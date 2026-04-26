@@ -15,10 +15,42 @@ import {
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const GENERATED_GAME_TOOL = "return_generated_game_pack";
+const OPENAI_REQUEST_TIMEOUT_MS = 55_000;
 const MAX_EDITABLE_SPEC_DEPTH = 8;
 const MAX_EDITABLE_SPEC_ARRAY_ITEMS = 200;
 const MAX_EDITABLE_SPEC_OBJECT_KEYS = 80;
 const MAX_EDITABLE_SPEC_STRING_LENGTH = 1200;
+
+const jsDataMemberNames = new Set([
+  "at",
+  "concat",
+  "entries",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "flat",
+  "flatMap",
+  "forEach",
+  "includes",
+  "indexOf",
+  "join",
+  "keys",
+  "length",
+  "map",
+  "pop",
+  "push",
+  "reduce",
+  "reverse",
+  "slice",
+  "some",
+  "sort",
+  "splice",
+  "toFixed",
+  "toString",
+  "trim",
+  "values",
+]);
 
 type ResponsesFunctionCall = {
   type: "function_call";
@@ -174,6 +206,83 @@ function parseEditableSpecJson(specJson: string): JsonValue {
   return parsedSpec;
 }
 
+function trimRuntimeMemberNames(segments: string[]) {
+  const trimmedSegments = [...segments];
+
+  while (
+    trimmedSegments.length > 0 &&
+    jsDataMemberNames.has(trimmedSegments[trimmedSegments.length - 1])
+  ) {
+    trimmedSegments.pop();
+  }
+
+  return trimmedSegments;
+}
+
+function specPathExists(spec: JsonValue, pathSegments: string[]) {
+  let currentValue: JsonValue | undefined = spec;
+
+  for (const segment of pathSegments) {
+    if (currentValue === null || currentValue === undefined) {
+      return false;
+    }
+
+    if (Array.isArray(currentValue)) {
+      if (segment === "length" || jsDataMemberNames.has(segment)) {
+        return true;
+      }
+
+      if (!/^\d+$/.test(segment)) {
+        return false;
+      }
+
+      currentValue = currentValue[Number(segment)];
+      continue;
+    }
+
+    if (typeof currentValue !== "object") {
+      return false;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(currentValue, segment)) {
+      return false;
+    }
+
+    currentValue = currentValue[segment];
+  }
+
+  return true;
+}
+
+function assertGeneratedSpecReferences(source: string, spec: JsonValue) {
+  const specPathPattern =
+    /\b(?:host\.spec|spec)((?:\.[A-Za-z_$][\w$]*)+)/g;
+  const checkedPaths = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = specPathPattern.exec(source)) !== null) {
+    const rawSegments = match[1].slice(1).split(".");
+    const pathSegments = trimRuntimeMemberNames(rawSegments);
+
+    if (pathSegments.length === 0) {
+      continue;
+    }
+
+    const path = pathSegments.join(".");
+    if (checkedPaths.has(path)) {
+      continue;
+    }
+
+    checkedPaths.add(path);
+
+    if (!specPathExists(spec, pathSegments)) {
+      throw new Error(
+        `Generated module references spec.${path}, but editableSpec does not define that path.`
+      );
+    }
+  }
+}
+
 function assertGeneratedSourceAllowed(source: string) {
   for (const pattern of forbiddenSourcePatterns) {
     if (pattern.test(source)) {
@@ -221,47 +330,67 @@ function transpileGeneratedTypeScript(source: string) {
 }
 
 async function requestGeneratedGamePackFromOpenAI(userPrompt: string) {
-  const response = await fetch(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
-      reasoning: {
-        effort: "medium",
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    OPENAI_REQUEST_TIMEOUT_MS
+  );
+
+  let response: Response;
+  try {
+    response = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      parallel_tool_calls: false,
-      tool_choice: {
-        type: "function",
-        name: GENERATED_GAME_TOOL,
-      },
-      tools: [
-        {
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
+        reasoning: {
+          effort: "medium",
+        },
+        parallel_tool_calls: false,
+        tool_choice: {
           type: "function",
           name: GENERATED_GAME_TOOL,
-          description:
-            "Return a generated Canvas 2D game pack with TypeScript module source, manifest, editable spec, metadata, and chat transcript.",
-          parameters: generatedGamePackJsonSchema,
-          strict: true,
         },
-      ],
-      instructions: createGeneratedGameSystemPrompt(userPrompt),
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: userPrompt,
-            },
-          ],
-        },
-      ],
-    }),
-    cache: "no-store",
-  });
+        tools: [
+          {
+            type: "function",
+            name: GENERATED_GAME_TOOL,
+            description:
+              "Return a generated Canvas 2D game pack with TypeScript module source, manifest, editable spec, metadata, and chat transcript.",
+            parameters: generatedGamePackJsonSchema,
+            strict: true,
+          },
+        ],
+        instructions: createGeneratedGameSystemPrompt(userPrompt),
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: userPrompt,
+              },
+            ],
+          },
+        ],
+      }),
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(
+        "OpenAI generation timed out while creating the game module."
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const payload = (await response.json()) as OpenAIResponsePayload;
 
@@ -311,6 +440,8 @@ function completeGeneratedGamePack(
   assertGeneratedSourceAllowed(pack.moduleSourceTs);
 
   const moduleSourceJs = transpileGeneratedTypeScript(pack.moduleSourceTs);
+  assertGeneratedSpecReferences(moduleSourceJs, editableSpec);
+
   const completedPack = {
     ...packWithoutSpecJson,
     editableSpec,

@@ -20,6 +20,8 @@ type EditorShellProps = {
   enteredPrompt: string;
 };
 
+const GENERATION_TIMEOUT_MS = 120_000;
+
 const generationStages = [
   {
     title: "Reading your game idea",
@@ -43,7 +45,8 @@ const generationStages = [
   },
   {
     title: "Booting the sandbox",
-    detail: "Mounting the generated game in an isolated canvas iframe.",
+    detail:
+      "Finalizing the generated pack before mounting it in an isolated iframe.",
     progress: 94,
   },
 ];
@@ -52,6 +55,7 @@ function getSpecSummary(pack: GeneratedGamePack) {
   const specSize = JSON.stringify(pack.editableSpec).length;
   return [
     `${pack.manifest.genre} genre`,
+    `${pack.manifest.viewport.width} x ${pack.manifest.viewport.height} viewport`,
     `${pack.manifest.controls.length} controls`,
     `${pack.manifest.capabilities.length} capabilities`,
     `${specSize.toLocaleString()} chars spec`,
@@ -71,6 +75,8 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    let didTimeOut = false;
+    let timeoutId: number | undefined;
 
     async function loadStarterProject() {
       setGenerationStepIndex(0);
@@ -81,6 +87,11 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
       });
 
       try {
+        timeoutId = window.setTimeout(() => {
+          didTimeOut = true;
+          controller.abort();
+        }, GENERATION_TIMEOUT_MS);
+
         const response = await fetch("/api/starter-project", {
           method: "POST",
           headers: {
@@ -116,6 +127,14 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
         });
       } catch (error) {
         if (controller.signal.aborted) {
+          if (didTimeOut) {
+            setLoadState({
+              status: "error",
+              message:
+                "Generation took longer than two minutes. Please retry; the model may have stalled while creating or validating the game module.",
+            });
+          }
+
           return;
         }
 
@@ -128,6 +147,10 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
           status: "error",
           message,
         });
+      } finally {
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
+        }
       }
     }
 
@@ -155,6 +178,12 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
       ? loadState.pack.project.name
       : "Starter Project";
   const currentGenerationStage = generationStages[generationStepIndex];
+  const isGenerating = loadState.status === "loading";
+
+  function regenerateGame() {
+    setGameResetNonce(0);
+    setRequestNonce((value) => value + 1);
+  }
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#f5efe3_0%,_#ede3d2_36%,_#e0e9e1_100%)] px-4 py-4 text-[var(--ink)] sm:px-6 lg:px-8">
@@ -199,8 +228,18 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                     Generated project log
                   </div>
                 </div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
-                  Read only
+                <div className="flex flex-col items-end gap-2">
+                  <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
+                    Read only
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isGenerating}
+                    onClick={regenerateGame}
+                    className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
+                  >
+                    {isGenerating ? "Generating..." : "Regenerate"}
+                  </button>
                 </div>
               </div>
               <p className="mt-3 max-w-xl text-sm leading-7 text-[var(--muted)]">
@@ -270,7 +309,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setRequestNonce((value) => value + 1)}
+                    onClick={regenerateGame}
                     className="inline-flex items-center justify-center border border-[#9d4b31]/30 bg-[#9d4b31] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b]"
                   >
                     Retry generation
@@ -323,6 +362,9 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                       </div>
                       <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
                         {loadState.pack.manifest.genre}
+                      </div>
+                      <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
+                        {loadState.pack.manifest.viewport.scaling}
                       </div>
                       <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
                         {loadState.pack.manifest.controls.length} controls
@@ -458,8 +500,15 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                   </button>
                 </div>
                 {gameStatus.state === "error" ? (
-                  <div className="border border-[rgba(169,72,42,0.24)] bg-[rgba(255,243,236,0.92)] px-4 py-3 text-sm text-[#613128]">
-                    Canvas runtime error: {gameStatus.message}
+                  <div className="flex flex-col gap-3 border border-[rgba(169,72,42,0.24)] bg-[rgba(255,243,236,0.92)] px-4 py-3 text-sm text-[#613128] sm:flex-row sm:items-center sm:justify-between">
+                    <div>Canvas runtime error: {gameStatus.message}</div>
+                    <button
+                      type="button"
+                      onClick={regenerateGame}
+                      className="inline-flex items-center justify-center border border-[#9d4b31]/30 bg-[#9d4b31] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b]"
+                    >
+                      Regenerate game
+                    </button>
                   </div>
                 ) : null}
                 <GeneratedGameHost

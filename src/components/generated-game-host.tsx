@@ -14,6 +14,8 @@ type GeneratedGameHostProps = {
   onStatusChange?: (status: GeneratedGameStatus) => void;
 };
 
+const SANDBOX_BOOT_TIMEOUT_MS = 12_000;
+
 function escapeScriptContent(source: string) {
   return source
     .replace(/<\/script/gi, "<\\/script")
@@ -58,14 +60,48 @@ function createIframeDocument(pack: GeneratedGamePack) {
       globalThis.__AICADE_MANIFEST__ = ${manifestJson};
     </script>
     <script>
+      (function () {
+        function notifyGeneratedError(message) {
+          parent.postMessage({
+            type: "game-error",
+            message: message || "Generated module crashed before boot."
+          }, "*");
+        }
+
+        window.addEventListener("error", function (event) {
+          notifyGeneratedError(event && event.message ? event.message : "Generated module crashed.");
+        });
+
+        window.addEventListener("unhandledrejection", function (event) {
+          const reason = event && event.reason;
+          notifyGeneratedError(reason && reason.message ? reason.message : String(reason || "Generated module promise rejected."));
+        });
+      })();
+    </script>
+    <script>
 ${generatedSource}
     </script>
     <script>
       (function () {
         const canvas = document.getElementById("game");
-        const ctx = canvas.getContext("2d");
-        const controls = Array.isArray(globalThis.__AICADE_MANIFEST__.controls)
-          ? globalThis.__AICADE_MANIFEST__.controls
+        const displayCtx = canvas.getContext("2d");
+        const renderCanvas = document.createElement("canvas");
+        const renderCtx = renderCanvas.getContext("2d");
+        const manifest = globalThis.__AICADE_MANIFEST__ || {};
+        const rawViewport = manifest.viewport || {};
+        const viewport = {
+          width:
+            typeof rawViewport.width === "number"
+              ? Math.max(1, Math.round(rawViewport.width))
+              : 960,
+          height:
+            typeof rawViewport.height === "number"
+              ? Math.max(1, Math.round(rawViewport.height))
+              : 540,
+          scaling: "stretch_to_fill"
+        };
+        const controls = Array.isArray(manifest.controls)
+          ? manifest.controls
           : [];
         const input = {
           actions: {},
@@ -82,11 +118,23 @@ ${generatedSource}
         }
         let game = null;
         let animationFrame = 0;
+        let displayWidth = 1;
+        let displayHeight = 1;
         let lastFrame = performance.now();
         let isRunning = false;
+        let resizeObserver = null;
 
         function notify(type, payload) {
           parent.postMessage(Object.assign({ type }, payload || {}), "*");
+        }
+
+        function prepareRenderSurface() {
+          renderCanvas.width = viewport.width;
+          renderCanvas.height = viewport.height;
+
+          if (renderCtx) {
+            renderCtx.setTransform(1, 0, 0, 1, 0, 0);
+          }
         }
 
         function normalizeDelta(now) {
@@ -97,13 +145,32 @@ ${generatedSource}
 
         function resize() {
           const rect = canvas.getBoundingClientRect();
-          const dpr = globalThis.devicePixelRatio || 1;
-          canvas.width = Math.max(1, Math.round(rect.width));
-          canvas.height = Math.max(1, Math.round(rect.height));
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          const nextDisplayWidth = Math.max(1, Math.round(rect.width));
+          const nextDisplayHeight = Math.max(1, Math.round(rect.height));
+
+          if (
+            nextDisplayWidth === displayWidth &&
+            nextDisplayHeight === displayHeight &&
+            canvas.width === displayWidth &&
+            canvas.height === displayHeight &&
+            renderCanvas.width === viewport.width &&
+            renderCanvas.height === viewport.height
+          ) {
+            return;
+          }
+
+          displayWidth = nextDisplayWidth;
+          displayHeight = nextDisplayHeight;
+          canvas.width = displayWidth;
+          canvas.height = displayHeight;
+          prepareRenderSurface();
+
+          if (displayCtx) {
+            displayCtx.setTransform(1, 0, 0, 1, 0, 0);
+          }
 
           if (game && typeof game.resize === "function") {
-            game.resize(rect.width, rect.height, dpr);
+            game.resize(viewport.width, viewport.height, 1);
           }
         }
 
@@ -118,7 +185,21 @@ ${generatedSource}
             for (const actionName in input.actions) {
               input.actions[actionName].pressed = false;
             }
-            game.render(ctx);
+            game.render(renderCtx);
+
+            displayCtx.clearRect(0, 0, displayWidth, displayHeight);
+            displayCtx.drawImage(
+              renderCanvas,
+              0,
+              0,
+              viewport.width,
+              viewport.height,
+              0,
+              0,
+              displayWidth,
+              displayHeight
+            );
+
             animationFrame = requestAnimationFrame(tick);
           } catch (error) {
             isRunning = false;
@@ -169,7 +250,7 @@ ${generatedSource}
 
         function boot() {
           try {
-            if (!ctx) {
+            if (!displayCtx || !renderCtx) {
               throw new Error("Canvas 2D context is unavailable.");
             }
 
@@ -177,10 +258,13 @@ ${generatedSource}
               throw new Error("Generated module did not register createGameModule.");
             }
 
+            prepareRenderSurface();
+
             game = globalThis.createGameModule({
-              canvas,
-              ctx,
-              spec: JSON.parse(JSON.stringify(globalThis.__AICADE_SPEC__))
+              canvas: renderCanvas,
+              ctx: renderCtx,
+              spec: JSON.parse(JSON.stringify(globalThis.__AICADE_SPEC__)),
+              viewport: JSON.parse(JSON.stringify(viewport))
             });
 
             const requiredMethods = [
@@ -202,8 +286,16 @@ ${generatedSource}
             resize();
             game.start();
             isRunning = true;
-            notify("game-ready", { manifest: globalThis.__AICADE_MANIFEST__ });
+            notify("game-ready", {
+              manifest: globalThis.__AICADE_MANIFEST__,
+              viewport
+            });
+            resize();
             animationFrame = requestAnimationFrame(tick);
+            requestAnimationFrame(resize);
+            requestAnimationFrame(function () {
+              resize();
+            });
           } catch (error) {
             notify("game-error", {
               message: error && error.message ? error.message : String(error)
@@ -214,7 +306,15 @@ ${generatedSource}
         canvas.addEventListener("pointerdown", function () {
           canvas.focus();
         });
+        if (typeof ResizeObserver === "function") {
+          resizeObserver = new ResizeObserver(function () {
+            resize();
+          });
+          resizeObserver.observe(canvas);
+          resizeObserver.observe(document.body);
+        }
         window.addEventListener("resize", resize, { passive: true });
+        window.addEventListener("load", resize, { passive: true });
         window.addEventListener("keydown", function (event) {
           if (setKey(event.code, true, event.repeat)) {
             event.preventDefault();
@@ -233,6 +333,9 @@ ${generatedSource}
         window.addEventListener("beforeunload", function () {
           isRunning = false;
           cancelAnimationFrame(animationFrame);
+          if (resizeObserver) {
+            resizeObserver.disconnect();
+          }
           if (game && typeof game.destroy === "function") {
             game.destroy();
           }
@@ -253,10 +356,25 @@ export function GeneratedGameHost({
   const srcDoc = useMemo(() => createIframeDocument(pack), [pack]);
 
   useEffect(() => {
+    let hasSettled = false;
+
     onStatusChange?.({
       state: "loading",
       message: "Booting generated canvas module...",
     });
+
+    const timeoutId = window.setTimeout(() => {
+      if (hasSettled) {
+        return;
+      }
+
+      hasSettled = true;
+      onStatusChange?.({
+        state: "error",
+        message:
+          "The generated sandbox did not finish booting. Regenerate the game to request a fresh module.",
+      });
+    }, SANDBOX_BOOT_TIMEOUT_MS);
 
     function handleMessage(event: MessageEvent) {
       if (event.source !== iframeRef.current?.contentWindow) {
@@ -264,6 +382,8 @@ export function GeneratedGameHost({
       }
 
       if (event.data?.type === "game-ready") {
+        hasSettled = true;
+        window.clearTimeout(timeoutId);
         onStatusChange?.({
           state: "ready",
           message: "Generated module is running in the sandbox.",
@@ -271,6 +391,8 @@ export function GeneratedGameHost({
       }
 
       if (event.data?.type === "game-error") {
+        hasSettled = true;
+        window.clearTimeout(timeoutId);
         onStatusChange?.({
           state: "error",
           message:
@@ -282,7 +404,11 @@ export function GeneratedGameHost({
     }
 
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    return () => {
+      hasSettled = true;
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("message", handleMessage);
+    };
   }, [onStatusChange, pack]);
 
   return (
