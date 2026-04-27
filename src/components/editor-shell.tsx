@@ -30,7 +30,8 @@ const generationStages = [
   },
   {
     title: "Designing the starter game",
-    detail: "Asking AI for the manifest, playable rules, and editable spec.",
+    detail:
+      "Asking AI for the manifest, playable rules, AI behavior, and editable spec.",
     progress: 38,
   },
   {
@@ -58,6 +59,8 @@ function getSpecSummary(pack: GeneratedGamePack) {
     `${pack.manifest.viewport.width} x ${pack.manifest.viewport.height} viewport`,
     `${pack.manifest.controls.length} controls`,
     `${pack.manifest.capabilities.length} capabilities`,
+    `${pack.manifest.ai.agents.length} AI agents`,
+    `${pack.manifest.ai.difficulty} AI`,
     `${specSize.toLocaleString()} chars spec`,
     `${pack.moduleSourceTs.split("\n").length} lines TS`,
   ];
@@ -67,6 +70,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [requestNonce, setRequestNonce] = useState(0);
   const [gameResetNonce, setGameResetNonce] = useState(0);
+  const [isGamePaused, setIsGamePaused] = useState(false);
   const [generationStepIndex, setGenerationStepIndex] = useState(0);
   const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>({
     state: "loading",
@@ -85,6 +89,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
         state: "loading",
         message: "Waiting for generated module...",
       });
+      setIsGamePaused(false);
 
       try {
         timeoutId = window.setTimeout(() => {
@@ -181,8 +186,21 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
   const isGenerating = loadState.status === "loading";
 
   function regenerateGame() {
+    setIsGamePaused(false);
     setGameResetNonce(0);
     setRequestNonce((value) => value + 1);
+  }
+
+  function toggleGamePaused() {
+    const nextIsPaused = !isGamePaused;
+
+    setIsGamePaused(nextIsPaused);
+    setGameStatus({
+      state: nextIsPaused ? "paused" : "ready",
+      message: nextIsPaused
+        ? "Generated module is paused in the sandbox."
+        : "Generated module is running in the sandbox.",
+    });
   }
 
   return (
@@ -203,6 +221,8 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                 className={`h-2 w-2 rounded-full ${
                   gameStatus.state === "ready"
                     ? "bg-[var(--accent)]"
+                    : gameStatus.state === "paused"
+                      ? "bg-[#c79236]"
                     : gameStatus.state === "error"
                       ? "bg-[#9d4b31]"
                       : "bg-[#c79236]"
@@ -369,6 +389,9 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                       <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
                         {loadState.pack.manifest.controls.length} controls
                       </div>
+                      <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
+                        {loadState.pack.manifest.ai.tickRate} AI tick
+                      </div>
                     </div>
                   </section>
 
@@ -399,6 +422,69 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                           <span className="max-w-[58%] text-right font-medium text-[var(--ink)]">
                             {control.keys.join(", ")}
                           </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="border border-[var(--line)] bg-white/78 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                      AI behavior
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-[var(--ink)]">
+                      {loadState.pack.manifest.ai.summary}
+                    </p>
+                    <div className="mt-4 grid gap-3 text-xs uppercase tracking-[0.16em] text-[var(--muted)] sm:grid-cols-3">
+                      <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
+                        {loadState.pack.manifest.ai.difficulty}
+                      </div>
+                      <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
+                        {loadState.pack.manifest.ai.tickRate}
+                      </div>
+                      <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
+                        {loadState.pack.manifest.ai.updateBudget} budget
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      {loadState.pack.manifest.ai.agents.map((agent) => (
+                        <div
+                          key={agent.id}
+                          className="border-t border-[var(--line)] pt-4"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-sm font-semibold text-[var(--ink)]">
+                                {agent.label}
+                              </div>
+                              <p className="mt-1 text-sm leading-7 text-[var(--muted)]">
+                                {agent.goal}
+                              </p>
+                            </div>
+                            <span className="shrink-0 border border-[var(--line)] px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                              {agent.role}
+                            </span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {agent.states.map((state) => (
+                              <span
+                                key={`${agent.id}-${state.name}`}
+                                className="border border-[var(--line)] bg-[rgba(240,247,243,0.82)] px-2.5 py-1 text-xs text-[var(--muted)]"
+                              >
+                                {state.name}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-3 text-xs leading-6 text-[var(--muted)]">
+                            Observes {agent.observes.join(", ")}
+                          </div>
+                          <div className="mt-1 text-xs leading-6 text-[var(--muted)]">
+                            Tuning{" "}
+                            {agent.tuning
+                              .map(
+                                (item) => `${item.parameter} ${item.value}`
+                              )
+                              .join(", ")}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -485,19 +571,33 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                       editable spec without regenerating.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGameStatus({
-                        state: "loading",
-                        message: "Resetting generated canvas module...",
-                      });
-                      setGameResetNonce((value) => value + 1);
-                    }}
-                    className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)]"
-                  >
-                    Reset game
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <button
+                      type="button"
+                      disabled={
+                        gameStatus.state !== "ready" &&
+                        gameStatus.state !== "paused"
+                      }
+                      onClick={toggleGamePaused}
+                      className="inline-flex items-center justify-center border border-[var(--line)] bg-[rgba(21,18,14,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:text-[var(--muted)] disabled:opacity-55"
+                    >
+                      {isGamePaused ? "Resume game" : "Pause game"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsGamePaused(false);
+                        setGameStatus({
+                          state: "loading",
+                          message: "Resetting generated canvas module...",
+                        });
+                        setGameResetNonce((value) => value + 1);
+                      }}
+                      className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)]"
+                    >
+                      Reset game
+                    </button>
+                  </div>
                 </div>
                 {gameStatus.state === "error" ? (
                   <div className="flex flex-col gap-3 border border-[rgba(169,72,42,0.24)] bg-[rgba(255,243,236,0.92)] px-4 py-3 text-sm text-[#613128] sm:flex-row sm:items-center sm:justify-between">
@@ -514,6 +614,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                 <GeneratedGameHost
                   key={`${loadState.pack.manifest.title}-${gameResetNonce}`}
                   pack={loadState.pack}
+                  isPaused={isGamePaused}
                   onStatusChange={setGameStatus}
                 />
               </>

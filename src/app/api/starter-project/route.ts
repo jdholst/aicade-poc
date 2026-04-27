@@ -4,10 +4,12 @@ import ts from "typescript";
 import {
   DEFAULT_OPENAI_MODEL,
   DEFAULT_STARTER_PROMPT,
+  aiSpecSchema,
   createGeneratedGameSystemPrompt,
   generatedGamePackFromOpenAiSchema,
   generatedGamePackJsonSchema,
   generatedGamePackSchema,
+  type AiSpec,
   type GeneratedGamePack,
   type GeneratedGamePackFromOpenAI,
   type JsonValue,
@@ -190,11 +192,203 @@ function assertSafeJsonValue(
   }
 }
 
+function extractFirstObjectLiteralText(source: string) {
+  const startIndex = source.indexOf("{");
+
+  if (startIndex < 0) {
+    return undefined;
+  }
+
+  let depth = 0;
+  let quote: '"' | "'" | "`" | null = null;
+  let isEscaped = false;
+
+  for (let index = startIndex; index < source.length; index += 1) {
+    const character = source[index];
+
+    if (quote) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+
+      if (character === "\\") {
+        isEscaped = true;
+        continue;
+      }
+
+      if (character === quote) {
+        quote = null;
+      }
+
+      continue;
+    }
+
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      continue;
+    }
+
+    if (character === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (character === "}") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return source.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function getEditableSpecJsonCandidates(specJson: string) {
+  const trimmedSpecJson = specJson.trim();
+  const candidates = [trimmedSpecJson];
+  const fencedJsonMatch = trimmedSpecJson.match(
+    /^```(?:json|javascript|js|ts)?\s*([\s\S]*?)\s*```$/i
+  );
+
+  if (fencedJsonMatch?.[1]) {
+    candidates.push(fencedJsonMatch[1].trim());
+  }
+
+  const extractedObject = extractFirstObjectLiteralText(trimmedSpecJson);
+  if (extractedObject) {
+    candidates.push(extractedObject);
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function getObjectLiteralPropertyName(name: ts.PropertyName) {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+    return name.text;
+  }
+
+  if (ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+
+  return undefined;
+}
+
+function parseJsonLikeExpression(expression: ts.Expression): unknown {
+  if (ts.isParenthesizedExpression(expression)) {
+    return parseJsonLikeExpression(expression.expression);
+  }
+
+  if (
+    ts.isStringLiteral(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression)
+  ) {
+    return expression.text;
+  }
+
+  if (ts.isNumericLiteral(expression)) {
+    return Number(expression.text);
+  }
+
+  if (
+    ts.isPrefixUnaryExpression(expression) &&
+    expression.operator === ts.SyntaxKind.MinusToken &&
+    ts.isNumericLiteral(expression.operand)
+  ) {
+    return -Number(expression.operand.text);
+  }
+
+  if (expression.kind === ts.SyntaxKind.TrueKeyword) {
+    return true;
+  }
+
+  if (expression.kind === ts.SyntaxKind.FalseKeyword) {
+    return false;
+  }
+
+  if (expression.kind === ts.SyntaxKind.NullKeyword) {
+    return null;
+  }
+
+  if (ts.isArrayLiteralExpression(expression)) {
+    return expression.elements.map((element) => {
+      if (ts.isSpreadElement(element)) {
+        throw new Error("Spread elements are not valid JSON.");
+      }
+
+      return parseJsonLikeExpression(element);
+    });
+  }
+
+  if (ts.isObjectLiteralExpression(expression)) {
+    const output: Record<string, unknown> = {};
+
+    for (const property of expression.properties) {
+      if (!ts.isPropertyAssignment(property)) {
+        throw new Error("Only property assignments are valid JSON.");
+      }
+
+      const propertyName = getObjectLiteralPropertyName(property.name);
+      if (propertyName === undefined) {
+        throw new Error("Computed property names are not valid JSON.");
+      }
+
+      output[propertyName] = parseJsonLikeExpression(property.initializer);
+    }
+
+    return output;
+  }
+
+  throw new Error("Unsupported JSON-like expression.");
+}
+
+function parseJsonLikeObjectLiteral(source: string): unknown {
+  const sourceFile = ts.createSourceFile(
+    "editable-spec.ts",
+    `const editableSpec = ${source};`,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.TS
+  );
+  const [statement] = sourceFile.statements;
+
+  if (!statement || !ts.isVariableStatement(statement)) {
+    throw new Error("Generated editableSpecJson was not an object literal.");
+  }
+
+  const [declaration] = statement.declarationList.declarations;
+  if (!declaration?.initializer) {
+    throw new Error("Generated editableSpecJson was not an object literal.");
+  }
+
+  return parseJsonLikeExpression(declaration.initializer);
+}
+
 function parseEditableSpecJson(specJson: string): JsonValue {
   let parsedSpec: unknown;
-  try {
-    parsedSpec = JSON.parse(specJson);
-  } catch {
+
+  for (const candidate of getEditableSpecJsonCandidates(specJson)) {
+    try {
+      parsedSpec = JSON.parse(candidate);
+
+      if (typeof parsedSpec === "string") {
+        parsedSpec = JSON.parse(parsedSpec);
+      }
+      break;
+    } catch {
+      try {
+        parsedSpec = parseJsonLikeObjectLiteral(candidate);
+        break;
+      } catch {
+        parsedSpec = undefined;
+      }
+    }
+  }
+
+  if (parsedSpec === undefined) {
     throw new Error("Generated editableSpecJson was not valid JSON.");
   }
 
@@ -204,6 +398,383 @@ function parseEditableSpecJson(specJson: string): JsonValue {
 
   assertSafeJsonValue(parsedSpec);
   return parsedSpec;
+}
+
+function parseEditableAiSpec(spec: JsonValue): AiSpec {
+  if (!isPlainObject(spec)) {
+    throw new Error("Generated editableSpecJson must be a JSON object.");
+  }
+
+  const parsedAiSpec = aiSpecSchema.safeParse(spec.ai);
+
+  if (!parsedAiSpec.success) {
+    const [firstIssue] = parsedAiSpec.error.issues;
+    const issuePath = firstIssue?.path.length
+      ? `.${firstIssue.path.join(".")}`
+      : "";
+    const issueMessage = firstIssue?.message ?? "Invalid AI spec.";
+
+    throw new Error(
+      `Generated editableSpecJson.ai${issuePath} is invalid: ${issueMessage}`
+    );
+  }
+
+  return parsedAiSpec.data;
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
+  }
+
+  if (isPlainObject(value)) {
+    return `{${Object.entries(value)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(
+        ([key, item]) =>
+          `${JSON.stringify(key)}:${stableJsonStringify(item)}`
+      )
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value) ?? "undefined";
+}
+
+function assertGeneratedAiSpec(manifestAi: AiSpec, editableSpec: JsonValue) {
+  const editableAi = parseEditableAiSpec(editableSpec);
+  const manifestAgentIds = new Set(manifestAi.agents.map((agent) => agent.id));
+  const editableAgentIds = new Set(editableAi.agents.map((agent) => agent.id));
+
+  for (const manifestAgent of manifestAi.agents) {
+    if (!editableAgentIds.has(manifestAgent.id)) {
+      throw new Error(
+        `Generated editableSpecJson.ai is missing manifest AI agent ${manifestAgent.id}.`
+      );
+    }
+  }
+
+  for (const editableAgent of editableAi.agents) {
+    if (!manifestAgentIds.has(editableAgent.id)) {
+      throw new Error(
+        `Generated editableSpecJson.ai contains extra AI agent ${editableAgent.id} that is not listed in manifest.ai.`
+      );
+    }
+  }
+
+  if (stableJsonStringify(manifestAi) !== stableJsonStringify(editableAi)) {
+    throw new Error(
+      "Generated editableSpecJson.ai must match manifest.ai so the editor and runtime share one AI spec."
+    );
+  }
+}
+
+function normalizeEditableAiSpec(
+  editableSpec: JsonValue,
+  manifestAi: AiSpec
+): JsonValue {
+  if (!isPlainObject(editableSpec)) {
+    throw new Error("Generated editableSpecJson must be a JSON object.");
+  }
+
+  const normalizedSpec = {
+    ...editableSpec,
+    ai: JSON.parse(JSON.stringify(manifestAi)) as JsonValue,
+  };
+
+  assertSafeJsonValue(normalizedSpec);
+  return normalizedSpec;
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let currentExpression = expression;
+
+  while (
+    ts.isParenthesizedExpression(currentExpression) ||
+    ts.isNonNullExpression(currentExpression) ||
+    ts.isAsExpression(currentExpression) ||
+    ts.isTypeAssertionExpression(currentExpression) ||
+    ts.isSatisfiesExpression(currentExpression)
+  ) {
+    currentExpression = currentExpression.expression;
+  }
+
+  return currentExpression;
+}
+
+function getAccessedPropertyName(expression: ts.Expression) {
+  const unwrappedExpression = unwrapExpression(expression);
+
+  if (ts.isPropertyAccessExpression(unwrappedExpression)) {
+    return unwrappedExpression.name.text;
+  }
+
+  if (
+    ts.isElementAccessExpression(unwrappedExpression) &&
+    unwrappedExpression.argumentExpression &&
+    ts.isStringLiteralLike(unwrappedExpression.argumentExpression)
+  ) {
+    return unwrappedExpression.argumentExpression.text;
+  }
+
+  return undefined;
+}
+
+function getAccessTargetExpression(expression: ts.Expression) {
+  const unwrappedExpression = unwrapExpression(expression);
+
+  if (
+    ts.isPropertyAccessExpression(unwrappedExpression) ||
+    ts.isElementAccessExpression(unwrappedExpression)
+  ) {
+    return unwrappedExpression.expression;
+  }
+
+  return undefined;
+}
+
+function isHostSpecAccess(expression: ts.Expression) {
+  const unwrappedExpression = unwrapExpression(expression);
+
+  if (ts.isPropertyAccessExpression(unwrappedExpression)) {
+    const targetExpression = unwrapExpression(unwrappedExpression.expression);
+
+    return (
+      unwrappedExpression.name.text === "spec" &&
+      ts.isIdentifier(targetExpression) &&
+      targetExpression.text === "host"
+    );
+  }
+
+  if (
+    ts.isElementAccessExpression(unwrappedExpression) &&
+    ts.isStringLiteralLike(unwrappedExpression.argumentExpression)
+  ) {
+    const targetExpression = unwrapExpression(unwrappedExpression.expression);
+
+    return (
+      unwrappedExpression.argumentExpression.text === "spec" &&
+      ts.isIdentifier(targetExpression) &&
+      targetExpression.text === "host"
+    );
+  }
+
+  return false;
+}
+
+function expressionContainsSpecRoot(
+  expression: ts.Expression,
+  specAliases: Set<string>
+): boolean {
+  const unwrappedExpression = unwrapExpression(expression);
+
+  if (ts.isIdentifier(unwrappedExpression)) {
+    return specAliases.has(unwrappedExpression.text);
+  }
+
+  if (isHostSpecAccess(unwrappedExpression)) {
+    return true;
+  }
+
+  if (
+    ts.isPropertyAccessExpression(unwrappedExpression) ||
+    ts.isElementAccessExpression(unwrappedExpression)
+  ) {
+    return expressionContainsSpecRoot(unwrappedExpression.expression, specAliases);
+  }
+
+  if (ts.isObjectLiteralExpression(unwrappedExpression)) {
+    return unwrappedExpression.properties.some((property) => {
+      if (ts.isSpreadAssignment(property)) {
+        return expressionContainsSpecRoot(property.expression, specAliases);
+      }
+
+      if (ts.isPropertyAssignment(property)) {
+        return expressionContainsSpecRoot(property.initializer, specAliases);
+      }
+
+      return false;
+    });
+  }
+
+  let containsSpecRoot = false;
+  ts.forEachChild(unwrappedExpression, (child) => {
+    if (containsSpecRoot || !ts.isExpression(child)) {
+      return;
+    }
+
+    containsSpecRoot = expressionContainsSpecRoot(child, specAliases);
+  });
+
+  return containsSpecRoot;
+}
+
+function expressionReadsAiFromSpec(
+  expression: ts.Expression,
+  specAliases: Set<string>
+): boolean {
+  const propertyName = getAccessedPropertyName(expression);
+  const targetExpression = getAccessTargetExpression(expression);
+
+  if (
+    propertyName === "ai" &&
+    targetExpression &&
+    expressionContainsSpecRoot(targetExpression, specAliases)
+  ) {
+    return true;
+  }
+
+  let readsAi = false;
+  ts.forEachChild(expression, (child) => {
+    if (readsAi || !ts.isExpression(child)) {
+      return;
+    }
+
+    readsAi = expressionReadsAiFromSpec(child, specAliases);
+  });
+
+  return readsAi;
+}
+
+function bindingPatternReadsAiFromSpec(
+  name: ts.BindingName,
+  initializer: ts.Expression | undefined,
+  specAliases: Set<string>
+) {
+  if (!initializer || !ts.isObjectBindingPattern(name)) {
+    return false;
+  }
+
+  if (!expressionContainsSpecRoot(initializer, specAliases)) {
+    return false;
+  }
+
+  return name.elements.some(
+    (element) =>
+      !element.propertyName &&
+      ts.isIdentifier(element.name) &&
+      element.name.text === "ai"
+  );
+}
+
+function bindingPatternDeclaresSpecAlias(
+  name: ts.BindingName,
+  initializer: ts.Expression | undefined,
+  specAliases: Set<string>
+) {
+  if (!initializer || !ts.isObjectBindingPattern(name)) {
+    return [];
+  }
+
+  const unwrappedInitializer = unwrapExpression(initializer);
+  if (!ts.isIdentifier(unwrappedInitializer) || unwrappedInitializer.text !== "host") {
+    return [];
+  }
+
+  const aliases: string[] = [];
+
+  for (const element of name.elements) {
+    const propertyName = element.propertyName ?? element.name;
+
+    if (
+      ts.isIdentifier(propertyName) &&
+      propertyName.text === "spec" &&
+      ts.isIdentifier(element.name)
+    ) {
+      aliases.push(element.name.text);
+      specAliases.add(element.name.text);
+    }
+  }
+
+  return aliases;
+}
+
+function assertGeneratedAiUsage(...sources: string[]) {
+  if (
+    sources.some((source) =>
+      /\b(?:host\.spec|spec)\s*(?:\?\.|\.)\s*ai\b/.test(source)
+    )
+  ) {
+    return;
+  }
+
+  for (const source of sources) {
+    const sourceFile = ts.createSourceFile(
+      "generated-module.ts",
+      source,
+      ts.ScriptTarget.ES2022,
+      true,
+      ts.ScriptKind.TS
+    );
+    const specAliases = new Set(["spec"]);
+    let readsEditableAiSpec = false;
+
+    function visit(node: ts.Node) {
+      if (readsEditableAiSpec) {
+        return;
+      }
+
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        if (
+          ts.isIdentifier(node.name) &&
+          expressionContainsSpecRoot(node.initializer, specAliases)
+        ) {
+          specAliases.add(node.name.text);
+        }
+
+        bindingPatternDeclaresSpecAlias(
+          node.name,
+          node.initializer,
+          specAliases
+        );
+
+        if (
+          bindingPatternReadsAiFromSpec(
+            node.name,
+            node.initializer,
+            specAliases
+          ) ||
+          expressionReadsAiFromSpec(node.initializer, specAliases)
+        ) {
+          readsEditableAiSpec = true;
+          return;
+        }
+      }
+
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        if (
+          ts.isIdentifier(node.left) &&
+          expressionContainsSpecRoot(node.right, specAliases)
+        ) {
+          specAliases.add(node.left.text);
+        }
+
+        if (expressionReadsAiFromSpec(node.right, specAliases)) {
+          readsEditableAiSpec = true;
+          return;
+        }
+      }
+
+      if (ts.isExpression(node) && expressionReadsAiFromSpec(node, specAliases)) {
+        readsEditableAiSpec = true;
+        return;
+      }
+
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+
+    if (readsEditableAiSpec) {
+      return;
+    }
+  }
+
+  throw new Error(
+    "Generated module must read spec.ai so AI behavior is driven by the editable AI spec."
+  );
 }
 
 function trimRuntimeMemberNames(segments: string[]) {
@@ -329,7 +900,10 @@ function transpileGeneratedTypeScript(source: string) {
   return result.outputText;
 }
 
-async function requestGeneratedGamePackFromOpenAI(userPrompt: string) {
+async function requestGeneratedGamePackFromOpenAI(
+  userPrompt: string,
+  validationFeedback?: string
+) {
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -360,12 +934,19 @@ async function requestGeneratedGamePackFromOpenAI(userPrompt: string) {
             type: "function",
             name: GENERATED_GAME_TOOL,
             description:
-              "Return a generated Canvas 2D game pack with TypeScript module source, manifest, editable spec, metadata, and chat transcript.",
+              "Return a generated Canvas 2D game pack with TypeScript module source, manifest, AI spec, editable spec, metadata, and chat transcript.",
             parameters: generatedGamePackJsonSchema,
             strict: true,
           },
         ],
-        instructions: createGeneratedGameSystemPrompt(userPrompt),
+        instructions: [
+          createGeneratedGameSystemPrompt(userPrompt),
+          validationFeedback
+            ? `Previous generation failed server validation: ${validationFeedback}. Return a fresh pack that fixes that exact validation failure.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
         input: [
           {
             role: "user",
@@ -435,11 +1016,16 @@ function completeGeneratedGamePack(
   }
 
   const { editableSpecJson, ...packWithoutSpecJson } = pack;
-  const editableSpec = parseEditableSpecJson(editableSpecJson);
+  const editableSpec = normalizeEditableAiSpec(
+    parseEditableSpecJson(editableSpecJson),
+    pack.manifest.ai
+  );
+  assertGeneratedAiSpec(pack.manifest.ai, editableSpec);
 
   assertGeneratedSourceAllowed(pack.moduleSourceTs);
 
   const moduleSourceJs = transpileGeneratedTypeScript(pack.moduleSourceTs);
+  assertGeneratedAiUsage(pack.moduleSourceTs, moduleSourceJs);
   assertGeneratedSpecReferences(moduleSourceJs, editableSpec);
 
   const completedPack = {
@@ -461,7 +1047,12 @@ async function generateGamePack(userPrompt: string): Promise<GeneratedGamePack> 
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const rawPack = await requestGeneratedGamePackFromOpenAI(userPrompt);
+      const validationFeedback =
+        attempt > 0 && lastError instanceof Error ? lastError.message : undefined;
+      const rawPack = await requestGeneratedGamePackFromOpenAI(
+        userPrompt,
+        validationFeedback
+      );
       const parsed = generatedGamePackFromOpenAiSchema.safeParse(rawPack);
 
       if (!parsed.success) {
