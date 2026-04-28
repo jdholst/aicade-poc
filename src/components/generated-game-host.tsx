@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
 
 import { GeneratedGamePack } from "@/lib/starter-project";
 
@@ -14,6 +20,10 @@ type GeneratedGameHostProps = {
   pack: GeneratedGamePack;
   isPaused?: boolean;
   onStatusChange?: (status: GeneratedGameStatus) => void;
+};
+
+export type GeneratedGameHostHandle = {
+  focusGame: () => void;
 };
 
 const SANDBOX_BOOT_TIMEOUT_MS = 12_000;
@@ -355,6 +365,10 @@ ${generatedSource}
           if (event.data && event.data.type === "game-pause") {
             setPaused(Boolean(event.data.paused));
           }
+
+          if (event.data && event.data.type === "game-focus") {
+            canvas.focus();
+          }
         });
         window.addEventListener("beforeunload", function () {
           isRunning = false;
@@ -376,13 +390,30 @@ ${generatedSource}
 </html>`;
 }
 
-export function GeneratedGameHost({
-  pack,
-  isPaused = false,
-  onStatusChange,
-}: GeneratedGameHostProps) {
+export const GeneratedGameHost = forwardRef<
+  GeneratedGameHostHandle,
+  GeneratedGameHostProps
+>(function GeneratedGameHost(
+  { pack, isPaused = false, onStatusChange },
+  ref
+) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDoc = useMemo(() => createIframeDocument(pack), [pack]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusGame() {
+        iframeRef.current?.focus();
+        iframeRef.current?.contentWindow?.focus();
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: "game-focus" },
+          "*"
+        );
+      },
+    }),
+    []
+  );
 
   useEffect(() => {
     let hasSettled = false;
@@ -462,4 +493,4 @@ export function GeneratedGameHost({
       />
     </div>
   );
-}
+});
