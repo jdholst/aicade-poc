@@ -21,9 +21,14 @@ export function PromptFacade({
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [openAiApiKey, setOpenAiApiKey] = useState("");
+  const [openAiKeyword, setOpenAiKeyword] = useState("");
   const [openAiModel, setOpenAiModel] = useState(DEFAULT_OPENAI_MODEL);
   const [isPending, startTransition] = useTransition();
   const needsOpenAiConfig = needsOpenAiApiKey || needsOpenAiModel;
+  const canSubmit =
+    !isPending &&
+    (!needsOpenAiApiKey ||
+      Boolean(openAiApiKey.trim() || openAiKeyword.trim()));
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,8 +40,12 @@ export function PromptFacade({
       params.set("idea", trimmed);
     }
 
-    if (needsOpenAiApiKey) {
+    if (needsOpenAiApiKey && openAiApiKey.trim()) {
       params.set("openAiApiKey", openAiApiKey.trim());
+    }
+
+    if (needsOpenAiApiKey && openAiKeyword.trim()) {
+      params.set("openAiKeyword", openAiKeyword.trim());
     }
 
     if (needsOpenAiModel) {
@@ -122,23 +131,43 @@ export function PromptFacade({
               {needsOpenAiConfig ? (
                 <section className="grid gap-4 border border-[var(--line)] bg-[rgba(255,255,255,0.58)] p-4 sm:grid-cols-2">
                   {needsOpenAiApiKey ? (
-                    <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                        OpenAI API key
-                      </span>
-                      <input
-                        type="password"
-                        required
-                        value={openAiApiKey}
-                        onChange={(event) =>
-                          setOpenAiApiKey(event.target.value)
-                        }
-                        autoComplete="off"
-                        spellCheck={false}
-                        className="mt-2 w-full border border-[var(--line)] bg-white/90 px-4 py-3 font-mono text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
-                        placeholder="sk-..."
-                      />
-                    </label>
+                    <div className="block">
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                          OpenAI API key
+                        </span>
+                        <input
+                          type="password"
+                          value={openAiApiKey}
+                          onChange={(event) =>
+                            setOpenAiApiKey(event.target.value)
+                          }
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="mt-2 w-full border border-[var(--line)] bg-white/90 px-4 py-3 font-mono text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                          placeholder="sk-..."
+                        />
+                      </label>
+                      <div className="py-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                        or
+                      </div>
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                          Key word
+                        </span>
+                        <input
+                          type="text"
+                          value={openAiKeyword}
+                          onChange={(event) =>
+                            setOpenAiKeyword(event.target.value)
+                          }
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="mt-2 w-full border border-[var(--line)] bg-white/90 px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                          placeholder="Secret Word"
+                        />
+                      </label>
+                    </div>
                   ) : null}
 
                   {needsOpenAiModel ? (
@@ -181,7 +210,7 @@ export function PromptFacade({
                 </p>
                 <button
                   type="submit"
-                  disabled={isPending}
+                  disabled={!canSubmit}
                   className="inline-flex min-w-48 items-center justify-center gap-3 border border-transparent bg-[var(--ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-65"
                 >
                   {isPending ? "Opening editor..." : "Create starter world"}

@@ -24,6 +24,7 @@ type LoadState =
 type EditorShellProps = {
   enteredPrompt: string;
   enteredOpenAiApiKey: string;
+  enteredOpenAiKeyword: string;
   enteredOpenAiModel: string;
   needsOpenAiApiKey: boolean;
   needsOpenAiModel: boolean;
@@ -33,6 +34,7 @@ type GenerationRequest = {
   id: number;
   prompt: string;
   openAiApiKey?: string;
+  openAiKeyword?: string;
   openAiModel?: string;
 };
 
@@ -82,6 +84,7 @@ function getSpecSummary(pack: GeneratedGamePack) {
 export function EditorShell({
   enteredPrompt,
   enteredOpenAiApiKey,
+  enteredOpenAiKeyword,
   enteredOpenAiModel,
   needsOpenAiApiKey,
   needsOpenAiModel,
@@ -90,6 +93,7 @@ export function EditorShell({
   const [generationRequest, setGenerationRequest] =
     useState<GenerationRequest | null>(null);
   const [openAiApiKey, setOpenAiApiKey] = useState(enteredOpenAiApiKey);
+  const [openAiKeyword, setOpenAiKeyword] = useState(enteredOpenAiKeyword);
   const [openAiModel, setOpenAiModel] = useState(
     isOpenAIModelId(enteredOpenAiModel)
       ? enteredOpenAiModel
@@ -140,6 +144,7 @@ export function EditorShell({
           body: JSON.stringify({
             enteredPrompt: activeGenerationRequest.prompt || undefined,
             openAiApiKey: activeGenerationRequest.openAiApiKey,
+            openAiKeyword: activeGenerationRequest.openAiKeyword,
             openAiModel: activeGenerationRequest.openAiModel,
           }),
         });
@@ -255,7 +260,9 @@ export function EditorShell({
     OPENAI_MODEL_OPTIONS.find((model) => model.id === openAiModel) ??
     OPENAI_MODEL_OPTIONS.find((model) => model.id === DEFAULT_OPENAI_MODEL);
   const canStartGeneration =
-    !isGenerating && (!needsOpenAiApiKey || Boolean(openAiApiKey.trim()));
+    !isGenerating &&
+    (!needsOpenAiApiKey ||
+      Boolean(openAiApiKey.trim() || openAiKeyword.trim()));
 
   function startGeneration() {
     if (!canStartGeneration) {
@@ -274,6 +281,7 @@ export function EditorShell({
       id: (request?.id ?? 0) + 1,
       prompt: enteredPrompt.trim(),
       openAiApiKey: needsOpenAiApiKey ? openAiApiKey.trim() : undefined,
+      openAiKeyword: needsOpenAiApiKey ? openAiKeyword.trim() : undefined,
       openAiModel: needsOpenAiModel ? openAiModel : undefined,
     }));
   }
@@ -394,23 +402,43 @@ export function EditorShell({
                   {needsOpenAiConfig ? (
                     <div className="mt-4 grid gap-3 border border-[var(--line)] bg-[rgba(240,247,243,0.72)] p-3">
                       {needsOpenAiApiKey ? (
-                        <label className="block">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                            OpenAI API key
-                          </span>
-                          <input
-                            type="password"
-                            required
-                            value={openAiApiKey}
-                            onChange={(event) =>
-                              setOpenAiApiKey(event.target.value)
-                            }
-                            autoComplete="off"
-                            spellCheck={false}
-                            className="mt-2 w-full border border-[var(--line)] bg-white/88 px-3 py-2 font-mono text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
-                            placeholder="sk-..."
-                          />
-                        </label>
+                        <div className="block">
+                          <label className="block">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                              OpenAI API key
+                            </span>
+                            <input
+                              type="password"
+                              value={openAiApiKey}
+                              onChange={(event) =>
+                                setOpenAiApiKey(event.target.value)
+                              }
+                              autoComplete="off"
+                              spellCheck={false}
+                              className="mt-2 w-full border border-[var(--line)] bg-white/88 px-3 py-2 font-mono text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                              placeholder="sk-..."
+                            />
+                          </label>
+                          <div className="py-3 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                            or
+                          </div>
+                          <label className="block">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                              Key word
+                            </span>
+                            <input
+                              type="text"
+                              value={openAiKeyword}
+                              onChange={(event) =>
+                                setOpenAiKeyword(event.target.value)
+                              }
+                              autoComplete="off"
+                              spellCheck={false}
+                              className="mt-2 w-full border border-[var(--line)] bg-white/88 px-3 py-2 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                              placeholder="Secret Word"
+                            />
+                          </label>
+                        </div>
                       ) : null}
 
                       {needsOpenAiModel ? (
