@@ -7,10 +7,12 @@ import { GeneratedGamePack } from "@/lib/starter-project";
 export type GeneratedGameStatus =
   | { state: "loading"; message: string }
   | { state: "ready"; message: string }
+  | { state: "paused"; message: string }
   | { state: "error"; message: string };
 
 type GeneratedGameHostProps = {
   pack: GeneratedGamePack;
+  isPaused?: boolean;
   onStatusChange?: (status: GeneratedGameStatus) => void;
 };
 
@@ -122,6 +124,8 @@ ${generatedSource}
         let displayHeight = 1;
         let lastFrame = performance.now();
         let isRunning = false;
+        let isPaused = false;
+        let hasStarted = false;
         let resizeObserver = null;
 
         function notify(type, payload) {
@@ -169,13 +173,13 @@ ${generatedSource}
             displayCtx.setTransform(1, 0, 0, 1, 0, 0);
           }
 
-          if (game && typeof game.resize === "function") {
+          if (hasStarted && game && typeof game.resize === "function") {
             game.resize(viewport.width, viewport.height, 1);
           }
         }
 
         function tick(now) {
-          if (!isRunning) {
+          if (!isRunning || isPaused) {
             return;
           }
 
@@ -207,6 +211,22 @@ ${generatedSource}
               message: error && error.message ? error.message : String(error)
             });
           }
+        }
+
+        function setPaused(nextIsPaused) {
+          if (!isRunning || isPaused === nextIsPaused) {
+            return;
+          }
+
+          isPaused = nextIsPaused;
+
+          if (isPaused) {
+            cancelAnimationFrame(animationFrame);
+            return;
+          }
+
+          lastFrame = performance.now();
+          animationFrame = requestAnimationFrame(tick);
         }
 
         function setKey(code, isDown, repeat) {
@@ -285,6 +305,8 @@ ${generatedSource}
 
             resize();
             game.start();
+            hasStarted = true;
+            game.resize(viewport.width, viewport.height, 1);
             isRunning = true;
             notify("game-ready", {
               manifest: globalThis.__AICADE_MANIFEST__,
@@ -329,9 +351,15 @@ ${generatedSource}
           if (event.data && event.data.type === "game-reload") {
             location.reload();
           }
+
+          if (event.data && event.data.type === "game-pause") {
+            setPaused(Boolean(event.data.paused));
+          }
         });
         window.addEventListener("beforeunload", function () {
           isRunning = false;
+          isPaused = false;
+          hasStarted = false;
           cancelAnimationFrame(animationFrame);
           if (resizeObserver) {
             resizeObserver.disconnect();
@@ -350,6 +378,7 @@ ${generatedSource}
 
 export function GeneratedGameHost({
   pack,
+  isPaused = false,
   onStatusChange,
 }: GeneratedGameHostProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -410,6 +439,13 @@ export function GeneratedGameHost({
       window.removeEventListener("message", handleMessage);
     };
   }, [onStatusChange, pack]);
+
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: "game-pause", paused: isPaused },
+      "*"
+    );
+  }, [isPaused, pack]);
 
   return (
     <div className="relative flex h-full min-h-[360px] w-full flex-col overflow-hidden border border-[var(--line-strong)] bg-[#0d1721]">
