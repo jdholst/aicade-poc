@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   GeneratedGameHost,
+  type GeneratedGameHostHandle,
   type GeneratedGameStatus,
 } from "@/components/generated-game-host";
 import {
@@ -97,6 +98,8 @@ export function EditorShell({
   const [gameResetNonce, setGameResetNonce] = useState(0);
   const [isGamePaused, setIsGamePaused] = useState(false);
   const [generationStepIndex, setGenerationStepIndex] = useState(0);
+  const gameHostRef = useRef<GeneratedGameHostHandle | null>(null);
+  const shouldFocusGameAfterResetRef = useRef(false);
   const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>({
     state: "loading",
     message: "Ready to build starter game.",
@@ -210,6 +213,34 @@ export function EditorShell({
     return () => window.clearInterval(intervalId);
   }, [loadState.status]);
 
+  useEffect(() => {
+    if (!shouldFocusGameAfterResetRef.current) {
+      return;
+    }
+
+    if (gameStatus.state === "error") {
+      shouldFocusGameAfterResetRef.current = false;
+      return;
+    }
+
+    if (gameStatus.state !== "ready") {
+      return;
+    }
+
+    shouldFocusGameAfterResetRef.current = false;
+    const focusId = window.setTimeout(() => {
+      gameHostRef.current?.focusGame();
+    }, 0);
+    const followUpFocusId = window.setTimeout(() => {
+      gameHostRef.current?.focusGame();
+    }, 120);
+
+    return () => {
+      window.clearTimeout(focusId);
+      window.clearTimeout(followUpFocusId);
+    };
+  }, [gameStatus.state, gameResetNonce]);
+
   const projectName =
     loadState.status === "success"
       ? loadState.pack.project.name
@@ -251,6 +282,12 @@ export function EditorShell({
     startGeneration();
   }
 
+  function focusGameAfterControlsClick() {
+    window.setTimeout(() => {
+      gameHostRef.current?.focusGame();
+    }, 0);
+  }
+
   function toggleGamePaused() {
     const nextIsPaused = !isGamePaused;
 
@@ -261,6 +298,7 @@ export function EditorShell({
         ? "Generated module is paused in the sandbox."
         : "Generated module is running in the sandbox.",
     });
+    focusGameAfterControlsClick();
   }
 
   return (
@@ -661,20 +699,21 @@ export function EditorShell({
                     >
                       {isGamePaused ? "Resume game" : "Pause game"}
                     </button>
-                  <button
-                    type="button"
-                    onClick={() => {
+                    <button
+                      type="button"
+                      onClick={() => {
+                        shouldFocusGameAfterResetRef.current = true;
                         setIsGamePaused(false);
-                      setGameStatus({
-                        state: "loading",
-                        message: "Resetting generated canvas module...",
-                      });
-                      setGameResetNonce((value) => value + 1);
-                    }}
-                    className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)]"
-                  >
-                    Reset game
-                  </button>
+                        setGameStatus({
+                          state: "loading",
+                          message: "Resetting generated canvas module...",
+                        });
+                        setGameResetNonce((value) => value + 1);
+                      }}
+                      className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)]"
+                    >
+                      Reset game
+                    </button>
                   </div>
                 </div>
                 {gameStatus.state === "error" ? (
@@ -690,6 +729,7 @@ export function EditorShell({
                   </div>
                 ) : null}
                 <GeneratedGameHost
+                  ref={gameHostRef}
                   key={`${loadState.pack.manifest.title}-${gameResetNonce}`}
                   pack={loadState.pack}
                   isPaused={isGamePaused}
