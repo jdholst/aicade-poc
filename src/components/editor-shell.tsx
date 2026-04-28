@@ -67,6 +67,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [requestNonce, setRequestNonce] = useState(0);
   const [gameResetNonce, setGameResetNonce] = useState(0);
+  const [isGamePaused, setIsGamePaused] = useState(false);
   const [generationStepIndex, setGenerationStepIndex] = useState(0);
   const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>({
     state: "loading",
@@ -85,6 +86,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
         state: "loading",
         message: "Waiting for generated module...",
       });
+      setIsGamePaused(false);
 
       try {
         timeoutId = window.setTimeout(() => {
@@ -181,8 +183,21 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
   const isGenerating = loadState.status === "loading";
 
   function regenerateGame() {
+    setIsGamePaused(false);
     setGameResetNonce(0);
     setRequestNonce((value) => value + 1);
+  }
+
+  function toggleGamePaused() {
+    const nextIsPaused = !isGamePaused;
+
+    setIsGamePaused(nextIsPaused);
+    setGameStatus({
+      state: nextIsPaused ? "paused" : "ready",
+      message: nextIsPaused
+        ? "Generated module is paused in the sandbox."
+        : "Generated module is running in the sandbox.",
+    });
   }
 
   return (
@@ -203,6 +218,8 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                 className={`h-2 w-2 rounded-full ${
                   gameStatus.state === "ready"
                     ? "bg-[var(--accent)]"
+                    : gameStatus.state === "paused"
+                      ? "bg-[#c79236]"
                     : gameStatus.state === "error"
                       ? "bg-[#9d4b31]"
                       : "bg-[#c79236]"
@@ -485,9 +502,22 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                       editable spec without regenerating.
                     </p>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <button
+                      type="button"
+                      disabled={
+                        gameStatus.state !== "ready" &&
+                        gameStatus.state !== "paused"
+                      }
+                      onClick={toggleGamePaused}
+                      className="inline-flex items-center justify-center border border-[var(--line)] bg-[rgba(21,18,14,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:text-[var(--muted)] disabled:opacity-55"
+                    >
+                      {isGamePaused ? "Resume game" : "Pause game"}
+                    </button>
                   <button
                     type="button"
                     onClick={() => {
+                        setIsGamePaused(false);
                       setGameStatus({
                         state: "loading",
                         message: "Resetting generated canvas module...",
@@ -498,6 +528,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                   >
                     Reset game
                   </button>
+                  </div>
                 </div>
                 {gameStatus.state === "error" ? (
                   <div className="flex flex-col gap-3 border border-[rgba(169,72,42,0.24)] bg-[rgba(255,243,236,0.92)] px-4 py-3 text-sm text-[#613128] sm:flex-row sm:items-center sm:justify-between">
@@ -514,6 +545,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                 <GeneratedGameHost
                   key={`${loadState.pack.manifest.title}-${gameResetNonce}`}
                   pack={loadState.pack}
+                  isPaused={isGamePaused}
                   onStatusChange={setGameStatus}
                 />
               </>
