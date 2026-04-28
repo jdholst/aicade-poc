@@ -8,6 +8,7 @@ import {
   generatedGamePackFromOpenAiSchema,
   generatedGamePackJsonSchema,
   generatedGamePackSchema,
+  isOpenAIModelId,
   type GeneratedGamePack,
   type GeneratedGamePackFromOpenAI,
   type JsonValue,
@@ -73,6 +74,8 @@ type OpenAIResponsePayload = {
 
 type StarterProjectRequestBody = {
   enteredPrompt?: unknown;
+  openAiApiKey?: unknown;
+  openAiModel?: unknown;
 };
 
 const forbiddenSourcePatterns = [
@@ -119,6 +122,34 @@ function normalizeUserPrompt(prompt: unknown) {
   }
 
   return normalized.slice(0, 320);
+}
+
+function normalizeClientOpenAiApiKey(apiKey: unknown) {
+  if (typeof apiKey !== "string") {
+    return undefined;
+  }
+
+  const normalized = apiKey.trim();
+
+  if (!normalized || normalized.length > 300) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeClientOpenAiModel(model: unknown) {
+  if (typeof model !== "string") {
+    return undefined;
+  }
+
+  const normalized = model.trim();
+
+  if (!isOpenAIModelId(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -329,7 +360,11 @@ function transpileGeneratedTypeScript(source: string) {
   return result.outputText;
 }
 
-async function requestGeneratedGamePackFromOpenAI(userPrompt: string) {
+async function requestGeneratedGamePackFromOpenAI(
+  userPrompt: string,
+  openAiApiKey: string,
+  openAiModel: string
+) {
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -341,12 +376,12 @@ async function requestGeneratedGamePackFromOpenAI(userPrompt: string) {
     response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openAiApiKey}`,
         "Content-Type": "application/json",
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
+        model: openAiModel,
         reasoning: {
           effort: "medium",
         },
@@ -456,12 +491,20 @@ function completeGeneratedGamePack(
   return parsed.data;
 }
 
-async function generateGamePack(userPrompt: string): Promise<GeneratedGamePack> {
+async function generateGamePack(
+  userPrompt: string,
+  openAiApiKey: string,
+  openAiModel: string
+): Promise<GeneratedGamePack> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const rawPack = await requestGeneratedGamePackFromOpenAI(userPrompt);
+      const rawPack = await requestGeneratedGamePackFromOpenAI(
+        userPrompt,
+        openAiApiKey,
+        openAiModel
+      );
       const parsed = generatedGamePackFromOpenAiSchema.safeParse(rawPack);
 
       if (!parsed.success) {
@@ -490,15 +533,42 @@ export async function POST(request: Request) {
     .json()
     .catch(() => undefined)) as StarterProjectRequestBody | undefined;
   const userPrompt = normalizeUserPrompt(requestBody?.enteredPrompt);
+  const envOpenAiApiKey = normalizeClientOpenAiApiKey(
+    process.env.OPENAI_API_KEY
+  );
+  const envOpenAiModel = process.env.OPENAI_MODEL?.trim() || undefined;
+  const clientOpenAiModel = normalizeClientOpenAiModel(requestBody?.openAiModel);
+  const openAiApiKey =
+    envOpenAiApiKey ?? normalizeClientOpenAiApiKey(requestBody?.openAiApiKey);
+  const openAiModel = envOpenAiModel ?? clientOpenAiModel ?? DEFAULT_OPENAI_MODEL;
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!openAiApiKey) {
     return NextResponse.json(
       {
         error:
-          "Missing OPENAI_API_KEY. Add it to .env.local to enable live generated module creation.",
+          "Missing OpenAI API key. Enter a key before building the starter game or add OPENAI_API_KEY to .env.local.",
       },
       {
-        status: 500,
+        status: 400,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  }
+
+  if (
+    !envOpenAiModel &&
+    typeof requestBody?.openAiModel === "string" &&
+    requestBody.openAiModel.trim() &&
+    !clientOpenAiModel
+  ) {
+    return NextResponse.json(
+      {
+        error: "Select a supported OpenAI model before building the starter game.",
+      },
+      {
+        status: 400,
         headers: {
           "Cache-Control": "no-store",
         },
@@ -507,7 +577,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const generatedGamePack = await generateGamePack(userPrompt);
+    const generatedGamePack = await generateGamePack(
+      userPrompt,
+      openAiApiKey,
+      openAiModel
+    );
 
     return NextResponse.json(generatedGamePack, {
       headers: {

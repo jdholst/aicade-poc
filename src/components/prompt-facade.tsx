@@ -3,10 +3,27 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState, useTransition } from "react";
 
-export function PromptFacade() {
+import {
+  DEFAULT_OPENAI_MODEL,
+  OPENAI_MODEL_OPTIONS,
+  isOpenAIModelId,
+} from "@/lib/starter-project";
+
+type PromptFacadeProps = {
+  needsOpenAiApiKey: boolean;
+  needsOpenAiModel: boolean;
+};
+
+export function PromptFacade({
+  needsOpenAiApiKey,
+  needsOpenAiModel,
+}: PromptFacadeProps) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
+  const [openAiApiKey, setOpenAiApiKey] = useState("");
+  const [openAiModel, setOpenAiModel] = useState(DEFAULT_OPENAI_MODEL);
   const [isPending, startTransition] = useTransition();
+  const needsOpenAiConfig = needsOpenAiApiKey || needsOpenAiModel;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -16,6 +33,14 @@ export function PromptFacade() {
 
     if (trimmed) {
       params.set("idea", trimmed);
+    }
+
+    if (needsOpenAiApiKey) {
+      params.set("openAiApiKey", openAiApiKey.trim());
+    }
+
+    if (needsOpenAiModel) {
+      params.set("openAiModel", openAiModel);
     }
 
     startTransition(() => {
@@ -93,6 +118,60 @@ export function PromptFacade() {
                   placeholder="A neon cave runner with floating platforms, coins, and a little robot hero..."
                 />
               </label>
+
+              {needsOpenAiConfig ? (
+                <section className="grid gap-4 border border-[var(--line)] bg-[rgba(255,255,255,0.58)] p-4 sm:grid-cols-2">
+                  {needsOpenAiApiKey ? (
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                        OpenAI API key
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        value={openAiApiKey}
+                        onChange={(event) =>
+                          setOpenAiApiKey(event.target.value)
+                        }
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="mt-2 w-full border border-[var(--line)] bg-white/90 px-4 py-3 font-mono text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                        placeholder="sk-..."
+                      />
+                    </label>
+                  ) : null}
+
+                  {needsOpenAiModel ? (
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                        AI model
+                      </span>
+                      <select
+                        value={openAiModel}
+                        onChange={(event) => {
+                          if (isOpenAIModelId(event.target.value)) {
+                            setOpenAiModel(event.target.value);
+                          }
+                        }}
+                        className="mt-2 w-full border border-[var(--line)] bg-white/90 px-4 py-3 text-sm font-medium text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                      >
+                        {OPENAI_MODEL_OPTIONS.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
+                        {
+                          OPENAI_MODEL_OPTIONS.find(
+                            (model) => model.id === openAiModel
+                          )?.detail
+                        }
+                      </p>
+                    </label>
+                  ) : null}
+                </section>
+              ) : null}
 
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="max-w-xl text-sm leading-7 text-[var(--muted)]">
