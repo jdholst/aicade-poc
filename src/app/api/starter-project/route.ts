@@ -75,6 +75,7 @@ type OpenAIResponsePayload = {
 type StarterProjectRequestBody = {
   enteredPrompt?: unknown;
   openAiApiKey?: unknown;
+  openAiKeyword?: unknown;
   openAiModel?: unknown;
 };
 
@@ -136,6 +137,29 @@ function normalizeClientOpenAiApiKey(apiKey: unknown) {
   }
 
   return normalized;
+}
+
+function normalizeClientOpenAiKeyword(keyword: unknown) {
+  if (typeof keyword !== "string") {
+    return undefined;
+  }
+
+  const normalized = keyword
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_")
+    .toUpperCase();
+
+  if (!normalized || normalized.length > 80) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function getOpenAiApiKeyForKeyword(keyword: string) {
+  return normalizeClientOpenAiApiKey(process.env[`KEYWORD_${keyword}`]);
 }
 
 function normalizeClientOpenAiModel(model: unknown) {
@@ -538,15 +562,31 @@ export async function POST(request: Request) {
   );
   const envOpenAiModel = process.env.OPENAI_MODEL?.trim() || undefined;
   const clientOpenAiModel = normalizeClientOpenAiModel(requestBody?.openAiModel);
+  const clientOpenAiApiKey = normalizeClientOpenAiApiKey(
+    requestBody?.openAiApiKey
+  );
+  const clientOpenAiKeyword = normalizeClientOpenAiKeyword(
+    requestBody?.openAiKeyword
+  );
+  const keywordOpenAiApiKey = clientOpenAiKeyword
+    ? getOpenAiApiKeyForKeyword(clientOpenAiKeyword)
+    : undefined;
   const openAiApiKey =
-    envOpenAiApiKey ?? normalizeClientOpenAiApiKey(requestBody?.openAiApiKey);
+    envOpenAiApiKey ?? clientOpenAiApiKey ?? keywordOpenAiApiKey;
   const openAiModel = envOpenAiModel ?? clientOpenAiModel ?? DEFAULT_OPENAI_MODEL;
 
   if (!openAiApiKey) {
+    const rawKeyword =
+      typeof requestBody?.openAiKeyword === "string"
+        ? requestBody.openAiKeyword.trim()
+        : "";
+    const missingKeywordMessage = clientOpenAiKeyword
+      ? `No OpenAI API key is configured for keyword "${rawKeyword}". Add KEYWORD_${clientOpenAiKeyword}=... to .env.local or enter the API key directly.`
+      : "Missing OpenAI API key. Enter a key, enter a configured keyword, or add OPENAI_API_KEY to .env.local.";
+
     return NextResponse.json(
       {
-        error:
-          "Missing OpenAI API key. Enter a key before building the starter game or add OPENAI_API_KEY to .env.local.",
+        error: missingKeywordMessage,
       },
       {
         status: 400,
