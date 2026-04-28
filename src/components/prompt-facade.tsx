@@ -76,6 +76,10 @@ export function PromptFacade({
                 generated starter appearing in seconds with chat on the left
                 and a live canvas on the right.
               </p>
+              <p className="max-w-2xl text-lg leading-8 text-[var(--muted)] sm:text-xl">
+                To begin enter your prompt at the right. Provide your own OpenAI API key,
+                or obtain a secret key word (email me at <a href="mailto:jakedavidholst@hotmail.com" className="underline">jakedavidholst@hotmail.com</a> for requests).
+              </p>
             </div>
           </div>
 
