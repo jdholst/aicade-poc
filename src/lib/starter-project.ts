@@ -5,6 +5,90 @@ export const DEFAULT_STARTER_PROMPT =
 
 export const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
 
+export const OPENAI_MODEL_OPTIONS = [
+  {
+    id: "gpt-5.5",
+    label: "GPT-5.5",
+    detail: "Flagship model for complex reasoning, coding, and design work.",
+  },
+  {
+    id: "gpt-5.4",
+    label: "GPT-5.4",
+    detail: "Frontier model for coding and professional workflows.",
+  },
+  {
+    id: "gpt-5.4-mini",
+    label: "GPT-5.4 mini",
+    detail: "Strong default for faster, lower-cost generation.",
+  },
+  {
+    id: "gpt-5.4-nano",
+    label: "GPT-5.4 nano",
+    detail: "Lowest-cost GPT-5.4 class option for simple generations.",
+  },
+  {
+    id: "gpt-5.2",
+    label: "GPT-5.2",
+    detail: "Previous frontier model for coding and agentic tasks.",
+  },
+  {
+    id: "gpt-5.2-pro",
+    label: "GPT-5.2 pro",
+    detail: "Higher-precision GPT-5.2 variant for difficult prompts.",
+  },
+  {
+    id: "gpt-5",
+    label: "GPT-5",
+    detail: "Previous reasoning model for coding and agentic tasks.",
+  },
+  {
+    id: "gpt-5-mini",
+    label: "GPT-5 mini",
+    detail: "Cost-efficient GPT-5 model for well-defined tasks.",
+  },
+  {
+    id: "gpt-5-nano",
+    label: "GPT-5 nano",
+    detail: "Fastest, lowest-cost GPT-5 model.",
+  },
+  {
+    id: "gpt-4.1",
+    label: "GPT-4.1",
+    detail: "Non-reasoning model with strong instruction following.",
+  },
+  {
+    id: "gpt-4.1-mini",
+    label: "GPT-4.1 mini",
+    detail: "Lower-cost GPT-4.1 variant.",
+  },
+  {
+    id: "gpt-4.1-nano",
+    label: "GPT-4.1 nano",
+    detail: "Fastest GPT-4.1 variant.",
+  },
+  {
+    id: "o3",
+    label: "o3",
+    detail: "Reasoning model for harder planning tasks.",
+  },
+  {
+    id: "o3-pro",
+    label: "o3 pro",
+    detail: "Higher-accuracy o3 variant.",
+  },
+  {
+    id: "o4-mini",
+    label: "o4 mini",
+    detail: "Fast reasoning model for lower-latency work.",
+  },
+] as const;
+
+export type OpenAIModelId = (typeof OPENAI_MODEL_OPTIONS)[number]["id"];
+
+export function isOpenAIModelId(value: string): value is OpenAIModelId {
+  return OPENAI_MODEL_OPTIONS.some((model) => model.id === value);
+}
+
 export type JsonValue =
   | string
   | number

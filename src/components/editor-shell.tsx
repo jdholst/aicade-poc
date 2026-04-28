@@ -7,17 +7,32 @@ import {
   type GeneratedGameStatus,
 } from "@/components/generated-game-host";
 import {
+  DEFAULT_OPENAI_MODEL,
   GeneratedGamePack,
+  OPENAI_MODEL_OPTIONS,
   generatedGamePackSchema,
+  isOpenAIModelId,
 } from "@/lib/starter-project";
 
 type LoadState =
+  | { status: "idle" }
   | { status: "loading" }
   | { status: "success"; pack: GeneratedGamePack }
   | { status: "error"; message: string };
 
 type EditorShellProps = {
   enteredPrompt: string;
+  enteredOpenAiApiKey: string;
+  enteredOpenAiModel: string;
+  needsOpenAiApiKey: boolean;
+  needsOpenAiModel: boolean;
+};
+
+type GenerationRequest = {
+  id: number;
+  prompt: string;
+  openAiApiKey?: string;
+  openAiModel?: string;
 };
 
 const GENERATION_TIMEOUT_MS = 120_000;
@@ -63,18 +78,36 @@ function getSpecSummary(pack: GeneratedGamePack) {
   ];
 }
 
-export function EditorShell({ enteredPrompt }: EditorShellProps) {
-  const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
-  const [requestNonce, setRequestNonce] = useState(0);
+export function EditorShell({
+  enteredPrompt,
+  enteredOpenAiApiKey,
+  enteredOpenAiModel,
+  needsOpenAiApiKey,
+  needsOpenAiModel,
+}: EditorShellProps) {
+  const [loadState, setLoadState] = useState<LoadState>({ status: "idle" });
+  const [generationRequest, setGenerationRequest] =
+    useState<GenerationRequest | null>(null);
+  const [openAiApiKey, setOpenAiApiKey] = useState(enteredOpenAiApiKey);
+  const [openAiModel, setOpenAiModel] = useState(
+    isOpenAIModelId(enteredOpenAiModel)
+      ? enteredOpenAiModel
+      : DEFAULT_OPENAI_MODEL
+  );
   const [gameResetNonce, setGameResetNonce] = useState(0);
   const [isGamePaused, setIsGamePaused] = useState(false);
   const [generationStepIndex, setGenerationStepIndex] = useState(0);
   const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>({
     state: "loading",
-    message: "Waiting for generated module...",
+    message: "Ready to build starter game.",
   });
 
   useEffect(() => {
+    if (!generationRequest) {
+      return;
+    }
+
+    const activeGenerationRequest = generationRequest;
     const controller = new AbortController();
     let didTimeOut = false;
     let timeoutId: number | undefined;
@@ -102,7 +135,9 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
           cache: "no-store",
           signal: controller.signal,
           body: JSON.stringify({
-            enteredPrompt: enteredPrompt || undefined,
+            enteredPrompt: activeGenerationRequest.prompt || undefined,
+            openAiApiKey: activeGenerationRequest.openAiApiKey,
+            openAiModel: activeGenerationRequest.openAiModel,
           }),
         });
 
@@ -159,7 +194,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
     void loadStarterProject();
 
     return () => controller.abort();
-  }, [enteredPrompt, requestNonce]);
+  }, [generationRequest]);
 
   useEffect(() => {
     if (loadState.status !== "loading") {
@@ -173,7 +208,7 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
     }, 1800);
 
     return () => window.clearInterval(intervalId);
-  }, [loadState.status, enteredPrompt, requestNonce]);
+  }, [loadState.status]);
 
   const projectName =
     loadState.status === "success"
@@ -181,11 +216,39 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
       : "Starter Project";
   const currentGenerationStage = generationStages[generationStepIndex];
   const isGenerating = loadState.status === "loading";
+  const submittedPrompt =
+    enteredPrompt.trim() ||
+    "No prompt was provided, so AI-Cade will use the default starter platformer prompt.";
+  const needsOpenAiConfig = needsOpenAiApiKey || needsOpenAiModel;
+  const selectedOpenAiModel =
+    OPENAI_MODEL_OPTIONS.find((model) => model.id === openAiModel) ??
+    OPENAI_MODEL_OPTIONS.find((model) => model.id === DEFAULT_OPENAI_MODEL);
+  const canStartGeneration =
+    !isGenerating && (!needsOpenAiApiKey || Boolean(openAiApiKey.trim()));
 
-  function regenerateGame() {
+  function startGeneration() {
+    if (!canStartGeneration) {
+      return;
+    }
+
     setIsGamePaused(false);
     setGameResetNonce(0);
-    setRequestNonce((value) => value + 1);
+    setGenerationStepIndex(0);
+    setLoadState({ status: "loading" });
+    setGameStatus({
+      state: "loading",
+      message: "Waiting for generated module...",
+    });
+    setGenerationRequest((request) => ({
+      id: (request?.id ?? 0) + 1,
+      prompt: enteredPrompt.trim(),
+      openAiApiKey: needsOpenAiApiKey ? openAiApiKey.trim() : undefined,
+      openAiModel: needsOpenAiModel ? openAiModel : undefined,
+    }));
+  }
+
+  function regenerateGame() {
+    startGeneration();
   }
 
   function toggleGamePaused() {
@@ -251,11 +314,15 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                   </div>
                   <button
                     type="button"
-                    disabled={isGenerating}
+                    disabled={!canStartGeneration}
                     onClick={regenerateGame}
                     className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
                   >
-                    {isGenerating ? "Generating..." : "Regenerate"}
+                    {isGenerating
+                      ? "Generating..."
+                      : loadState.status === "idle"
+                        ? "Build"
+                        : "Regenerate"}
                   </button>
                 </div>
               </div>
@@ -267,6 +334,85 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
             </div>
 
             <div className="chat-history-scroll min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5">
+              {loadState.status !== "success" ? (
+                <article className="ml-auto max-w-[92%] border border-[var(--line)] bg-[rgba(21,18,14,0.93)] px-4 py-3 text-white">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                    Prompt
+                  </div>
+                  <p className="mt-2 text-sm leading-7">{submittedPrompt}</p>
+                </article>
+              ) : null}
+
+              {loadState.status === "idle" ? (
+                <article className="max-w-[92%] border border-[var(--line)] bg-white/88 px-4 py-3 text-[var(--ink)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                    AI
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
+                    I have your prompt ready. Start generation when you want the
+                    starter game code, editable spec, controls, and editor
+                    metadata created.
+                  </p>
+                  {needsOpenAiConfig ? (
+                    <div className="mt-4 grid gap-3 border border-[var(--line)] bg-[rgba(240,247,243,0.72)] p-3">
+                      {needsOpenAiApiKey ? (
+                        <label className="block">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                            OpenAI API key
+                          </span>
+                          <input
+                            type="password"
+                            required
+                            value={openAiApiKey}
+                            onChange={(event) =>
+                              setOpenAiApiKey(event.target.value)
+                            }
+                            autoComplete="off"
+                            spellCheck={false}
+                            className="mt-2 w-full border border-[var(--line)] bg-white/88 px-3 py-2 font-mono text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                            placeholder="sk-..."
+                          />
+                        </label>
+                      ) : null}
+
+                      {needsOpenAiModel ? (
+                        <label className="block">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                            AI model
+                          </span>
+                          <select
+                            value={openAiModel}
+                            onChange={(event) => {
+                              if (isOpenAIModelId(event.target.value)) {
+                                setOpenAiModel(event.target.value);
+                              }
+                            }}
+                            className="mt-2 w-full border border-[var(--line)] bg-white/88 px-3 py-2 text-sm font-medium text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
+                          >
+                            {OPENAI_MODEL_OPTIONS.map((model) => (
+                              <option key={model.id} value={model.id}>
+                                {model.label}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
+                            {selectedOpenAiModel?.detail}
+                          </p>
+                        </label>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={!canStartGeneration}
+                    onClick={startGeneration}
+                    className="mt-4 inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
+                  >
+                    Build the starter game
+                  </button>
+                </article>
+              ) : null}
+
               {loadState.status === "loading" ? (
                 <>
                   <div className="border border-[var(--line)] bg-white/76 px-4 py-3 text-sm text-[var(--muted)]">
@@ -326,8 +472,9 @@ export function EditorShell({ enteredPrompt }: EditorShellProps) {
                   </div>
                   <button
                     type="button"
+                    disabled={!canStartGeneration}
                     onClick={regenerateGame}
-                    className="inline-flex items-center justify-center border border-[#9d4b31]/30 bg-[#9d4b31] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b]"
+                    className="inline-flex items-center justify-center border border-[#9d4b31]/30 bg-[#9d4b31] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
                   >
                     Retry generation
                   </button>
