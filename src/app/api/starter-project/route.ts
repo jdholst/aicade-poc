@@ -2,75 +2,26 @@ import { NextResponse } from "next/server";
 import ts from "typescript";
 
 import {
-  DEFAULT_OPENAI_MODEL,
-  DEFAULT_STARTER_PROMPT,
-  createGeneratedGameSystemPrompt,
   generatedGamePackFromOpenAiSchema,
-  generatedGamePackJsonSchema,
   generatedGamePackSchema,
-  isOpenAIModelId,
+  requestGeneratedGamePackFromOpenAI,
   type GeneratedGamePack,
   type GeneratedGamePackFromOpenAI,
   type JsonValue,
-} from "@/lib/starter-project";
+} from "@/service/starter-project";
+import {
+  MAX_EDITABLE_SPEC_DEPTH,
+  MAX_EDITABLE_SPEC_ARRAY_ITEMS,
+  MAX_EDITABLE_SPEC_OBJECT_KEYS,
+  MAX_EDITABLE_SPEC_STRING_LENGTH,
+  jsDataMemberNames,
+  forbiddenSourcePatterns,
+  DEFAULT_STARTER_PROMPT,
+  DEFAULT_OPENAI_MODEL,
+} from "@/constants";
+import { isOpenAIModelId } from "@/utils/openai-utils";
 
-const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const GENERATED_GAME_TOOL = "return_generated_game_pack";
-const OPENAI_REQUEST_TIMEOUT_MS = 55_000;
-const MAX_EDITABLE_SPEC_DEPTH = 8;
-const MAX_EDITABLE_SPEC_ARRAY_ITEMS = 200;
-const MAX_EDITABLE_SPEC_OBJECT_KEYS = 80;
-const MAX_EDITABLE_SPEC_STRING_LENGTH = 1200;
-
-const jsDataMemberNames = new Set([
-  "at",
-  "concat",
-  "entries",
-  "every",
-  "filter",
-  "find",
-  "findIndex",
-  "flat",
-  "flatMap",
-  "forEach",
-  "includes",
-  "indexOf",
-  "join",
-  "keys",
-  "length",
-  "map",
-  "pop",
-  "push",
-  "reduce",
-  "reverse",
-  "slice",
-  "some",
-  "sort",
-  "splice",
-  "toFixed",
-  "toString",
-  "trim",
-  "values",
-]);
-
-type ResponsesFunctionCall = {
-  type: "function_call";
-  name: string;
-  arguments: string;
-};
-
-type ResponseOutputItem = {
-  type: string;
-  name?: string;
-  arguments?: string;
-};
-
-type OpenAIResponsePayload = {
-  error?: {
-    message?: string;
-  };
-  output?: ResponseOutputItem[];
-};
+export const runtime = "nodejs";
 
 type StarterProjectRequestBody = {
   enteredPrompt?: unknown;
@@ -78,30 +29,6 @@ type StarterProjectRequestBody = {
   openAiKeyword?: unknown;
   openAiModel?: unknown;
 };
-
-const forbiddenSourcePatterns = [
-  /\bimport\b/i,
-  /\bexport\b/i,
-  /\bfetch\b/i,
-  /\bXMLHttpRequest\b/i,
-  /\bWebSocket\b/i,
-  /\blocalStorage\b/i,
-  /\bsessionStorage\b/i,
-  /\bindexedDB\b/i,
-  /\b(?:globalThis|self)\s*\.\s*parent\b/i,
-  /\b(?:globalThis|self)\s*\.\s*top\b/i,
-  /\b(?:globalThis|self)\s*\.\s*opener\b/i,
-  /\bparent\s*\./i,
-  /\btop\s*\./i,
-  /\bopener\s*\./i,
-  /\beval\b/i,
-  /\bnew\s+Function\b/i,
-  /\bFunction\s*\(/,
-  /\bsetTimeout\b/i,
-  /\bsetInterval\b/i,
-  /\bdocument\b/i,
-  /\bwindow\b/i,
-];
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) {
@@ -384,104 +311,6 @@ function transpileGeneratedTypeScript(source: string) {
   return result.outputText;
 }
 
-async function requestGeneratedGamePackFromOpenAI(
-  userPrompt: string,
-  openAiApiKey: string,
-  openAiModel: string
-) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    OPENAI_REQUEST_TIMEOUT_MS
-  );
-
-  let response: Response;
-  try {
-    response = await fetch(OPENAI_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: openAiModel,
-        reasoning: {
-          effort: "medium",
-        },
-        parallel_tool_calls: false,
-        tool_choice: {
-          type: "function",
-          name: GENERATED_GAME_TOOL,
-        },
-        tools: [
-          {
-            type: "function",
-            name: GENERATED_GAME_TOOL,
-            description:
-              "Return a generated Canvas 2D game pack with TypeScript module source, manifest, editable spec, metadata, and chat transcript.",
-            parameters: generatedGamePackJsonSchema,
-            strict: true,
-          },
-        ],
-        instructions: createGeneratedGameSystemPrompt(userPrompt),
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: userPrompt,
-              },
-            ],
-          },
-        ],
-      }),
-      cache: "no-store",
-    });
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(
-        "OpenAI generation timed out while creating the game module."
-      );
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  const payload = (await response.json()) as OpenAIResponsePayload;
-
-  if (!response.ok) {
-    throw new Error(
-      payload.error?.message ??
-        `OpenAI request failed with status ${response.status}.`
-    );
-  }
-
-  const functionCall = payload.output?.find(
-    (item): item is ResponsesFunctionCall =>
-      item.type === "function_call" &&
-      typeof item.name === "string" &&
-      item.name === GENERATED_GAME_TOOL &&
-      typeof item.arguments === "string"
-  );
-
-  if (!functionCall) {
-    throw new Error("OpenAI did not return a generated game pack.");
-  }
-
-  let parsedArguments: unknown;
-  try {
-    parsedArguments = JSON.parse(functionCall.arguments);
-  } catch {
-    throw new Error("OpenAI returned invalid JSON for the generated game pack.");
-  }
-
-  return parsedArguments;
-}
-
 function completeGeneratedGamePack(
   pack: GeneratedGamePackFromOpenAI,
   userPrompt: string
@@ -549,9 +378,6 @@ async function generateGamePack(
   );
 }
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function POST(request: Request) {
   const requestBody = (await request
     .json()
@@ -581,7 +407,7 @@ export async function POST(request: Request) {
         ? requestBody.openAiKeyword.trim()
         : "";
     const missingKeywordMessage = clientOpenAiKeyword
-      ? `No OpenAI API key is configured for keyword "${rawKeyword}". Add KEYWORD_${clientOpenAiKeyword}=... to .env.local or enter the API key directly.`
+      ? `No OpenAI API key is configured for keyword "${rawKeyword}".`
       : "Missing OpenAI API key. Enter a key, enter a configured keyword, or add OPENAI_API_KEY to .env.local.";
 
     return NextResponse.json(

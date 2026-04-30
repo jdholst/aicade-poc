@@ -8,7 +8,8 @@ import {
   useRef,
 } from "react";
 
-import { GeneratedGamePack } from "@/lib/starter-project";
+import { GeneratedGamePack } from "@/service/starter-project";
+import { SANDBOX_BOOT_TIMEOUT_MS } from "@/constants";
 
 export type GeneratedGameStatus =
   | { state: "loading"; message: string }
@@ -25,8 +26,6 @@ type GeneratedGameHostProps = {
 export type GeneratedGameHostHandle = {
   focusGame: () => void;
 };
-
-const SANDBOX_BOOT_TIMEOUT_MS = 12_000;
 
 function escapeScriptContent(source: string) {
   return source

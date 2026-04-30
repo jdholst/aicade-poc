@@ -1,93 +1,11 @@
 import { z } from "zod";
-
-export const DEFAULT_STARTER_PROMPT =
-  "A simple 2D platformer where I control a character that can jump";
-
-export const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
-
-export const OPENAI_MODEL_OPTIONS = [
-  {
-    id: "gpt-5.5",
-    label: "GPT-5.5",
-    detail: "Flagship model for complex reasoning, coding, and design work.",
-  },
-  {
-    id: "gpt-5.4",
-    label: "GPT-5.4",
-    detail: "Frontier model for coding and professional workflows.",
-  },
-  {
-    id: "gpt-5.4-mini",
-    label: "GPT-5.4 mini",
-    detail: "Strong default for faster, lower-cost generation.",
-  },
-  {
-    id: "gpt-5.4-nano",
-    label: "GPT-5.4 nano",
-    detail: "Lowest-cost GPT-5.4 class option for simple generations.",
-  },
-  {
-    id: "gpt-5.2",
-    label: "GPT-5.2",
-    detail: "Previous frontier model for coding and agentic tasks.",
-  },
-  {
-    id: "gpt-5.2-pro",
-    label: "GPT-5.2 pro",
-    detail: "Higher-precision GPT-5.2 variant for difficult prompts.",
-  },
-  {
-    id: "gpt-5",
-    label: "GPT-5",
-    detail: "Previous reasoning model for coding and agentic tasks.",
-  },
-  {
-    id: "gpt-5-mini",
-    label: "GPT-5 mini",
-    detail: "Cost-efficient GPT-5 model for well-defined tasks.",
-  },
-  {
-    id: "gpt-5-nano",
-    label: "GPT-5 nano",
-    detail: "Fastest, lowest-cost GPT-5 model.",
-  },
-  {
-    id: "gpt-4.1",
-    label: "GPT-4.1",
-    detail: "Non-reasoning model with strong instruction following.",
-  },
-  {
-    id: "gpt-4.1-mini",
-    label: "GPT-4.1 mini",
-    detail: "Lower-cost GPT-4.1 variant.",
-  },
-  {
-    id: "gpt-4.1-nano",
-    label: "GPT-4.1 nano",
-    detail: "Fastest GPT-4.1 variant.",
-  },
-  {
-    id: "o3",
-    label: "o3",
-    detail: "Reasoning model for harder planning tasks.",
-  },
-  {
-    id: "o3-pro",
-    label: "o3 pro",
-    detail: "Higher-accuracy o3 variant.",
-  },
-  {
-    id: "o4-mini",
-    label: "o4 mini",
-    detail: "Fast reasoning model for lower-latency work.",
-  },
-] as const;
-
-export type OpenAIModelId = (typeof OPENAI_MODEL_OPTIONS)[number]["id"];
-
-export function isOpenAIModelId(value: string): value is OpenAIModelId {
-  return OPENAI_MODEL_OPTIONS.some((model) => model.id === value);
-}
+import { behaviorValues } from "@/constants";
+export {
+  DEFAULT_STARTER_PROMPT,
+  DEFAULT_OPENAI_MODEL,
+  OPENAI_MODEL_OPTIONS,
+  behaviorValues,
+} from "@/constants";
 
 export type JsonValue =
   | string
@@ -339,65 +257,7 @@ export const generatedGamePackJsonSchema = {
   },
 } as const;
 
-export function createGeneratedGameSystemPrompt(userPrompt: string) {
-  return `
-You are creating the first magic moment for an AI game creation product.
-
-Return a generated game pack for this user prompt:
-"${userPrompt}".
-
-You must generate TypeScript source for a self-contained Canvas 2D game runtime.
-
-Hard module contract:
-- Do not use imports, exports, React, JSX, DOM queries, network calls, storage APIs, eval, Function, timers, parent/top/opener access, or external assets.
-- The source must assign:
-  globalThis.createGameModule = function createGameModule(host) { ... }
-- The factory receives host = { canvas, ctx, spec, viewport }.
-- It must return an object with these functions:
-  start(), update(dt, input), render(ctx), resize(width, height, dpr), destroy(), getEditableSpec(), applyPatch(patch).
-- The game must use host.spec as its editable game spec and source of truth.
-- The generated code and editableSpecJson must agree exactly. Every spec path read by the module must exist in editableSpecJson.
-- Before reading nested data such as position.x, ball.x, paddle.y, or entity.size, initialize that object from a complete default object merged with host.spec.
-- Do not read .x, .y, .width, .height, .radius, .speed, or similar properties from possibly undefined objects.
-- Prefer a small local state object created in start() from validated spec values, then update/render from that local state.
-- The game must treat host.viewport.width and host.viewport.height as the full logical playable viewport.
-- resize(width, height, dpr) receives the same logical viewport size; the host scales that viewport to fill the iframe.
-- The game must read controls from input.actions[actionName].down and input.actions[actionName].pressed.
-- The game may also inspect input.rawKeys[keyCode] when useful.
-- The game must render visible primitive Canvas 2D shapes without external assets.
-- The game must be immediately playable and match the user's requested genre and fantasy.
-- Do not force the design into a platformer unless the user asks for a platformer.
-- The render output must fill the entire logical viewport from x=0..width and y=0..height.
-- Gameplay boundaries must match visible drawn boundaries. Do not create invisible walls, invisible floors, hidden collision barriers, or unreachable dead zones.
-- If the game uses an arena, room, court, maze, or track, draw its edges clearly and keep the playable area inside those visible edges.
-- Avoid large purely decorative areas that the player cannot interact with unless they are clearly background and do not block movement.
-- Keep the initial player, avatar, paddle, cursor, or primary controlled object visible and usable in the first frame.
-- Do not rely on requestAnimationFrame; the iframe host owns the animation loop.
-- Do not call postMessage; the iframe host owns the handshake.
-
-Pack requirements:
-- The first chat message must be a user message whose text is exactly the user prompt above.
-- Include assistant messages explaining that code, spec, controls, and editor metadata were generated.
-- The manifest must list canvas2d runtime, genre, viewport, controls, and capabilities.
-- The manifest viewport should usually be 960x540 for wide games, 800x600 for classic arcade games, or 720x720 for square arenas.
-- The manifest viewport scaling must be "stretch_to_fill" so the host can fill the iframe without letterboxing.
-- Manifest controls must include action names, labels, key codes, and kinds.
-- Use browser KeyboardEvent.code values for keys, such as ArrowLeft, ArrowRight, ArrowUp, ArrowDown, KeyW, KeyA, KeyS, KeyD, Space, Enter, Escape, ShiftLeft, and ShiftRight.
-- editableSpecJson must be a JSON string representing one object that fully describes the generated game state/config.
-- editableSpecJson must contain only JSON values, stay compact, and be enough for the generated module to run.
-- The editor metadata panels should summarize the generated runtime, controls, and editable spec.
-`.trim();
-}
-
 // Legacy exports retained so the hidden hand-written GameCanvas keeps compiling.
-export const behaviorValues = [
-  "player_move",
-  "player_jump",
-  "gravity",
-  "solid",
-  "camera_follow",
-] as const;
-
 export type StarterBehavior = (typeof behaviorValues)[number];
 
 export type StarterEntity = {

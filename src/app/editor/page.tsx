@@ -1,4 +1,4 @@
-import { EditorShell } from "@/components/editor-shell";
+import { EditorShell } from "@/components/editor-shell/editor-shell";
 
 type EditorPageProps = {
   searchParams: Promise<{
