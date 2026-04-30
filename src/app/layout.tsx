@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
 import "./globals.css";
-
-export const metadata: Metadata = {
-  title: "AI-cade v0 POC",
-  description: "AI-generated starter platformer flow built with Next.js.",
-};
+export { metadata } from "@/constants";
 
 export default function RootLayout({
   children,

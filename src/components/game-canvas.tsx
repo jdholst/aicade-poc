@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
-import { StarterBehavior, StarterEntity, StarterProjectSpec } from "@/lib/starter-project";
+import { StarterBehavior, StarterEntity, StarterProjectSpec } from "@/service/starter-project";
+import { STEP_MS, MOVE_SPEED, JUMP_SPEED } from "@/constants";
 
 type RuntimeEntity = StarterEntity & {
   vx: number;
@@ -22,10 +23,6 @@ type RuntimeState = {
   spawnX: number;
   spawnY: number;
 };
-
-const STEP_MS = 1000 / 60;
-const MOVE_SPEED = 360;
-const JUMP_SPEED = 760;
 
 function includesBehavior(entity: RuntimeEntity, behavior: StarterBehavior) {
   return entity.behaviors.includes(behavior);
