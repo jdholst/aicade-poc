@@ -1,4 +1,31 @@
+import {
+  GENERATED_GAME_FACTORY_ASSIGNMENT,
+  GENERATED_GAME_REQUIRED_METHODS,
+} from "@/service/starter-project/generated-game-contract";
+
 export function createGeneratedGameSystemPrompt(userPrompt: string) {
+  const requiredMethodSignatures = GENERATED_GAME_REQUIRED_METHODS.map(
+    (method) => {
+      if (method === "update") {
+        return "update(dt, input)";
+      }
+
+      if (method === "render") {
+        return "render(ctx)";
+      }
+
+      if (method === "resize") {
+        return "resize(width, height, dpr)";
+      }
+
+      if (method === "applyPatch") {
+        return "applyPatch(patch)";
+      }
+
+      return `${method}()`;
+    }
+  ).join(", ");
+
   return `
 You are creating the first magic moment for an AI game creation product.
 
@@ -10,10 +37,10 @@ You must generate TypeScript source for a self-contained Canvas 2D game runtime.
 Hard module contract:
 - Do not use imports, exports, React, JSX, DOM queries, network calls, storage APIs, eval, Function, timers, parent/top/opener access, or external assets.
 - The source must assign:
-  globalThis.createGameModule = function createGameModule(host) { ... }
+  ${GENERATED_GAME_FACTORY_ASSIGNMENT} = function createGameModule(host) { ... }
 - The factory receives host = { canvas, ctx, spec, viewport }.
 - It must return an object with these functions:
-  start(), update(dt, input), render(ctx), resize(width, height, dpr), destroy(), getEditableSpec(), applyPatch(patch).
+  ${requiredMethodSignatures}.
 - The game must use host.spec as its editable game spec and source of truth.
 - The generated code and editableSpecJson must agree exactly. Every spec path read by the module must exist in editableSpecJson.
 - Before reading nested data such as position.x, ball.x, paddle.y, or entity.size, initialize that object from a complete default object merged with host.spec.

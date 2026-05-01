@@ -1,33 +1,13 @@
-import {
-  type GeneratedGamePack,
-} from "@/service/starter-project";
-import { type OpenAIModelId } from "@/utils/openai-utils";
 import { OpenAiConfigForm } from "@/components/openai-config-form";
-import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
-
-export type GenerationStage = {
-  title: string;
-  detail: string;
-  progress: number;
-};
+import type {
+  EditorAIChatActions,
+  EditorAIChatSession,
+} from "@/hooks/use-editor-session";
+import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 
 type EditorAIChatProps = {
-  canStartGeneration: boolean;
-  generationStages: GenerationStage[];
-  generationStepIndex: number;
-  isGenerating: boolean;
-  loadState: StarterProjectLoadState;
-  needsOpenAiApiKey: boolean;
-  needsOpenAiModel: boolean;
-  onOpenAiApiKeyChange: (value: string) => void;
-  onOpenAiKeywordChange: (value: string) => void;
-  onOpenAiModelChange: (value: OpenAIModelId) => void;
-  onRegenerateGame: () => void;
-  onStartGeneration: () => void;
-  openAiApiKey: string;
-  openAiKeyword: string;
-  openAiModel: OpenAIModelId;
-  submittedPrompt: string;
+  actions: EditorAIChatActions;
+  chat: EditorAIChatSession;
 };
 
 function getSpecSummary(pack: GeneratedGamePack) {
@@ -42,24 +22,27 @@ function getSpecSummary(pack: GeneratedGamePack) {
   ];
 }
 
-export function EditorAIChat({
-  canStartGeneration,
-  generationStages,
-  generationStepIndex,
-  isGenerating,
-  loadState,
-  needsOpenAiApiKey,
-  needsOpenAiModel,
-  onOpenAiApiKeyChange,
-  onOpenAiKeywordChange,
-  onOpenAiModelChange,
-  onRegenerateGame,
-  onStartGeneration,
-  openAiApiKey,
-  openAiKeyword,
-  openAiModel,
-  submittedPrompt,
-}: EditorAIChatProps) {
+export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
+  const {
+    canStartGeneration,
+    generationStages,
+    generationStepIndex,
+    isGenerating,
+    loadState,
+    needsOpenAiApiKey,
+    needsOpenAiModel,
+    openAiApiKey,
+    openAiKeyword,
+    openAiModel,
+    submittedPrompt,
+  } = chat;
+  const {
+    onOpenAiApiKeyChange,
+    onOpenAiKeywordChange,
+    onOpenAiModelChange,
+    onRegenerateGame,
+    onStartGeneration,
+  } = actions;
 
   return (
     <aside className="flex min-h-0 flex-col border border-[var(--line-strong)] bg-[rgba(255,249,242,0.78)] backdrop-blur">

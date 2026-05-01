@@ -1,12 +1,12 @@
 import { OPENAI_MODEL_OPTIONS } from "@/constants";
-import { isOpenAIModelId, OpenAIModelId } from "@/utils/openai-utils";
+import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 
 type OpenAiConfigFormProps = {
   needsOpenAiApiKey: boolean;
   needsOpenAiModel: boolean;
   openAiApiKey: string;
   openAiKeyword: string;
-  openAiModel: string;
+  openAiModel: OpenAIModelId;
   onOpenAiApiKeyChange: (value: string) => void;
   onOpenAiKeywordChange: (value: string) => void;
   onOpenAiModelChange: (value: OpenAIModelId) => void;

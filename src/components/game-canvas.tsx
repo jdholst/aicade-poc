@@ -2,7 +2,11 @@
 
 import { useEffect, useRef } from "react";
 
-import { StarterBehavior, StarterEntity, StarterProjectSpec } from "@/service/starter-project";
+import type {
+  StarterBehavior,
+  StarterEntity,
+  StarterProjectSpec,
+} from "@/service/starter-project/starter-project-schema";
 import { STEP_MS, MOVE_SPEED, JUMP_SPEED } from "@/constants";
 
 type RuntimeEntity = StarterEntity & {
