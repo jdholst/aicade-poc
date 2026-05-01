@@ -112,7 +112,7 @@ export const OPENAI_MODEL_OPTIONS = [
     label: "GPT-5",
     detail: "Stable GPT-5 model for general usage.",
   },
-];
+] as const;
 
 export const behaviorValues = [
   "player",

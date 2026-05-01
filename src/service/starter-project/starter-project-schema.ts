@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { behaviorValues } from "@/constants";
+import { GENERATED_GAME_FACTORY_ASSIGNMENT } from "@/service/starter-project/generated-game-contract";
 export {
   DEFAULT_STARTER_PROMPT,
   DEFAULT_OPENAI_MODEL,
@@ -80,11 +81,11 @@ const generatedGamePackSharedSchema = z
     moduleSourceTs: z.string().min(1200).max(30000),
   })
   .superRefine((data, ctx) => {
-    if (!data.moduleSourceTs.includes("globalThis.createGameModule")) {
+    if (!data.moduleSourceTs.includes(GENERATED_GAME_FACTORY_ASSIGNMENT)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["moduleSourceTs"],
-        message: "Generated module must assign globalThis.createGameModule.",
+        message: `Generated module must assign ${GENERATED_GAME_FACTORY_ASSIGNMENT}.`,
       });
     }
   });

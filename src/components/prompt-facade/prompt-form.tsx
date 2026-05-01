@@ -4,12 +4,13 @@ import { FormEvent, useState } from "react";
 
 import { DEFAULT_OPENAI_MODEL } from "@/constants";
 import { OpenAiConfigForm } from "@/components/openai-config-form";
+import { type OpenAIModelId } from "@/utils/openai-utils";
 
 type PromptFormValues = {
   idea: string;
   openAiApiKey: string;
   openAiKeyword: string;
-  openAiModel: string;
+  openAiModel: OpenAIModelId;
 };
 
 type PromptFormProps = {
@@ -30,7 +31,8 @@ export function PromptForm({
   const [prompt, setPrompt] = useState("");
   const [openAiApiKey, setOpenAiApiKey] = useState("");
   const [openAiKeyword, setOpenAiKeyword] = useState("");
-  const [openAiModel, setOpenAiModel] = useState(DEFAULT_OPENAI_MODEL);
+  const [openAiModel, setOpenAiModel] =
+    useState<OpenAIModelId>(DEFAULT_OPENAI_MODEL);
   const canSubmit =
     !isPending &&
     (!needsOpenAiApiKey ||

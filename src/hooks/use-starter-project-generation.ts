@@ -6,7 +6,8 @@ import {
   requestStarterProject,
   type StarterProjectRequest,
 } from "@/service/starter-project/starter-project-client";
-import { type GeneratedGamePack } from "@/service/starter-project";
+import { GENERATION_TIMEOUT_MS } from "@/constants";
+import { type GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 
 export type StarterProjectLoadState =
   | { status: "idle" }
@@ -54,12 +55,18 @@ export function useStarterProjectGeneration({
 
     const activeGenerationRequest = generationRequest;
     const controller = new AbortController();
+    let didTimeOut = false;
+    let timeoutId: number | undefined;
 
     async function loadStarterProject() {
       setGenerationStepIndex(0);
       setLoadState({ status: "loading" });
 
       try {
+        timeoutId = window.setTimeout(() => {
+          didTimeOut = true;
+          controller.abort();
+        }, GENERATION_TIMEOUT_MS);
 
         const pack = await requestStarterProject(
           activeGenerationRequest,
@@ -71,6 +78,17 @@ export function useStarterProjectGeneration({
           pack,
         });
       } catch (error) {
+        if (controller.signal.aborted) {
+          if (didTimeOut) {
+            setLoadState({
+              status: "error",
+              message:
+                "Generation took longer than two minutes. Please retry; the model may have stalled while creating or validating the game module.",
+            });
+          }
+
+          return;
+        }
 
         const message =
           error instanceof Error
@@ -81,6 +99,10 @@ export function useStarterProjectGeneration({
           status: "error",
           message,
         });
+      } finally {
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
+        }
       }
     }
 

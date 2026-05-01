@@ -1,4 +1,5 @@
 import { EditorShell } from "@/components/editor-shell/editor-shell";
+import { getOpenAiConfigRequirements } from "@/service/starter-project";
 
 type EditorPageProps = {
   searchParams: Promise<{
@@ -17,8 +18,7 @@ export default async function EditorPage({ searchParams }: EditorPageProps) {
   const enteredOpenAiKeyword =
     typeof openAiKeyword === "string" ? openAiKeyword : "";
   const enteredOpenAiModel = typeof openAiModel === "string" ? openAiModel : "";
-  const needsOpenAiApiKey = !process.env.OPENAI_API_KEY;
-  const needsOpenAiModel = !process.env.OPENAI_MODEL;
+  const openAiConfigRequirements = getOpenAiConfigRequirements(process.env);
 
   return (
     <EditorShell
@@ -27,8 +27,8 @@ export default async function EditorPage({ searchParams }: EditorPageProps) {
       enteredOpenAiApiKey={enteredOpenAiApiKey}
       enteredOpenAiKeyword={enteredOpenAiKeyword}
       enteredOpenAiModel={enteredOpenAiModel}
-      needsOpenAiApiKey={needsOpenAiApiKey}
-      needsOpenAiModel={needsOpenAiModel}
+      needsOpenAiApiKey={openAiConfigRequirements.needsOpenAiApiKey}
+      needsOpenAiModel={openAiConfigRequirements.needsOpenAiModel}
     />
   );
 }

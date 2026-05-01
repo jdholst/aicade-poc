@@ -1,6 +1,11 @@
-import { GENERATED_GAME_TOOL, OPENAI_REQUEST_TIMEOUT_MS, OPENAI_RESPONSES_URL } from "@/constants";
-import { createGeneratedGameSystemPrompt, generatedGamePackJsonSchema } from ".";
-
+import {
+  GENERATED_GAME_TOOL,
+  OPENAI_REQUEST_TIMEOUT_MS,
+  OPENAI_RESPONSES_URL,
+} from "@/constants";
+import { type OpenAIModelId } from "@/utils/openai-utils";
+import { createGeneratedGameSystemPrompt } from "@/service/starter-project/starter-project-prompt";
+import { generatedGamePackJsonSchema } from "@/service/starter-project/starter-project-schema";
 
 type ResponsesFunctionCall = {
   type: "function_call";
@@ -14,7 +19,6 @@ type ResponseOutputItem = {
   arguments?: string;
 };
 
-
 type OpenAIResponsePayload = {
   error?: {
     message?: string;
@@ -25,7 +29,7 @@ type OpenAIResponsePayload = {
 export async function requestGeneratedGamePackFromOpenAI(
   userPrompt: string,
   openAiApiKey: string,
-  openAiModel: string
+  openAiModel: OpenAIModelId
 ) {
   const controller = new AbortController();
   const timeoutId = setTimeout(

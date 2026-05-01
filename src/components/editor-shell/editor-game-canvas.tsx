@@ -1,66 +1,32 @@
 import {
   GeneratedGameHost,
   type GeneratedGameHostHandle,
-  type GeneratedGameStatus,
 } from "@/components/generated-game-host";
-import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
-import type { GenerationStage } from "@/components/editor-shell/editor-ai-chat";
-import { useEffect, useRef } from "react";
+import type {
+  EditorGameCanvasActions,
+  EditorGameCanvasSession,
+} from "@/hooks/use-editor-session";
+import { useRef } from "react";
 
 type EditorGameCanvasProps = {
-  currentGenerationStage: GenerationStage;
-  gameResetNonce: number;
-  gameStatus: GeneratedGameStatus;
-  isGamePaused: boolean;
-  loadState: StarterProjectLoadState;
-  onGameStatusChange: (status: GeneratedGameStatus) => void;
-  onRegenerate: () => void;
-  onReset: () => void;
-  onTogglePaused: () => void;
+  actions: EditorGameCanvasActions;
+  canvas: EditorGameCanvasSession;
 };
 
 export function EditorGameCanvas({
-  currentGenerationStage,
-  gameResetNonce,
-  gameStatus,
-  isGamePaused,
-  loadState,
-  onGameStatusChange,
-  onRegenerate,
-  onReset,
-  onTogglePaused,
+  actions,
+  canvas,
 }: EditorGameCanvasProps) {
+  const {
+    currentGenerationStage,
+    gameResetNonce,
+    gameStatus,
+    isGamePaused,
+    loadState,
+  } = canvas;
+  const { onGameStatusChange, onRegenerate, onReset, onTogglePaused } =
+    actions;
   const gameHostRef = useRef<GeneratedGameHostHandle | null>(null);
-  const shouldFocusGameAfterResetRef = useRef(false);
-
-
-  useEffect(() => {
-    if (!shouldFocusGameAfterResetRef.current) {
-      return;
-    }
-
-    if (gameStatus.state === "error") {
-      shouldFocusGameAfterResetRef.current = false;
-      return;
-    }
-
-    if (gameStatus.state !== "ready") {
-      return;
-    }
-
-    shouldFocusGameAfterResetRef.current = false;
-    const focusId = window.setTimeout(() => {
-      gameHostRef.current?.focusGame();
-    }, 0);
-    const followUpFocusId = window.setTimeout(() => {
-      gameHostRef.current?.focusGame();
-    }, 120);
-
-    return () => {
-      window.clearTimeout(focusId);
-      window.clearTimeout(followUpFocusId);
-    };
-  }, [gameStatus.state, gameResetNonce]);
 
   const toggleGamePaused = () => {
     onTogglePaused();
@@ -71,10 +37,9 @@ export function EditorGameCanvas({
   };
 
   const handleResetGame = () => {
-    shouldFocusGameAfterResetRef.current = true;
     onReset();
-  }
-    
+  };
+
   return (
     <section className="flex min-h-0 flex-col gap-4">
       {loadState.status === "success" ? (
@@ -127,6 +92,7 @@ export function EditorGameCanvas({
             key={`${loadState.pack.manifest.title}-${gameResetNonce}`}
             pack={loadState.pack}
             isPaused={isGamePaused}
+            focusOnReadyKey={gameResetNonce}
             onStatusChange={onGameStatusChange}
           />
         </>
