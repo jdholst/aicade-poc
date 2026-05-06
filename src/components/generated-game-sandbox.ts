@@ -4,20 +4,11 @@ import {
   GENERATED_GAME_REQUIRED_METHODS,
 } from "@/service/starter-project/generated-game-contract";
 import {
-  parseRuntimeEvent,
   postRuntimeCommand,
   type RuntimeCommand,
-  type RuntimeEvent,
 } from "@/runtime/runtime-adapter";
 
 export type GeneratedGameSandboxCommand = RuntimeCommand;
-export type GeneratedGameSandboxEvent = RuntimeEvent;
-
-export function parseGeneratedGameSandboxEvent(
-  data: unknown
-): GeneratedGameSandboxEvent | null {
-  return parseRuntimeEvent(data);
-}
 
 export function postGeneratedGameSandboxCommand(
   target: Window | null | undefined,
@@ -180,6 +171,22 @@ ${generatedSource}
           const delta = Math.min(48, now - lastFrame) / 1000;
           lastFrame = now;
           return delta;
+        }
+
+        function applyHostViewport(nextViewport) {
+          if (
+            !nextViewport ||
+            typeof nextViewport.width !== "number" ||
+            typeof nextViewport.height !== "number" ||
+            nextViewport.scaling !== "stretch_to_fill"
+          ) {
+            return;
+          }
+
+          viewport.width = Math.max(1, Math.round(nextViewport.width));
+          viewport.height = Math.max(1, Math.round(nextViewport.height));
+          viewport.scaling = "stretch_to_fill";
+          resize();
         }
 
         function resize() {
@@ -377,6 +384,10 @@ ${generatedSource}
         window.addEventListener("message", function (event) {
           if (event.data && event.data.type === "game-reload") {
             location.reload();
+          }
+
+          if (event.data && event.data.type === "game-resize") {
+            applyHostViewport(event.data.viewport);
           }
 
           if (event.data && event.data.type === "game-pause") {
