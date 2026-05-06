@@ -3,46 +3,27 @@ import {
   GENERATED_GAME_FACTORY_NAME,
   GENERATED_GAME_REQUIRED_METHODS,
 } from "@/service/starter-project/generated-game-contract";
+import {
+  parseRuntimeEvent,
+  postRuntimeCommand,
+  type RuntimeCommand,
+  type RuntimeEvent,
+} from "@/runtime/runtime-adapter";
 
-export type GeneratedGameSandboxCommand =
-  | { type: "game-focus" }
-  | { type: "game-reload" }
-  | { type: "game-pause"; paused: boolean };
-
-export type GeneratedGameSandboxEvent =
-  | { type: "game-ready" }
-  | { type: "game-error"; message: string };
+export type GeneratedGameSandboxCommand = RuntimeCommand;
+export type GeneratedGameSandboxEvent = RuntimeEvent;
 
 export function parseGeneratedGameSandboxEvent(
   data: unknown
 ): GeneratedGameSandboxEvent | null {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-
-  const event = data as { type?: unknown; message?: unknown };
-  if (event.type === "game-ready") {
-    return { type: "game-ready" };
-  }
-
-  if (event.type === "game-error") {
-    return {
-      type: "game-error",
-      message:
-        typeof event.message === "string"
-          ? event.message
-          : "Generated module crashed.",
-    };
-  }
-
-  return null;
+  return parseRuntimeEvent(data);
 }
 
 export function postGeneratedGameSandboxCommand(
   target: Window | null | undefined,
   command: GeneratedGameSandboxCommand
 ) {
-  target?.postMessage(command, "*");
+  postRuntimeCommand(target, command);
 }
 
 export function focusGeneratedGameSandbox(
@@ -425,4 +406,3 @@ ${generatedSource}
   </body>
 </html>`;
 }
-
