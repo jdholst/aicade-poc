@@ -97,6 +97,10 @@ export const GeneratedGameHost = forwardRef<
         return;
       }
 
+      if (sandboxEvent.type === "game-debug-event") {
+        return;
+      }
+
       hasSettled = true;
       window.clearTimeout(timeoutId);
 

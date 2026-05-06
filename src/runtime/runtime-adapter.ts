@@ -3,6 +3,7 @@ export type RuntimeKind = "canvas2d" | "phaser";
 export type RuntimeCommand =
   | { type: "game-focus" }
   | { type: "game-reload" }
+  | { type: "game-resize"; viewport: RuntimeViewport }
   | { type: "game-pause"; paused: boolean };
 
 export type RuntimeViewport = {
@@ -13,7 +14,8 @@ export type RuntimeViewport = {
 
 export type RuntimeEvent =
   | { type: "game-ready"; manifest?: unknown; viewport?: RuntimeViewport }
-  | { type: "game-error"; message: string };
+  | { type: "game-error"; message: string }
+  | { type: "game-debug-event"; message: string; data?: unknown };
 
 export type RuntimeMountDescriptor = {
   title: string;
@@ -37,6 +39,7 @@ export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
   }
 
   const event = data as {
+    data?: unknown;
     type?: unknown;
     manifest?: unknown;
     message?: unknown;
@@ -66,6 +69,22 @@ export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
           ? event.message
           : "Generated module crashed.",
     };
+  }
+
+  if (
+    event.type === "game-debug-event" &&
+    typeof event.message === "string"
+  ) {
+    const runtimeEvent: RuntimeEvent = {
+      type: "game-debug-event",
+      message: event.message,
+    };
+
+    if (typeof event.data !== "undefined") {
+      runtimeEvent.data = event.data;
+    }
+
+    return runtimeEvent;
   }
 
   return null;
