@@ -10,10 +10,10 @@ import {
 
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 import { SANDBOX_BOOT_TIMEOUT_MS } from "@/constants";
+import { canvasRuntimeAdapter } from "@/runtime/canvas-runtime-adapter";
+import type { RuntimeAdapter } from "@/runtime/runtime-adapter";
 import {
-  createGeneratedGameSandboxDocument,
   focusGeneratedGameSandbox,
-  parseGeneratedGameSandboxEvent,
   postGeneratedGameSandboxCommand,
   scheduleGeneratedGameSandboxFocus,
 } from "@/components/generated-game-sandbox";
@@ -26,6 +26,7 @@ export type GeneratedGameStatus =
 
 type GeneratedGameHostProps = {
   pack: GeneratedGamePack;
+  runtimeAdapter?: RuntimeAdapter<GeneratedGamePack>;
   isPaused?: boolean;
   focusOnReadyKey?: number;
   onStatusChange?: (status: GeneratedGameStatus) => void;
@@ -39,11 +40,20 @@ export const GeneratedGameHost = forwardRef<
   GeneratedGameHostHandle,
   GeneratedGameHostProps
 >(function GeneratedGameHost(
-  { pack, isPaused = false, focusOnReadyKey = 0, onStatusChange },
+  {
+    pack,
+    runtimeAdapter = canvasRuntimeAdapter,
+    isPaused = false,
+    focusOnReadyKey = 0,
+    onStatusChange,
+  },
   ref
 ) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const srcDoc = useMemo(() => createGeneratedGameSandboxDocument(pack), [pack]);
+  const mountDescriptor = useMemo(
+    () => runtimeAdapter.createMountDescriptor(pack),
+    [pack, runtimeAdapter]
+  );
 
   useImperativeHandle(
     ref,
@@ -82,7 +92,7 @@ export const GeneratedGameHost = forwardRef<
         return;
       }
 
-      const sandboxEvent = parseGeneratedGameSandboxEvent(event.data);
+      const sandboxEvent = runtimeAdapter.parseEvent(event.data);
       if (!sandboxEvent) {
         return;
       }
@@ -119,7 +129,7 @@ export const GeneratedGameHost = forwardRef<
       window.clearTimeout(timeoutId);
       window.removeEventListener("message", handleMessage);
     };
-  }, [focusOnReadyKey, onStatusChange, pack]);
+  }, [focusOnReadyKey, onStatusChange, pack, runtimeAdapter]);
 
   useEffect(() => {
     postGeneratedGameSandboxCommand(iframeRef.current?.contentWindow, {
@@ -136,9 +146,9 @@ export const GeneratedGameHost = forwardRef<
       </div>
       <iframe
         ref={iframeRef}
-        title={pack.manifest.title}
-        sandbox="allow-scripts"
-        srcDoc={srcDoc}
+        title={mountDescriptor.title}
+        sandbox={mountDescriptor.sandbox}
+        srcDoc={mountDescriptor.srcDoc}
         className="h-full min-h-[360px] w-full flex-1 border-0"
       />
     </div>
