@@ -67,6 +67,7 @@ export function EditorShell({
         <EditorHeader
           projectName={session.projectName}
           gameStatus={session.canvas.gameStatus}
+          loadState={session.canvas.loadState}
         />
 
         <section className="grid h-[calc(100vh-9.5rem)] min-h-[620px] gap-4 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.25fr)]">
