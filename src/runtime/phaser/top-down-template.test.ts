@@ -1,20 +1,17 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import packageJson from "../../../package.json";
 import { topDownPhaserTemplate } from ".";
 
 describe("top-down Phaser template", () => {
-  it("declares Phaser as a runtime dependency", () => {
-    expect(packageJson.dependencies).toMatchObject({
-      phaser: "^3.90.0",
-    });
-  });
-
   it("describes a hand-authored top-down runtime template", () => {
     expect(topDownPhaserTemplate).toMatchObject({
       id: "top-down-chase-v1",
       runtime: "phaser",
       title: "Top-Down Chase",
+      runtimeScriptPath: "/runtime/phaser/top-down-template.js",
       viewport: {
         width: 960,
         height: 540,
@@ -31,13 +28,18 @@ describe("top-down Phaser template", () => {
     });
   });
 
-  it("includes authored Phaser runtime source with protocol and gameplay hooks", () => {
-    expect(topDownPhaserTemplate.runtimeSource).toContain("new Phaser.Game");
-    expect(topDownPhaserTemplate.runtimeSource).toContain('notify("game-ready"');
-    expect(topDownPhaserTemplate.runtimeSource).toContain('notify("game-error"');
-    expect(topDownPhaserTemplate.runtimeSource).toContain("createPlayer");
-    expect(topDownPhaserTemplate.runtimeSource).toContain("createObjective");
-    expect(topDownPhaserTemplate.runtimeSource).toContain("createChaser");
-    expect(topDownPhaserTemplate.runtimeSource).toContain("cursors.left.isDown");
+  it("points to an authored Phaser runtime script with protocol and gameplay hooks", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+
+    expect(runtimeSource).toContain("new Phaser.Game");
+    expect(runtimeSource).toContain('notify("game-ready"');
+    expect(runtimeSource).toContain('notify("game-error"');
+    expect(runtimeSource).toContain("createPlayer");
+    expect(runtimeSource).toContain("createObjective");
+    expect(runtimeSource).toContain("createChaser");
+    expect(runtimeSource).toContain("cursors.left.isDown");
   });
 });
