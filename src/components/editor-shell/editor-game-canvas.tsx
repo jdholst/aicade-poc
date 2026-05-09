@@ -1,11 +1,12 @@
 import {
-  GeneratedGameHost,
+  RuntimeIframeHost,
   type GeneratedGameHostHandle,
 } from "@/components/generated-game-host";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
+import { phaserRuntimeAdapter, topDownPhaserTemplate } from "@/runtime/phaser";
 import { useRef } from "react";
 
 type EditorGameCanvasProps = {
@@ -42,7 +43,7 @@ export function EditorGameCanvas({
 
   return (
     <section className="flex min-h-0 flex-col gap-4">
-      {loadState.status === "success" ? (
+      {loadState.status !== "loading" ? (
         <>
           <div className="flex flex-col gap-3 border border-[var(--line-strong)] bg-[rgba(255,249,242,0.82)] px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -50,8 +51,7 @@ export function EditorGameCanvas({
                 Runtime controls
               </div>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Reset restarts this generated module from its original editable
-                spec without regenerating.
+                Reset restarts the runtime without regenerating.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -77,7 +77,7 @@ export function EditorGameCanvas({
           </div>
           {gameStatus.state === "error" ? (
             <div className="flex flex-col gap-3 border border-[rgba(169,72,42,0.24)] bg-[rgba(255,243,236,0.92)] px-4 py-3 text-sm text-[#613128] sm:flex-row sm:items-center sm:justify-between">
-              <div>Canvas runtime error: {gameStatus.message}</div>
+              <div>Runtime error: {gameStatus.message}</div>
               <button
                 type="button"
                 onClick={onRegenerate}
@@ -87,12 +87,15 @@ export function EditorGameCanvas({
               </button>
             </div>
           ) : null}
-          <GeneratedGameHost
+          <RuntimeIframeHost
             ref={gameHostRef}
-            key={`${loadState.pack.manifest.title}-${gameResetNonce}`}
-            pack={loadState.pack}
+            key={`${topDownPhaserTemplate.id}-${gameResetNonce}`}
+            artifact={topDownPhaserTemplate}
+            runtimeAdapter={phaserRuntimeAdapter}
             isPaused={isGamePaused}
             focusOnReadyKey={gameResetNonce}
+            frameLabel="Phaser runtime"
+            frameDetail="Sandboxed iframe"
             onStatusChange={onGameStatusChange}
           />
         </>

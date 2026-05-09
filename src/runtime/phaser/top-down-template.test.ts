@@ -42,4 +42,22 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain("createChaser");
     expect(runtimeSource).toContain("cursors.left.isDown");
   });
+
+  it("handles the shared host command protocol", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+
+    expect(runtimeSource).toContain('window.addEventListener("message"');
+    expect(runtimeSource).toContain('event.data.type === "game-reload"');
+    expect(runtimeSource).toContain('event.data.type === "game-focus"');
+    expect(runtimeSource).toContain('event.data.type === "game-pause"');
+    expect(runtimeSource).toContain('event.data.type === "game-resize"');
+    expect(runtimeSource).toContain("function setPaused(nextIsPaused)");
+    expect(runtimeSource).toContain("function applyHostViewport(nextViewport)");
+    expect(runtimeSource).toContain("game.scene.pause");
+    expect(runtimeSource).toContain("game.scene.resume");
+    expect(runtimeSource).toContain("game.scale.resize");
+  });
 });

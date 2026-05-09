@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 
 import { DEFAULT_OPENAI_MODEL } from "@/constants";
-import type { GeneratedGameStatus } from "@/components/generated-game-host";
+import type { RuntimeStatus } from "@/components/generated-game-host";
 import { useStarterProjectGeneration } from "@/hooks/use-starter-project-generation";
 import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
@@ -54,8 +54,14 @@ export type EditorGameCanvasSession = {
   loadState: StarterProjectLoadState;
 };
 
+export type GeneratedGameStatus =
+  | { state: "loading"; message: string }
+  | { state: "ready"; message: string }
+  | { state: "paused"; message: string }
+  | { state: "error"; message: string };
+
 export type EditorGameCanvasActions = {
-  onGameStatusChange: (status: GeneratedGameStatus) => void;
+  onGameStatusChange: (status: RuntimeStatus) => void;
   onRegenerate: () => void;
   onReset: () => void;
   onTogglePaused: () => void;
@@ -133,8 +139,8 @@ export function useEditorSession({
     setGameStatus({
       state: nextIsPaused ? "paused" : "ready",
       message: nextIsPaused
-        ? "Generated module is paused in the sandbox."
-        : "Generated module is running in the sandbox.",
+        ? "Phaser runtime is paused in the sandbox."
+        : "Phaser runtime is running in the sandbox.",
     });
   }
 
@@ -142,10 +148,30 @@ export function useEditorSession({
     setIsGamePaused(false);
     setGameStatus({
       state: "loading",
-      message: "Resetting generated canvas module...",
+      message: "Resetting Phaser runtime...",
     });
     setGameResetNonce((value) => value + 1);
   }
+
+  const handleRuntimeStatusChange = useCallback((status: RuntimeStatus) => {
+    if (status.state === "loading") {
+      setGameStatus({
+        state: "loading",
+        message: "Booting Phaser runtime...",
+      });
+      return;
+    }
+
+    if (status.state === "ready") {
+      setGameStatus({
+        state: "ready",
+        message: "Phaser runtime is running in the sandbox.",
+      });
+      return;
+    }
+
+    setGameStatus(status);
+  }, []);
 
   const chat: EditorAIChatSession = {
     canStartGeneration,
@@ -177,7 +203,7 @@ export function useEditorSession({
     },
     actions: {
       canvas: {
-        onGameStatusChange: setGameStatus,
+        onGameStatusChange: handleRuntimeStatusChange,
         onRegenerate: startGeneration,
         onReset: resetGame,
         onTogglePaused: toggleGamePaused,
@@ -192,4 +218,3 @@ export function useEditorSession({
     },
   };
 }
-
