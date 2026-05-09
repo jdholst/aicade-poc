@@ -1,12 +1,27 @@
 (function () {
-  const viewport = { width: 960, height: 540, scaling: "stretch_to_fill" };
+  const template = globalThis.__AICADE_PHASER_TEMPLATE__ || {};
+  const rawViewport = template.viewport || {};
+  const viewport = {
+    width:
+      typeof rawViewport.width === "number"
+        ? Math.max(1, Math.round(rawViewport.width))
+        : 960,
+    height:
+      typeof rawViewport.height === "number"
+        ? Math.max(1, Math.round(rawViewport.height))
+        : 540,
+    scaling: "stretch_to_fill",
+  };
+  const SCENE_KEY = "top-down-chase";
   let game = null;
+  let activeScene = null;
   let player = null;
   let objective = null;
   let chaser = null;
   let cursors = null;
   let scoreText = null;
   let score = 0;
+  let isPaused = false;
 
   function notify(type, payload) {
     parent.postMessage(Object.assign({ type }, payload || {}), "*");
@@ -42,10 +57,66 @@
     );
   }
 
+  function applyHostViewport(nextViewport) {
+    if (
+      !nextViewport ||
+      typeof nextViewport.width !== "number" ||
+      typeof nextViewport.height !== "number" ||
+      nextViewport.scaling !== "stretch_to_fill"
+    ) {
+      return;
+    }
+
+    viewport.width = Math.max(1, Math.round(nextViewport.width));
+    viewport.height = Math.max(1, Math.round(nextViewport.height));
+    viewport.scaling = "stretch_to_fill";
+
+    if (game && game.scale) {
+      game.scale.resize(viewport.width, viewport.height);
+    }
+
+    if (activeScene && activeScene.physics) {
+      activeScene.physics.world.setBounds(
+        32,
+        32,
+        viewport.width - 64,
+        viewport.height - 64
+      );
+      activeScene.cameras.main.setSize(viewport.width, viewport.height);
+    }
+  }
+
+  function setPaused(nextIsPaused) {
+    if (!game || isPaused === nextIsPaused) {
+      return;
+    }
+
+    isPaused = nextIsPaused;
+
+    if (isPaused) {
+      game.scene.pause(SCENE_KEY);
+      return;
+    }
+
+    game.scene.resume(SCENE_KEY);
+  }
+
+  function focusGameContainer() {
+    const container = document.getElementById("game");
+    if (container) {
+      container.focus();
+    }
+  }
+
   function createScene() {
     return {
+      key: SCENE_KEY,
       preload() {},
       create() {
+        activeScene = {
+          cameras: this.cameras,
+          physics: this.physics,
+        };
         this.cameras.main.setBackgroundColor("#10171e");
         this.physics.world.setBounds(
           32,
@@ -143,6 +214,24 @@
         },
       },
       scene: createScene(),
+    });
+
+    window.addEventListener("message", function (event) {
+      if (event.data && event.data.type === "game-reload") {
+        location.reload();
+      }
+
+      if (event.data && event.data.type === "game-focus") {
+        focusGameContainer();
+      }
+
+      if (event.data && event.data.type === "game-pause") {
+        setPaused(Boolean(event.data.paused));
+      }
+
+      if (event.data && event.data.type === "game-resize") {
+        applyHostViewport(event.data.viewport);
+      }
     });
 
     window.addEventListener("beforeunload", function () {
