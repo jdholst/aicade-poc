@@ -1,7 +1,10 @@
 "use client";
 
 import {
+  type ForwardedRef,
   forwardRef,
+  type ReactElement,
+  type RefAttributes,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -18,10 +21,9 @@ import {
   scheduleGeneratedGameSandboxFocus,
 } from "@/components/generated-game-sandbox";
 
-export type GeneratedGameStatus =
-  | { state: "loading"; message: string }
-  | { state: "ready"; message: string }
-  | { state: "paused"; message: string }
+export type RuntimeStatus =
+  | { state: "loading" }
+  | { state: "ready" }
   | { state: "error"; message: string };
 
 type GeneratedGameHostProps = {
@@ -29,30 +31,39 @@ type GeneratedGameHostProps = {
   runtimeAdapter?: RuntimeAdapter<GeneratedGamePack>;
   isPaused?: boolean;
   focusOnReadyKey?: number;
-  onStatusChange?: (status: GeneratedGameStatus) => void;
+  onStatusChange?: (status: RuntimeStatus) => void;
 };
 
 export type GeneratedGameHostHandle = {
   focusGame: () => void;
 };
 
-export const GeneratedGameHost = forwardRef<
-  GeneratedGameHostHandle,
-  GeneratedGameHostProps
->(function GeneratedGameHost(
+type RuntimeIframeHostProps<TArtifact> = {
+  artifact: TArtifact;
+  runtimeAdapter: RuntimeAdapter<TArtifact>;
+  isPaused?: boolean;
+  focusOnReadyKey?: number;
+  frameLabel?: string;
+  frameDetail?: string;
+  onStatusChange?: (status: RuntimeStatus) => void;
+};
+
+function RuntimeIframeHostInner<TArtifact>(
   {
-    pack,
-    runtimeAdapter = canvasRuntimeAdapter,
+    artifact,
+    runtimeAdapter,
     isPaused = false,
     focusOnReadyKey = 0,
+    frameLabel = "Runtime",
+    frameDetail = "Sandboxed iframe",
     onStatusChange,
-  },
-  ref
+  }: RuntimeIframeHostProps<TArtifact>,
+  ref: ForwardedRef<GeneratedGameHostHandle>
 ) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const mountDescriptor = useMemo(
-    () => runtimeAdapter.createMountDescriptor(pack),
-    [pack, runtimeAdapter]
+    () => runtimeAdapter.createMountDescriptor(artifact),
+    [artifact, runtimeAdapter]
   );
 
   useImperativeHandle(
@@ -71,7 +82,6 @@ export const GeneratedGameHost = forwardRef<
 
     onStatusChange?.({
       state: "loading",
-      message: "Booting generated canvas module...",
     });
 
     const timeoutId = window.setTimeout(() => {
@@ -107,7 +117,6 @@ export const GeneratedGameHost = forwardRef<
       if (sandboxEvent.type === "game-ready") {
         onStatusChange?.({
           state: "ready",
-          message: "Generated module is running in the sandbox.",
         });
 
         if (focusOnReadyKey > 0) {
@@ -133,20 +142,25 @@ export const GeneratedGameHost = forwardRef<
       window.clearTimeout(timeoutId);
       window.removeEventListener("message", handleMessage);
     };
-  }, [focusOnReadyKey, onStatusChange, pack, runtimeAdapter]);
+  }, [
+    artifact,
+    focusOnReadyKey,
+    onStatusChange,
+    runtimeAdapter,
+  ]);
 
   useEffect(() => {
     postGeneratedGameSandboxCommand(iframeRef.current?.contentWindow, {
       type: "game-pause",
       paused: isPaused,
     });
-  }, [isPaused, pack]);
+  }, [artifact, isPaused]);
 
   return (
     <div className="relative flex h-full min-h-[360px] w-full flex-col overflow-hidden border border-[var(--line-strong)] bg-[#0d1721]">
       <div className="flex items-center justify-between border-b border-white/10 bg-[#0b1118] px-4 py-3 text-xs uppercase tracking-[0.2em] text-white/60">
-        <span>Generated canvas</span>
-        <span>Sandboxed iframe</span>
+        <span>{frameLabel}</span>
+        <span>{frameDetail}</span>
       </div>
       <iframe
         ref={iframeRef}
@@ -156,5 +170,39 @@ export const GeneratedGameHost = forwardRef<
         className="h-full min-h-[360px] w-full flex-1 border-0"
       />
     </div>
+  );
+}
+
+export const RuntimeIframeHost = forwardRef(RuntimeIframeHostInner) as <
+  TArtifact,
+>(
+  props: RuntimeIframeHostProps<TArtifact> &
+    RefAttributes<GeneratedGameHostHandle>
+) => ReactElement;
+
+export const GeneratedGameHost = forwardRef<
+  GeneratedGameHostHandle,
+  GeneratedGameHostProps
+>(function GeneratedGameHost(
+  {
+    pack,
+    runtimeAdapter = canvasRuntimeAdapter,
+    isPaused = false,
+    focusOnReadyKey = 0,
+    onStatusChange,
+  },
+  ref
+) {
+  return (
+    <RuntimeIframeHost
+      ref={ref}
+      artifact={pack}
+      runtimeAdapter={runtimeAdapter}
+      isPaused={isPaused}
+      focusOnReadyKey={focusOnReadyKey}
+      frameLabel="Generated canvas"
+      frameDetail="Sandboxed iframe"
+      onStatusChange={onStatusChange}
+    />
   );
 });

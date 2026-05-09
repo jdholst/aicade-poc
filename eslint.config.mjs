@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "public/runtime/phaser/phaser-arcade-physics.min.js",
   ]),
 ]);
 
