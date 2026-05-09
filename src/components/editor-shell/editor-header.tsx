@@ -1,4 +1,4 @@
-import type { GeneratedGameStatus } from "@/components/generated-game-host";
+import type { GeneratedGameStatus } from "@/hooks/use-editor-session";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
 type EditorHeaderProps = {
