@@ -1,0 +1,195 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type {
+  EditorGameCanvasActions,
+  EditorGameCanvasSession,
+} from "@/hooks/use-editor-session";
+import type { GeneratedGamePack } from "@/service/starter-project";
+
+import { EditorGameCanvas } from "./editor-game-canvas";
+
+const currentGenerationStage = {
+  title: "Booting the sandbox",
+  detail: "Finalizing the generated pack before mounting it.",
+  progress: 72,
+};
+
+const pack: GeneratedGamePack = {
+  project: {
+    name: "Canvas Override Test",
+    summary: "A generated canvas runtime for override tests.",
+  },
+  chatTranscript: [
+    { role: "user", text: "make an override test" },
+    { role: "assistant", text: "planning the override test" },
+    { role: "assistant", text: "built the override test" },
+  ],
+  manifest: {
+    title: "Canvas Override Test",
+    genre: "arcade",
+    runtime: "canvas2d",
+    editableSpecVersion: "1",
+    viewport: {
+      width: 960,
+      height: 540,
+      scaling: "stretch_to_fill",
+    },
+    capabilities: ["start", "update", "render"],
+    controls: [
+      {
+        action: "move_left",
+        label: "Move left",
+        keys: ["ArrowLeft"],
+        kind: "button",
+      },
+    ],
+  },
+  editableSpec: {},
+  editorMetadata: {
+    panels: [
+      {
+        title: "Runtime",
+        items: [{ label: "Engine", value: "Canvas 2D" }],
+      },
+    ],
+  },
+  moduleSourceTs:
+    "globalThis.createGameModule = function createGameModule() {};",
+  moduleSourceJs:
+    "globalThis.createGameModule = function createGameModule() {};",
+};
+
+function createActions(
+  overrides: Partial<EditorGameCanvasActions> = {}
+): EditorGameCanvasActions {
+  return {
+    onGameStatusChange: vi.fn(),
+    onRegenerate: vi.fn(),
+    onReset: vi.fn(),
+    onTogglePaused: vi.fn(),
+    ...overrides,
+  };
+}
+
+function createCanvasSession(
+  overrides: Partial<EditorGameCanvasSession> = {}
+): EditorGameCanvasSession {
+  return {
+    currentGenerationStage,
+    gameResetNonce: 0,
+    gameStatus: {
+      state: "loading",
+      message: "Ready to build starter game.",
+    },
+    isGamePaused: false,
+    loadState: {
+      status: "idle",
+    },
+    ...overrides,
+  };
+}
+
+describe("EditorGameCanvas", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("mounts the hand-authored Phaser runtime before generation starts by default", () => {
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    expect(screen.getByTitle("Top-Down Chase")).toBeVisible();
+    expect(screen.getByText("Phaser runtime")).toBeVisible();
+    expect(
+      screen.queryByText("The generated game module will boot here.")
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the Canvas initial runtime screen when the runtime override is canvas2d", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_EDITOR_RUNTIME", "canvas2d");
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    expect(
+      screen.getByText("The generated game module will boot here.")
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Build a starter game to mount the canvas runtime in an isolated iframe."
+      )
+    ).toBeVisible();
+    expect(screen.getByText("Ready")).toBeVisible();
+  });
+
+  it("mounts the generated Canvas host when the runtime override succeeds", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_EDITOR_RUNTIME", "canvas2d");
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          loadState: {
+            status: "success",
+            pack,
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTitle("Canvas Override Test")).toBeVisible();
+    expect(screen.getByText("Generated canvas")).toBeVisible();
+  });
+
+  it("shows the loading runtime screen while generation is running", () => {
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          loadState: {
+            status: "loading",
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText("Generating your game")).toBeVisible();
+    expect(screen.getByText("Booting the sandbox")).toBeVisible();
+    expect(screen.getByText("72%")).toBeVisible();
+  });
+
+  it("shows an error runtime screen and retry action when generation fails", () => {
+    const onRegenerate = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onRegenerate })}
+        canvas={createCanvasSession({
+          loadState: {
+            status: "error",
+            message: "Generated game creation failed.",
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText("The runtime could not be prepared.")
+    ).toBeVisible();
+    expect(screen.getByText("Generated game creation failed.")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+});
