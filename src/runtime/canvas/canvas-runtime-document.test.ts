@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 import {
@@ -6,12 +6,7 @@ import {
   GENERATED_GAME_REQUIRED_METHODS,
 } from "@/service/starter-project/generated-game-contract";
 
-import {
-  createGeneratedGameSandboxDocument,
-  focusGeneratedGameSandbox,
-  postGeneratedGameSandboxCommand,
-  scheduleGeneratedGameSandboxFocus,
-} from "./generated-game-sandbox";
+import { createCanvasRuntimeDocument } from "@/runtime/canvas";
 
 const pack: GeneratedGamePack = {
   project: {
@@ -21,7 +16,7 @@ const pack: GeneratedGamePack = {
   chatTranscript: [
     { role: "user", text: "make a sandbox protocol test" },
     { role: "assistant", text: "planning the sandbox protocol test" },
-    { role: "assistant", text: "built the sandbox protocol test" },
+    { role: "assistant", text: "built the protocol test" },
   ],
   manifest: {
     title: "Sandbox Protocol Test",
@@ -58,97 +53,9 @@ const pack: GeneratedGamePack = {
     "globalThis.createGameModule = function createGameModule() {};",
 };
 
-describe("generated game sandbox commands", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-  });
-
-  it("posts host commands to the sandbox window", () => {
-    const target = {
-      postMessage: vi.fn(),
-    } as unknown as Window;
-
-    postGeneratedGameSandboxCommand(target, { type: "game-reload" });
-
-    expect(target.postMessage).toHaveBeenCalledWith(
-      { type: "game-reload" },
-      "*"
-    );
-  });
-
-  it("ignores missing sandbox windows when posting commands", () => {
-    expect(() => {
-      postGeneratedGameSandboxCommand(null, { type: "game-focus" });
-      postGeneratedGameSandboxCommand(undefined, { type: "game-focus" });
-    }).not.toThrow();
-  });
-
-  it("focuses the iframe, focuses the child window, and posts game-focus", () => {
-    const contentWindow = {
-      focus: vi.fn(),
-      postMessage: vi.fn(),
-    } as unknown as Window;
-    const iframe = {
-      contentWindow,
-      focus: vi.fn(),
-    } as unknown as HTMLIFrameElement;
-
-    focusGeneratedGameSandbox(iframe);
-
-    expect(iframe.focus).toHaveBeenCalled();
-    expect(contentWindow.focus).toHaveBeenCalled();
-    expect(contentWindow.postMessage).toHaveBeenCalledWith(
-      { type: "game-focus" },
-      "*"
-    );
-  });
-
-  it("schedules immediate and follow-up sandbox focus attempts", () => {
-    vi.useFakeTimers();
-    const contentWindow = {
-      focus: vi.fn(),
-      postMessage: vi.fn(),
-    } as unknown as Window;
-    const iframe = {
-      contentWindow,
-      focus: vi.fn(),
-    } as unknown as HTMLIFrameElement;
-
-    scheduleGeneratedGameSandboxFocus(iframe);
-
-    vi.advanceTimersByTime(0);
-    expect(contentWindow.postMessage).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(120);
-    expect(iframe.focus).toHaveBeenCalledTimes(2);
-    expect(contentWindow.focus).toHaveBeenCalledTimes(2);
-    expect(contentWindow.postMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it("allows scheduled focus attempts to be cancelled", () => {
-    vi.useFakeTimers();
-    const contentWindow = {
-      focus: vi.fn(),
-      postMessage: vi.fn(),
-    } as unknown as Window;
-    const iframe = {
-      contentWindow,
-      focus: vi.fn(),
-    } as unknown as HTMLIFrameElement;
-
-    const cancel = scheduleGeneratedGameSandboxFocus(iframe);
-    cancel();
-    vi.runAllTimers();
-
-    expect(iframe.focus).not.toHaveBeenCalled();
-    expect(contentWindow.postMessage).not.toHaveBeenCalled();
-  });
-});
-
-describe("generated game sandbox document", () => {
+describe("canvas runtime document", () => {
   it("serializes the editable spec, manifest, and generated source safely", () => {
-    const document = createGeneratedGameSandboxDocument({
+    const document = createCanvasRuntimeDocument({
       ...pack,
       editableSpec: {
         player: "ship",
@@ -171,7 +78,7 @@ describe("generated game sandbox document", () => {
   });
 
   it("boots the configured generated game factory and enforces the contract", () => {
-    const document = createGeneratedGameSandboxDocument(pack);
+    const document = createCanvasRuntimeDocument(pack);
 
     expect(document).toContain(`globalThis.${GENERATED_GAME_FACTORY_NAME}`);
     expect(document).toContain(JSON.stringify(GENERATED_GAME_REQUIRED_METHODS));
@@ -182,17 +89,17 @@ describe("generated game sandbox document", () => {
   });
 
   it("notifies the host about ready and error runtime events", () => {
-    const document = createGeneratedGameSandboxDocument(pack);
+    const document = createCanvasRuntimeDocument(pack);
 
     expect(document).toContain('type: "game-error"');
     expect(document).toContain('notify("game-error"');
     expect(document).toContain('notify("game-ready"');
-    expect(document).toContain("window.addEventListener(\"error\"");
-    expect(document).toContain("window.addEventListener(\"unhandledrejection\"");
+    expect(document).toContain('window.addEventListener("error"');
+    expect(document).toContain('window.addEventListener("unhandledrejection"');
   });
 
   it("listens for the host runtime command protocol", () => {
-    const document = createGeneratedGameSandboxDocument(pack);
+    const document = createCanvasRuntimeDocument(pack);
 
     expect(document).toContain('event.data.type === "game-reload"');
     expect(document).toContain('event.data.type === "game-resize"');
@@ -205,14 +112,12 @@ describe("generated game sandbox document", () => {
   });
 
   it("applies only valid host viewport resize commands", () => {
-    const document = createGeneratedGameSandboxDocument(pack);
+    const document = createCanvasRuntimeDocument(pack);
 
     expect(document).toContain("function applyHostViewport(nextViewport)");
     expect(document).toContain('typeof nextViewport.width !== "number"');
     expect(document).toContain('typeof nextViewport.height !== "number"');
-    expect(document).toContain(
-      'nextViewport.scaling !== "stretch_to_fill"'
-    );
+    expect(document).toContain('nextViewport.scaling !== "stretch_to_fill"');
     expect(document).toContain(
       "viewport.width = Math.max(1, Math.round(nextViewport.width));"
     );

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { GeneratedGameStatus } from "@/components/generated-game-host";
+import type { GeneratedGameStatus } from "@/hooks/use-editor-session";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
 import { EditorHeader } from "./editor-header";
