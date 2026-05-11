@@ -130,6 +130,9 @@ describe("EditorGameCanvas", () => {
       )
     ).toBeVisible();
     expect(screen.getByText("Ready")).toBeVisible();
+    expect(screen.getByText("Runtime controls")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reset game" })).toBeDisabled();
   });
 
   it("mounts the generated Canvas host when the runtime override succeeds", () => {
@@ -151,6 +154,35 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByText("Generated canvas")).toBeVisible();
   });
 
+  it("enables runtime controls when the runtime is ready", () => {
+    const onReset = vi.fn();
+    const onTogglePaused = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onReset, onTogglePaused })}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "ready",
+            message: "Phaser runtime is running in the sandbox.",
+          },
+        })}
+      />
+    );
+
+    const pauseButton = screen.getByRole("button", { name: "Pause game" });
+    const resetButton = screen.getByRole("button", { name: "Reset game" });
+
+    expect(pauseButton).toBeEnabled();
+    expect(resetButton).toBeEnabled();
+
+    fireEvent.click(pauseButton);
+    fireEvent.click(resetButton);
+
+    expect(onTogglePaused).toHaveBeenCalledTimes(1);
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the loading runtime screen while generation is running", () => {
     render(
       <EditorGameCanvas
@@ -166,6 +198,9 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByText("Generating your game")).toBeVisible();
     expect(screen.getByText("Booting the sandbox")).toBeVisible();
     expect(screen.getByText("72%")).toBeVisible();
+    expect(screen.getByText("Runtime controls")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reset game" })).toBeDisabled();
   });
 
   it("shows an error runtime screen and retry action when generation fails", () => {
@@ -187,6 +222,9 @@ describe("EditorGameCanvas", () => {
       screen.getByText("The runtime could not be prepared.")
     ).toBeVisible();
     expect(screen.getByText("Generated game creation failed.")).toBeVisible();
+    expect(screen.getByText("Runtime controls")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reset game" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
