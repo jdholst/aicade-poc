@@ -183,6 +183,36 @@ describe("EditorGameCanvas", () => {
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps reset available when a mounted runtime reports an error", () => {
+    const onReset = vi.fn();
+    const onTogglePaused = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onReset, onTogglePaused })}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "error",
+            message: "The runtime crashed.",
+          },
+        })}
+      />
+    );
+
+    const pauseButton = screen.getByRole("button", { name: "Pause game" });
+    const resetButton = screen.getByRole("button", { name: "Reset game" });
+
+    expect(screen.getByText("Runtime error: The runtime crashed.")).toBeVisible();
+    expect(pauseButton).toBeDisabled();
+    expect(resetButton).toBeEnabled();
+
+    fireEvent.click(pauseButton);
+    fireEvent.click(resetButton);
+
+    expect(onTogglePaused).not.toHaveBeenCalled();
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the loading runtime screen while generation is running", () => {
     render(
       <EditorGameCanvas

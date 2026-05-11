@@ -40,12 +40,18 @@ export function EditorGameCanvas({
     runtimeMode === "canvas2d" && loadState.status === "idle";
   const shouldShowCanvasRuntime =
     runtimeMode === "canvas2d" && loadState.status === "success";
-  const canUseRuntimeControls =
-    (shouldShowPhaserRuntime || shouldShowCanvasRuntime) &&
+  const hasMountedRuntime = shouldShowPhaserRuntime || shouldShowCanvasRuntime;
+  const canPauseRuntime =
+    hasMountedRuntime &&
     (gameStatus.state === "ready" || gameStatus.state === "paused");
+  const canResetRuntime =
+    hasMountedRuntime &&
+    (gameStatus.state === "ready" ||
+      gameStatus.state === "paused" ||
+      gameStatus.state === "error");
 
   const toggleGamePaused = () => {
-    if (!canUseRuntimeControls) {
+    if (!canPauseRuntime) {
       return;
     }
 
@@ -57,7 +63,7 @@ export function EditorGameCanvas({
   };
 
   const handleResetGame = () => {
-    if (!canUseRuntimeControls) {
+    if (!canResetRuntime) {
       return;
     }
 
@@ -67,7 +73,8 @@ export function EditorGameCanvas({
   return (
     <section className="flex min-h-0 flex-col gap-4">
       <RuntimeControls
-        canUseRuntimeControls={canUseRuntimeControls}
+        canPauseRuntime={canPauseRuntime}
+        canResetRuntime={canResetRuntime}
         isGamePaused={isGamePaused}
         onReset={handleResetGame}
         onTogglePaused={toggleGamePaused}
@@ -125,12 +132,14 @@ export function EditorGameCanvas({
 }
 
 function RuntimeControls({
-  canUseRuntimeControls,
+  canPauseRuntime,
+  canResetRuntime,
   isGamePaused,
   onReset,
   onTogglePaused,
 }: {
-  canUseRuntimeControls: boolean;
+  canPauseRuntime: boolean;
+  canResetRuntime: boolean;
   isGamePaused: boolean;
   onReset: () => void;
   onTogglePaused: () => void;
@@ -148,7 +157,7 @@ function RuntimeControls({
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <button
           type="button"
-          disabled={!canUseRuntimeControls}
+          disabled={!canPauseRuntime}
           onClick={onTogglePaused}
           className="inline-flex items-center justify-center border border-[var(--line)] bg-[rgba(21,18,14,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:text-[var(--muted)] disabled:opacity-55"
         >
@@ -156,7 +165,7 @@ function RuntimeControls({
         </button>
         <button
           type="button"
-          disabled={!canUseRuntimeControls}
+          disabled={!canResetRuntime}
           onClick={onReset}
           className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.08)] disabled:text-[var(--muted)] disabled:opacity-55"
         >
