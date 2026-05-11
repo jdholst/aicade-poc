@@ -4,17 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   GeneratedGameHost,
-  RuntimeIframeHost,
   type GeneratedGameHostHandle,
-  type RuntimeStatus,
 } from "./generated-game-host";
+import type { RuntimeIframeStatus } from "./runtime-iframe-host";
 import type { RuntimeAdapter } from "@/runtime/runtime-adapter";
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
-import {
-  phaserRuntimeAdapter,
-  topDownPhaserTemplate,
-  type HandAuthoredPhaserTemplate,
-} from "@/runtime/phaser";
 
 const pack: GeneratedGamePack = {
   project: {
@@ -94,17 +88,6 @@ const runtimeAdapter: RuntimeAdapter<GeneratedGamePack> = {
   },
 };
 
-const phaserHostAdapter: RuntimeAdapter<HandAuthoredPhaserTemplate> = {
-  ...phaserRuntimeAdapter,
-  createMountDescriptor(template) {
-    return {
-      title: template.title,
-      sandbox: "allow-scripts",
-      srcDoc: "<!doctype html><html><body><div id=\"game\"></div></body></html>",
-    };
-  },
-};
-
 describe("GeneratedGameHost runtime protocol handling", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -124,7 +107,7 @@ describe("GeneratedGameHost runtime protocol handling", () => {
   });
 
   it("keeps debug events internal while preserving ready and error status updates", async () => {
-    const statuses: RuntimeStatus[] = [];
+    const statuses: RuntimeIframeStatus[] = [];
 
     render(
       <GeneratedGameHost
@@ -186,7 +169,7 @@ describe("GeneratedGameHost runtime protocol handling", () => {
   });
 
   it("ignores messages from other windows and unrecognized runtime messages", async () => {
-    const statuses: RuntimeStatus[] = [];
+    const statuses: RuntimeIframeStatus[] = [];
 
     render(
       <GeneratedGameHost
@@ -226,7 +209,7 @@ describe("GeneratedGameHost runtime protocol handling", () => {
 
   it("does not let debug events settle the runtime boot timeout", () => {
     vi.useFakeTimers();
-    const statuses: RuntimeStatus[] = [];
+    const statuses: RuntimeIframeStatus[] = [];
 
     act(() => {
       render(
@@ -266,7 +249,7 @@ describe("GeneratedGameHost runtime protocol handling", () => {
 
   it("clears the boot timeout after ready", () => {
     vi.useFakeTimers();
-    const statuses: RuntimeStatus[] = [];
+    const statuses: RuntimeIframeStatus[] = [];
 
     act(() => {
       render(
@@ -395,103 +378,6 @@ describe("GeneratedGameHost runtime protocol handling", () => {
 
     expect(iframeFocus).toHaveBeenCalledTimes(2);
     expect(windowFocus).toHaveBeenCalledTimes(2);
-    expect(postMessage).toHaveBeenCalledWith({ type: "game-focus" }, "*");
-  });
-});
-
-describe("RuntimeIframeHost runtime protocol handling", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-  });
-
-  it("renders a Phaser artifact through the shared iframe host and handles ready events", async () => {
-    const statuses: RuntimeStatus[] = [];
-
-    render(
-      <RuntimeIframeHost
-        artifact={topDownPhaserTemplate}
-        runtimeAdapter={phaserHostAdapter}
-        onStatusChange={(status) => {
-          statuses.push(status);
-        }}
-      />
-    );
-
-    await waitFor(() => {
-      expect(statuses.at(-1)).toEqual({
-        state: "loading",
-      });
-    });
-
-    const iframe = screen.getByTitle<HTMLIFrameElement>("Top-Down Chase");
-
-    expect(iframe).toHaveAttribute(
-      "srcdoc",
-      '<!doctype html><html><body><div id="game"></div></body></html>'
-    );
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: {
-            type: "game-ready",
-            manifest: { runtime: "phaser" },
-            viewport: topDownPhaserTemplate.viewport,
-          },
-          source: iframe.contentWindow,
-        })
-      );
-    });
-
-    expect(statuses.at(-1)).toEqual({
-      state: "ready",
-    });
-  });
-
-  it("posts shared runtime commands for a Phaser artifact", async () => {
-    const ref = createRef<GeneratedGameHostHandle>();
-    const { rerender } = render(
-      <RuntimeIframeHost
-        ref={ref}
-        artifact={topDownPhaserTemplate}
-        runtimeAdapter={phaserHostAdapter}
-        isPaused={false}
-      />
-    );
-    const iframe = screen.getByTitle<HTMLIFrameElement>("Top-Down Chase");
-    const iframeFocus = vi
-      .spyOn(iframe, "focus")
-      .mockImplementation(() => undefined);
-    const windowFocus = vi
-      .spyOn(iframe.contentWindow!, "focus")
-      .mockImplementation(() => undefined);
-    const postMessage = vi
-      .spyOn(iframe.contentWindow!, "postMessage")
-      .mockImplementation(() => undefined);
-
-    rerender(
-      <RuntimeIframeHost
-        ref={ref}
-        artifact={topDownPhaserTemplate}
-        runtimeAdapter={phaserHostAdapter}
-        isPaused
-      />
-    );
-
-    await waitFor(() => {
-      expect(postMessage).toHaveBeenCalledWith(
-        { type: "game-pause", paused: true },
-        "*"
-      );
-    });
-
-    act(() => {
-      ref.current?.focusGame();
-    });
-
-    expect(iframeFocus).toHaveBeenCalled();
-    expect(windowFocus).toHaveBeenCalled();
     expect(postMessage).toHaveBeenCalledWith({ type: "game-focus" }, "*");
   });
 });

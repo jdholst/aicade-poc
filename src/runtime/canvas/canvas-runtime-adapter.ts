@@ -1,7 +1,5 @@
-import {
-  createGeneratedGameSandboxDocument,
-} from "@/components/generated-game-sandbox";
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
+import { createCanvasRuntimeDocument } from "@/runtime/canvas";
 
 import {
   parseRuntimeEvent,
@@ -14,7 +12,7 @@ export const canvasRuntimeAdapter: RuntimeAdapter<GeneratedGamePack> = {
     return {
       title: pack.manifest.title,
       sandbox: "allow-scripts",
-      srcDoc: createGeneratedGameSandboxDocument(pack),
+      srcDoc: createCanvasRuntimeDocument(pack),
     };
   },
   parseEvent: parseRuntimeEvent,
