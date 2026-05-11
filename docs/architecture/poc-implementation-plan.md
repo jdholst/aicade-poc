@@ -70,6 +70,14 @@ prompt
 
 The initial AI-enabled Phaser flow should generate Game Spec/config only. Sparkline-owned template code should provide the runtime, mechanic modules, layout primitives, validation hooks, and runtime protocol.
 
+Resolved Phase 3/4 shape:
+
+- Mechanics should be explicit Game Spec entries even when starter specs include common defaults such as player movement or win/loss.
+- Objectives should remain separate from mechanics. Objectives declare player-facing success, while mechanics provide the runtime behavior that makes the objective achievable and measurable.
+- Active mechanics should live as top-level module entries that can target entities, scenes, regions, or objectives by stable ID.
+- The schema should support an objectives list from the start, while the first top-down template only needs to fully honor one primary active objective.
+- Validation goals should remain separate from objectives so the system can ask both "what is the player trying to do?" and "what must be true for Sparkline to trust this draft as playable?"
+
 ## Milestones
 
 ### Milestone 1: Runtime Adapter Foundation
@@ -139,12 +147,17 @@ Deliverables:
 - Include stable IDs for entities, mechanics, assets, objectives, scenes, and config blocks.
 - Represent generic entity roles such as player, enemy, pickup, projectile, obstacle, boss, and hazard.
 - Represent one scene/arena plus basic layout primitives.
+- Model objectives separately from mechanics and from validation goals.
+- Support an objectives list in schema, with one primary active objective for the first top-down template.
+- Keep active mechanics as top-level module entries that reference entities, scenes, regions, or objectives by stable ID.
+- Keep validation goals as a separate list of system checks that can reference objective IDs when needed.
 
 Acceptance criteria:
 
 - A known Game Spec can configure the hand-authored top-down template.
 - Invalid specs fail validation before reaching the runtime.
 - The schema leaves room for versioned extensions without making the core loose.
+- A known spec can express objective, mechanics, and validation goals as separate concerns without ambiguity.
 
 Proves:
 
@@ -165,6 +178,8 @@ Deliverables:
 - Add a Mechanic Registry.
 - Implement a small initial module set: player movement, enemy chase, pickups, health/damage, score/timer, win/loss, simple obstacles.
 - Let the Game Spec list active mechanics and configs.
+- Keep common defaults such as player movement or win/loss explicit in starter specs rather than hidden in template assumptions.
+- Make mechanic configs target entities, scenes, regions, or objectives by stable ID where needed.
 - Add basic validation checks per mechanic where practical.
 - Keep unused modules out of a given game config.
 
@@ -173,6 +188,7 @@ Acceptance criteria:
 - A Game Spec can turn mechanics on/off and tune values.
 - Mechanics map from spec entries to code through the registry.
 - Basic mechanic validation can detect obvious missing/broken behavior.
+- The first registry surface stays game-level and inspectable instead of hiding behavior inside entity-local blobs.
 
 Proves:
 
