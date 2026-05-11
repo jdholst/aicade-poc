@@ -3,8 +3,9 @@
 import { useCallback, useState } from "react";
 
 import { DEFAULT_OPENAI_MODEL } from "@/constants";
-import type { RuntimeStatus } from "@/components/generated-game-host";
+import type { RuntimeIframeStatus } from "@/components/runtime-iframe-host";
 import { useStarterProjectGeneration } from "@/hooks/use-starter-project-generation";
+import { createInitialGameStatus } from "@/runtime/editor-runtime-mode";
 import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
@@ -61,7 +62,7 @@ export type GeneratedGameStatus =
   | { state: "error"; message: string };
 
 export type EditorGameCanvasActions = {
-  onGameStatusChange: (status: RuntimeStatus) => void;
+  onGameStatusChange: (status: RuntimeIframeStatus) => void;
   onRegenerate: () => void;
   onReset: () => void;
   onTogglePaused: () => void;
@@ -85,10 +86,9 @@ export function useEditorSession({
   );
   const [gameResetNonce, setGameResetNonce] = useState(0);
   const [isGamePaused, setIsGamePaused] = useState(false);
-  const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>({
-    state: "loading",
-    message: "Ready to build starter game.",
-  });
+  const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>(() =>
+    createInitialGameStatus()
+  );
 
   const handleGenerationStarted = useCallback(() => {
     setGameStatus({
@@ -153,25 +153,28 @@ export function useEditorSession({
     setGameResetNonce((value) => value + 1);
   }
 
-  const handleRuntimeStatusChange = useCallback((status: RuntimeStatus) => {
-    if (status.state === "loading") {
-      setGameStatus({
-        state: "loading",
-        message: "Booting Phaser runtime...",
-      });
-      return;
-    }
+  const handleRuntimeStatusChange = useCallback(
+    (status: RuntimeIframeStatus) => {
+      if (status.state === "loading") {
+        setGameStatus({
+          state: "loading",
+          message: "Booting Phaser runtime...",
+        });
+        return;
+      }
 
-    if (status.state === "ready") {
-      setGameStatus({
-        state: "ready",
-        message: "Phaser runtime is running in the sandbox.",
-      });
-      return;
-    }
+      if (status.state === "ready") {
+        setGameStatus({
+          state: "ready",
+          message: "Phaser runtime is running in the sandbox.",
+        });
+        return;
+      }
 
-    setGameStatus(status);
-  }, []);
+      setGameStatus(status);
+    },
+    []
+  );
 
   const chat: EditorAIChatSession = {
     canStartGeneration,

@@ -3,45 +3,6 @@ import {
   GENERATED_GAME_FACTORY_NAME,
   GENERATED_GAME_REQUIRED_METHODS,
 } from "@/service/starter-project/generated-game-contract";
-import {
-  postRuntimeCommand,
-  type RuntimeCommand,
-} from "@/runtime/runtime-adapter";
-
-export type GeneratedGameSandboxCommand = RuntimeCommand;
-
-export function postGeneratedGameSandboxCommand(
-  target: Window | null | undefined,
-  command: GeneratedGameSandboxCommand
-) {
-  postRuntimeCommand(target, command);
-}
-
-export function focusGeneratedGameSandbox(
-  iframe: HTMLIFrameElement | null | undefined
-) {
-  iframe?.focus();
-  iframe?.contentWindow?.focus();
-  postGeneratedGameSandboxCommand(iframe?.contentWindow, {
-    type: "game-focus",
-  });
-}
-
-export function scheduleGeneratedGameSandboxFocus(
-  iframe: HTMLIFrameElement | null | undefined
-) {
-  const focusId = window.setTimeout(() => {
-    focusGeneratedGameSandbox(iframe);
-  }, 0);
-  const followUpFocusId = window.setTimeout(() => {
-    focusGeneratedGameSandbox(iframe);
-  }, 120);
-
-  return () => {
-    window.clearTimeout(focusId);
-    window.clearTimeout(followUpFocusId);
-  };
-}
 
 function escapeScriptContent(source: string) {
   return source
@@ -50,7 +11,7 @@ function escapeScriptContent(source: string) {
     .replace(/\u2029/g, "\\u2029");
 }
 
-export function createGeneratedGameSandboxDocument(pack: GeneratedGamePack) {
+export function createCanvasRuntimeDocument(pack: GeneratedGamePack) {
   const editableSpecJson = JSON.stringify(pack.editableSpec);
   const manifestJson = JSON.stringify(pack.manifest);
   const generatedSource = escapeScriptContent(pack.moduleSourceJs);

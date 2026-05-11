@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 
-import { canvasRuntimeAdapter } from "./canvas-runtime-adapter";
+import { canvasRuntimeAdapter } from "@/runtime/canvas";
 
 const pack: GeneratedGamePack = {
   project: {
