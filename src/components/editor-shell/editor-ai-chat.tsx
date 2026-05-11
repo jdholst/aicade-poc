@@ -179,6 +179,17 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                 {loadState.message}
               </p>
             </div>
+            <OpenAiConfigForm
+              needsOpenAiApiKey={needsOpenAiApiKey}
+              needsOpenAiModel={needsOpenAiModel}
+              openAiApiKey={openAiApiKey}
+              openAiKeyword={openAiKeyword}
+              openAiModel={openAiModel}
+              onOpenAiApiKeyChange={onOpenAiApiKeyChange}
+              onOpenAiKeywordChange={onOpenAiKeywordChange}
+              onOpenAiModelChange={onOpenAiModelChange}
+              variant="chat"
+            />
             <button
               type="button"
               disabled={!canStartGeneration}
