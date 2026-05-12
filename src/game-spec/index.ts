@@ -10,6 +10,13 @@ export {
 } from "./game-spec-schema";
 
 export {
+  GameSpecValidationError,
+  getTopDownGameSpecValidationIssues,
+  validateTopDownGameSpec,
+  type GameSpecValidationIssue,
+} from "./game-spec-validation";
+
+export {
   parseTopDownGameSpec,
   parseTopDownSpec,
   topDownGameSpecSchema,

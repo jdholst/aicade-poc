@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 
 import { describe, expect, it } from "vitest";
 
-import { parseTopDownGameSpec } from "@/game-spec";
+import { validateTopDownGameSpec } from "@/game-spec";
 
 import { createTopDownPhaserTemplate, topDownPhaserTemplate } from ".";
 
@@ -193,7 +193,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("builds template artifacts from validated top-down Game Spec input", () => {
-    const spec = parseTopDownGameSpec({
+    const spec = validateTopDownGameSpec({
       ...topDownPhaserTemplate.gameSpec,
       id: "game_custom_arena",
       title: "Custom Arena",
@@ -226,7 +226,7 @@ describe("top-down Phaser template", () => {
 
     expect(() =>
       createTopDownPhaserTemplate(
-        parseTopDownGameSpec({
+        validateTopDownGameSpec({
           ...topDownPhaserTemplate.gameSpec,
           template: {
             ...topDownPhaserTemplate.gameSpec.template,
@@ -235,6 +235,20 @@ describe("top-down Phaser template", () => {
         })
       )
     ).toThrow("Invalid input");
+
+    expect(() =>
+      createTopDownPhaserTemplate(
+        validateTopDownGameSpec({
+          ...topDownPhaserTemplate.gameSpec,
+          objectives: [
+            {
+              ...topDownPhaserTemplate.gameSpec.objectives[0],
+              primary: false,
+            },
+          ],
+        })
+      )
+    ).toThrow("Expected exactly one primary objective.");
   });
 
   it("points to an authored Phaser runtime script with protocol and gameplay hooks", () => {

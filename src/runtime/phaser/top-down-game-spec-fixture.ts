@@ -1,6 +1,6 @@
-import { parseTopDownGameSpec } from "@/game-spec";
+import { validateTopDownGameSpec } from "@/game-spec";
 
-export const topDownGameSpecFixture = parseTopDownGameSpec({
+export const topDownGameSpecFixture = validateTopDownGameSpec({
   schemaVersion: "game-spec/v1",
   id: "game_crystal_spec_chase",
   title: "Crystal Spec Chase",
