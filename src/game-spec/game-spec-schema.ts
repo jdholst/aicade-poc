@@ -47,7 +47,7 @@ function isJsonValue(value: unknown): value is JsonValue {
   });
 }
 
-const jsonValueSchema = z.custom<JsonValue>(isJsonValue, {
+export const jsonValueSchema = z.custom<JsonValue>(isJsonValue, {
   message: "Game Spec JSON fields must contain only JSON-compatible values.",
 });
 

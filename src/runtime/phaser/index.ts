@@ -1,4 +1,5 @@
 export {
+  createTopDownPhaserTemplate,
   topDownPhaserTemplate,
   type HandAuthoredPhaserTemplate,
 } from "./top-down-template";

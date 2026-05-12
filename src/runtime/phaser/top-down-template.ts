@@ -1,4 +1,7 @@
 import type { RuntimeViewport } from "@/runtime/runtime-adapter";
+import type { TopDownGameSpec } from "@/game-spec";
+
+import { topDownGameSpecFixture } from "./top-down-game-spec-fixture";
 
 type PhaserTemplateControl = {
   action: string;
@@ -9,6 +12,7 @@ type PhaserTemplateControl = {
 
 export type HandAuthoredPhaserTemplate = {
   controls: PhaserTemplateControl[];
+  gameSpec: TopDownGameSpec;
   id: string;
   runtime: "phaser";
   runtimeScriptPath: string;
@@ -16,22 +20,30 @@ export type HandAuthoredPhaserTemplate = {
   viewport: RuntimeViewport;
 };
 
-export const topDownPhaserTemplate: HandAuthoredPhaserTemplate = {
-  id: "top-down-chase-v1",
-  runtime: "phaser",
-  title: "Top-Down Chase",
-  viewport: {
-    width: 960,
-    height: 540,
-    scaling: "stretch_to_fill",
-  },
-  controls: [
-    {
-      action: "move",
-      kind: "axis",
-      keys: ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
-      label: "Move",
+export function createTopDownPhaserTemplate(
+  gameSpec: TopDownGameSpec
+): HandAuthoredPhaserTemplate {
+  const scene = gameSpec.template.config.scenes[0];
+
+  return {
+    id: `${gameSpec.id}-phaser-template`,
+    runtime: "phaser",
+    title: gameSpec.title,
+    viewport: {
+      width: scene.arena.width,
+      height: scene.arena.height,
+      scaling: "stretch_to_fill",
     },
-  ],
-  runtimeScriptPath: "/runtime/phaser/top-down-template.js",
-};
+    controls: gameSpec.controls.map(({ action, kind, keys, label }) => ({
+      action,
+      kind,
+      keys,
+      label,
+    })),
+    gameSpec,
+    runtimeScriptPath: "/runtime/phaser/top-down-template.js",
+  };
+}
+
+export const topDownPhaserTemplate =
+  createTopDownPhaserTemplate(topDownGameSpecFixture);

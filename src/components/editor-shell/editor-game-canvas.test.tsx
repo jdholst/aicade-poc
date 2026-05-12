@@ -104,7 +104,7 @@ describe("EditorGameCanvas", () => {
       />
     );
 
-    expect(screen.getByTitle("Top-Down Chase")).toBeVisible();
+    expect(screen.getByTitle("Crystal Spec Chase")).toBeVisible();
     expect(screen.getByText("Phaser runtime")).toBeVisible();
     expect(
       screen.queryByText("The generated game module will boot here.")

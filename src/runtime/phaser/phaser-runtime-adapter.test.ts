@@ -9,9 +9,13 @@ describe("phaser runtime adapter", () => {
       phaserRuntimeAdapter.createMountDescriptor(topDownPhaserTemplate);
 
     expect(phaserRuntimeAdapter.kind).toBe("phaser");
-    expect(descriptor.title).toBe("Top-Down Chase");
+    expect(descriptor.title).toBe("Crystal Spec Chase");
     expect(descriptor.sandbox).toBe("allow-scripts");
     expect(descriptor.srcDoc).toContain('<div id="game" tabindex="0"></div>');
+    expect(descriptor.srcDoc).toContain('"gameSpec"');
+    expect(descriptor.srcDoc).toContain('"title":"Crystal Spec Chase"');
+    expect(descriptor.srcDoc).toContain('"width":800');
+    expect(descriptor.srcDoc).toContain('"height":600');
     expect(descriptor.srcDoc).toContain(
       '<script src="/runtime/phaser/phaser-arcade-physics.min.js"></script>'
     );

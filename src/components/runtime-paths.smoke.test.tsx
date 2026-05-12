@@ -137,7 +137,7 @@ describe("runtime path smoke validation", () => {
       expect(statuses.at(-1)).toEqual({ state: "loading" });
     });
 
-    const iframe = screen.getByTitle<HTMLIFrameElement>("Top-Down Chase");
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Crystal Spec Chase");
 
     expect(iframe).toBeVisible();
 
@@ -163,7 +163,7 @@ describe("runtime path smoke validation", () => {
       expect(statuses.at(-1)).toEqual({ state: "loading" });
     });
 
-    const iframe = screen.getByTitle<HTMLIFrameElement>("Top-Down Chase");
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Crystal Spec Chase");
 
     expect(iframe).toBeVisible();
 
