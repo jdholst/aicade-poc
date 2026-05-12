@@ -1,4 +1,11 @@
 import type { RuntimeViewport } from "@/runtime/runtime-adapter";
+import type { TopDownGameSpec } from "@/game-spec";
+
+import {
+  getTopDownGameSpecFixtureState,
+  topDownGameSpecFixture,
+  type TopDownGameSpecFixtureState,
+} from "./top-down-game-spec-fixture";
 
 type PhaserTemplateControl = {
   action: string;
@@ -9,6 +16,7 @@ type PhaserTemplateControl = {
 
 export type HandAuthoredPhaserTemplate = {
   controls: PhaserTemplateControl[];
+  gameSpec: TopDownGameSpec;
   id: string;
   runtime: "phaser";
   runtimeScriptPath: string;
@@ -16,22 +24,69 @@ export type HandAuthoredPhaserTemplate = {
   viewport: RuntimeViewport;
 };
 
-export const topDownPhaserTemplate: HandAuthoredPhaserTemplate = {
-  id: "top-down-chase-v1",
-  runtime: "phaser",
-  title: "Top-Down Chase",
-  viewport: {
-    width: 960,
-    height: 540,
-    scaling: "stretch_to_fill",
-  },
-  controls: [
-    {
-      action: "move",
-      kind: "axis",
-      keys: ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
-      label: "Move",
+export type TopDownPhaserTemplateState =
+  | {
+      template: HandAuthoredPhaserTemplate;
+      status: "valid";
+    }
+  | {
+      issues: Extract<
+        TopDownGameSpecFixtureState,
+        { status: "invalid" }
+      >["issues"];
+      message: string;
+      status: "invalid";
+    };
+
+export function createTopDownPhaserTemplate(
+  gameSpec: TopDownGameSpec
+): HandAuthoredPhaserTemplate {
+  const scene = gameSpec.template.config.scenes[0];
+
+  return {
+    id: `${gameSpec.id}-phaser-template`,
+    runtime: "phaser",
+    title: gameSpec.title,
+    viewport: {
+      width: scene.arena.width,
+      height: scene.arena.height,
+      scaling: "stretch_to_fill",
     },
-  ],
-  runtimeScriptPath: "/runtime/phaser/top-down-template.js",
+    controls: gameSpec.controls.map(({ action, kind, keys, label }) => ({
+      action,
+      kind,
+      keys,
+      label,
+    })),
+    gameSpec,
+    runtimeScriptPath: "/runtime/phaser/top-down-template.js",
+  };
+}
+
+export const topDownPhaserTemplate =
+  createTopDownPhaserTemplate(topDownGameSpecFixture);
+
+const validTopDownPhaserTemplateState: TopDownPhaserTemplateState = {
+  status: "valid",
+  template: topDownPhaserTemplate,
 };
+
+export function getTopDownPhaserTemplateState(
+  useValidFixture =
+    process.env.NEXT_PUBLIC_AICADE_USE_INVALID_GAME_SPEC !== "1"
+): TopDownPhaserTemplateState {
+  if (useValidFixture) {
+    return validTopDownPhaserTemplateState;
+  }
+
+  const fixtureState = getTopDownGameSpecFixtureState(useValidFixture);
+
+  if (fixtureState.status === "invalid") {
+    return fixtureState;
+  }
+
+  return {
+    status: "valid",
+    template: createTopDownPhaserTemplate(fixtureState.gameSpec),
+  };
+}

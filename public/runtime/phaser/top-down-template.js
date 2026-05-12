@@ -1,18 +1,39 @@
 (function () {
   const template = globalThis.__AICADE_PHASER_TEMPLATE__ || {};
+  const gameSpec = template.gameSpec || {};
+  const topDownScene =
+    gameSpec.template &&
+    gameSpec.template.config &&
+    Array.isArray(gameSpec.template.config.scenes)
+      ? gameSpec.template.config.scenes[0]
+      : null;
+  const layout = topDownScene && topDownScene.layout ? topDownScene.layout : {};
+  const arena =
+    topDownScene && topDownScene.arena
+      ? topDownScene.arena
+      : { width: 960, height: 540 };
+  const primaryObjective =
+    Array.isArray(gameSpec.objectives) &&
+    gameSpec.objectives.find(function (objective) {
+      return objective.primary;
+    });
   const rawViewport = template.viewport || {};
   const viewport = {
     width:
       typeof rawViewport.width === "number"
         ? Math.max(1, Math.round(rawViewport.width))
-        : 960,
+        : Math.max(1, Math.round(arena.width || 960)),
     height:
       typeof rawViewport.height === "number"
         ? Math.max(1, Math.round(rawViewport.height))
-        : 540,
+        : Math.max(1, Math.round(arena.height || 540)),
     scaling: "stretch_to_fill",
   };
   const SCENE_KEY = "top-down-chase";
+  const objectiveLabel =
+    primaryObjective && primaryObjective.label
+      ? primaryObjective.label
+      : "Collect crystals";
   let game = null;
   let activeScene = null;
   let player = null;
@@ -22,27 +43,142 @@
   let scoreText = null;
   let score = 0;
   let isPaused = false;
+  let playerStart = { x: 160, y: 270 };
+  let chaserStart = { x: 780, y: 405 };
 
   function notify(type, payload) {
     parent.postMessage(Object.assign({ type }, payload || {}), "*");
   }
 
+  function findEntityByRole(role) {
+    if (!Array.isArray(gameSpec.entities)) {
+      return null;
+    }
+
+    return (
+      gameSpec.entities.find(function (entity) {
+        return entity.role === role;
+      }) || null
+    );
+  }
+
+  function findZoneForEntity(entityId) {
+    if (!entityId || !Array.isArray(layout.spawnZones)) {
+      return null;
+    }
+
+    return (
+      layout.spawnZones.find(function (zone) {
+        return (
+          Array.isArray(zone.entityIds) && zone.entityIds.indexOf(entityId) >= 0
+        );
+      }) || null
+    );
+  }
+
+  function getZoneCenter(zone, fallback) {
+    if (!zone) {
+      return fallback;
+    }
+
+    return {
+      x: zone.x + zone.width / 2,
+      y: zone.y + zone.height / 2,
+    };
+  }
+
+  function getRandomPointInZone(zone, fallback) {
+    if (!zone || !globalThis.Phaser) {
+      return fallback;
+    }
+
+    return {
+      x: Phaser.Math.Between(zone.x, zone.x + zone.width),
+      y: Phaser.Math.Between(zone.y, zone.y + zone.height),
+    };
+  }
+
+  function findFirstPickupZone() {
+    return Array.isArray(layout.pickupZones) && layout.pickupZones.length > 0
+      ? layout.pickupZones[0]
+      : null;
+  }
+
+  function createWall(scene, wall) {
+    const wallBody = scene.add.rectangle(
+      wall.x + wall.width / 2,
+      wall.y + wall.height / 2,
+      wall.width,
+      wall.height,
+      0x263746
+    );
+    scene.physics.add.existing(wallBody, true);
+    return wallBody;
+  }
+
+  function createObstacle(scene, obstacle) {
+    const obstacleBody =
+      obstacle.shape === "circle"
+        ? scene.add.circle(obstacle.x, obstacle.y, obstacle.radius, 0x375064)
+        : scene.add.rectangle(
+            obstacle.x + obstacle.width / 2,
+            obstacle.y + obstacle.height / 2,
+            obstacle.width,
+            obstacle.height,
+            0x375064
+          );
+    scene.physics.add.existing(obstacleBody, true);
+    return obstacleBody;
+  }
+
+  function createLayoutBodies(scene) {
+    const staticBodies = [];
+
+    if (Array.isArray(layout.walls)) {
+      layout.walls.forEach(function (wall) {
+        staticBodies.push(createWall(scene, wall));
+      });
+    }
+
+    if (Array.isArray(layout.obstacles)) {
+      layout.obstacles.forEach(function (obstacle) {
+        staticBodies.push(createObstacle(scene, obstacle));
+      });
+    }
+
+    return staticBodies;
+  }
+
   function createPlayer(scene) {
-    player = scene.add.rectangle(160, 270, 34, 34, 0x6ee7b7);
+    const playerEntity = findEntityByRole("player");
+    playerStart = getZoneCenter(
+      findZoneForEntity(playerEntity && playerEntity.id),
+      playerStart
+    );
+    player = scene.add.rectangle(playerStart.x, playerStart.y, 34, 34, 0x6ee7b7);
     scene.physics.add.existing(player);
     player.body.setCollideWorldBounds(true);
     return player;
   }
 
   function createObjective(scene) {
-    objective = scene.add.star(780, 150, 5, 10, 22, 0xf6c46b);
+    const objectiveStart = getZoneCenter(findFirstPickupZone(), {
+      x: viewport.width - 180,
+      y: 150,
+    });
+    objective = scene.add.star(objectiveStart.x, objectiveStart.y, 5, 10, 22, 0xf6c46b);
     scene.physics.add.existing(objective);
     objective.body.setAllowGravity(false);
     return objective;
   }
 
   function createChaser(scene) {
-    chaser = scene.add.circle(780, 405, 18, 0xa9482a);
+    const enemyEntity = findEntityByRole("enemy");
+    chaserStart = getZoneCenter(
+      findZoneForEntity(enemyEntity && enemyEntity.id),
+      chaserStart
+    );
+    chaser = scene.add.circle(chaserStart.x, chaserStart.y, 18, 0xa9482a);
     scene.physics.add.existing(chaser);
     chaser.body.setCollideWorldBounds(true);
     return chaser;
@@ -50,11 +186,12 @@
 
   function collectObjective() {
     score += 1;
-    scoreText.setText("Crystals: " + score);
-    objective.setPosition(
-      Phaser.Math.Between(96, viewport.width - 96),
-      Phaser.Math.Between(96, viewport.height - 96)
-    );
+    scoreText.setText(objectiveLabel + ": " + score);
+    const nextPoint = getRandomPointInZone(findFirstPickupZone(), {
+      x: Phaser.Math.Between(96, viewport.width - 96),
+      y: Phaser.Math.Between(96, viewport.height - 96),
+    });
+    objective.setPosition(nextPoint.x, nextPoint.y);
   }
 
   function applyHostViewport(nextViewport) {
@@ -119,49 +256,54 @@
         };
         this.cameras.main.setBackgroundColor("#10171e");
         this.physics.world.setBounds(
-          32,
-          32,
-          viewport.width - 64,
-          viewport.height - 64
+          0,
+          0,
+          viewport.width,
+          viewport.height
         );
 
         this.add
           .rectangle(
             viewport.width / 2,
             viewport.height / 2,
-            viewport.width - 64,
-            viewport.height - 64,
+            Math.max(1, arena.width || viewport.width),
+            Math.max(1, arena.height || viewport.height),
             0x18242f
           )
           .setStrokeStyle(2, 0x6ee7b7, 0.5);
 
-        this.add.text(40, 24, "Top-Down Chase", {
+        this.add.text(40, 24, gameSpec.title || template.title || "Top-Down Chase", {
           color: "#f8f4ee",
           fontFamily: "Arial, sans-serif",
           fontSize: "18px",
         });
-        scoreText = this.add.text(40, 50, "Crystals: 0", {
+        scoreText = this.add.text(40, 50, objectiveLabel + ": 0", {
           color: "#f6c46b",
           fontFamily: "Arial, sans-serif",
           fontSize: "16px",
         });
 
+        const staticLayoutBodies = createLayoutBodies(this);
         createPlayer(this);
         createObjective(this);
         createChaser(this);
         cursors = this.input.keyboard.createCursorKeys();
 
+        staticLayoutBodies.forEach((body) => {
+          this.physics.add.collider(player, body);
+          this.physics.add.collider(chaser, body);
+        });
         this.physics.add.overlap(player, objective, collectObjective);
         this.physics.add.overlap(player, chaser, () => {
           score = 0;
-          scoreText.setText("Crystals: 0");
-          player.setPosition(160, 270);
-          chaser.setPosition(780, 405);
+          scoreText.setText(objectiveLabel + ": 0");
+          player.setPosition(playerStart.x, playerStart.y);
+          chaser.setPosition(chaserStart.x, chaserStart.y);
         });
 
         notify("game-ready", {
           manifest: {
-            title: "Top-Down Chase",
+            title: gameSpec.title || template.title || "Top-Down Chase",
             runtime: "phaser",
           },
           viewport,
