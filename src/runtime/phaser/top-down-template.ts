@@ -1,7 +1,11 @@
 import type { RuntimeViewport } from "@/runtime/runtime-adapter";
 import type { TopDownGameSpec } from "@/game-spec";
 
-import { topDownGameSpecFixture } from "./top-down-game-spec-fixture";
+import {
+  getTopDownGameSpecFixtureState,
+  topDownGameSpecFixture,
+  type TopDownGameSpecFixtureState,
+} from "./top-down-game-spec-fixture";
 
 type PhaserTemplateControl = {
   action: string;
@@ -19,6 +23,20 @@ export type HandAuthoredPhaserTemplate = {
   title: string;
   viewport: RuntimeViewport;
 };
+
+export type TopDownPhaserTemplateState =
+  | {
+      template: HandAuthoredPhaserTemplate;
+      status: "valid";
+    }
+  | {
+      issues: Extract<
+        TopDownGameSpecFixtureState,
+        { status: "invalid" }
+      >["issues"];
+      message: string;
+      status: "invalid";
+    };
 
 export function createTopDownPhaserTemplate(
   gameSpec: TopDownGameSpec
@@ -47,3 +65,28 @@ export function createTopDownPhaserTemplate(
 
 export const topDownPhaserTemplate =
   createTopDownPhaserTemplate(topDownGameSpecFixture);
+
+const validTopDownPhaserTemplateState: TopDownPhaserTemplateState = {
+  status: "valid",
+  template: topDownPhaserTemplate,
+};
+
+export function getTopDownPhaserTemplateState(
+  useValidFixture =
+    process.env.NEXT_PUBLIC_AICADE_USE_INVALID_GAME_SPEC !== "1"
+): TopDownPhaserTemplateState {
+  if (useValidFixture) {
+    return validTopDownPhaserTemplateState;
+  }
+
+  const fixtureState = getTopDownGameSpecFixtureState(useValidFixture);
+
+  if (fixtureState.status === "invalid") {
+    return fixtureState;
+  }
+
+  return {
+    status: "valid",
+    template: createTopDownPhaserTemplate(fixtureState.gameSpec),
+  };
+}

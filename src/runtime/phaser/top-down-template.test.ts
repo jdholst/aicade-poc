@@ -2,11 +2,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { validateTopDownGameSpec } from "@/game-spec";
 
-import { createTopDownPhaserTemplate, topDownPhaserTemplate } from ".";
+import {
+  createTopDownPhaserTemplate,
+  getTopDownPhaserTemplateState,
+  topDownPhaserTemplate,
+} from ".";
 
 type PostedMessage = {
   manifest?: {
@@ -166,6 +170,10 @@ function createRuntimeHarness(template: unknown) {
 }
 
 describe("top-down Phaser template", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("describes a hand-authored top-down runtime template", () => {
     expect(topDownPhaserTemplate).toMatchObject({
       id: "game_crystal_spec_chase-phaser-template",
@@ -249,6 +257,20 @@ describe("top-down Phaser template", () => {
         })
       )
     ).toThrow("Expected exactly one primary objective.");
+  });
+
+  it("reports invalid fixture state without crashing module import", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_USE_INVALID_GAME_SPEC", "1");
+
+    expect(getTopDownPhaserTemplateState()).toMatchObject({
+      message:
+        "Game Spec validation failed: objectives: Expected exactly one primary objective.",
+      status: "invalid",
+    });
+  });
+
+  it("returns a stable valid template state for mounted runtime renders", () => {
+    expect(getTopDownPhaserTemplateState()).toBe(getTopDownPhaserTemplateState());
   });
 
   it("points to an authored Phaser runtime script with protocol and gameplay hooks", () => {

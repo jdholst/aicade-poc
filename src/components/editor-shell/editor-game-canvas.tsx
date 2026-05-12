@@ -10,7 +10,10 @@ import type {
 } from "@/hooks/use-editor-session";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 import { getEditorRuntimeMode } from "@/runtime/editor-runtime-mode";
-import { phaserRuntimeAdapter, topDownPhaserTemplate } from "@/runtime/phaser";
+import {
+  getTopDownPhaserTemplateState,
+  phaserRuntimeAdapter,
+} from "@/runtime/phaser";
 import { useRef, type ReactNode } from "react";
 
 type EditorGameCanvasProps = {
@@ -33,9 +36,15 @@ export function EditorGameCanvas({
     actions;
   const gameHostRef = useRef<RuntimeIframeHostHandle | null>(null);
   const runtimeMode = getEditorRuntimeMode();
+  const phaserTemplateState = getTopDownPhaserTemplateState();
   const shouldShowPhaserRuntime =
     runtimeMode === "phaser" &&
+    phaserTemplateState.status === "valid" &&
     (loadState.status === "idle" || loadState.status === "success");
+  const shouldShowPhaserValidationError =
+    runtimeMode === "phaser" &&
+    phaserTemplateState.status === "invalid" &&
+    loadState.status !== "loading";
   const shouldShowCanvasInitial =
     runtimeMode === "canvas2d" && loadState.status === "idle";
   const shouldShowCanvasRuntime =
@@ -100,11 +109,16 @@ export function EditorGameCanvas({
               onRegenerate={onRegenerate}
             />
           ) : null}
+          {shouldShowPhaserValidationError ? (
+            <GameSpecValidationErrorScreen
+              message={phaserTemplateState.message}
+            />
+          ) : null}
           {shouldShowPhaserRuntime ? (
             <RuntimeIframeHost
               ref={gameHostRef}
-              key={`${topDownPhaserTemplate.id}-${gameResetNonce}`}
-              artifact={topDownPhaserTemplate}
+              key={`${phaserTemplateState.template.id}-${gameResetNonce}`}
+              artifact={phaserTemplateState.template}
               runtimeAdapter={phaserRuntimeAdapter}
               isPaused={isGamePaused}
               focusOnReadyKey={gameResetNonce}
@@ -288,6 +302,29 @@ function RuntimeErrorScreen({
         >
           Try again
         </button>
+      </div>
+    </RuntimeScreenShell>
+  );
+}
+
+function GameSpecValidationErrorScreen({ message }: { message: string }) {
+  return (
+    <RuntimeScreenShell statusLabel="Validation stopped">
+      <div className="max-w-2xl space-y-6 px-4 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#f1b7a3]/30 bg-[#9d4b31]/10">
+          <div className="h-12 w-12 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
+        </div>
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
+            Game Spec validation failed
+          </div>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
+            The runtime was not started.
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-white/65">
+            {message}
+          </p>
+        </div>
       </div>
     </RuntimeScreenShell>
   );

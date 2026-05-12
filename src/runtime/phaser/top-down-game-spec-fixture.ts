@@ -1,6 +1,11 @@
-import { validateTopDownGameSpec } from "@/game-spec";
+import {
+  GameSpecValidationError,
+  validateTopDownGameSpec,
+  type GameSpecValidationIssue,
+  type TopDownGameSpec,
+} from "@/game-spec";
 
-export const topDownGameSpecFixture = validateTopDownGameSpec({
+const validTopDownGameSpecFixtureInput = {
   schemaVersion: "game-spec/v1",
   id: "game_crystal_spec_chase",
   title: "Crystal Spec Chase",
@@ -178,4 +183,65 @@ export const topDownGameSpecFixture = validateTopDownGameSpec({
       },
     },
   ],
-});
+};
+
+const invalidTopDownGameSpecFixtureInput = {
+  ...validTopDownGameSpecFixtureInput,
+  title: "Invalid Crystal Spec Chase",
+  objectives: validTopDownGameSpecFixtureInput.objectives.map((objective) => ({
+    ...objective,
+    primary: false,
+  })),
+};
+
+export type TopDownGameSpecFixtureState =
+  | {
+      gameSpec: TopDownGameSpec;
+      status: "valid";
+    }
+  | {
+      issues: GameSpecValidationIssue[];
+      message: string;
+      status: "invalid";
+    };
+
+export function getTopDownGameSpecFixtureState(
+  useValidFixture = true
+): TopDownGameSpecFixtureState {
+  const input = useValidFixture
+    ? validTopDownGameSpecFixtureInput
+    : invalidTopDownGameSpecFixtureInput;
+
+  try {
+    return {
+      gameSpec: validateTopDownGameSpec(input),
+      status: "valid",
+    };
+  } catch (error) {
+    if (error instanceof GameSpecValidationError) {
+      return {
+        issues: error.issues,
+        message: error.message,
+        status: "invalid",
+      };
+    }
+
+    if (error instanceof Error) {
+      return {
+        issues: [],
+        message: error.message,
+        status: "invalid",
+      };
+    }
+
+    return {
+      issues: [],
+      message: "Unknown Game Spec validation failure.",
+      status: "invalid",
+    };
+  }
+}
+
+export const topDownGameSpecFixture = validateTopDownGameSpec(
+  validTopDownGameSpecFixtureInput
+);
