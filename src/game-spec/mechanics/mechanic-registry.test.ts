@@ -1,0 +1,197 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  getTopDownMechanicDefinition,
+  getTopDownMechanicDefinitionsForSpec,
+  topDownMechanicRegistry,
+  validateTopDownGameSpec,
+} from "..";
+
+const registryBackedTopDownSpec = {
+  schemaVersion: "game-spec/v1",
+  id: "game_registry_fixture",
+  title: "Registry Fixture",
+  currentIntentSummary: "Exercise all built-in top-down mechanics.",
+  template: {
+    id: "template_top_down",
+    version: "1.0.0",
+    config: {
+      scenes: [
+        {
+          id: "scene_arena",
+          name: "Arena",
+          objectiveIds: ["objective_collect_crystal"],
+          validationGoalIds: ["validation_collectible_reachable"],
+          arena: {
+            id: "arena_main",
+            width: 800,
+            height: 600,
+          },
+          layout: {
+            walls: [],
+            obstacles: [],
+            spawnZones: [
+              {
+                id: "spawn_player",
+                x: 80,
+                y: 80,
+                width: 120,
+                height: 120,
+                entityIds: ["entity_player"],
+              },
+            ],
+            pickupZones: [
+              {
+                id: "pickup_crystals",
+                x: 320,
+                y: 160,
+                width: 240,
+                height: 180,
+                assetIds: ["asset_crystal"],
+              },
+            ],
+            regions: [
+              {
+                id: "region_safe_start",
+                label: "Safe Start",
+                x: 48,
+                y: 48,
+                width: 160,
+                height: 160,
+              },
+            ],
+          },
+        },
+      ],
+    },
+  },
+  controls: [
+    {
+      id: "control_move",
+      action: "move",
+      label: "Move",
+      kind: "axis",
+      keys: ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
+    },
+  ],
+  entities: [
+    {
+      id: "entity_player",
+      role: "player",
+      name: "Player",
+    },
+    {
+      id: "entity_chaser",
+      role: "enemy",
+      name: "Chaser",
+    },
+    {
+      id: "entity_crystal",
+      role: "pickup",
+      name: "Crystal",
+    },
+  ],
+  assets: [
+    {
+      id: "asset_player",
+      role: "player",
+      name: "Player Placeholder",
+      source: "template",
+    },
+    {
+      id: "asset_crystal",
+      role: "pickup",
+      name: "Crystal Placeholder",
+      source: "template",
+    },
+  ],
+  objectives: [
+    {
+      id: "objective_collect_crystal",
+      label: "Collect crystal",
+      description: "Collect the crystal.",
+      primary: true,
+    },
+  ],
+  validationGoals: [
+    {
+      id: "validation_collectible_reachable",
+      label: "Collectible reachable",
+      description: "The collectible can be reached by the player.",
+      objectiveId: "objective_collect_crystal",
+    },
+  ],
+  mechanics: [
+    {
+      id: "mechanic_player_movement",
+      type: "player_movement",
+      targetIds: ["entity_player"],
+      sceneIds: ["scene_arena"],
+      objectiveIds: ["objective_collect_crystal"],
+      config: {},
+    },
+    {
+      id: "mechanic_chaser_enemy",
+      type: "enemy_chase",
+      targetIds: ["entity_chaser", "entity_player"],
+      sceneIds: ["scene_arena"],
+      regionIds: ["region_safe_start"],
+      objectiveIds: ["objective_collect_crystal"],
+      config: {
+        speed: 96,
+      },
+    },
+    {
+      id: "mechanic_pickup_collection",
+      type: "pickup_collection",
+      targetIds: ["entity_player"],
+      sceneIds: ["scene_arena"],
+      regionIds: ["region_safe_start"],
+      assetIds: ["asset_crystal"],
+      objectiveIds: ["objective_collect_crystal"],
+      config: {
+        requiredCount: 5,
+      },
+    },
+  ],
+};
+
+describe("top-down Mechanic Registry", () => {
+  it("exposes built-in mechanics and validates the current active entries through the registry", () => {
+    expect(topDownMechanicRegistry.map((entry) => entry.type)).toEqual([
+      "player_movement",
+      "enemy_chase",
+      "pickup_collection",
+    ]);
+
+    expect(getTopDownMechanicDefinition("player_movement")).toMatchObject({
+      label: "Player movement",
+      runtimeInstallerKey: "install_player_movement",
+      type: "player_movement",
+    });
+    expect(getTopDownMechanicDefinition("enemy_chase")).toMatchObject({
+      label: "Enemy chase",
+      runtimeInstallerKey: "install_enemy_chase",
+      type: "enemy_chase",
+    });
+    expect(getTopDownMechanicDefinition("pickup_collection")).toMatchObject({
+      label: "Pickup collection",
+      runtimeInstallerKey: "install_pickup_collection",
+      type: "pickup_collection",
+    });
+
+    expect(validateTopDownGameSpec(registryBackedTopDownSpec)).toEqual(
+      registryBackedTopDownSpec
+    );
+  });
+
+  it("returns only registry definitions declared by the active Game Spec", () => {
+    const spec = validateTopDownGameSpec({
+      ...registryBackedTopDownSpec,
+      mechanics: registryBackedTopDownSpec.mechanics.slice(0, 2),
+    });
+
+    expect(getTopDownMechanicDefinitionsForSpec(spec).map((entry) => entry.type))
+      .toEqual(["player_movement", "enemy_chase"]);
+  });
+});

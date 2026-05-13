@@ -3,6 +3,7 @@ import {
   type TopDownGameSpec,
 } from "./top-down-spec-schema";
 import type { StableId } from "./game-spec-schema";
+import { getTopDownMechanicDefinition } from "./mechanics/mechanic-registry";
 
 export type GameSpecValidationIssue = {
   path: string;
@@ -19,12 +20,6 @@ export class GameSpecValidationError extends Error {
     this.name = "GameSpecValidationError";
   }
 }
-
-const supportedTopDownMechanicTypes = new Set([
-  "enemy_chase",
-  "pickup_collection",
-  "player_movement",
-]);
 
 function toIdSet(items: Array<{ id: StableId }>): Set<StableId> {
   return new Set(items.map((item) => item.id));
@@ -55,6 +50,12 @@ export function getTopDownGameSpecValidationIssues(
   const validationGoalIds = toIdSet(spec.validationGoals);
   const entityIds = toIdSet(spec.entities);
   const assetIds = toIdSet(spec.assets);
+  const sceneIds = toIdSet(spec.template.config.scenes);
+  const regionIds = new Set<StableId>(
+    spec.template.config.scenes.flatMap((scene) =>
+      scene.layout.regions.map((region) => region.id)
+    )
+  );
 
   const primaryObjectives = spec.objectives.filter(
     (objective) => objective.primary
@@ -78,7 +79,7 @@ export function getTopDownGameSpecValidationIssues(
   }
 
   for (const mechanic of spec.mechanics) {
-    if (!supportedTopDownMechanicTypes.has(mechanic.type)) {
+    if (!getTopDownMechanicDefinition(mechanic.type)) {
       issues.push({
         path: `mechanics.${mechanic.id}.type`,
         message: `Unsupported mechanic type "${mechanic.type}".`,
@@ -91,6 +92,27 @@ export function getTopDownGameSpecValidationIssues(
       mechanic.targetIds,
       entityIds,
       "entity"
+    );
+    addUnknownReferenceIssues(
+      issues,
+      `mechanics.${mechanic.id}.sceneIds`,
+      mechanic.sceneIds,
+      sceneIds,
+      "scene"
+    );
+    addUnknownReferenceIssues(
+      issues,
+      `mechanics.${mechanic.id}.regionIds`,
+      mechanic.regionIds,
+      regionIds,
+      "region"
+    );
+    addUnknownReferenceIssues(
+      issues,
+      `mechanics.${mechanic.id}.assetIds`,
+      mechanic.assetIds,
+      assetIds,
+      "asset"
     );
     addUnknownReferenceIssues(
       issues,

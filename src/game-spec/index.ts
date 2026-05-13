@@ -10,6 +10,13 @@ export {
 } from "./game-spec-schema";
 
 export {
+  getTopDownMechanicDefinition,
+  getTopDownMechanicDefinitionsForSpec,
+  topDownMechanicRegistry,
+  type MechanicRegistryEntry,
+} from "./mechanics/mechanic-registry";
+
+export {
   GameSpecValidationError,
   getTopDownGameSpecValidationIssues,
   validateTopDownGameSpec,

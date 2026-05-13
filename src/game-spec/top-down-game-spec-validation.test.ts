@@ -114,6 +114,8 @@ const validTopDownGameSpec = {
       id: "mechanic_pickup_collection",
       type: "pickup_collection",
       targetIds: ["entity_player"],
+      sceneIds: ["scene_arena"],
+      assetIds: ["asset_crystal"],
       objectiveIds: ["objective_collect_crystal"],
       config: {
         assetId: "asset_crystal",
@@ -173,6 +175,9 @@ describe("Top-down Game Spec pre-runtime validation", () => {
           {
             ...validTopDownGameSpec.mechanics[0],
             targetIds: ["entity_missing"],
+            sceneIds: ["scene_missing"],
+            regionIds: ["region_missing"],
+            assetIds: ["asset_missing"],
             objectiveIds: ["objective_missing"],
           },
         ],
@@ -208,6 +213,9 @@ describe("Top-down Game Spec pre-runtime validation", () => {
       [
         "validationGoals.validation_collectible_reachable.objectiveId: Unknown objective ID \"objective_missing\".",
         "mechanics.mechanic_player_movement.targetIds: Unknown entity ID \"entity_missing\".",
+        "mechanics.mechanic_player_movement.sceneIds: Unknown scene ID \"scene_missing\".",
+        "mechanics.mechanic_player_movement.regionIds: Unknown region ID \"region_missing\".",
+        "mechanics.mechanic_player_movement.assetIds: Unknown asset ID \"asset_missing\".",
         "mechanics.mechanic_player_movement.objectiveIds: Unknown objective ID \"objective_missing\".",
         "scenes.scene_arena.objectiveIds: Unknown objective ID \"objective_missing\".",
         "scenes.scene_arena.validationGoalIds: Unknown validation goal ID \"validation_missing\".",
