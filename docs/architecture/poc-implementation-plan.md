@@ -75,6 +75,11 @@ Resolved Phase 3/4 shape:
 - Mechanics should be explicit Game Spec entries even when starter specs include common defaults such as player movement or win/loss.
 - Objectives should remain separate from mechanics. Objectives declare player-facing success, while mechanics provide the runtime behavior that makes the objective achievable and measurable.
 - Active mechanics should live as top-level module entries that can target entities, scenes, regions, or objectives by stable ID.
+- Mechanic Modules should be installable behavior units, not only labels or data definitions. The Mechanic Registry should map each active mechanic type to an installer/factory that receives a narrow runtime context plus the Game Spec mechanic entry.
+- The core top-down template should own Phaser boot, iframe protocol, scene lifecycle, layout/static collision setup, starter entity tracking, and module orchestration. Mechanic Modules should own opt-in gameplay behavior and may return `update`/`dispose` hooks.
+- The first module extraction should use a strict vertical-slice order: `player_movement` first as the install seam tracer bullet, then `pickup_collection`, then `enemy_chase`.
+- The runtime should use a middle-path object ownership model: the core creates and tracks stable world substrate and spec-declared starter entities, while modules may create dynamic mechanic-owned objects through controlled helpers for lifecycle, collision, cleanup, and error reporting.
+- Mechanic install/update/dispose failures should be handled defensively so a broken mechanic can be disabled and reported without crashing the editor. Deeper sandboxing and performance checks are required before AI-generated extension modules can be trusted like built-ins.
 - The schema should support an objectives list from the start, while the first top-down template only needs to fully honor one primary active objective.
 - Validation goals should remain separate from objectives so the system can ask both "what is the player trying to do?" and "what must be true for Sparkline to trust this draft as playable?"
 
@@ -176,17 +181,26 @@ Goal: make top-down game behavior modular and opt-in through Game Spec.
 Deliverables:
 
 - Add a Mechanic Registry.
-- Implement a small initial module set: player movement, enemy chase, pickups, health/damage, score/timer, win/loss, simple obstacles.
+- Implement a small initial module set over time: player movement, enemy chase, pickups, health/damage, score/timer, win/loss, simple obstacles.
+- Extract the first built-in top-down modules structurally before behavior polish: `player_movement`, then `pickup_collection`, then `enemy_chase`.
+- Treat Mechanic Modules as installable behavior units with installer/factory functions, optional `update`/`dispose` hooks, and a narrow runtime context.
+- Keep the top-down template core responsible for Phaser boot, iframe protocol, scene lifecycle, layout/static collision, starter entity tracking, and module orchestration.
+- Allow modules to create dynamic mechanic-owned objects only through controlled runtime helpers so ownership, collision registration, cleanup, and error reporting remain centralized.
 - Let the Game Spec list active mechanics and configs.
 - Keep common defaults such as player movement or win/loss explicit in starter specs rather than hidden in template assumptions.
+- Add `pickup_collection` explicitly to the known top-down Game Spec fixture before the runtime installs pickup/scoring behavior.
 - Make mechanic configs target entities, scenes, regions, or objectives by stable ID where needed.
 - Add basic validation checks per mechanic where practical.
 - Keep unused modules out of a given game config.
+- Keep pickup spawn quality improvements and enemy pathfinding/obstacle-aware steering out of the first extraction task; handle those as follow-up behavior-quality work after the module seam exists.
 
 Acceptance criteria:
 
 - A Game Spec can turn mechanics on/off and tune values.
 - Mechanics map from spec entries to code through the registry.
+- The authored top-down runtime installs behavior from declared active mechanics instead of relying on hidden chaser-game assumptions.
+- A missing active mechanic should not silently install its behavior.
+- Mechanic installation, update, and disposal failures should be reported gracefully without crashing the editor.
 - Basic mechanic validation can detect obvious missing/broken behavior.
 - The first registry surface stays game-level and inspectable instead of hiding behavior inside entity-local blobs.
 

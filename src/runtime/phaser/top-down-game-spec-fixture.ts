@@ -174,6 +174,17 @@ const validTopDownGameSpecFixtureInput = {
       config: {},
     },
     {
+      id: "mechanic_pickup_collection",
+      type: "pickup_collection",
+      targetIds: ["entity_player"],
+      sceneIds: ["scene_arena"],
+      assetIds: ["asset_crystal"],
+      objectiveIds: ["objective_collect_crystals"],
+      config: {
+        assetId: "asset_crystal",
+      },
+    },
+    {
       id: "mechanic_chaser_enemy",
       type: "enemy_chase",
       targetIds: ["entity_chaser", "entity_player"],

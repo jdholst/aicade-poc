@@ -34,12 +34,20 @@
     primaryObjective && primaryObjective.label
       ? primaryObjective.label
       : "Collect crystals";
+  const activeMechanics = Array.isArray(gameSpec.mechanics)
+    ? gameSpec.mechanics
+    : [];
+  const runtimeInstallerKeys = {
+    enemy_chase: "install_enemy_chase",
+    pickup_collection: "install_pickup_collection",
+    player_movement: "install_player_movement",
+  };
   let game = null;
   let activeScene = null;
+  let installedMechanics = [];
   let player = null;
   let objective = null;
   let chaser = null;
-  let cursors = null;
   let scoreText = null;
   let score = 0;
   let isPaused = false;
@@ -48,6 +56,22 @@
 
   function notify(type, payload) {
     parent.postMessage(Object.assign({ type }, payload || {}), "*");
+  }
+
+  function getErrorMessage(error) {
+    return error && error.message ? error.message : String(error);
+  }
+
+  function reportMechanicFailure(mechanic, phase, error) {
+    notify("game-error", {
+      message:
+        "Mechanic " +
+        mechanic.id +
+        " " +
+        phase +
+        " failed: " +
+        getErrorMessage(error),
+    });
   }
 
   function findEntityByRole(role) {
@@ -102,6 +126,14 @@
     return Array.isArray(layout.pickupZones) && layout.pickupZones.length > 0
       ? layout.pickupZones[0]
       : null;
+  }
+
+  function findActiveMechanic(type) {
+    return (
+      activeMechanics.find(function (mechanic) {
+        return mechanic.type === type;
+      }) || null
+    );
   }
 
   function createWall(scene, wall) {
@@ -192,6 +224,165 @@
       y: Phaser.Math.Between(96, viewport.height - 96),
     });
     objective.setPosition(nextPoint.x, nextPoint.y);
+  }
+
+  function installPlayerMovement(context) {
+    const cursors = context.scene.input.keyboard.createCursorKeys();
+    const configuredSpeed =
+      context.mechanic &&
+      context.mechanic.config &&
+      typeof context.mechanic.config.speed === "number"
+        ? context.mechanic.config.speed
+        : 220;
+
+    return {
+      update() {
+        if (!player) {
+          return;
+        }
+
+        const velocity = new Phaser.Math.Vector2(0, 0);
+
+        if (cursors.left.isDown) {
+          velocity.x -= 1;
+        }
+        if (cursors.right.isDown) {
+          velocity.x += 1;
+        }
+        if (cursors.up.isDown) {
+          velocity.y -= 1;
+        }
+        if (cursors.down.isDown) {
+          velocity.y += 1;
+        }
+
+        velocity.normalize().scale(configuredSpeed);
+        player.body.setVelocity(velocity.x, velocity.y);
+      },
+    };
+  }
+
+  function installPickupCollection(context) {
+    createObjective(context.scene);
+    context.scene.physics.add.overlap(player, objective, collectObjective);
+
+    return {};
+  }
+
+  function installEnemyChase(context) {
+    createChaser(context.scene);
+
+    context.staticLayoutBodies.forEach(function (body) {
+      context.scene.physics.add.collider(chaser, body);
+    });
+
+    context.scene.physics.add.overlap(player, chaser, function () {
+      score = 0;
+      scoreText.setText(objectiveLabel + ": 0");
+      player.setPosition(playerStart.x, playerStart.y);
+      chaser.setPosition(chaserStart.x, chaserStart.y);
+    });
+
+    const configuredSpeed =
+      context.mechanic &&
+      context.mechanic.config &&
+      typeof context.mechanic.config.speed === "number"
+        ? context.mechanic.config.speed
+        : 96;
+
+    return {
+      update() {
+        if (!player || !chaser) {
+          return;
+        }
+
+        context.scene.physics.moveToObject(chaser, player, configuredSpeed);
+      },
+    };
+  }
+
+  const runtimeMechanicInstallers = {
+    install_enemy_chase: installEnemyChase,
+    install_pickup_collection: installPickupCollection,
+    install_player_movement: installPlayerMovement,
+  };
+
+  function installActiveMechanic(scene, type, contextExtras) {
+    const mechanic = findActiveMechanic(type);
+
+    if (!mechanic) {
+      return null;
+    }
+
+    const installerKey = runtimeInstallerKeys[mechanic.type];
+    const installer = runtimeMechanicInstallers[installerKey];
+
+    if (!installer) {
+      return null;
+    }
+
+    try {
+      const installed = installer({
+        mechanic,
+        scene,
+        staticLayoutBodies:
+          contextExtras && Array.isArray(contextExtras.staticLayoutBodies)
+            ? contextExtras.staticLayoutBodies
+            : [],
+      });
+
+      return {
+        dispose: installed && installed.dispose,
+        mechanic,
+        status: "active",
+        update: installed && installed.update,
+      };
+    } catch (error) {
+      reportMechanicFailure(mechanic, "install", error);
+
+      return {
+        mechanic,
+        status: "disabled",
+      };
+    }
+  }
+
+  function updateInstalledMechanics() {
+    installedMechanics.forEach(function (installed) {
+      if (
+        !installed ||
+        installed.status !== "active" ||
+        typeof installed.update !== "function"
+      ) {
+        return;
+      }
+
+      try {
+        installed.update();
+      } catch (error) {
+        installed.status = "disabled";
+        reportMechanicFailure(installed.mechanic, "update", error);
+      }
+    });
+  }
+
+  function disposeInstalledMechanics() {
+    installedMechanics.forEach(function (installed) {
+      if (
+        !installed ||
+        installed.status !== "active" ||
+        typeof installed.dispose !== "function"
+      ) {
+        return;
+      }
+
+      try {
+        installed.dispose();
+      } catch (error) {
+        installed.status = "disabled";
+        reportMechanicFailure(installed.mechanic, "dispose", error);
+      }
+    });
   }
 
   function applyHostViewport(nextViewport) {
@@ -285,20 +476,20 @@
 
         const staticLayoutBodies = createLayoutBodies(this);
         createPlayer(this);
-        createObjective(this);
-        createChaser(this);
-        cursors = this.input.keyboard.createCursorKeys();
+        installedMechanics = [
+          installActiveMechanic(this, "player_movement", {
+            staticLayoutBodies,
+          }),
+          installActiveMechanic(this, "pickup_collection", {
+            staticLayoutBodies,
+          }),
+          installActiveMechanic(this, "enemy_chase", {
+            staticLayoutBodies,
+          }),
+        ].filter(Boolean);
 
         staticLayoutBodies.forEach((body) => {
           this.physics.add.collider(player, body);
-          this.physics.add.collider(chaser, body);
-        });
-        this.physics.add.overlap(player, objective, collectObjective);
-        this.physics.add.overlap(player, chaser, () => {
-          score = 0;
-          scoreText.setText(objectiveLabel + ": 0");
-          player.setPosition(playerStart.x, playerStart.y);
-          chaser.setPosition(chaserStart.x, chaserStart.y);
         });
 
         notify("game-ready", {
@@ -310,30 +501,7 @@
         });
       },
       update() {
-        if (!player || !chaser || !cursors) {
-          return;
-        }
-
-        const speed = 220;
-        const velocity = new Phaser.Math.Vector2(0, 0);
-
-        if (cursors.left.isDown) {
-          velocity.x -= 1;
-        }
-        if (cursors.right.isDown) {
-          velocity.x += 1;
-        }
-        if (cursors.up.isDown) {
-          velocity.y -= 1;
-        }
-        if (cursors.down.isDown) {
-          velocity.y += 1;
-        }
-
-        velocity.normalize().scale(speed);
-        player.body.setVelocity(velocity.x, velocity.y);
-
-        this.physics.moveToObject(chaser, player, 96);
+        updateInstalledMechanics();
       },
     };
   }
@@ -377,13 +545,15 @@
     });
 
     window.addEventListener("beforeunload", function () {
+      disposeInstalledMechanics();
+
       if (game) {
         game.destroy(true);
       }
     });
   } catch (error) {
     notify("game-error", {
-      message: error && error.message ? error.message : String(error),
+      message: getErrorMessage(error),
     });
   }
 })();

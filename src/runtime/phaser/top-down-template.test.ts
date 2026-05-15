@@ -23,31 +23,77 @@ type PostedMessage = {
   };
 };
 
-function createRuntimeHarness(template: unknown) {
+type GameElement = {
+  body?: {
+    setAllowGravity: () => void;
+    setCollideWorldBounds: () => void;
+    setVelocity: (x: number, y: number) => void;
+    velocityCalls: Array<{ x: number; y: number }>;
+  };
+  kind: string;
+  setPosition?: (x: number, y: number) => void;
+  x: number;
+  y: number;
+};
+
+function createRuntimeHarness(
+  template: unknown,
+  cursorState: Partial<Record<"down" | "left" | "right" | "up", boolean>> = {},
+  options: {
+    throwOnCreateCursorKeys?: boolean;
+    throwOnSetVelocity?: boolean;
+  } = {}
+) {
   const messages: PostedMessage[] = [];
   const textLabels: string[] = [];
-  const gameElements: Array<{ kind: string; x: number; y: number }> = [];
+  const gameElements: GameElement[] = [];
+  const moveToObjectCalls: Array<{ speed: number }> = [];
+  const overlapCalls: Array<{ first: GameElement; second: GameElement }> = [];
+  let sceneConfig: { create: () => void; update?: () => void } | null = null;
 
-  const createBody = () => ({
-    setAllowGravity() {},
-    setCollideWorldBounds() {},
-    setVelocity() {},
-  });
+  const createBody = () => {
+    const body = {
+      velocityCalls: [] as Array<{ x: number; y: number }>,
+      setAllowGravity() {},
+      setCollideWorldBounds() {},
+      setVelocity(x: number, y: number) {
+        if (options.throwOnSetVelocity) {
+          throw new Error("Velocity update failed");
+        }
 
-  const attachBody = (element: { body?: ReturnType<typeof createBody> }) => {
+        body.velocityCalls.push({ x, y });
+      },
+    };
+
+    return body;
+  };
+
+  const attachBody = (element: GameElement) => {
     element.body = createBody();
   };
 
   const scene = {
     add: {
       circle(x: number, y: number) {
-        const element = { kind: "circle", x, y };
+        const element: GameElement = {
+          kind: "circle",
+          setPosition(nextX: number, nextY: number) {
+            element.x = nextX;
+            element.y = nextY;
+          },
+          x,
+          y,
+        };
         gameElements.push(element);
         return element;
       },
       rectangle(x: number, y: number) {
-        const element = {
+        const element: GameElement = {
           kind: "rectangle",
+          setPosition(nextX: number, nextY: number) {
+            element.x = nextX;
+            element.y = nextY;
+          },
           setStrokeStyle() {
             return element;
           },
@@ -58,7 +104,15 @@ function createRuntimeHarness(template: unknown) {
         return element;
       },
       star(x: number, y: number) {
-        const element = { kind: "star", x, y };
+        const element: GameElement = {
+          kind: "star",
+          setPosition(nextX: number, nextY: number) {
+            element.x = nextX;
+            element.y = nextY;
+          },
+          x,
+          y,
+        };
         gameElements.push(element);
         return element;
       },
@@ -80,11 +134,15 @@ function createRuntimeHarness(template: unknown) {
     input: {
       keyboard: {
         createCursorKeys() {
+          if (options.throwOnCreateCursorKeys) {
+            throw new Error("Keyboard setup failed");
+          }
+
           return {
-            down: { isDown: false },
-            left: { isDown: false },
-            right: { isDown: false },
-            up: { isDown: false },
+            down: { isDown: cursorState.down ?? false },
+            left: { isDown: cursorState.left ?? false },
+            right: { isDown: cursorState.right ?? false },
+            up: { isDown: cursorState.up ?? false },
           };
         },
       },
@@ -92,12 +150,16 @@ function createRuntimeHarness(template: unknown) {
     physics: {
       add: {
         collider() {},
-        existing(element: { body?: ReturnType<typeof createBody> }) {
+        existing(element: GameElement) {
           attachBody(element);
         },
-        overlap() {},
+        overlap(first: GameElement, second: GameElement) {
+          overlapCalls.push({ first, second });
+        },
       },
-      moveToObject() {},
+      moveToObject(_from: GameElement, _to: GameElement, speed: number) {
+        moveToObjectCalls.push({ speed });
+      },
       world: {
         setBounds() {},
       },
@@ -115,8 +177,9 @@ function createRuntimeHarness(template: unknown) {
         resume() {},
       };
 
-      constructor(config: { scene: { create: () => void } }) {
-        config.scene.create.call(scene);
+      constructor(config: { scene: { create: () => void; update?: () => void } }) {
+        sceneConfig = config.scene;
+        sceneConfig.create.call(scene);
       }
 
       destroy() {}
@@ -166,7 +229,17 @@ function createRuntimeHarness(template: unknown) {
     },
   };
 
-  return { context, gameElements, messages, textLabels };
+  return {
+    context,
+    gameElements,
+    moveToObjectCalls,
+    overlapCalls,
+    messages,
+    runUpdate() {
+      sceneConfig?.update?.call(scene);
+    },
+    textLabels,
+  };
 }
 
 describe("top-down Phaser template", () => {
@@ -273,6 +346,174 @@ describe("top-down Phaser template", () => {
     expect(getTopDownPhaserTemplateState()).toBe(getTopDownPhaserTemplateState());
   });
 
+  it("declares every gameplay behavior as an active Game Spec mechanic", () => {
+    expect(
+      topDownPhaserTemplate.gameSpec.mechanics.map((mechanic) => mechanic.type)
+    ).toEqual(["player_movement", "pickup_collection", "enemy_chase"]);
+  });
+
+  it("installs the declared movement, pickup, and chase mechanics for the valid fixture", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const { context, gameElements, moveToObjectCalls, runUpdate } =
+      createRuntimeHarness(topDownPhaserTemplate, { right: true });
+
+    runInNewContext(runtimeSource, context);
+    runUpdate();
+
+    const player = gameElements.find(
+      (element) => element.kind === "rectangle" && element.x === 156
+    );
+
+    expect(player?.body?.velocityCalls).toEqual([{ x: 220, y: 0 }]);
+    expect(gameElements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "star", x: 400, y: 400 }),
+        expect.objectContaining({ kind: "circle", x: 668, y: 428 }),
+      ])
+    );
+    expect(moveToObjectCalls).toEqual([{ speed: 96 }]);
+  });
+
+  it("does not apply player movement when the player_movement mechanic is omitted", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const templateWithoutMovement = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: topDownPhaserTemplate.gameSpec.mechanics.filter(
+          (mechanic) => mechanic.type !== "player_movement"
+        ),
+      },
+    };
+    const { context, gameElements, runUpdate } = createRuntimeHarness(
+      templateWithoutMovement,
+      { right: true }
+    );
+
+    runInNewContext(runtimeSource, context);
+    runUpdate();
+
+    const player = gameElements.find(
+      (element) => element.kind === "rectangle" && element.x === 156
+    );
+    expect(player?.body?.velocityCalls).toEqual([]);
+  });
+
+  it("does not install pickup collection when the pickup_collection mechanic is omitted", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const templateWithoutPickupCollection = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: topDownPhaserTemplate.gameSpec.mechanics.filter(
+          (mechanic) => mechanic.type !== "pickup_collection"
+        ),
+      },
+    };
+    const { context, gameElements, overlapCalls } = createRuntimeHarness(
+      templateWithoutPickupCollection
+    );
+
+    runInNewContext(runtimeSource, context);
+
+    expect(
+      gameElements.some((element) => element.kind === "star")
+    ).toBe(false);
+    expect(
+      overlapCalls.some(
+        ({ first, second }) => first.kind === "star" || second.kind === "star"
+      )
+    ).toBe(false);
+  });
+
+  it("does not install enemy chase when the enemy_chase mechanic is omitted", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const templateWithoutEnemyChase = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: topDownPhaserTemplate.gameSpec.mechanics.filter(
+          (mechanic) => mechanic.type !== "enemy_chase"
+        ),
+      },
+    };
+    const { context, gameElements, moveToObjectCalls, runUpdate } =
+      createRuntimeHarness(templateWithoutEnemyChase);
+
+    runInNewContext(runtimeSource, context);
+    runUpdate();
+
+    expect(
+      gameElements.some(
+        (element) =>
+          element.kind === "circle" && element.x === 668 && element.y === 428
+      )
+    ).toBe(false);
+    expect(moveToObjectCalls).toEqual([]);
+  });
+
+  it("reports mechanic install failures without preventing the runtime from becoming ready", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const { context, messages } = createRuntimeHarness(
+      topDownPhaserTemplate,
+      {},
+      { throwOnCreateCursorKeys: true }
+    );
+
+    runInNewContext(runtimeSource, context);
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+          type: "game-error",
+        }),
+        expect.objectContaining({
+          type: "game-ready",
+        }),
+      ])
+    );
+  });
+
+  it("reports mechanic update failures without throwing out of the frame loop", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const { context, messages, runUpdate } = createRuntimeHarness(
+      topDownPhaserTemplate,
+      { right: true },
+      { throwOnSetVelocity: true }
+    );
+
+    runInNewContext(runtimeSource, context);
+
+    expect(() => runUpdate()).not.toThrow();
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        message:
+          "Mechanic mechanic_player_movement update failed: Velocity update failed",
+        type: "game-error",
+      })
+    );
+  });
+
   it("points to an authored Phaser runtime script with protocol and gameplay hooks", () => {
     const runtimeSource = readFileSync(
       join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
@@ -320,10 +561,10 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain('obstacle.shape === "circle"');
     expect(runtimeSource).toContain("scene.physics.add.existing(wallBody, true)");
     expect(runtimeSource).toContain("this.physics.add.collider(player, body)");
-    expect(runtimeSource).toContain("this.physics.add.collider(chaser, body)");
+    expect(runtimeSource).toContain("context.scene.physics.add.collider(chaser, body)");
   });
 
-  it("keeps the authored runtime bootable with fallback values when optional spec pieces are missing", () => {
+  it("keeps the authored runtime bootable without hidden pickup behavior when optional spec pieces are missing", () => {
     const runtimeSource = readFileSync(
       join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
       "utf8"
@@ -350,10 +591,9 @@ describe("top-down Phaser template", () => {
     expect(gameElements).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "rectangle", x: 160, y: 270 }),
-        expect.objectContaining({ kind: "star", x: 780, y: 150 }),
-        expect.objectContaining({ kind: "circle", x: 780, y: 405 }),
       ])
     );
+    expect(gameElements.some((element) => element.kind === "star")).toBe(false);
   });
 
   it("handles the shared host command protocol", () => {
