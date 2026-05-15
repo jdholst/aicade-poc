@@ -20,7 +20,34 @@ describe("phaser runtime adapter", () => {
       '<script src="/runtime/phaser/phaser-arcade-physics.min.js"></script>'
     );
     expect(descriptor.srcDoc).toContain(
+      '<script src="/runtime/phaser/mechanics/player-movement.js"></script>'
+    );
+    expect(descriptor.srcDoc).toContain(
+      '<script src="/runtime/phaser/mechanics/pickup-collection.js"></script>'
+    );
+    expect(descriptor.srcDoc).toContain(
+      '<script src="/runtime/phaser/mechanics/enemy-chase.js"></script>'
+    );
+    expect(descriptor.srcDoc).toContain(
       '<script src="/runtime/phaser/top-down-template.js"></script>'
+    );
+    expect(
+      descriptor.srcDoc.indexOf(
+        '<script src="/runtime/phaser/phaser-arcade-physics.min.js"></script>'
+      )
+    ).toBeLessThan(
+      descriptor.srcDoc.indexOf(
+        '<script src="/runtime/phaser/mechanics/player-movement.js"></script>'
+      )
+    );
+    expect(
+      descriptor.srcDoc.indexOf(
+        '<script src="/runtime/phaser/mechanics/enemy-chase.js"></script>'
+      )
+    ).toBeLessThan(
+      descriptor.srcDoc.indexOf(
+        '<script src="/runtime/phaser/top-down-template.js"></script>'
+      )
     );
     expect(descriptor.srcDoc).toContain("globalThis.__AICADE_PHASER_TEMPLATE__");
     expect(descriptor.srcDoc).toContain('type: "game-error"');

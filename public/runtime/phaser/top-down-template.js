@@ -37,11 +37,7 @@
   const activeMechanics = Array.isArray(gameSpec.mechanics)
     ? gameSpec.mechanics
     : [];
-  const runtimeInstallerKeys = {
-    enemy_chase: "install_enemy_chase",
-    pickup_collection: "install_pickup_collection",
-    player_movement: "install_player_movement",
-  };
+  const runtimeInstallerKeys = template.mechanicInstallerKeys || {};
   const PICKUP_SPAWN_PADDING = 24;
   const PATH_CHECK_PADDING = 18;
   let game = null;
@@ -179,6 +175,45 @@
     };
   }
 
+  function dotVectors(first, second) {
+    return first.x * second.x + first.y * second.y;
+  }
+
+  function getDistanceSquared(first, second) {
+    const dx = first.x - second.x;
+    const dy = first.y - second.y;
+
+    return dx * dx + dy * dy;
+  }
+
+  function getChaseCandidateScore(from, to, direction, direct) {
+    if (Math.abs(direct.y) < 0.2 && Math.abs(direction.y) < 0.2) {
+      return -Infinity;
+    }
+
+    if (Math.abs(direct.x) < 0.2 && Math.abs(direction.x) < 0.2) {
+      return -Infinity;
+    }
+
+    const probePoint = {
+      x: from.x + direction.x * 48,
+      y: from.y + direction.y * 48,
+    };
+
+    if (isPointBlockedByLayout(probePoint, PATH_CHECK_PADDING)) {
+      return -Infinity;
+    }
+
+    if (isPathBlockedByLayout(from, probePoint, PATH_CHECK_PADDING)) {
+      return -Infinity;
+    }
+
+    return (
+      dotVectors(direction, direct) * 1000 -
+      getDistanceSquared(probePoint, to) * 0.001
+    );
+  }
+
   function getChaseVelocity(from, to, speed) {
     const direct = normalizeVector({
       x: to.x - from.x,
@@ -189,24 +224,38 @@
       return scaleVector(direct, speed);
     }
 
-    const detours = [
-      normalizeVector({ x: direct.x - direct.y * 0.85, y: direct.y + direct.x * 0.85 }, direct),
-      normalizeVector({ x: direct.x + direct.y * 0.85, y: direct.y - direct.x * 0.85 }, direct),
+    const targetDirection = {
+      x: Math.sign(to.x - from.x),
+      y: Math.sign(to.y - from.y),
+    };
+    const candidates = [
+      normalizeVector({ x: targetDirection.x, y: 0 }, direct),
+      normalizeVector({ x: 0, y: targetDirection.y }, direct),
+      normalizeVector(
+        { x: direct.x - direct.y * 0.85, y: direct.y + direct.x * 0.85 },
+        direct
+      ),
+      normalizeVector(
+        { x: direct.x + direct.y * 0.85, y: direct.y - direct.x * 0.85 },
+        direct
+      ),
+      normalizeVector({ x: -direct.y, y: direct.x }, direct),
+      normalizeVector({ x: direct.y, y: -direct.x }, direct),
+      direct,
     ];
+    let bestCandidate = candidates[0];
+    let bestScore = -Infinity;
 
-    for (let index = 0; index < detours.length; index += 1) {
-      const velocity = scaleVector(detours[index], speed);
-      const probePoint = {
-        x: from.x + detours[index].x * 48,
-        y: from.y + detours[index].y * 48,
-      };
+    for (let index = 0; index < candidates.length; index += 1) {
+      const score = getChaseCandidateScore(from, to, candidates[index], direct);
 
-      if (!isPointBlockedByLayout(probePoint, PATH_CHECK_PADDING)) {
-        return velocity;
+      if (score > bestScore) {
+        bestCandidate = candidates[index];
+        bestScore = score;
       }
     }
 
-    return scaleVector(detours[0], speed);
+    return scaleVector(bestCandidate, speed);
   }
 
   function getZoneSampleBounds(zone, padding) {
@@ -378,92 +427,12 @@
     objective.setPosition(nextPoint.x, nextPoint.y);
   }
 
-  function installPlayerMovement(context) {
-    const cursors = context.scene.input.keyboard.createCursorKeys();
-    const configuredSpeed =
-      context.mechanic &&
-      context.mechanic.config &&
-      typeof context.mechanic.config.speed === "number"
-        ? context.mechanic.config.speed
-        : 220;
-
-    return {
-      update() {
-        if (!player) {
-          return;
-        }
-
-        const velocity = new Phaser.Math.Vector2(0, 0);
-
-        if (cursors.left.isDown) {
-          velocity.x -= 1;
-        }
-        if (cursors.right.isDown) {
-          velocity.x += 1;
-        }
-        if (cursors.up.isDown) {
-          velocity.y -= 1;
-        }
-        if (cursors.down.isDown) {
-          velocity.y += 1;
-        }
-
-        velocity.normalize().scale(configuredSpeed);
-        player.body.setVelocity(velocity.x, velocity.y);
-      },
-    };
+  function resetAfterChaserCatch() {
+    score = 0;
+    scoreText.setText(objectiveLabel + ": 0");
+    player.setPosition(playerStart.x, playerStart.y);
+    chaser.setPosition(chaserStart.x, chaserStart.y);
   }
-
-  function installPickupCollection(context) {
-    createObjective(context.scene);
-    context.scene.physics.add.overlap(player, objective, collectObjective);
-
-    return {};
-  }
-
-  function installEnemyChase(context) {
-    createChaser(context.scene);
-
-    context.staticLayoutBodies.forEach(function (body) {
-      context.scene.physics.add.collider(chaser, body);
-    });
-
-    context.scene.physics.add.overlap(player, chaser, function () {
-      score = 0;
-      scoreText.setText(objectiveLabel + ": 0");
-      player.setPosition(playerStart.x, playerStart.y);
-      chaser.setPosition(chaserStart.x, chaserStart.y);
-    });
-
-    const configuredSpeed =
-      context.mechanic &&
-      context.mechanic.config &&
-      typeof context.mechanic.config.speed === "number"
-        ? context.mechanic.config.speed
-        : 96;
-
-    return {
-      update() {
-        if (!player || !chaser) {
-          return;
-        }
-
-        const velocity = getChaseVelocity(
-          { x: chaser.x, y: chaser.y },
-          { x: player.x, y: player.y },
-          configuredSpeed
-        );
-
-        chaser.body.setVelocity(velocity.x, velocity.y);
-      },
-    };
-  }
-
-  const runtimeMechanicInstallers = {
-    install_enemy_chase: installEnemyChase,
-    install_pickup_collection: installPickupCollection,
-    install_player_movement: installPlayerMovement,
-  };
 
   function installActiveMechanic(scene, type, contextExtras) {
     const mechanic = findActiveMechanic(type);
@@ -473,15 +442,58 @@
     }
 
     const installerKey = runtimeInstallerKeys[mechanic.type];
+    const runtimeMechanicInstallers =
+      globalThis.__AICADE_TOP_DOWN_MECHANICS__ || {};
     const installer = runtimeMechanicInstallers[installerKey];
 
+    if (!installerKey) {
+      reportMechanicFailure(
+        mechanic,
+        "install",
+        new Error("Missing runtime installer key.")
+      );
+
+      return {
+        mechanic,
+        status: "disabled",
+      };
+    }
+
     if (!installer) {
-      return null;
+      reportMechanicFailure(
+        mechanic,
+        "install",
+        new Error('Missing runtime installer "' + installerKey + '".')
+      );
+
+      return {
+        mechanic,
+        status: "disabled",
+      };
     }
 
     try {
       const installed = installer({
+        Phaser: globalThis.Phaser,
+        collectObjective,
+        createChaser() {
+          return createChaser(scene);
+        },
+        createObjective() {
+          return createObjective(scene);
+        },
+        getChaser() {
+          return chaser;
+        },
+        getChaseVelocity,
+        getObjective() {
+          return objective;
+        },
+        getPlayer() {
+          return player;
+        },
         mechanic,
+        resetAfterChaserCatch,
         scene,
         staticLayoutBodies:
           contextExtras && Array.isArray(contextExtras.staticLayoutBodies)
