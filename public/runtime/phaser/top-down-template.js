@@ -42,6 +42,8 @@
     pickup_collection: "install_pickup_collection",
     player_movement: "install_player_movement",
   };
+  const PICKUP_SPAWN_PADDING = 24;
+  const PATH_CHECK_PADDING = 18;
   let game = null;
   let activeScene = null;
   let installedMechanics = [];
@@ -111,15 +113,160 @@
     };
   }
 
-  function getRandomPointInZone(zone, fallback) {
+  function isPointInsideRect(point, rect, padding) {
+    return (
+      point.x >= rect.x - padding &&
+      point.x <= rect.x + rect.width + padding &&
+      point.y >= rect.y - padding &&
+      point.y <= rect.y + rect.height + padding
+    );
+  }
+
+  function isPointInsideCircle(point, circle, padding) {
+    const radius = circle.radius + padding;
+    const dx = point.x - circle.x;
+    const dy = point.y - circle.y;
+
+    return dx * dx + dy * dy <= radius * radius;
+  }
+
+  function isPointBlockedByLayout(point, padding) {
+    const walls = Array.isArray(layout.walls) ? layout.walls : [];
+    const obstacles = Array.isArray(layout.obstacles) ? layout.obstacles : [];
+
+    return walls.concat(obstacles).some(function (shape) {
+      if (shape.shape === "circle") {
+        return isPointInsideCircle(point, shape, padding);
+      }
+
+      return isPointInsideRect(point, shape, padding);
+    });
+  }
+
+  function isPathBlockedByLayout(start, end, padding) {
+    for (let step = 1; step <= 12; step += 1) {
+      const t = step / 12;
+      const point = {
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+      };
+
+      if (isPointBlockedByLayout(point, padding)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function normalizeVector(vector, fallback) {
+    const length = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
+
+    if (length <= 0) {
+      return fallback || { x: 0, y: 0 };
+    }
+
+    return {
+      x: vector.x / length,
+      y: vector.y / length,
+    };
+  }
+
+  function scaleVector(vector, scale) {
+    return {
+      x: vector.x * scale,
+      y: vector.y * scale,
+    };
+  }
+
+  function getChaseVelocity(from, to, speed) {
+    const direct = normalizeVector({
+      x: to.x - from.x,
+      y: to.y - from.y,
+    });
+
+    if (!isPathBlockedByLayout(from, to, PATH_CHECK_PADDING)) {
+      return scaleVector(direct, speed);
+    }
+
+    const detours = [
+      normalizeVector({ x: direct.x - direct.y * 0.85, y: direct.y + direct.x * 0.85 }, direct),
+      normalizeVector({ x: direct.x + direct.y * 0.85, y: direct.y - direct.x * 0.85 }, direct),
+    ];
+
+    for (let index = 0; index < detours.length; index += 1) {
+      const velocity = scaleVector(detours[index], speed);
+      const probePoint = {
+        x: from.x + detours[index].x * 48,
+        y: from.y + detours[index].y * 48,
+      };
+
+      if (!isPointBlockedByLayout(probePoint, PATH_CHECK_PADDING)) {
+        return velocity;
+      }
+    }
+
+    return scaleVector(detours[0], speed);
+  }
+
+  function getZoneSampleBounds(zone, padding) {
+    const minX = zone.x + padding;
+    const maxX = zone.x + zone.width - padding;
+    const minY = zone.y + padding;
+    const maxY = zone.y + zone.height - padding;
+
+    if (minX > maxX || minY > maxY) {
+      const center = getZoneCenter(zone, { x: zone.x, y: zone.y });
+
+      return {
+        maxX: center.x,
+        maxY: center.y,
+        minX: center.x,
+        minY: center.y,
+      };
+    }
+
+    return { maxX, maxY, minX, minY };
+  }
+
+  function findFirstOpenPointInZone(zone, fallback, padding) {
+    const bounds = getZoneSampleBounds(zone, padding);
+
+    for (let yIndex = 0; yIndex <= 4; yIndex += 1) {
+      for (let xIndex = 0; xIndex <= 4; xIndex += 1) {
+        const point = {
+          x: bounds.minX + ((bounds.maxX - bounds.minX) * xIndex) / 4,
+          y: bounds.minY + ((bounds.maxY - bounds.minY) * yIndex) / 4,
+        };
+
+        if (!isPointBlockedByLayout(point, padding)) {
+          return point;
+        }
+      }
+    }
+
+    return fallback;
+  }
+
+  function getRandomPointInZone(zone, fallback, padding) {
     if (!zone || !globalThis.Phaser) {
       return fallback;
     }
 
-    return {
-      x: Phaser.Math.Between(zone.x, zone.x + zone.width),
-      y: Phaser.Math.Between(zone.y, zone.y + zone.height),
-    };
+    const bounds = getZoneSampleBounds(zone, padding);
+
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const point = {
+        x: Phaser.Math.Between(bounds.minX, bounds.maxX),
+        y: Phaser.Math.Between(bounds.minY, bounds.maxY),
+      };
+
+      if (!isPointBlockedByLayout(point, padding)) {
+        return point;
+      }
+    }
+
+    return findFirstOpenPointInZone(zone, fallback, padding);
   }
 
   function findFirstPickupZone() {
@@ -194,10 +341,15 @@
   }
 
   function createObjective(scene) {
-    const objectiveStart = getZoneCenter(findFirstPickupZone(), {
-      x: viewport.width - 180,
-      y: 150,
-    });
+    const pickupZone = findFirstPickupZone();
+    const objectiveStart = getRandomPointInZone(
+      pickupZone,
+      getZoneCenter(pickupZone, {
+        x: viewport.width - 180,
+        y: 150,
+      }),
+      PICKUP_SPAWN_PADDING
+    );
     objective = scene.add.star(objectiveStart.x, objectiveStart.y, 5, 10, 22, 0xf6c46b);
     scene.physics.add.existing(objective);
     objective.body.setAllowGravity(false);
@@ -222,7 +374,7 @@
     const nextPoint = getRandomPointInZone(findFirstPickupZone(), {
       x: Phaser.Math.Between(96, viewport.width - 96),
       y: Phaser.Math.Between(96, viewport.height - 96),
-    });
+    }, PICKUP_SPAWN_PADDING);
     objective.setPosition(nextPoint.x, nextPoint.y);
   }
 
@@ -296,7 +448,13 @@
           return;
         }
 
-        context.scene.physics.moveToObject(chaser, player, configuredSpeed);
+        const velocity = getChaseVelocity(
+          { x: chaser.x, y: chaser.y },
+          { x: player.x, y: player.y },
+          configuredSpeed
+        );
+
+        chaser.body.setVelocity(velocity.x, velocity.y);
       },
     };
   }

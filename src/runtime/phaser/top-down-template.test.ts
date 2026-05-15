@@ -36,6 +36,30 @@ type GameElement = {
   y: number;
 };
 
+function createTemplateWithSceneLayout(
+  layout: typeof topDownPhaserTemplate.gameSpec.template.config.scenes[0]["layout"]
+) {
+  const scene = topDownPhaserTemplate.gameSpec.template.config.scenes[0];
+
+  return {
+    ...topDownPhaserTemplate,
+    gameSpec: {
+      ...topDownPhaserTemplate.gameSpec,
+      template: {
+        ...topDownPhaserTemplate.gameSpec.template,
+        config: {
+          scenes: [
+            {
+              ...scene,
+              layout,
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
 function createRuntimeHarness(
   template: unknown,
   cursorState: Partial<Record<"down" | "left" | "right" | "up", boolean>> = {},
@@ -366,15 +390,21 @@ describe("top-down Phaser template", () => {
     const player = gameElements.find(
       (element) => element.kind === "rectangle" && element.x === 156
     );
+    const chaser = gameElements.find(
+      (element) => element.kind === "circle" && element.x === 668
+    );
 
     expect(player?.body?.velocityCalls).toEqual([{ x: 220, y: 0 }]);
     expect(gameElements).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: "star", x: 400, y: 400 }),
+        expect.objectContaining({ kind: "star", x: 224, y: 224 }),
         expect.objectContaining({ kind: "circle", x: 668, y: 428 }),
       ])
     );
-    expect(moveToObjectCalls).toEqual([{ speed: 96 }]);
+    expect(chaser?.body?.velocityCalls).toHaveLength(1);
+    expect(chaser?.body?.velocityCalls[0].x).toBeLessThan(0);
+    expect(chaser?.body?.velocityCalls[0].y).toBeLessThan(0);
+    expect(moveToObjectCalls).toEqual([]);
   });
 
   it("does not apply player movement when the player_movement mechanic is omitted", () => {
@@ -435,6 +465,46 @@ describe("top-down Phaser template", () => {
     ).toBe(false);
   });
 
+  it("places pickup crystals away from wall and obstacle geometry", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const templateWithBlockedPickupCenter = createTemplateWithSceneLayout({
+      ...topDownPhaserTemplate.gameSpec.template.config.scenes[0].layout,
+      obstacles: [
+        {
+          id: "obstacle_pickup_center",
+          shape: "rect",
+          x: 190,
+          y: 190,
+          width: 20,
+          height: 20,
+        },
+      ],
+      pickupZones: [
+        {
+          id: "pickup_blocked_center",
+          x: 100,
+          y: 100,
+          width: 200,
+          height: 200,
+          assetIds: ["asset_crystal"],
+        },
+      ],
+    });
+    const { context, gameElements } = createRuntimeHarness(
+      templateWithBlockedPickupCenter
+    );
+
+    runInNewContext(runtimeSource, context);
+
+    const crystal = gameElements.find((element) => element.kind === "star");
+    expect(crystal).toEqual(
+      expect.not.objectContaining({ x: 200, y: 200 })
+    );
+  });
+
   it("does not install enemy chase when the enemy_chase mechanic is omitted", () => {
     const runtimeSource = readFileSync(
       join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
@@ -461,6 +531,57 @@ describe("top-down Phaser template", () => {
           element.kind === "circle" && element.x === 668 && element.y === 428
       )
     ).toBe(false);
+    expect(moveToObjectCalls).toEqual([]);
+  });
+
+  it("steers the enemy around blocking obstacles instead of chasing directly into them", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const templateWithBlockedChaseLine = createTemplateWithSceneLayout({
+      ...topDownPhaserTemplate.gameSpec.template.config.scenes[0].layout,
+      obstacles: [
+        {
+          id: "obstacle_chase_blocker",
+          shape: "rect",
+          x: 360,
+          y: 260,
+          width: 80,
+          height: 80,
+        },
+      ],
+      pickupZones: [],
+      spawnZones: [
+        {
+          id: "spawn_player",
+          x: 140,
+          y: 240,
+          width: 120,
+          height: 120,
+          entityIds: ["entity_player"],
+        },
+        {
+          id: "spawn_chaser",
+          x: 540,
+          y: 240,
+          width: 120,
+          height: 120,
+          entityIds: ["entity_chaser"],
+        },
+      ],
+    });
+    const { context, gameElements, moveToObjectCalls, runUpdate } =
+      createRuntimeHarness(templateWithBlockedChaseLine);
+
+    runInNewContext(runtimeSource, context);
+    runUpdate();
+
+    const chaser = gameElements.find(
+      (element) => element.kind === "circle" && element.x === 600
+    );
+    expect(chaser?.body?.velocityCalls).toHaveLength(1);
+    expect(chaser?.body?.velocityCalls.at(-1)?.y).not.toBe(0);
     expect(moveToObjectCalls).toEqual([]);
   });
 
