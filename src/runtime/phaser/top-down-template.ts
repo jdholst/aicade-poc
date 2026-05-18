@@ -1,6 +1,8 @@
 import type { RuntimeViewport } from "@/runtime/runtime-adapter";
 import {
-  getTopDownMechanicDefinition,
+  createMechanicRuntimeBridge,
+  TOP_DOWN_PHASER_MECHANIC_SCOPE,
+  topDownMechanicRegistry,
   type TopDownGameSpec,
 } from "@/game-spec";
 
@@ -16,13 +18,6 @@ type PhaserTemplateControl = {
   keys: string[];
   label: string;
 };
-
-const TOP_DOWN_MECHANIC_RUNTIME_SCRIPT_PATHS = [
-  "/runtime/phaser/mechanics/player-movement.js",
-  "/runtime/phaser/mechanics/pickup-collection.js",
-  "/runtime/phaser/mechanics/enemy-chase.js",
-  "/runtime/phaser/mechanics/hazard-contact.js",
-];
 
 export type HandAuthoredPhaserTemplate = {
   controls: PhaserTemplateControl[];
@@ -54,6 +49,11 @@ export function createTopDownPhaserTemplate(
   gameSpec: TopDownGameSpec
 ): HandAuthoredPhaserTemplate {
   const scene = gameSpec.template.config.scenes[0];
+  const mechanicRuntimeBridge = createMechanicRuntimeBridge({
+    mechanics: gameSpec.mechanics,
+    registry: topDownMechanicRegistry,
+    scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
+  });
 
   return {
     id: `${gameSpec.id}-phaser-template`,
@@ -71,16 +71,9 @@ export function createTopDownPhaserTemplate(
       label,
     })),
     gameSpec,
-    mechanicInstallerKeys: Object.fromEntries(
-      gameSpec.mechanics.flatMap((mechanic) => {
-        const definition = getTopDownMechanicDefinition(mechanic.type);
-
-        return definition
-          ? [[mechanic.type, definition.runtimeInstallerKey]]
-          : [];
-      })
-    ),
-    runtimeDependencyScriptPaths: TOP_DOWN_MECHANIC_RUNTIME_SCRIPT_PATHS,
+    mechanicInstallerKeys: mechanicRuntimeBridge.mechanicInstallerKeys,
+    runtimeDependencyScriptPaths:
+      mechanicRuntimeBridge.runtimeDependencyScriptPaths,
     runtimeScriptPath: "/runtime/phaser/top-down-template.js",
   };
 }

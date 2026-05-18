@@ -34,8 +34,26 @@ type GameElement = {
   };
   kind: string;
   setPosition?: (x: number, y: number) => void;
+  setStrokeStyle?: () => GameElement;
   x: number;
   y: number;
+};
+
+type RuntimeHarnessContext = {
+  Phaser: Record<string, unknown>;
+  globalThis: {
+    __AICADE_PHASER_TEMPLATE__: unknown;
+    Phaser: unknown;
+    __AICADE_TOP_DOWN_MECHANICS__?: Record<string, unknown>;
+  };
+  location: { reload: () => void };
+  parent: { postMessage: (message: PostedMessage) => void };
+  window: {
+    addEventListener: (
+      type: string,
+      listener: (event?: { data?: unknown }) => void
+    ) => void;
+  };
 };
 
 function createTemplateWithSceneLayout(
@@ -244,7 +262,7 @@ function createRuntimeHarness(
     },
   };
 
-  const context = {
+  const context: RuntimeHarnessContext = {
     Phaser: phaser,
     globalThis: {
       __AICADE_PHASER_TEMPLATE__: template,
@@ -428,6 +446,29 @@ describe("top-down Phaser template", () => {
     });
   });
 
+  it("exposes runtime dependency scripts for active mechanics from the Mechanic Registry", () => {
+    expect(topDownPhaserTemplate.runtimeDependencyScriptPaths).toEqual([
+      "/runtime/phaser/mechanics/player-movement.js",
+      "/runtime/phaser/mechanics/pickup-collection.js",
+      "/runtime/phaser/mechanics/enemy-chase.js",
+      "/runtime/phaser/mechanics/hazard-contact.js",
+    ]);
+
+    const pickupOnlyTemplate = createTopDownPhaserTemplate({
+      ...topDownPhaserTemplate.gameSpec,
+      mechanics: topDownPhaserTemplate.gameSpec.mechanics.filter(
+        (mechanic) => mechanic.type === "pickup_collection"
+      ),
+    });
+
+    expect(pickupOnlyTemplate.mechanicInstallerKeys).toEqual({
+      pickup_collection: "install_pickup_collection",
+    });
+    expect(pickupOnlyTemplate.runtimeDependencyScriptPaths).toEqual([
+      "/runtime/phaser/mechanics/pickup-collection.js",
+    ]);
+  });
+
   it("installs active mechanics through the external runtime mechanic registry", () => {
     const runtimeSource = readFileSync(
       join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
@@ -520,7 +561,11 @@ describe("top-down Phaser template", () => {
   });
 
   it("registers built-in installers from runtime dependency scripts", () => {
-    const context = {
+    const context: {
+      globalThis: {
+        __AICADE_TOP_DOWN_MECHANICS__?: Record<string, unknown>;
+      };
+    } = {
       globalThis: {},
     };
 

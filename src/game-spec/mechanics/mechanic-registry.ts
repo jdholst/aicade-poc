@@ -1,6 +1,10 @@
 import type { ZodType } from "zod";
 
-import type { JsonValue, StableId } from "../game-spec-schema";
+import type {
+  GameSpecMechanicEntry,
+  JsonValue,
+  StableId,
+} from "../game-spec-schema";
 import type { TopDownGameSpec } from "../top-down-spec-schema";
 
 export type MechanicRuntimeScope = {
@@ -23,10 +27,24 @@ export type MechanicRegistryEntry<TContext = unknown> = {
   scope: MechanicRuntimeScope;
   capabilityTags: MechanicCapabilityTag[];
   runtimeInstallerKey: StableId;
+  runtimeDependencyScriptPath?: string;
   configSchema?: ZodType<Record<string, JsonValue>>;
   agentContract?: Record<string, JsonValue>;
   runtimeContext?: TContext;
   validation?: Record<string, JsonValue>;
+};
+
+export type MechanicRuntimeBridgeInput<
+  TEntry extends MechanicRegistryEntry = MechanicRegistryEntry,
+> = {
+  mechanics: readonly GameSpecMechanicEntry[];
+  registry: readonly TEntry[];
+  scope: MechanicRuntimeScope;
+};
+
+export type MechanicRuntimeBridge = {
+  mechanicInstallerKeys: Record<StableId, StableId>;
+  runtimeDependencyScriptPaths: string[];
 };
 
 export const TOP_DOWN_PHASER_MECHANIC_SCOPE = {
@@ -42,6 +60,7 @@ export const topDownMechanicRegistry = [
     scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
     capabilityTags: ["movement"],
     runtimeInstallerKey: "install_player_movement",
+    runtimeDependencyScriptPath: "/runtime/phaser/mechanics/player-movement.js",
   },
   {
     type: "enemy_chase",
@@ -50,6 +69,7 @@ export const topDownMechanicRegistry = [
     scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
     capabilityTags: ["enemy_ai"],
     runtimeInstallerKey: "install_enemy_chase",
+    runtimeDependencyScriptPath: "/runtime/phaser/mechanics/enemy-chase.js",
   },
   {
     type: "pickup_collection",
@@ -58,6 +78,7 @@ export const topDownMechanicRegistry = [
     scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
     capabilityTags: ["collection", "score"],
     runtimeInstallerKey: "install_pickup_collection",
+    runtimeDependencyScriptPath: "/runtime/phaser/mechanics/pickup-collection.js",
   },
   {
     type: "hazard_contact",
@@ -66,6 +87,7 @@ export const topDownMechanicRegistry = [
     scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
     capabilityTags: ["health_damage"],
     runtimeInstallerKey: "install_hazard_contact",
+    runtimeDependencyScriptPath: "/runtime/phaser/mechanics/hazard-contact.js",
   },
 ] as const satisfies readonly MechanicRegistryEntry[];
 
@@ -92,6 +114,51 @@ export function getMechanicDefinitionsForScope<
   TEntry extends MechanicRegistryEntry,
 >(registry: readonly TEntry[], scope: MechanicRuntimeScope): TEntry[] {
   return registry.filter((entry) => isSameMechanicScope(entry.scope, scope));
+}
+
+export function createMechanicRuntimeBridge<
+  TEntry extends MechanicRegistryEntry,
+>({
+  mechanics,
+  registry,
+  scope,
+}: MechanicRuntimeBridgeInput<TEntry>): MechanicRuntimeBridge {
+  const activeTypes = new Set<StableId>();
+  const activeScriptPaths = new Set<string>();
+  const mechanicInstallerKeys: Record<StableId, StableId> = {};
+  const runtimeDependencyScriptPaths: string[] = [];
+
+  for (const mechanic of mechanics) {
+    if (activeTypes.has(mechanic.type)) {
+      continue;
+    }
+
+    const definition = getMechanicDefinitionForScope(
+      registry,
+      mechanic.type,
+      scope
+    );
+
+    if (!definition) {
+      continue;
+    }
+
+    activeTypes.add(mechanic.type);
+    mechanicInstallerKeys[mechanic.type] = definition.runtimeInstallerKey;
+
+    if (
+      definition.runtimeDependencyScriptPath &&
+      !activeScriptPaths.has(definition.runtimeDependencyScriptPath)
+    ) {
+      activeScriptPaths.add(definition.runtimeDependencyScriptPath);
+      runtimeDependencyScriptPaths.push(definition.runtimeDependencyScriptPath);
+    }
+  }
+
+  return {
+    mechanicInstallerKeys,
+    runtimeDependencyScriptPaths,
+  };
 }
 
 export function getTopDownMechanicDefinition(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createMechanicRuntimeBridge,
   getMechanicDefinitionForScope,
   getMechanicDefinitionsForScope,
   getTopDownMechanicDefinition,
@@ -8,9 +9,10 @@ import {
   TOP_DOWN_PHASER_MECHANIC_SCOPE,
   topDownMechanicRegistry,
   validateTopDownGameSpec,
+  type TopDownGameSpec,
 } from "..";
 
-const registryBackedTopDownSpec = {
+const registryBackedTopDownSpec: TopDownGameSpec = {
   schemaVersion: "game-spec/v1",
   id: "game_registry_fixture",
   title: "Registry Fixture",
@@ -172,6 +174,7 @@ describe("top-down Mechanic Registry", () => {
       capabilityTags: ["movement"],
       label: "Player movement",
       runtimeInstallerKey: "install_player_movement",
+      runtimeDependencyScriptPath: "/runtime/phaser/mechanics/player-movement.js",
       scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
       type: "player_movement",
     });
@@ -179,6 +182,7 @@ describe("top-down Mechanic Registry", () => {
       capabilityTags: ["enemy_ai"],
       label: "Enemy chase",
       runtimeInstallerKey: "install_enemy_chase",
+      runtimeDependencyScriptPath: "/runtime/phaser/mechanics/enemy-chase.js",
       scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
       type: "enemy_chase",
     });
@@ -186,6 +190,8 @@ describe("top-down Mechanic Registry", () => {
       capabilityTags: ["collection", "score"],
       label: "Pickup collection",
       runtimeInstallerKey: "install_pickup_collection",
+      runtimeDependencyScriptPath:
+        "/runtime/phaser/mechanics/pickup-collection.js",
       scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
       type: "pickup_collection",
     });
@@ -193,6 +199,7 @@ describe("top-down Mechanic Registry", () => {
       capabilityTags: ["health_damage"],
       label: "Hazard contact",
       runtimeInstallerKey: "install_hazard_contact",
+      runtimeDependencyScriptPath: "/runtime/phaser/mechanics/hazard-contact.js",
       scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
       type: "hazard_contact",
     });
@@ -242,5 +249,62 @@ describe("top-down Mechanic Registry", () => {
       "pickup_collection",
       "hazard_contact",
     ]);
+  });
+
+  it("builds runtime installer keys for active mechanics in the requested scope", () => {
+    const bridge = createMechanicRuntimeBridge({
+      mechanics: [
+        registryBackedTopDownSpec.mechanics[0],
+        registryBackedTopDownSpec.mechanics[0],
+        registryBackedTopDownSpec.mechanics[1],
+      ],
+      registry: topDownMechanicRegistry,
+      scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
+    });
+
+    expect(bridge.mechanicInstallerKeys).toEqual({
+      enemy_chase: "install_enemy_chase",
+      player_movement: "install_player_movement",
+    });
+  });
+
+  it("builds runtime dependency script paths from active scoped registry entries", () => {
+    const bridge = createMechanicRuntimeBridge({
+      mechanics: [
+        registryBackedTopDownSpec.mechanics[2],
+        registryBackedTopDownSpec.mechanics[0],
+        registryBackedTopDownSpec.mechanics[2],
+      ],
+      registry: topDownMechanicRegistry,
+      scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
+    });
+
+    expect(bridge.runtimeDependencyScriptPaths).toEqual([
+      "/runtime/phaser/mechanics/pickup-collection.js",
+      "/runtime/phaser/mechanics/player-movement.js",
+    ]);
+  });
+
+  it("omits unmatched mechanics from runtime bridge metadata", () => {
+    const bridge = createMechanicRuntimeBridge({
+      mechanics: [
+        registryBackedTopDownSpec.mechanics[0],
+        {
+          ...registryBackedTopDownSpec.mechanics[1],
+          type: "unsupported_mechanic",
+          config: {} as any,
+        },
+      ],
+      registry: topDownMechanicRegistry,
+      scope: {
+        templateId: "template_platformer",
+        runtime: "phaser",
+      },
+    });
+
+    expect(bridge).toEqual({
+      mechanicInstallerKeys: {},
+      runtimeDependencyScriptPaths: [],
+    });
   });
 });

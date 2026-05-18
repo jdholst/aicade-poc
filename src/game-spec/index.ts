@@ -10,6 +10,7 @@ export {
 } from "./game-spec-schema";
 
 export {
+  createMechanicRuntimeBridge,
   getMechanicDefinitionForScope,
   getMechanicDefinitionsForScope,
   getTopDownMechanicDefinition,
@@ -18,6 +19,8 @@ export {
   topDownMechanicRegistry,
   type MechanicCapabilityTag,
   type MechanicRegistryEntry,
+  type MechanicRuntimeBridge,
+  type MechanicRuntimeBridgeInput,
   type MechanicRuntimeScope,
 } from "./mechanics/mechanic-registry";
 
