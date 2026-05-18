@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getMechanicDefinitionForScope,
+  getMechanicDefinitionsForScope,
   getTopDownMechanicDefinition,
   getTopDownMechanicDefinitionsForSpec,
+  TOP_DOWN_PHASER_MECHANIC_SCOPE,
   topDownMechanicRegistry,
   validateTopDownGameSpec,
 } from "..";
@@ -162,22 +165,36 @@ describe("top-down Mechanic Registry", () => {
       "player_movement",
       "enemy_chase",
       "pickup_collection",
+      "hazard_contact",
     ]);
 
     expect(getTopDownMechanicDefinition("player_movement")).toMatchObject({
+      capabilityTags: ["movement"],
       label: "Player movement",
       runtimeInstallerKey: "install_player_movement",
+      scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
       type: "player_movement",
     });
     expect(getTopDownMechanicDefinition("enemy_chase")).toMatchObject({
+      capabilityTags: ["enemy_ai"],
       label: "Enemy chase",
       runtimeInstallerKey: "install_enemy_chase",
+      scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
       type: "enemy_chase",
     });
     expect(getTopDownMechanicDefinition("pickup_collection")).toMatchObject({
+      capabilityTags: ["collection", "score"],
       label: "Pickup collection",
       runtimeInstallerKey: "install_pickup_collection",
+      scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
       type: "pickup_collection",
+    });
+    expect(getTopDownMechanicDefinition("hazard_contact")).toMatchObject({
+      capabilityTags: ["health_damage"],
+      label: "Hazard contact",
+      runtimeInstallerKey: "install_hazard_contact",
+      scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
+      type: "hazard_contact",
     });
 
     expect(validateTopDownGameSpec(registryBackedTopDownSpec)).toEqual(
@@ -193,5 +210,37 @@ describe("top-down Mechanic Registry", () => {
 
     expect(getTopDownMechanicDefinitionsForSpec(spec).map((entry) => entry.type))
       .toEqual(["player_movement", "enemy_chase"]);
+  });
+
+  it("resolves mechanics by type and runtime scope without namespacing Game Spec mechanic IDs", () => {
+    expect(
+      getMechanicDefinitionForScope(
+        topDownMechanicRegistry,
+        "player_movement",
+        TOP_DOWN_PHASER_MECHANIC_SCOPE
+      )
+    ).toMatchObject({
+      runtimeInstallerKey: "install_player_movement",
+      type: "player_movement",
+    });
+
+    expect(
+      getMechanicDefinitionForScope(topDownMechanicRegistry, "player_movement", {
+        templateId: "template_platformer",
+        runtime: "phaser",
+      })
+    ).toBeUndefined();
+
+    expect(
+      getMechanicDefinitionsForScope(
+        topDownMechanicRegistry,
+        TOP_DOWN_PHASER_MECHANIC_SCOPE
+      ).map((entry) => entry.type)
+    ).toEqual([
+      "player_movement",
+      "enemy_chase",
+      "pickup_collection",
+      "hazard_contact",
+    ]);
   });
 });

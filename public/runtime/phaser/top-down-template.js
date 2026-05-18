@@ -39,18 +39,15 @@
     : [];
   const runtimeInstallerKeys = template.mechanicInstallerKeys || {};
   const PICKUP_SPAWN_PADDING = 24;
-  const PATH_CHECK_PADDING = 18;
+  const DEFAULT_PLAYER_ENTITY_ID = "entity_player";
   let game = null;
   let activeScene = null;
   let installedMechanics = [];
-  let player = null;
-  let objective = null;
-  let chaser = null;
+  let entityHandles = {};
+  let entityStartPositions = {};
+  let objectiveScores = {};
   let scoreText = null;
-  let score = 0;
   let isPaused = false;
-  let playerStart = { x: 160, y: 270 };
-  let chaserStart = { x: 780, y: 405 };
 
   function notify(type, payload) {
     parent.postMessage(Object.assign({ type }, payload || {}), "*");
@@ -80,6 +77,18 @@
     return (
       gameSpec.entities.find(function (entity) {
         return entity.role === role;
+      }) || null
+    );
+  }
+
+  function findEntityById(entityId) {
+    if (!entityId || !Array.isArray(gameSpec.entities)) {
+      return null;
+    }
+
+    return (
+      gameSpec.entities.find(function (entity) {
+        return entity.id === entityId;
       }) || null
     );
   }
@@ -175,87 +184,8 @@
     };
   }
 
-  function dotVectors(first, second) {
-    return first.x * second.x + first.y * second.y;
-  }
-
-  function getDistanceSquared(first, second) {
-    const dx = first.x - second.x;
-    const dy = first.y - second.y;
-
-    return dx * dx + dy * dy;
-  }
-
-  function getChaseCandidateScore(from, to, direction, direct) {
-    if (Math.abs(direct.y) < 0.2 && Math.abs(direction.y) < 0.2) {
-      return -Infinity;
-    }
-
-    if (Math.abs(direct.x) < 0.2 && Math.abs(direction.x) < 0.2) {
-      return -Infinity;
-    }
-
-    const probePoint = {
-      x: from.x + direction.x * 48,
-      y: from.y + direction.y * 48,
-    };
-
-    if (isPointBlockedByLayout(probePoint, PATH_CHECK_PADDING)) {
-      return -Infinity;
-    }
-
-    if (isPathBlockedByLayout(from, probePoint, PATH_CHECK_PADDING)) {
-      return -Infinity;
-    }
-
-    return (
-      dotVectors(direction, direct) * 1000 -
-      getDistanceSquared(probePoint, to) * 0.001
-    );
-  }
-
-  function getChaseVelocity(from, to, speed) {
-    const direct = normalizeVector({
-      x: to.x - from.x,
-      y: to.y - from.y,
-    });
-
-    if (!isPathBlockedByLayout(from, to, PATH_CHECK_PADDING)) {
-      return scaleVector(direct, speed);
-    }
-
-    const targetDirection = {
-      x: Math.sign(to.x - from.x),
-      y: Math.sign(to.y - from.y),
-    };
-    const candidates = [
-      normalizeVector({ x: targetDirection.x, y: 0 }, direct),
-      normalizeVector({ x: 0, y: targetDirection.y }, direct),
-      normalizeVector(
-        { x: direct.x - direct.y * 0.85, y: direct.y + direct.x * 0.85 },
-        direct
-      ),
-      normalizeVector(
-        { x: direct.x + direct.y * 0.85, y: direct.y - direct.x * 0.85 },
-        direct
-      ),
-      normalizeVector({ x: -direct.y, y: direct.x }, direct),
-      normalizeVector({ x: direct.y, y: -direct.x }, direct),
-      direct,
-    ];
-    let bestCandidate = candidates[0];
-    let bestScore = -Infinity;
-
-    for (let index = 0; index < candidates.length; index += 1) {
-      const score = getChaseCandidateScore(from, to, candidates[index], direct);
-
-      if (score > bestScore) {
-        bestCandidate = candidates[index];
-        bestScore = score;
-      }
-    }
-
-    return scaleVector(bestCandidate, speed);
+  function randomBetween(min, max) {
+    return Phaser.Math.Between(min, max);
   }
 
   function getZoneSampleBounds(zone, padding) {
@@ -377,61 +307,204 @@
     return staticBodies;
   }
 
+  function getSpawnPointForEntity(entityId, fallback) {
+    return getZoneCenter(findZoneForEntity(entityId), fallback);
+  }
+
+  function findPickupPoint(options) {
+    const pickupZone = findFirstPickupZone();
+    const padding =
+      options && typeof options.padding === "number"
+        ? options.padding
+        : PICKUP_SPAWN_PADDING;
+    const fallback =
+      options && options.fallback
+        ? options.fallback
+        : getZoneCenter(pickupZone, {
+            x: viewport.width - 180,
+            y: 150,
+          });
+
+    return getRandomPointInZone(pickupZone, fallback, padding);
+  }
+
+  function getOptionNumber(options, key, fallback) {
+    return options && typeof options[key] === "number" ? options[key] : fallback;
+  }
+
+  function createEntityHandle(scene, entityId, options) {
+    const settings = options || {};
+    const fallbackPoint =
+      settings.fallback ||
+      {
+        x: getOptionNumber(settings, "x", viewport.width / 2),
+        y: getOptionNumber(settings, "y", viewport.height / 2),
+      };
+    const point = settings.point || getSpawnPointForEntity(entityId, fallbackPoint);
+    const color = getOptionNumber(settings, "color", 0xffffff);
+    let handle = null;
+
+    if (settings.kind === "circle") {
+      handle = scene.add.circle(
+        point.x,
+        point.y,
+        getOptionNumber(settings, "radius", 18),
+        color
+      );
+    } else if (settings.kind === "star") {
+      handle = scene.add.star(
+        point.x,
+        point.y,
+        getOptionNumber(settings, "points", 5),
+        getOptionNumber(settings, "innerRadius", 10),
+        getOptionNumber(settings, "outerRadius", 22),
+        color
+      );
+    } else {
+      handle = scene.add.rectangle(
+        point.x,
+        point.y,
+        getOptionNumber(settings, "width", 34),
+        getOptionNumber(settings, "height", 34),
+        color
+      );
+    }
+
+    scene.physics.add.existing(handle, Boolean(settings.staticBody));
+
+    if (
+      settings.allowGravity === false &&
+      handle.body &&
+      typeof handle.body.setAllowGravity === "function"
+    ) {
+      handle.body.setAllowGravity(false);
+    }
+
+    if (
+      settings.collideWorldBounds &&
+      handle.body &&
+      typeof handle.body.setCollideWorldBounds === "function"
+    ) {
+      handle.body.setCollideWorldBounds(true);
+    }
+
+    entityHandles[entityId] = handle;
+    entityStartPositions[entityId] = { x: point.x, y: point.y };
+
+    return handle;
+  }
+
+  function getEntityHandle(entityId) {
+    return entityHandles[entityId] || null;
+  }
+
+  function resetEntityHandle(entityId) {
+    const handle = getEntityHandle(entityId);
+    const start = entityStartPositions[entityId];
+
+    if (!handle || !start || typeof handle.setPosition !== "function") {
+      return;
+    }
+
+    handle.setPosition(start.x, start.y);
+  }
+
+  function getPrimaryObjectiveId() {
+    return primaryObjective && primaryObjective.id
+      ? primaryObjective.id
+      : "objective_primary";
+  }
+
+  function setObjectiveScore(objectiveId, nextScore) {
+    const resolvedObjectiveId = objectiveId || getPrimaryObjectiveId();
+    objectiveScores[resolvedObjectiveId] = nextScore;
+
+    if (scoreText && resolvedObjectiveId === getPrimaryObjectiveId()) {
+      scoreText.setText(objectiveLabel + ": " + nextScore);
+    }
+  }
+
+  function incrementObjectiveScore(objectiveId, amount) {
+    const resolvedObjectiveId = objectiveId || getPrimaryObjectiveId();
+    const nextScore =
+      (objectiveScores[resolvedObjectiveId] || 0) +
+      (typeof amount === "number" ? amount : 1);
+
+    setObjectiveScore(resolvedObjectiveId, nextScore);
+  }
+
+  function resetObjectiveScore(objectiveId) {
+    setObjectiveScore(objectiveId || getPrimaryObjectiveId(), 0);
+  }
+
   function createPlayer(scene) {
     const playerEntity = findEntityByRole("player");
-    playerStart = getZoneCenter(
-      findZoneForEntity(playerEntity && playerEntity.id),
-      playerStart
-    );
-    player = scene.add.rectangle(playerStart.x, playerStart.y, 34, 34, 0x6ee7b7);
-    scene.physics.add.existing(player);
-    player.body.setCollideWorldBounds(true);
-    return player;
+    const playerEntityId =
+      playerEntity && playerEntity.id ? playerEntity.id : DEFAULT_PLAYER_ENTITY_ID;
+
+    return createEntityHandle(scene, playerEntityId, {
+      kind: "rectangle",
+      fallback: { x: 160, y: 270 },
+      width: 34,
+      height: 34,
+      color: 0x6ee7b7,
+      collideWorldBounds: true,
+    });
   }
 
-  function createObjective(scene) {
-    const pickupZone = findFirstPickupZone();
-    const objectiveStart = getRandomPointInZone(
-      pickupZone,
-      getZoneCenter(pickupZone, {
-        x: viewport.width - 180,
-        y: 150,
-      }),
-      PICKUP_SPAWN_PADDING
-    );
-    objective = scene.add.star(objectiveStart.x, objectiveStart.y, 5, 10, 22, 0xf6c46b);
-    scene.physics.add.existing(objective);
-    objective.body.setAllowGravity(false);
-    return objective;
-  }
+  function createMechanicContext(scene, mechanic, contextExtras) {
+    const staticBodies =
+      contextExtras && Array.isArray(contextExtras.staticLayoutBodies)
+        ? contextExtras.staticLayoutBodies
+        : [];
 
-  function createChaser(scene) {
-    const enemyEntity = findEntityByRole("enemy");
-    chaserStart = getZoneCenter(
-      findZoneForEntity(enemyEntity && enemyEntity.id),
-      chaserStart
-    );
-    chaser = scene.add.circle(chaserStart.x, chaserStart.y, 18, 0xa9482a);
-    scene.physics.add.existing(chaser);
-    chaser.body.setCollideWorldBounds(true);
-    return chaser;
-  }
-
-  function collectObjective() {
-    score += 1;
-    scoreText.setText(objectiveLabel + ": " + score);
-    const nextPoint = getRandomPointInZone(findFirstPickupZone(), {
-      x: Phaser.Math.Between(96, viewport.width - 96),
-      y: Phaser.Math.Between(96, viewport.height - 96),
-    }, PICKUP_SPAWN_PADDING);
-    objective.setPosition(nextPoint.x, nextPoint.y);
-  }
-
-  function resetAfterChaserCatch() {
-    score = 0;
-    scoreText.setText(objectiveLabel + ": 0");
-    player.setPosition(playerStart.x, playerStart.y);
-    chaser.setPosition(chaserStart.x, chaserStart.y);
+    return {
+      mechanic,
+      entities: {
+        createHandle(entityId, options) {
+          return createEntityHandle(scene, entityId, options);
+        },
+        findById: findEntityById,
+        findByRole: findEntityByRole,
+        getHandle: getEntityHandle,
+        resetHandle: resetEntityHandle,
+      },
+      layout: {
+        findPickupPoint,
+        findSpawnPointForEntity: getSpawnPointForEntity,
+        isPathBlocked: isPathBlockedByLayout,
+        isPointBlocked: isPointBlockedByLayout,
+        staticBodies,
+      },
+      objective: {
+        increment: incrementObjectiveScore,
+        reset: resetObjectiveScore,
+      },
+      input: {
+        createCursorKeys() {
+          return scene.input.keyboard.createCursorKeys();
+        },
+      },
+      math: {
+        normalizeVector,
+        randomBetween,
+        scaleVector,
+      },
+      physics: {
+        addCollider(first, second) {
+          scene.physics.add.collider(first, second);
+        },
+        addOverlap(first, second, handler) {
+          scene.physics.add.overlap(first, second, handler);
+        },
+      },
+      runtime: {
+        getViewport() {
+          return viewport;
+        },
+        resetEntity: resetEntityHandle,
+      },
+    };
   }
 
   function installActiveMechanic(scene, type, contextExtras) {
@@ -473,33 +546,9 @@
     }
 
     try {
-      const installed = installer({
-        Phaser: globalThis.Phaser,
-        collectObjective,
-        createChaser() {
-          return createChaser(scene);
-        },
-        createObjective() {
-          return createObjective(scene);
-        },
-        getChaser() {
-          return chaser;
-        },
-        getChaseVelocity,
-        getObjective() {
-          return objective;
-        },
-        getPlayer() {
-          return player;
-        },
-        mechanic,
-        resetAfterChaserCatch,
-        scene,
-        staticLayoutBodies:
-          contextExtras && Array.isArray(contextExtras.staticLayoutBodies)
-            ? contextExtras.staticLayoutBodies
-            : [],
-      });
+      const installed = installer(
+        createMechanicContext(scene, mechanic, contextExtras)
+      );
 
       return {
         dispose: installed && installed.dispose,
@@ -644,23 +693,25 @@
           fontSize: "16px",
         });
 
-        const staticLayoutBodies = createLayoutBodies(this);
-        createPlayer(this);
-        installedMechanics = [
-          installActiveMechanic(this, "player_movement", {
-            staticLayoutBodies,
-          }),
-          installActiveMechanic(this, "pickup_collection", {
-            staticLayoutBodies,
-          }),
-          installActiveMechanic(this, "enemy_chase", {
-            staticLayoutBodies,
-          }),
-        ].filter(Boolean);
+        entityHandles = {};
+        entityStartPositions = {};
+        objectiveScores = {};
 
-        staticLayoutBodies.forEach((body) => {
-          this.physics.add.collider(player, body);
-        });
+        const staticLayoutBodies = createLayoutBodies(this);
+        const player = createPlayer(this);
+        installedMechanics = activeMechanics
+          .map((mechanic) =>
+            installActiveMechanic(this, mechanic.type, {
+              staticLayoutBodies,
+            })
+          )
+          .filter(Boolean);
+
+        if (player) {
+          staticLayoutBodies.forEach((body) => {
+            this.physics.add.collider(player, body);
+          });
+        }
 
         notify("game-ready", {
           manifest: {

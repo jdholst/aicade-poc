@@ -83,6 +83,14 @@ const validTopDownGameSpecFixtureInput = {
                 height: 96,
                 entityIds: ["entity_chaser"],
               },
+              {
+                id: "spawn_hazard",
+                x: 452,
+                y: 72,
+                width: 96,
+                height: 96,
+                entityIds: ["entity_hazard"],
+              },
             ],
             pickupZones: [
               {
@@ -133,6 +141,11 @@ const validTopDownGameSpecFixtureInput = {
       id: "entity_chaser",
       role: "enemy",
       name: "Chaser",
+    },
+    {
+      id: "entity_hazard",
+      role: "hazard",
+      name: "Hazard",
     },
   ],
   assets: [
@@ -192,6 +205,13 @@ const validTopDownGameSpecFixtureInput = {
       config: {
         speed: 96,
       },
+    },
+    {
+      id: "mechanic_hazard_contact",
+      type: "hazard_contact",
+      targetIds: ["entity_hazard", "entity_player"],
+      objectiveIds: ["objective_collect_crystals"],
+      config: {},
     },
   ],
 };

@@ -9,8 +9,10 @@ import { getTopDownMechanicDefinition, validateTopDownGameSpec } from "@/game-sp
 import {
   createTopDownPhaserTemplate,
   getTopDownPhaserTemplateState,
+  TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS,
   topDownPhaserTemplate,
 } from ".";
+import type { TopDownMechanicInstaller } from "./top-down-mechanic-runtime";
 
 type PostedMessage = {
   manifest?: {
@@ -72,7 +74,15 @@ function createRuntimeHarness(
   const textLabels: string[] = [];
   const gameElements: GameElement[] = [];
   const moveToObjectCalls: Array<{ speed: number }> = [];
-  const overlapCalls: Array<{ first: GameElement; second: GameElement }> = [];
+  const overlapCalls: Array<{
+    first: GameElement;
+    handler?: () => void;
+    second: GameElement;
+  }> = [];
+  const windowEventListeners: Record<
+    string,
+    Array<(event?: { data?: unknown }) => void>
+  > = {};
   let sceneConfig: { create: () => void; update?: () => void } | null = null;
 
   const createBody = () => {
@@ -177,8 +187,8 @@ function createRuntimeHarness(
         existing(element: GameElement) {
           attachBody(element);
         },
-        overlap(first: GameElement, second: GameElement) {
-          overlapCalls.push({ first, second });
+        overlap(first: GameElement, second: GameElement, handler?: () => void) {
+          overlapCalls.push({ first, handler, second });
         },
       },
       moveToObject(_from: GameElement, _to: GameElement, speed: number) {
@@ -249,7 +259,10 @@ function createRuntimeHarness(
       },
     },
     window: {
-      addEventListener() {},
+      addEventListener(type: string, listener: (event?: { data?: unknown }) => void) {
+        windowEventListeners[type] = windowEventListeners[type] || [];
+        windowEventListeners[type].push(listener);
+      },
     },
   };
 
@@ -259,6 +272,9 @@ function createRuntimeHarness(
     moveToObjectCalls,
     overlapCalls,
     messages,
+    dispatchWindowEvent(type: string, event?: { data?: unknown }) {
+      windowEventListeners[type]?.forEach((listener) => listener(event));
+    },
     runUpdate() {
       sceneConfig?.update?.call(scene);
     },
@@ -387,7 +403,12 @@ describe("top-down Phaser template", () => {
   it("declares every gameplay behavior as an active Game Spec mechanic", () => {
     expect(
       topDownPhaserTemplate.gameSpec.mechanics.map((mechanic) => mechanic.type)
-    ).toEqual(["player_movement", "pickup_collection", "enemy_chase"]);
+    ).toEqual([
+      "player_movement",
+      "pickup_collection",
+      "enemy_chase",
+      "hazard_contact",
+    ]);
   });
 
   it("exposes runtime installer keys from the Mechanic Registry", () => {
@@ -399,6 +420,12 @@ describe("top-down Phaser template", () => {
         ])
       )
     );
+    expect(topDownPhaserTemplate.mechanicInstallerKeys).toEqual({
+      enemy_chase: "install_enemy_chase",
+      hazard_contact: "install_hazard_contact",
+      pickup_collection: "install_pickup_collection",
+      player_movement: "install_player_movement",
+    });
   });
 
   it("installs active mechanics through the external runtime mechanic registry", () => {
@@ -407,20 +434,29 @@ describe("top-down Phaser template", () => {
       "utf8"
     );
     const installedTypes: string[] = [];
+    const installerContexts: Array<Record<string, unknown>> = [];
     const { context } = createRuntimeHarness(topDownPhaserTemplate);
 
     Object.assign(context.globalThis, {
       __AICADE_TOP_DOWN_MECHANICS__: {
-        install_enemy_chase() {
+        install_enemy_chase(installerContext: Record<string, unknown>) {
           installedTypes.push("enemy_chase");
+          installerContexts.push(installerContext);
           return {};
         },
-        install_pickup_collection() {
+        install_hazard_contact(installerContext: Record<string, unknown>) {
+          installedTypes.push("hazard_contact");
+          installerContexts.push(installerContext);
+          return {};
+        },
+        install_pickup_collection(installerContext: Record<string, unknown>) {
           installedTypes.push("pickup_collection");
+          installerContexts.push(installerContext);
           return {};
         },
-        install_player_movement() {
+        install_player_movement(installerContext: Record<string, unknown>) {
           installedTypes.push("player_movement");
+          installerContexts.push(installerContext);
           return {};
         },
       },
@@ -432,7 +468,55 @@ describe("top-down Phaser template", () => {
       "player_movement",
       "pickup_collection",
       "enemy_chase",
+      "hazard_contact",
     ]);
+    expect(installerContexts).toHaveLength(4);
+    installerContexts.forEach((installerContext) => {
+      const entities = installerContext.entities as Record<string, unknown>;
+      const input = installerContext.input as Record<string, unknown>;
+      const layout = installerContext.layout as Record<string, unknown>;
+      const math = installerContext.math as Record<string, unknown>;
+      const objective = installerContext.objective as Record<string, unknown>;
+      const physics = installerContext.physics as Record<string, unknown>;
+      const runtime = installerContext.runtime as Record<string, unknown>;
+
+      expect(typeof entities.createHandle).toBe("function");
+      expect(typeof entities.findById).toBe("function");
+      expect(typeof entities.findByRole).toBe("function");
+      expect(typeof entities.getHandle).toBe("function");
+      expect(typeof entities.resetHandle).toBe("function");
+      expect(typeof layout.findPickupPoint).toBe("function");
+      expect(typeof layout.findSpawnPointForEntity).toBe("function");
+      expect(typeof layout.isPathBlocked).toBe("function");
+      expect(typeof layout.isPointBlocked).toBe("function");
+      expect(Array.isArray(layout.staticBodies)).toBe(true);
+      expect(typeof input.createCursorKeys).toBe("function");
+      expect(typeof math.normalizeVector).toBe("function");
+      expect(typeof math.randomBetween).toBe("function");
+      expect(typeof math.scaleVector).toBe("function");
+      expect(typeof objective.increment).toBe("function");
+      expect(typeof objective.reset).toBe("function");
+      expect(typeof physics.addCollider).toBe("function");
+      expect(typeof physics.addOverlap).toBe("function");
+      expect(typeof runtime.getViewport).toBe("function");
+      expect(typeof runtime.resetEntity).toBe("function");
+      expect(Object.keys(installerContext)).not.toEqual(
+        expect.arrayContaining([
+          "Phaser",
+          "collectObjective",
+          "createChaser",
+          "createObjective",
+          "gameSpec",
+          "getChaser",
+          "getChaseVelocity",
+          "getObjective",
+          "getPlayer",
+          "resetAfterChaserCatch",
+          "scene",
+          "viewport",
+        ])
+      );
+    });
   });
 
   it("registers built-in installers from runtime dependency scripts", () => {
@@ -458,6 +542,33 @@ describe("top-down Phaser template", () => {
       "install_player_movement",
       "install_pickup_collection",
       "install_enemy_chase",
+      "install_hazard_contact",
+    ]);
+  });
+
+  it("defines a narrow typed runtime context for top-down mechanic installers", () => {
+    const installer = ((context) => {
+      const services = TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS.map(
+        (key) => context[key]
+      );
+
+      expect(services).toHaveLength(7);
+
+      return {
+        dispose() {},
+        update() {},
+      };
+    }) satisfies TopDownMechanicInstaller;
+
+    expect(typeof installer).toBe("function");
+    expect(TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS).toEqual([
+      "entities",
+      "layout",
+      "physics",
+      "objective",
+      "input",
+      "math",
+      "runtime",
     ]);
   });
 
@@ -617,6 +728,42 @@ describe("top-down Phaser template", () => {
       )
     ).toBe(false);
     expect(moveToObjectCalls).toEqual([]);
+  });
+
+  it("installs hazard contact as a typed service-backed mechanic", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const { context, gameElements, overlapCalls, textLabels } =
+      createRuntimeHarness(topDownPhaserTemplate);
+
+    runTopDownRuntime(runtimeSource, context);
+
+    const player = gameElements.find(
+      (element) => element.kind === "rectangle" && element.x === 156
+    );
+    const hazard = gameElements.find(
+      (element) => element.kind === "circle" && element.x === 500
+    );
+    const pickupOverlap = overlapCalls.find(
+      ({ second }) => second.kind === "star"
+    );
+    const hazardOverlap = overlapCalls.find(
+      ({ first, second }) => first === player && second === hazard
+    );
+
+    expect(hazard).toEqual(
+      expect.objectContaining({ kind: "circle", x: 500, y: 120 })
+    );
+    expect(hazardOverlap?.handler).toEqual(expect.any(Function));
+
+    pickupOverlap?.handler?.();
+    player?.setPosition?.(300, 300);
+    hazardOverlap?.handler?.();
+
+    expect(player).toEqual(expect.objectContaining({ x: 156, y: 316 }));
+    expect(textLabels.at(-1)).toBe("Collect crystals: 0");
   });
 
   it("steers the enemy around blocking obstacles instead of chasing directly into them", () => {
@@ -800,6 +947,67 @@ describe("top-down Phaser template", () => {
     );
   });
 
+  it("reports mechanic dispose failures without interrupting teardown", () => {
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const disposedTypes: string[] = [];
+    const { context, dispatchWindowEvent, messages } =
+      createRuntimeHarness(topDownPhaserTemplate);
+
+    Object.assign(context.globalThis, {
+      __AICADE_TOP_DOWN_MECHANICS__: {
+        install_enemy_chase() {
+          return {
+            dispose() {
+              disposedTypes.push("enemy_chase");
+            },
+          };
+        },
+        install_hazard_contact() {
+          return {
+            dispose() {
+              disposedTypes.push("hazard_contact");
+            },
+          };
+        },
+        install_pickup_collection() {
+          return {
+            dispose() {
+              disposedTypes.push("pickup_collection");
+            },
+          };
+        },
+        install_player_movement() {
+          return {
+            dispose() {
+              disposedTypes.push("player_movement");
+              throw new Error("Dispose failed");
+            },
+          };
+        },
+      },
+    });
+
+    runInNewContext(runtimeSource, context);
+
+    expect(() => dispatchWindowEvent("beforeunload")).not.toThrow();
+    expect(disposedTypes).toEqual([
+      "player_movement",
+      "pickup_collection",
+      "enemy_chase",
+      "hazard_contact",
+    ]);
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        message:
+          "Mechanic mechanic_player_movement dispose failed: Dispose failed",
+        type: "game-error",
+      })
+    );
+  });
+
   it("points to an authored Phaser runtime script with protocol and gameplay hooks", () => {
     const runtimeSource = readFileSync(
       join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
@@ -818,8 +1026,13 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain('notify("game-ready"');
     expect(runtimeSource).toContain('notify("game-error"');
     expect(runtimeSource).toContain("createPlayer");
-    expect(runtimeSource).toContain("createObjective");
-    expect(runtimeSource).toContain("createChaser");
+    expect(runtimeSource).toContain("createEntityHandle");
+    expect(runtimeSource).toContain("createMechanicContext");
+    expect(runtimeSource).not.toContain("function createObjective");
+    expect(runtimeSource).not.toContain("function createChaser");
+    expect(runtimeSource).not.toContain("function getChaseVelocity");
+    expect(playerMovementSource).not.toContain("context.scene");
+    expect(playerMovementSource).not.toContain("context.Phaser");
     expect(playerMovementSource).toContain("cursors.left.isDown");
   });
 
@@ -850,6 +1063,14 @@ describe("top-down Phaser template", () => {
       join(process.cwd(), "public", "/runtime/phaser/mechanics/enemy-chase.js"),
       "utf8"
     );
+    const pickupCollectionSource = readFileSync(
+      join(
+        process.cwd(),
+        "public",
+        "/runtime/phaser/mechanics/pickup-collection.js"
+      ),
+      "utf8"
+    );
 
     expect(runtimeSource).toContain("function createWall(scene, wall)");
     expect(runtimeSource).toContain("function createObstacle(scene, obstacle)");
@@ -859,9 +1080,13 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain('obstacle.shape === "circle"');
     expect(runtimeSource).toContain("scene.physics.add.existing(wallBody, true)");
     expect(runtimeSource).toContain("this.physics.add.collider(player, body)");
-    expect(enemyChaseSource).toContain(
-      "context.scene.physics.add.collider(chaser, body)"
-    );
+    expect(enemyChaseSource).toContain("context.physics.addCollider(enemy, body)");
+    expect(enemyChaseSource).toContain("context.layout.isPathBlocked");
+    expect(enemyChaseSource).toContain("context.layout.isPointBlocked");
+    expect(enemyChaseSource).not.toContain("context.scene");
+    expect(enemyChaseSource).not.toContain("context.Phaser");
+    expect(pickupCollectionSource).not.toContain("context.scene");
+    expect(pickupCollectionSource).not.toContain("context.Phaser");
   });
 
   it("keeps the authored runtime bootable without hidden pickup behavior when optional spec pieces are missing", () => {

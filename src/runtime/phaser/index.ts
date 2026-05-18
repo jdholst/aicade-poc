@@ -9,3 +9,25 @@ export {
   createPhaserRuntimeDocument,
   phaserRuntimeAdapter,
 } from "./phaser-runtime-adapter";
+export { TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS } from "./top-down-mechanic-runtime";
+export type {
+  TopDownMechanicContextServiceKey,
+  TopDownMechanicCreateHandleOptions,
+  TopDownMechanicCursorKeys,
+  TopDownMechanicCursorState,
+  TopDownMechanicEntitiesService,
+  TopDownMechanicEntity,
+  TopDownMechanicEntityHandle,
+  TopDownMechanicInstaller,
+  TopDownMechanicInstallerContext,
+  TopDownMechanicInstallerRegistry,
+  TopDownMechanicInstallResult,
+  TopDownMechanicInputService,
+  TopDownMechanicLayoutService,
+  TopDownMechanicMathService,
+  TopDownMechanicObjectiveService,
+  TopDownMechanicOverlapHandler,
+  TopDownMechanicPhysicsService,
+  TopDownMechanicPoint,
+  TopDownMechanicRuntimeService,
+} from "./top-down-mechanic-runtime";

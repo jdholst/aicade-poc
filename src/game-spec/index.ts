@@ -10,10 +10,15 @@ export {
 } from "./game-spec-schema";
 
 export {
+  getMechanicDefinitionForScope,
+  getMechanicDefinitionsForScope,
   getTopDownMechanicDefinition,
   getTopDownMechanicDefinitionsForSpec,
+  TOP_DOWN_PHASER_MECHANIC_SCOPE,
   topDownMechanicRegistry,
+  type MechanicCapabilityTag,
   type MechanicRegistryEntry,
+  type MechanicRuntimeScope,
 } from "./mechanics/mechanic-registry";
 
 export {

@@ -21,6 +21,7 @@ const TOP_DOWN_MECHANIC_RUNTIME_SCRIPT_PATHS = [
   "/runtime/phaser/mechanics/player-movement.js",
   "/runtime/phaser/mechanics/pickup-collection.js",
   "/runtime/phaser/mechanics/enemy-chase.js",
+  "/runtime/phaser/mechanics/hazard-contact.js",
 ];
 
 export type HandAuthoredPhaserTemplate = {
