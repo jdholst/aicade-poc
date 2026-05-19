@@ -7,9 +7,8 @@ import {
 } from "@/game-spec";
 
 import {
-  getTopDownGameSpecFixtureState,
+  getTopDownGameSpecFixture,
   topDownGameSpecFixture,
-  type TopDownGameSpecFixtureState,
 } from "./top-down-game-spec-fixture";
 
 type PhaserTemplateControl = {
@@ -37,10 +36,7 @@ export type TopDownPhaserTemplateState =
       status: "valid";
     }
   | {
-      issues: Extract<
-        TopDownGameSpecFixtureState,
-        { status: "invalid" }
-      >["issues"];
+      issues: [];
       message: string;
       status: "invalid";
     };
@@ -86,22 +82,25 @@ const validTopDownPhaserTemplateState: TopDownPhaserTemplateState = {
   template: topDownPhaserTemplate,
 };
 
-export function getTopDownPhaserTemplateState(
-  useValidFixture =
-    process.env.NEXT_PUBLIC_AICADE_USE_INVALID_GAME_SPEC !== "1"
-): TopDownPhaserTemplateState {
-  if (useValidFixture) {
-    return validTopDownPhaserTemplateState;
+const topDownPhaserTemplateStateByFixture = new WeakMap<
+  TopDownGameSpec,
+  TopDownPhaserTemplateState
+>([[topDownGameSpecFixture, validTopDownPhaserTemplateState]]);
+
+export function getTopDownPhaserTemplateState(): TopDownPhaserTemplateState {
+  const selectedFixture = getTopDownGameSpecFixture();
+  const cachedState = topDownPhaserTemplateStateByFixture.get(selectedFixture);
+
+  if (cachedState) {
+    return cachedState;
   }
 
-  const fixtureState = getTopDownGameSpecFixtureState(useValidFixture);
-
-  if (fixtureState.status === "invalid") {
-    return fixtureState;
-  }
-
-  return {
+  const selectedState: TopDownPhaserTemplateState = {
     status: "valid",
-    template: createTopDownPhaserTemplate(fixtureState.gameSpec),
+    template: createTopDownPhaserTemplate(selectedFixture),
   };
+
+  topDownPhaserTemplateStateByFixture.set(selectedFixture, selectedState);
+
+  return selectedState;
 }

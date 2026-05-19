@@ -172,11 +172,18 @@ export function useEditorSession({
       }
 
       if (status.state === "loading") {
-        setRuntimeWarnings([]);
-        setGameStatus({
-          state: "loading",
-          message: "Booting Phaser runtime...",
-        });
+        setRuntimeWarnings((warnings) =>
+          warnings.length === 0 ? warnings : []
+        );
+        setGameStatus((currentStatus) =>
+          currentStatus.state === "loading" &&
+          currentStatus.message === "Booting Phaser runtime..."
+            ? currentStatus
+            : {
+                state: "loading",
+                message: "Booting Phaser runtime...",
+              }
+        );
         return;
       }
 

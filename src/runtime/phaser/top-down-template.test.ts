@@ -12,6 +12,10 @@ import {
   TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS,
   topDownPhaserTemplate,
 } from ".";
+import {
+  getTopDownGameSpecFixture,
+  TOP_DOWN_GAME_SPEC_FIXTURE_ENV,
+} from "./top-down-game-spec-fixture";
 import type { TopDownMechanicInstaller } from "./top-down-mechanic-runtime";
 
 type PostedMessage = {
@@ -404,18 +408,33 @@ describe("top-down Phaser template", () => {
     ).toThrow("Expected exactly one primary objective.");
   });
 
-  it("reports invalid fixture state without crashing module import", () => {
-    vi.stubEnv("NEXT_PUBLIC_AICADE_USE_INVALID_GAME_SPEC", "1");
-
-    expect(getTopDownPhaserTemplateState()).toMatchObject({
-      message:
-        "Game Spec validation failed: objectives: Expected exactly one primary objective.",
-      status: "invalid",
-    });
-  });
-
   it("returns a stable valid template state for mounted runtime renders", () => {
     expect(getTopDownPhaserTemplateState()).toBe(getTopDownPhaserTemplateState());
+  });
+
+  it("selects named valid top-down fixtures from the fixture catalog", () => {
+    expect(getTopDownGameSpecFixture().title).toBe("Crystal Spec Chase");
+    expect(getTopDownGameSpecFixture("prism_relay_gauntlet").title).toBe(
+      "Prism Relay Gauntlet"
+    );
+    expect(getTopDownGameSpecFixture("unknown_fixture").title).toBe(
+      "Crystal Spec Chase"
+    );
+  });
+
+  it("uses the selected fixture when building the Phaser template state", () => {
+    vi.stubEnv(TOP_DOWN_GAME_SPEC_FIXTURE_ENV, "prism_relay_gauntlet");
+
+    const selectedState = getTopDownPhaserTemplateState();
+
+    expect(selectedState).toBe(getTopDownPhaserTemplateState());
+    expect(selectedState).toMatchObject({
+      status: "valid",
+      template: {
+        id: "game_prism_relay_gauntlet-phaser-template",
+        title: "Prism Relay Gauntlet",
+      },
+    });
   });
 
   it("declares every gameplay behavior as an active Game Spec mechanic", () => {
@@ -467,6 +486,26 @@ describe("top-down Phaser template", () => {
     expect(pickupOnlyTemplate.runtimeDependencyScriptPaths).toEqual([
       "/runtime/phaser/mechanics/pickup-collection.js",
     ]);
+  });
+
+  it("builds the Prism Relay Gauntlet fixture with movement, pickup, and hazard but no chase", () => {
+    const relayTemplate = createTopDownPhaserTemplate(
+      getTopDownGameSpecFixture("prism_relay_gauntlet")
+    );
+
+    expect(relayTemplate.mechanicInstallerKeys).toEqual({
+      hazard_contact: "install_hazard_contact",
+      pickup_collection: "install_pickup_collection",
+      player_movement: "install_player_movement",
+    });
+    expect(relayTemplate.runtimeDependencyScriptPaths).toEqual([
+      "/runtime/phaser/mechanics/player-movement.js",
+      "/runtime/phaser/mechanics/pickup-collection.js",
+      "/runtime/phaser/mechanics/hazard-contact.js",
+    ]);
+    expect(relayTemplate.gameSpec.entities.map((entity) => entity.role)).toEqual(
+      ["player", "pickup", "hazard"]
+    );
   });
 
   it("installs active mechanics through the external runtime mechanic registry", () => {
@@ -809,6 +848,56 @@ describe("top-down Phaser template", () => {
 
     expect(player).toEqual(expect.objectContaining({ x: 156, y: 316 }));
     expect(textLabels.at(-1)).toBe("Collect crystals: 0");
+  });
+
+  it("runs Prism Relay Gauntlet as a different behavior combination without enemy chase", () => {
+    const relayTemplate = createTopDownPhaserTemplate(
+      getTopDownGameSpecFixture("prism_relay_gauntlet")
+    );
+    const runtimeSource = readFileSync(
+      join(process.cwd(), "public", relayTemplate.runtimeScriptPath),
+      "utf8"
+    );
+    const { context, gameElements, overlapCalls, runUpdate, textLabels } =
+      createRuntimeHarness(relayTemplate, { right: true });
+
+    runTopDownRuntime(runtimeSource, context, relayTemplate);
+    runUpdate();
+
+    const player = gameElements.find(
+      (element) => element.kind === "rectangle" && element.x === 120
+    );
+    const hazard = gameElements.find(
+      (element) => element.kind === "circle" && element.x === 450
+    );
+    const pickupOverlap = overlapCalls.find(
+      ({ second }) => second.kind === "star"
+    );
+    const hazardOverlap = overlapCalls.find(
+      ({ first, second }) => first === player && second === hazard
+    );
+
+    expect(player?.body?.velocityCalls).toEqual([{ x: 280, y: 0 }]);
+    expect(hazard).toEqual(expect.objectContaining({ x: 450, y: 300 }));
+    expect(
+      gameElements
+        .filter((element) => element.kind === "circle")
+        .flatMap((element) => element.body?.velocityCalls ?? [])
+    ).toEqual([]);
+    expect(gameElements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "star", x: 674, y: 204 }),
+      ])
+    );
+    expect(hazardOverlap?.handler).toEqual(expect.any(Function));
+
+    pickupOverlap?.handler?.();
+    player?.setPosition?.(560, 300);
+    hazardOverlap?.handler?.();
+
+    expect(player).toEqual(expect.objectContaining({ x: 120, y: 300 }));
+    expect(textLabels).toContain("Relay prisms: 1");
+    expect(textLabels.at(-1)).toBe("Relay prisms: 0");
   });
 
   it("steers the enemy around blocking obstacles instead of chasing directly into them", () => {

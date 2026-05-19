@@ -112,8 +112,8 @@ describe("EditorGameCanvas", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows a recoverable validation state when the Phaser Game Spec is invalid", () => {
-    vi.stubEnv("NEXT_PUBLIC_AICADE_USE_INVALID_GAME_SPEC", "1");
+  it("mounts the selected top-down Phaser fixture", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
 
     render(
       <EditorGameCanvas
@@ -122,16 +122,9 @@ describe("EditorGameCanvas", () => {
       />
     );
 
-    expect(screen.getByText("Game Spec validation failed")).toBeVisible();
-    expect(screen.getByText("The runtime was not started.")).toBeVisible();
-    expect(
-      screen.getByText(
-        "Game Spec validation failed: objectives: Expected exactly one primary objective."
-      )
-    ).toBeVisible();
+    expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reset game" })).toBeDisabled();
+    expect(screen.getByText("Phaser runtime")).toBeVisible();
   });
 
   it("shows the Canvas initial runtime screen when the runtime override is canvas2d", () => {
