@@ -15,6 +15,13 @@ The POC should answer these questions:
 - Can projects, checkpoints, builds, edit records, and generation telemetry be saved lightly enough to test the future Game Pack model?
 - Which modules are stable enough to promote into Sparkline v1?
 
+## Related Architecture Docs
+
+These Phase 3/4 model docs describe the current authoring contracts behind this roadmap:
+
+- [Game Spec Authoring Model](./game-spec-authoring-model.md)
+- [Mechanic Registry Authoring Model](./mechanic-registry-authoring-model.md)
+
 ## Scope
 
 In scope:
