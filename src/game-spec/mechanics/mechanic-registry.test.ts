@@ -149,7 +149,7 @@ const registryBackedTopDownSpec: TopDownGameSpec = {
     {
       id: "mechanic_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player"],
+      targetIds: ["entity_player", "entity_crystal"],
       sceneIds: ["scene_arena"],
       regionIds: ["region_safe_start"],
       assetIds: ["asset_crystal"],
@@ -212,11 +212,49 @@ describe("top-down Mechanic Registry", () => {
   it("returns only registry definitions declared by the active Game Spec", () => {
     const spec = validateTopDownGameSpec({
       ...registryBackedTopDownSpec,
+      entities: registryBackedTopDownSpec.entities.filter(
+        (entity) => entity.id !== "entity_crystal"
+      ),
       mechanics: registryBackedTopDownSpec.mechanics.slice(0, 2),
     });
 
     expect(getTopDownMechanicDefinitionsForSpec(spec).map((entry) => entry.type))
       .toEqual(["player_movement", "enemy_chase"]);
+  });
+
+  it("declares mechanic validation contracts for built-in top-down mechanics", () => {
+    expect(getTopDownMechanicDefinition("player_movement"))
+      .toMatchObject({
+        validationRequirements: {
+          requiredTargetRoles: ["player"],
+        },
+      });
+    expect(getTopDownMechanicDefinition("pickup_collection"))
+      .toMatchObject({
+        validationRequirements: {
+          requiredTargetRoles: ["player"],
+          requiredAssetRoles: ["pickup"],
+          requiresObjective: true,
+          layoutCoverage: [
+            {
+              kind: "pickup_zone_for_referenced_asset",
+              assetRole: "pickup",
+            },
+          ],
+        },
+      });
+    expect(getTopDownMechanicDefinition("enemy_chase")).toMatchObject({
+      validationRequirements: {
+        requiredTargetRoles: ["enemy", "player"],
+        requiresObjective: true,
+      },
+    });
+    expect(getTopDownMechanicDefinition("hazard_contact")).toMatchObject({
+      validationRequirements: {
+        requiredTargetRoles: ["hazard", "player"],
+        requiresObjective: true,
+      },
+    });
   });
 
   it("resolves mechanics by type and runtime scope without namespacing Game Spec mechanic IDs", () => {

@@ -8,11 +8,13 @@ import { getTopDownMechanicDefinition, validateTopDownGameSpec } from "@/game-sp
 
 import {
   createTopDownPhaserTemplate,
+  createTopDownPhaserTemplateState,
   getTopDownPhaserTemplateState,
   TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS,
   topDownPhaserTemplate,
 } from ".";
 import {
+  createTopDownGameSpecFixtureState,
   getTopDownGameSpecFixture,
   TOP_DOWN_GAME_SPEC_FIXTURE_ENV,
 } from "./top-down-game-spec-fixture";
@@ -410,6 +412,38 @@ describe("top-down Phaser template", () => {
 
   it("returns a stable valid template state for mounted runtime renders", () => {
     expect(getTopDownPhaserTemplateState()).toBe(getTopDownPhaserTemplateState());
+  });
+
+  it("returns an invalid template state instead of throwing for semantically invalid Game Specs", () => {
+    const invalidFixtureState = createTopDownGameSpecFixtureState({
+      ...topDownPhaserTemplate.gameSpec,
+      mechanics: topDownPhaserTemplate.gameSpec.mechanics.map((mechanic) =>
+        mechanic.type === "player_movement"
+          ? {
+              ...mechanic,
+              targetIds: [],
+            }
+          : mechanic
+      ),
+    });
+
+    expect(invalidFixtureState).toMatchObject({
+      status: "invalid",
+      message:
+        'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+      issues: [
+        {
+          path: "mechanics.mechanic_player_movement.targetIds",
+          message: 'Expected target role "player".',
+        },
+      ],
+    });
+    expect(createTopDownPhaserTemplateState(invalidFixtureState))
+      .toMatchObject({
+        status: "invalid",
+        message:
+          'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+      });
   });
 
   it("selects named valid top-down fixtures from the fixture catalog", () => {

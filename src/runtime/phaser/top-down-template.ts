@@ -3,12 +3,14 @@ import {
   createMechanicRuntimeBridge,
   TOP_DOWN_PHASER_MECHANIC_SCOPE,
   topDownMechanicRegistry,
+  type GameSpecValidationIssue,
   type TopDownGameSpec,
 } from "@/game-spec";
 
 import {
-  getTopDownGameSpecFixture,
+  getTopDownGameSpecFixtureState,
   topDownGameSpecFixture,
+  type TopDownGameSpecFixtureState,
 } from "./top-down-game-spec-fixture";
 
 type PhaserTemplateControl = {
@@ -36,7 +38,7 @@ export type TopDownPhaserTemplateState =
       status: "valid";
     }
   | {
-      issues: [];
+      issues: GameSpecValidationIssue[];
       message: string;
       status: "invalid";
     };
@@ -77,30 +79,43 @@ export function createTopDownPhaserTemplate(
 export const topDownPhaserTemplate =
   createTopDownPhaserTemplate(topDownGameSpecFixture);
 
-const validTopDownPhaserTemplateState: TopDownPhaserTemplateState = {
-  status: "valid",
-  template: topDownPhaserTemplate,
-};
-
-const topDownPhaserTemplateStateByFixture = new WeakMap<
-  TopDownGameSpec,
+const topDownPhaserTemplateStateByFixtureState = new WeakMap<
+  TopDownGameSpecFixtureState,
   TopDownPhaserTemplateState
->([[topDownGameSpecFixture, validTopDownPhaserTemplateState]]);
+>();
+
+export function createTopDownPhaserTemplateState(
+  fixtureState: TopDownGameSpecFixtureState
+): TopDownPhaserTemplateState {
+  if (fixtureState.status === "invalid") {
+    return {
+      status: "invalid",
+      issues: fixtureState.issues,
+      message: fixtureState.message,
+    };
+  }
+
+  return {
+    status: "valid",
+    template: createTopDownPhaserTemplate(fixtureState.fixture),
+  };
+}
 
 export function getTopDownPhaserTemplateState(): TopDownPhaserTemplateState {
-  const selectedFixture = getTopDownGameSpecFixture();
-  const cachedState = topDownPhaserTemplateStateByFixture.get(selectedFixture);
+  const selectedFixtureState = getTopDownGameSpecFixtureState();
+  const cachedState =
+    topDownPhaserTemplateStateByFixtureState.get(selectedFixtureState);
 
   if (cachedState) {
     return cachedState;
   }
 
-  const selectedState: TopDownPhaserTemplateState = {
-    status: "valid",
-    template: createTopDownPhaserTemplate(selectedFixture),
-  };
+  const selectedState = createTopDownPhaserTemplateState(selectedFixtureState);
 
-  topDownPhaserTemplateStateByFixture.set(selectedFixture, selectedState);
+  topDownPhaserTemplateStateByFixtureState.set(
+    selectedFixtureState,
+    selectedState
+  );
 
   return selectedState;
 }

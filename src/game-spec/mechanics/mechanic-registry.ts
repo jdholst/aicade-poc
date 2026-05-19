@@ -1,6 +1,7 @@
 import type { ZodType } from "zod";
 
 import type {
+  GameSpec,
   GameSpecMechanicEntry,
   JsonValue,
   StableId,
@@ -20,6 +21,18 @@ export type MechanicCapabilityTag =
   | "score"
   | "timer";
 
+export type MechanicValidationLayoutCoverageRequirement = {
+  kind: "pickup_zone_for_referenced_asset";
+  assetRole: GameSpec["assets"][number]["role"];
+};
+
+export type MechanicValidationRequirements = {
+  requiredTargetRoles?: readonly GameSpec["entities"][number]["role"][];
+  requiredAssetRoles?: readonly GameSpec["assets"][number]["role"][];
+  requiresObjective?: boolean;
+  layoutCoverage?: readonly MechanicValidationLayoutCoverageRequirement[];
+};
+
 export type MechanicRegistryEntry<TContext = unknown> = {
   type: StableId;
   label: string;
@@ -31,7 +44,7 @@ export type MechanicRegistryEntry<TContext = unknown> = {
   configSchema?: ZodType<Record<string, JsonValue>>;
   agentContract?: Record<string, JsonValue>;
   runtimeContext?: TContext;
-  validation?: Record<string, JsonValue>;
+  validationRequirements?: MechanicValidationRequirements;
 };
 
 export type MechanicRuntimeBridgeInput<
@@ -61,6 +74,9 @@ export const topDownMechanicRegistry = [
     capabilityTags: ["movement"],
     runtimeInstallerKey: "install_player_movement",
     runtimeDependencyScriptPath: "/runtime/phaser/mechanics/player-movement.js",
+    validationRequirements: {
+      requiredTargetRoles: ["player"],
+    },
   },
   {
     type: "enemy_chase",
@@ -70,6 +86,10 @@ export const topDownMechanicRegistry = [
     capabilityTags: ["enemy_ai"],
     runtimeInstallerKey: "install_enemy_chase",
     runtimeDependencyScriptPath: "/runtime/phaser/mechanics/enemy-chase.js",
+    validationRequirements: {
+      requiredTargetRoles: ["enemy", "player"],
+      requiresObjective: true,
+    },
   },
   {
     type: "pickup_collection",
@@ -79,6 +99,17 @@ export const topDownMechanicRegistry = [
     capabilityTags: ["collection", "score"],
     runtimeInstallerKey: "install_pickup_collection",
     runtimeDependencyScriptPath: "/runtime/phaser/mechanics/pickup-collection.js",
+    validationRequirements: {
+      requiredTargetRoles: ["player"],
+      requiredAssetRoles: ["pickup"],
+      requiresObjective: true,
+      layoutCoverage: [
+        {
+          kind: "pickup_zone_for_referenced_asset",
+          assetRole: "pickup",
+        },
+      ],
+    },
   },
   {
     type: "hazard_contact",
@@ -88,6 +119,10 @@ export const topDownMechanicRegistry = [
     capabilityTags: ["health_damage"],
     runtimeInstallerKey: "install_hazard_contact",
     runtimeDependencyScriptPath: "/runtime/phaser/mechanics/hazard-contact.js",
+    validationRequirements: {
+      requiredTargetRoles: ["hazard", "player"],
+      requiresObjective: true,
+    },
   },
 ] as const satisfies readonly MechanicRegistryEntry[];
 

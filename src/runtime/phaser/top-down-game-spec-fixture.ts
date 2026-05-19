@@ -1,4 +1,9 @@
-import { validateTopDownGameSpec, type TopDownGameSpec } from "@/game-spec";
+import {
+  GameSpecValidationError,
+  validateTopDownGameSpec,
+  type GameSpecValidationIssue,
+  type TopDownGameSpec,
+} from "@/game-spec";
 
 export const TOP_DOWN_GAME_SPEC_FIXTURE_ENV =
   "NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE";
@@ -188,7 +193,7 @@ const crystalSpecChaseGameSpecFixtureInput = {
     {
       id: "mechanic_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player"],
+      targetIds: ["entity_player", "entity_crystal"],
       sceneIds: ["scene_arena"],
       assetIds: ["asset_crystal"],
       objectiveIds: ["objective_collect_crystals"],
@@ -428,7 +433,7 @@ const prismRelayGauntletGameSpecFixtureInput = {
     {
       id: "mechanic_relay_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player"],
+      targetIds: ["entity_player", "entity_relay_prism"],
       sceneIds: ["scene_relay_gauntlet"],
       assetIds: ["asset_relay_prism"],
       objectiveIds: ["objective_collect_relay_prisms"],
@@ -453,28 +458,92 @@ const topDownGameSpecFixtureInputs = {
 
 export type TopDownGameSpecFixtureId = keyof typeof topDownGameSpecFixtureInputs;
 
-export const topDownGameSpecFixtures: Record<
+export type TopDownGameSpecFixtureState =
+  | {
+      fixture: TopDownGameSpec;
+      status: "valid";
+    }
+  | {
+      issues: GameSpecValidationIssue[];
+      message: string;
+      status: "invalid";
+    };
+
+const topDownGameSpecFixtureStateById = new Map<
   TopDownGameSpecFixtureId,
-  TopDownGameSpec
-> = {
-  crystal_spec_chase: validateTopDownGameSpec(
-    topDownGameSpecFixtureInputs.crystal_spec_chase
-  ),
-  prism_relay_gauntlet: validateTopDownGameSpec(
-    topDownGameSpecFixtureInputs.prism_relay_gauntlet
-  ),
-};
+  TopDownGameSpecFixtureState
+>();
+
+function createInvalidFixtureState(error: unknown): TopDownGameSpecFixtureState {
+  if (error instanceof GameSpecValidationError) {
+    return {
+      status: "invalid",
+      issues: error.issues,
+      message: error.message.replace(/^Game Spec validation failed: /, ""),
+    };
+  }
+
+  return {
+    status: "invalid",
+    issues: [],
+    message:
+      error instanceof Error
+        ? error.message
+        : "Game Spec validation failed for the selected fixture.",
+  };
+}
+
+export function createTopDownGameSpecFixtureState(
+  fixtureInput: unknown
+): TopDownGameSpecFixtureState {
+  try {
+    return {
+      status: "valid",
+      fixture: validateTopDownGameSpec(fixtureInput),
+    };
+  } catch (error) {
+    return createInvalidFixtureState(error);
+  }
+}
+
+function createTopDownGameSpecFixtureStateForId(
+  fixtureId: TopDownGameSpecFixtureId
+): TopDownGameSpecFixtureState {
+  return createTopDownGameSpecFixtureState(topDownGameSpecFixtureInputs[fixtureId]);
+}
 
 export function getTopDownGameSpecFixture(
   fixtureId = process.env[TOP_DOWN_GAME_SPEC_FIXTURE_ENV]
 ): TopDownGameSpec {
-  return topDownGameSpecFixtures[resolveTopDownGameSpecFixtureId(fixtureId)];
+  const fixtureState = getTopDownGameSpecFixtureState(fixtureId);
+
+  if (fixtureState.status === "valid") {
+    return fixtureState.fixture;
+  }
+
+  throw new GameSpecValidationError(fixtureState.issues);
+}
+
+export function getTopDownGameSpecFixtureState(
+  fixtureId = process.env[TOP_DOWN_GAME_SPEC_FIXTURE_ENV]
+): TopDownGameSpecFixtureState {
+  const resolvedFixtureId = resolveTopDownGameSpecFixtureId(fixtureId);
+  const cachedState = topDownGameSpecFixtureStateById.get(resolvedFixtureId);
+
+  if (cachedState) {
+    return cachedState;
+  }
+
+  const fixtureState = createTopDownGameSpecFixtureStateForId(resolvedFixtureId);
+  topDownGameSpecFixtureStateById.set(resolvedFixtureId, fixtureState);
+
+  return fixtureState;
 }
 
 function resolveTopDownGameSpecFixtureId(
   fixtureId: string | undefined
 ): TopDownGameSpecFixtureId {
-  if (fixtureId && fixtureId in topDownGameSpecFixtures) {
+  if (fixtureId && fixtureId in topDownGameSpecFixtureInputs) {
     return fixtureId as TopDownGameSpecFixtureId;
   }
 
@@ -482,4 +551,6 @@ function resolveTopDownGameSpecFixtureId(
 }
 
 export const topDownGameSpecFixture =
-  topDownGameSpecFixtures[DEFAULT_TOP_DOWN_GAME_SPEC_FIXTURE_ID];
+  topDownGameSpecFixtureInputs[
+    DEFAULT_TOP_DOWN_GAME_SPEC_FIXTURE_ID
+  ] as TopDownGameSpec;

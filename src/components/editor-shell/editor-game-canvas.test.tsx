@@ -94,6 +94,7 @@ function createCanvasSession(
 describe("EditorGameCanvas", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.doUnmock("@/runtime/phaser");
     vi.restoreAllMocks();
   });
 
@@ -375,5 +376,43 @@ describe("EditorGameCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Phaser Game Spec validation errors without crashing the editor", async () => {
+    vi.resetModules();
+    vi.doMock("@/runtime/phaser", () => ({
+      getTopDownPhaserTemplateState: () => ({
+        status: "invalid",
+        message:
+          'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+        issues: [
+          {
+            path: "mechanics.mechanic_player_movement.targetIds",
+            message: 'Expected target role "player".',
+          },
+        ],
+      }),
+      phaserRuntimeAdapter: {},
+    }));
+
+    const { EditorGameCanvas: MockedEditorGameCanvas } = await import(
+      "./editor-game-canvas"
+    );
+
+    render(
+      <MockedEditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    expect(screen.getByText("Game Spec validation failed")).toBeVisible();
+    expect(screen.getByText("The runtime was not started.")).toBeVisible();
+    expect(
+      screen.getByText(
+        'mechanics.mechanic_player_movement.targetIds: Expected target role "player".'
+      )
+    ).toBeVisible();
+    expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });
 });

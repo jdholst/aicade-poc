@@ -22,6 +22,8 @@ export {
   type MechanicRuntimeBridge,
   type MechanicRuntimeBridgeInput,
   type MechanicRuntimeScope,
+  type MechanicValidationLayoutCoverageRequirement,
+  type MechanicValidationRequirements,
 } from "./mechanics/mechanic-registry";
 
 export {

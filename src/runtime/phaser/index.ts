@@ -1,5 +1,6 @@
 export {
   createTopDownPhaserTemplate,
+  createTopDownPhaserTemplateState,
   getTopDownPhaserTemplateState,
   topDownPhaserTemplate,
   type HandAuthoredPhaserTemplate,
