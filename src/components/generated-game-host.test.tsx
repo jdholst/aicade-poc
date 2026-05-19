@@ -81,7 +81,16 @@ const runtimeAdapter: RuntimeAdapter<GeneratedGamePack> = {
     }
 
     if (event.type === "error") {
-      return { type: "game-error", message: "Runtime failed." };
+      return {
+        type: "game-error",
+        issue: {
+          message: "Runtime failed.",
+          recoverable: false,
+          severity: "error",
+          type: "runtime-error",
+        },
+        message: "Runtime failed.",
+      };
     }
 
     return null;

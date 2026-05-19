@@ -58,14 +58,25 @@
   }
 
   function reportMechanicFailure(mechanic, phase, error) {
+    const message =
+      "Mechanic " +
+      mechanic.id +
+      " " +
+      phase +
+      " failed: " +
+      getErrorMessage(error);
+
     notify("game-error", {
-      message:
-        "Mechanic " +
-        mechanic.id +
-        " " +
-        phase +
-        " failed: " +
-        getErrorMessage(error),
+      issue: {
+        type: "mechanic-disabled",
+        severity: "warning",
+        recoverable: true,
+        mechanicId: mechanic.id,
+        mechanicType: mechanic.type,
+        phase,
+        message,
+      },
+      message,
     });
   }
 

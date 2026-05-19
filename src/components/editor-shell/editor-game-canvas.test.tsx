@@ -86,6 +86,7 @@ function createCanvasSession(
     loadState: {
       status: "idle",
     },
+    runtimeWarnings: [],
     ...overrides,
   };
 }
@@ -233,6 +234,106 @@ describe("EditorGameCanvas", () => {
 
     expect(onTogglePaused).not.toHaveBeenCalled();
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows recoverable runtime warnings without blocking controls", () => {
+    const onReset = vi.fn();
+    const onTogglePaused = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onReset, onTogglePaused })}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "ready",
+            message: "Phaser runtime is running in the sandbox.",
+          },
+          runtimeWarnings: [
+            {
+              type: "mechanic-disabled",
+              severity: "warning",
+              recoverable: true,
+              mechanicId: "mechanic_player_movement",
+              mechanicType: "player_movement",
+              phase: "install",
+              message:
+                "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+            },
+          ],
+        })}
+      />
+    );
+
+    const pauseButton = screen.getByRole("button", { name: "Pause game" });
+    const resetButton = screen.getByRole("button", { name: "Reset game" });
+
+    expect(screen.getByText("Mechanic warning")).toBeVisible();
+    expect(screen.getByText("Warning 1 of 1")).toBeVisible();
+    expect(screen.getByText("player_movement disabled")).toBeVisible();
+    expect(screen.getByText("install")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Mechanic mechanic_player_movement install failed: Keyboard setup failed"
+      )
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Previous warning" })
+    ).not.toBeInTheDocument();
+    expect(pauseButton).toBeEnabled();
+    expect(resetButton).toBeEnabled();
+
+    fireEvent.click(pauseButton);
+    fireEvent.click(resetButton);
+
+    expect(onTogglePaused).toHaveBeenCalledTimes(1);
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets users cycle through multiple recoverable runtime warnings", () => {
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "ready",
+            message: "Phaser runtime is running in the sandbox.",
+          },
+          runtimeWarnings: [
+            {
+              type: "mechanic-disabled",
+              severity: "warning",
+              recoverable: true,
+              mechanicId: "mechanic_player_movement",
+              mechanicType: "player_movement",
+              phase: "install",
+              message: "Movement failed.",
+            },
+            {
+              type: "mechanic-disabled",
+              severity: "warning",
+              recoverable: true,
+              mechanicId: "mechanic_chaser_enemy",
+              mechanicType: "enemy_chase",
+              phase: "update",
+              message: "Chase failed.",
+            },
+          ],
+        })}
+      />
+    );
+
+    expect(screen.getByText("Warning 1 of 2")).toBeVisible();
+    expect(screen.getByText("player_movement disabled")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next warning" }));
+
+    expect(screen.getByText("Warning 2 of 2")).toBeVisible();
+    expect(screen.getByText("enemy_chase disabled")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous warning" }));
+
+    expect(screen.getByText("Warning 1 of 2")).toBeVisible();
+    expect(screen.getByText("player_movement disabled")).toBeVisible();
   });
 
   it("shows the loading runtime screen while generation is running", () => {

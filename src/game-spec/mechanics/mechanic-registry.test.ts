@@ -292,7 +292,7 @@ describe("top-down Mechanic Registry", () => {
         {
           ...registryBackedTopDownSpec.mechanics[1],
           type: "unsupported_mechanic",
-          config: {} as any,
+          config: {},
         },
       ],
       registry: topDownMechanicRegistry,

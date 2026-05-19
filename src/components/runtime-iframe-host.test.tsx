@@ -49,7 +49,34 @@ const runtimeAdapter: RuntimeAdapter<TestRuntimeArtifact> = {
     }
 
     if (event.type === "error") {
-      return { type: "game-error", message: "Runtime failed." };
+      return {
+        type: "game-error",
+        issue: {
+          message: "Runtime failed.",
+          recoverable: false,
+          severity: "error",
+          type: "runtime-error",
+        },
+        message: "Runtime failed.",
+      };
+    }
+
+    if (event.type === "mechanic-warning") {
+      return {
+        type: "game-error",
+        issue: {
+          type: "mechanic-disabled",
+          severity: "warning",
+          recoverable: true,
+          mechanicId: "mechanic_player_movement",
+          mechanicType: "player_movement",
+          phase: "install",
+          message:
+            "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+        },
+        message:
+          "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+      };
     }
 
     return null;
@@ -148,6 +175,51 @@ describe("RuntimeIframeHost", () => {
     dispatchRuntimeMessage(iframe, { type: "ready" }, window);
 
     expect(statuses).toEqual([{ state: "loading" }]);
+  });
+
+  it("reports recoverable warnings without settling the runtime", async () => {
+    vi.useFakeTimers();
+    const statuses: RuntimeIframeStatus[] = [];
+
+    act(() => {
+      render(
+        <RuntimeIframeHost
+          artifact={artifact}
+          runtimeAdapter={runtimeAdapter}
+          onStatusChange={(status) => {
+            statuses.push(status);
+          }}
+        />
+      );
+    });
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Test Runtime");
+
+    dispatchRuntimeMessage(iframe, { type: "mechanic-warning" });
+
+    expect(statuses.at(-1)).toEqual({
+      state: "warning",
+      issue: {
+        type: "mechanic-disabled",
+        severity: "warning",
+        recoverable: true,
+        mechanicId: "mechanic_player_movement",
+        mechanicType: "player_movement",
+        phase: "install",
+        message:
+          "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+      },
+    });
+
+    dispatchRuntimeMessage(iframe, { type: "ready" });
+
+    expect(statuses.at(-1)).toEqual({ state: "ready" });
+
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(statuses.at(-1)).toEqual({ state: "ready" });
   });
 
   it("times out when the runtime never sends a settling event", () => {

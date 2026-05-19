@@ -935,6 +935,16 @@ describe("top-down Phaser template", () => {
     expect(messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          issue: {
+            mechanicId: "mechanic_player_movement",
+            mechanicType: "player_movement",
+            message:
+              "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+            phase: "install",
+            recoverable: true,
+            severity: "warning",
+            type: "mechanic-disabled",
+          },
           message:
             "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
           type: "game-error",
@@ -958,6 +968,16 @@ describe("top-down Phaser template", () => {
     expect(messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          issue: {
+            mechanicId: "mechanic_player_movement",
+            mechanicType: "player_movement",
+            message:
+              'Mechanic mechanic_player_movement install failed: Missing runtime installer "install_player_movement".',
+            phase: "install",
+            recoverable: true,
+            severity: "warning",
+            type: "mechanic-disabled",
+          },
           message:
             'Mechanic mechanic_player_movement install failed: Missing runtime installer "install_player_movement".',
           type: "game-error",
@@ -985,6 +1005,16 @@ describe("top-down Phaser template", () => {
     expect(() => runUpdate()).not.toThrow();
     expect(messages).toContainEqual(
       expect.objectContaining({
+        issue: {
+          mechanicId: "mechanic_player_movement",
+          mechanicType: "player_movement",
+          message:
+            "Mechanic mechanic_player_movement update failed: Velocity update failed",
+          phase: "update",
+          recoverable: true,
+          severity: "warning",
+          type: "mechanic-disabled",
+        },
         message:
           "Mechanic mechanic_player_movement update failed: Velocity update failed",
         type: "game-error",
@@ -1046,6 +1076,16 @@ describe("top-down Phaser template", () => {
     ]);
     expect(messages).toContainEqual(
       expect.objectContaining({
+        issue: {
+          mechanicId: "mechanic_player_movement",
+          mechanicType: "player_movement",
+          message:
+            "Mechanic mechanic_player_movement dispose failed: Dispose failed",
+          phase: "dispose",
+          recoverable: true,
+          severity: "warning",
+          type: "mechanic-disabled",
+        },
         message:
           "Mechanic mechanic_player_movement dispose failed: Dispose failed",
         type: "game-error",

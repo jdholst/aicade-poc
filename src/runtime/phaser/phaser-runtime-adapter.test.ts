@@ -85,6 +85,12 @@ describe("phaser runtime adapter", () => {
       })
     ).toEqual({
       type: "game-error",
+      issue: {
+        message: "Phaser boot failed.",
+        recoverable: false,
+        severity: "error",
+        type: "runtime-error",
+      },
       message: "Phaser boot failed.",
     });
   });

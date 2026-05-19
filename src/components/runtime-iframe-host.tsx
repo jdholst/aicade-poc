@@ -12,7 +12,7 @@ import {
 } from "react";
 
 import { SANDBOX_BOOT_TIMEOUT_MS } from "@/constants";
-import type { RuntimeAdapter } from "@/runtime/runtime-adapter";
+import type { RuntimeAdapter, RuntimeIssue } from "@/runtime/runtime-adapter";
 import {
   focusRuntimeIframe,
   postRuntimeIframeCommand,
@@ -22,6 +22,7 @@ import {
 export type RuntimeIframeStatus =
   | { state: "loading" }
   | { state: "ready" }
+  | { state: "warning"; issue: Extract<RuntimeIssue, { recoverable: true }> }
   | { state: "error"; message: string };
 
 export type RuntimeIframeHostHandle = {
@@ -101,10 +102,10 @@ function RuntimeIframeHostInner<TArtifact>(
         return;
       }
 
-      hasSettled = true;
-      window.clearTimeout(timeoutId);
-
       if (sandboxEvent.type === "game-ready") {
+        hasSettled = true;
+        window.clearTimeout(timeoutId);
+
         onStatusChange?.({
           state: "ready",
         });
@@ -118,6 +119,17 @@ function RuntimeIframeHostInner<TArtifact>(
       }
 
       if (sandboxEvent.type === "game-error") {
+        if (sandboxEvent.issue.recoverable) {
+          onStatusChange?.({
+            state: "warning",
+            issue: sandboxEvent.issue,
+          });
+          return;
+        }
+
+        hasSettled = true;
+        window.clearTimeout(timeoutId);
+
         onStatusChange?.({
           state: "error",
           message: sandboxEvent.message,
