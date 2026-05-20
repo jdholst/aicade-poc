@@ -8,8 +8,8 @@ import {
 } from "@/game-spec";
 
 import {
+  getDefaultTopDownGameSpecFixture,
   getTopDownGameSpecFixtureState,
-  topDownGameSpecFixture,
   type TopDownGameSpecFixtureState,
 } from "./top-down-game-spec-fixture";
 
@@ -77,7 +77,7 @@ export function createTopDownPhaserTemplate(
 }
 
 export const topDownPhaserTemplate =
-  createTopDownPhaserTemplate(topDownGameSpecFixture);
+  createTopDownPhaserTemplate(getDefaultTopDownGameSpecFixture());
 
 const topDownPhaserTemplateStateByFixtureState = new WeakMap<
   TopDownGameSpecFixtureState,
