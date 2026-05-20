@@ -5,37 +5,6 @@
   const PATH_CHECK_PADDING = 18;
 
   /**
-   * @param {import("@/runtime/phaser").TopDownMechanicInstallerContext} context
-   * @param {import("@/runtime/phaser").TopDownMechanicEntity["role"]} role
-   */
-  function findTargetEntityByRole(context, role) {
-    const targetIds =
-      context.mechanic && Array.isArray(context.mechanic.targetIds)
-        ? context.mechanic.targetIds
-        : [];
-
-    for (let index = 0; index < targetIds.length; index += 1) {
-      const entity = context.entities.findById(targetIds[index]);
-
-      if (entity && entity.role === role) {
-        return entity;
-      }
-    }
-
-    return context.entities.findByRole(role);
-  }
-
-  /** @param {import("@/runtime/phaser").TopDownMechanicInstallerContext} context */
-  function getPrimaryObjectiveId(context) {
-    const objectiveIds =
-      context.mechanic && Array.isArray(context.mechanic.objectiveIds)
-        ? context.mechanic.objectiveIds
-        : [];
-
-    return objectiveIds[0] || "objective_primary";
-  }
-
-  /**
    * @param {import("@/runtime/phaser").TopDownMechanicPoint} vector
    * @param {import("@/runtime/phaser").TopDownMechanicPoint} [fallback]
    */
@@ -175,13 +144,15 @@
 
   /** @type {import("@/runtime/phaser").TopDownMechanicInstaller} */
   registry.install_enemy_chase = function installEnemyChase(context) {
-    const enemyEntity = findTargetEntityByRole(context, "enemy");
-    const playerEntity = findTargetEntityByRole(context, "player");
-    const enemyEntityId =
-      enemyEntity && enemyEntity.id ? enemyEntity.id : "entity_enemy";
-    const playerEntityId =
-      playerEntity && playerEntity.id ? playerEntity.id : "entity_player";
-    const objectiveId = getPrimaryObjectiveId(context);
+    const enemyEntityId = context.entities.getTargetIdByRole(
+      "enemy",
+      "entity_enemy"
+    );
+    const playerEntityId = context.entities.getTargetIdByRole(
+      "player",
+      "entity_player"
+    );
+    const objectiveId = context.objective.getPrimaryId();
     const enemy = context.entities.createHandle(enemyEntityId, {
       kind: "circle",
       fallback: { x: 780, y: 405 },

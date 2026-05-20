@@ -4,46 +4,17 @@
 
   const PICKUP_SPAWN_PADDING = 24;
 
-  /**
-   * @param {import("@/runtime/phaser").TopDownMechanicInstallerContext} context
-   * @param {import("@/runtime/phaser").TopDownMechanicEntity["role"]} role
-   */
-  function findTargetEntityByRole(context, role) {
-    const targetIds =
-      context.mechanic && Array.isArray(context.mechanic.targetIds)
-        ? context.mechanic.targetIds
-        : [];
-
-    for (let index = 0; index < targetIds.length; index += 1) {
-      const entity = context.entities.findById(targetIds[index]);
-
-      if (entity && entity.role === role) {
-        return entity;
-      }
-    }
-
-    return context.entities.findByRole(role);
-  }
-
-  /** @param {import("@/runtime/phaser").TopDownMechanicInstallerContext} context */
-  function getPrimaryObjectiveId(context) {
-    const objectiveIds =
-      context.mechanic && Array.isArray(context.mechanic.objectiveIds)
-        ? context.mechanic.objectiveIds
-        : [];
-
-    return objectiveIds[0] || "objective_primary";
-  }
-
   /** @type {import("@/runtime/phaser").TopDownMechanicInstaller} */
   registry.install_pickup_collection = function installPickupCollection(context) {
-    const playerEntity = findTargetEntityByRole(context, "player");
-    const pickupEntity = context.entities.findByRole("pickup");
-    const playerEntityId =
-      playerEntity && playerEntity.id ? playerEntity.id : "entity_player";
-    const pickupEntityId =
-      pickupEntity && pickupEntity.id ? pickupEntity.id : "entity_pickup";
-    const objectiveId = getPrimaryObjectiveId(context);
+    const playerEntityId = context.entities.getTargetIdByRole(
+      "player",
+      "entity_player"
+    );
+    const pickupEntityId = context.entities.getTargetIdByRole(
+      "pickup",
+      "entity_pickup"
+    );
+    const objectiveId = context.objective.getPrimaryId();
     const pickup = context.entities.createHandle(pickupEntityId, {
       kind: "star",
       point: context.layout.findPickupPoint({

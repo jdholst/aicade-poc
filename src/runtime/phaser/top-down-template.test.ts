@@ -367,8 +367,14 @@ describe("top-down Phaser template", () => {
       const services = TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS.map(
         (key) => context[key]
       );
+      const helperResults = [
+        context.entities.findTargetByRole("player"),
+        context.entities.getTargetIdByRole("player", "entity_player"),
+        context.objective.getPrimaryId(),
+      ];
 
       expect(services).toHaveLength(7);
+      expect(helperResults).toHaveLength(3);
 
       return {
         dispose() {},
@@ -880,6 +886,21 @@ describe("top-down Phaser template", () => {
     const playerMovementSource = loadPublicRuntimeSource(
       "/runtime/phaser/mechanics/player-movement.js"
     );
+    const pickupCollectionSource = loadPublicRuntimeSource(
+      "/runtime/phaser/mechanics/pickup-collection.js"
+    );
+    const enemyChaseSource = loadPublicRuntimeSource(
+      "/runtime/phaser/mechanics/enemy-chase.js"
+    );
+    const hazardContactSource = loadPublicRuntimeSource(
+      "/runtime/phaser/mechanics/hazard-contact.js"
+    );
+    const mechanicSources = [
+      playerMovementSource,
+      pickupCollectionSource,
+      enemyChaseSource,
+      hazardContactSource,
+    ];
 
     expect(runtimeSource).toContain("new Phaser.Game");
     expect(runtimeSource).toContain('notify("game-ready"');
@@ -887,12 +908,19 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain("createPlayer");
     expect(runtimeSource).toContain("createEntityHandle");
     expect(runtimeSource).toContain("createMechanicContext");
+    expect(runtimeSource).toContain("findTargetByRole");
+    expect(runtimeSource).toContain("getTargetIdByRole");
+    expect(runtimeSource).toContain("getPrimaryId");
     expect(runtimeSource).not.toContain("function createObjective");
     expect(runtimeSource).not.toContain("function createChaser");
     expect(runtimeSource).not.toContain("function getChaseVelocity");
     expect(playerMovementSource).not.toContain("context.scene");
     expect(playerMovementSource).not.toContain("context.Phaser");
     expect(playerMovementSource).toContain("cursors.left.isDown");
+    mechanicSources.forEach((mechanicSource) => {
+      expect(mechanicSource).not.toContain("function findTargetEntityByRole");
+      expect(mechanicSource).not.toContain("function getPrimaryObjectiveId");
+    });
   });
 
   it("reads title, objective, and entity placement from Game Spec input", () => {

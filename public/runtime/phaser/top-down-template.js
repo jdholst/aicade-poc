@@ -571,6 +571,40 @@
           ? contextExtras.staticLayoutBodies
           : [];
 
+      function findTargetByRole(role) {
+        const targetIds =
+          mechanic && Array.isArray(mechanic.targetIds)
+            ? mechanic.targetIds
+            : [];
+
+        for (let index = 0; index < targetIds.length; index += 1) {
+          const entity = entityModule.findById(targetIds[index]);
+
+          if (entity && entity.role === role) {
+            return entity;
+          }
+        }
+
+        return entityModule.findByRole(role);
+      }
+
+      function getTargetIdByRole(role, fallbackEntityId) {
+        const targetEntity = findTargetByRole(role);
+
+        return targetEntity && targetEntity.id
+          ? targetEntity.id
+          : fallbackEntityId;
+      }
+
+      function getPrimaryObjectiveId(fallbackObjectiveId) {
+        const objectiveIds =
+          mechanic && Array.isArray(mechanic.objectiveIds)
+            ? mechanic.objectiveIds
+            : [];
+
+        return objectiveIds[0] || fallbackObjectiveId || "objective_primary";
+      }
+
       return {
         mechanic,
         entities: {
@@ -579,6 +613,8 @@
           },
           findById: entityModule.findById,
           findByRole: entityModule.findByRole,
+          findTargetByRole,
+          getTargetIdByRole,
           getHandle: entityModule.getEntityHandle,
           resetHandle: entityModule.resetEntityHandle,
         },
@@ -590,6 +626,7 @@
           staticBodies,
         },
         objective: {
+          getPrimaryId: getPrimaryObjectiveId,
           increment: objectiveModule.incrementObjectiveScore,
           reset: objectiveModule.resetObjectiveScore,
         },

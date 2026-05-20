@@ -76,6 +76,13 @@ export type TopDownMechanicEntitiesService = {
   ) => TopDownMechanicEntityHandle;
   findById: (entityId: StableId) => TopDownMechanicEntity | null;
   findByRole: (role: TopDownMechanicEntity["role"]) => TopDownMechanicEntity | null;
+  findTargetByRole: (
+    role: TopDownMechanicEntity["role"]
+  ) => TopDownMechanicEntity | null;
+  getTargetIdByRole: (
+    role: TopDownMechanicEntity["role"],
+    fallbackEntityId: StableId
+  ) => StableId;
   getHandle: (entityId: StableId) => TopDownMechanicEntityHandle | null;
   resetHandle: (entityId: StableId) => void;
 };
@@ -119,6 +126,7 @@ export type TopDownMechanicPhysicsService = {
 
 /** Objective mutations for score-like runtime state. */
 export type TopDownMechanicObjectiveService = {
+  getPrimaryId: (fallbackObjectiveId?: StableId) => StableId;
   increment: (objectiveId: StableId, amount?: number) => void;
   reset: (objectiveId: StableId) => void;
 };
