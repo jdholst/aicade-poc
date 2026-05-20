@@ -1,6 +1,6 @@
 # AI-Cade POC Implementation Plan
 
-Draft status: planning draft. This document turns the Sparkline Architecture page into a build sequence for the AI-Cade POC. The POC is a proving ground for Sparkline's game generation and creation technology, not the full Sparkline community product.
+Draft status: implementation roadmap with Phase 3/4 closeout remarks. This document turns the Sparkline Architecture page into a build sequence for the AI-Cade POC. The POC is a proving ground for Sparkline's game generation and creation technology, not the full Sparkline community product.
 
 ## Purpose
 
@@ -21,6 +21,7 @@ These Phase 3/4 model docs describe the current authoring contracts behind this 
 
 - [Game Spec Authoring Model](./game-spec-authoring-model.md)
 - [Mechanic Registry Authoring Model](./mechanic-registry-authoring-model.md)
+- [Phase 5 Prep Notes](./phase-5-prep-notes.md)
 
 ## Scope
 
@@ -89,6 +90,33 @@ Resolved Phase 3/4 shape:
 - Mechanic install/update/dispose failures should be handled defensively so a broken mechanic can be disabled and reported without crashing the editor. Deeper sandboxing and performance checks are required before AI-generated extension modules can be trusted like built-ins.
 - The schema should support an objectives list from the start, while the first top-down template only needs to fully honor one primary active objective.
 - Validation goals should remain separate from objectives so the system can ask both "what is the player trying to do?" and "what must be true for Sparkline to trust this draft as playable?"
+
+## Phase 3/4 Closeout Remarks
+
+Phase 4 can be closed as completed for the POC. The remaining cleanup notes have been carried forward into [Phase 5 Prep Notes](./phase-5-prep-notes.md) rather than keeping Phase 4 open.
+
+What Phase 3/4 proved:
+
+- The existing Canvas path and the new Phaser path can share the runtime adapter and iframe host Interface.
+- A compact top-down Game Spec can configure the hand-authored Phaser template.
+- Mechanics can be explicit Game Spec entries, bridged through the Mechanic Registry, and installed as external runtime Mechanic Modules.
+- Built-in mechanics can use a narrow typed context instead of raw Phaser scene access.
+- Mechanic-aware validation can catch missing targets, missing objectives, missing pickup coverage, unsupported mechanics, and unused authoring modules before runtime boot.
+- Runtime failures now distinguish recoverable mechanic warnings from fatal runtime errors.
+- A second valid fixture can prove a different mechanic combination without changing runtime code.
+- The editor runtime panel can present validation errors, warnings, fatal runtime errors, loading, and mounted hosts without one component owning every runtime state.
+
+Implementation findings that shifted the plan:
+
+- `game-error` remained the right runtime transport. Instead of adding a separate `mechanic-disabled` event, recoverable mechanic failures became typed `game-error.issue` payloads.
+- Invalid Game Spec handling needed to be data-shaped instead of import-time throwing. Fixture/template state now returns valid or invalid state so the editor can render a validation screen.
+- Mechanic validation belongs with declarative registry metadata, not custom validator branches per mechanic. This keeps built-ins precise while preserving a future manifest shape for generated mechanics.
+- Fixture authoring needed a catalog. The original single fixture grew into named valid fixtures, with `Crystal Spec Chase` as default and `Prism Relay Gauntlet` proving a no-enemy mechanic combination.
+- The runtime core needed internal Modules before further extraction. The single public classic script stayed in place, but its Implementation is now split into runtime config, layout, entity, objective, mechanic lifecycle, host protocol, and scene boot factories.
+- Mechanic authoring helpers belong on the existing runtime context. A separate public helper script would have added load-order surface without enough Leverage.
+- Editor runtime display needed a view model. Runtime panel behavior is now derived in a pure Module while `useEditorSession` remains the state owner.
+
+Phase 5 should start from the carried prep notes and the next milestones below, especially generated-pack completion, persistence/checkpoints, prompt-to-spec generation, and telemetry.
 
 ## Milestones
 
