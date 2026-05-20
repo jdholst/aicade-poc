@@ -557,14 +557,6 @@
     const reporter = dependencies.reporter;
     let installedMechanics = [];
 
-    function findActiveMechanic(type) {
-      return (
-        config.activeMechanics.find(function (mechanic) {
-          return mechanic.type === type;
-        }) || null
-      );
-    }
-
     function createMechanicContext(scene, mechanic, contextExtras) {
       const staticBodies =
         contextExtras && Array.isArray(contextExtras.staticLayoutBodies)
@@ -657,10 +649,8 @@
       };
     }
 
-    function installActiveMechanic(scene, type, contextExtras) {
-      const mechanic = findActiveMechanic(type);
-
-      if (!mechanic) {
+    function installActiveMechanic(scene, mechanic, contextExtras) {
+      if (!mechanic || !mechanic.type) {
         return null;
       }
 
@@ -719,7 +709,7 @@
     function installActiveMechanics(scene, contextExtras) {
       installedMechanics = config.activeMechanics
         .map(function (mechanic) {
-          return installActiveMechanic(scene, mechanic.type, contextExtras);
+          return installActiveMechanic(scene, mechanic, contextExtras);
         })
         .filter(Boolean);
 

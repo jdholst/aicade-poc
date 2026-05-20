@@ -334,6 +334,81 @@ describe("top-down Phaser template", () => {
     });
   });
 
+  it("installs duplicate mechanic types with their own mechanic entries", () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const baseMechanic = topDownPhaserTemplate.gameSpec.mechanics[0];
+    const duplicateMechanic = {
+      ...baseMechanic,
+      id: "mechanic_player_movement_second",
+      targetIds: ["entity_player_second"],
+      config: {
+        ...baseMechanic.config,
+        speed: 320,
+      },
+    };
+    const templateWithDuplicateMechanic = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          baseMechanic,
+          duplicateMechanic,
+          ...topDownPhaserTemplate.gameSpec.mechanics.slice(1),
+        ],
+      },
+    };
+    const installedMechanics: Array<{
+      config: unknown;
+      id: unknown;
+      targetIds: unknown;
+    }> = [];
+    const { context } = createRuntimeHarness(templateWithDuplicateMechanic);
+
+    Object.assign(context.globalThis, {
+      __AICADE_TOP_DOWN_MECHANICS__: {
+        install_enemy_chase() {
+          return {};
+        },
+        install_hazard_contact() {
+          return {};
+        },
+        install_pickup_collection() {
+          return {};
+        },
+        install_player_movement(installerContext: {
+          mechanic?: {
+            config?: unknown;
+            id?: unknown;
+            targetIds?: unknown;
+          };
+        }) {
+          installedMechanics.push({
+            config: installerContext.mechanic?.config,
+            id: installerContext.mechanic?.id,
+            targetIds: installerContext.mechanic?.targetIds,
+          });
+
+          return {};
+        },
+      },
+    });
+
+    runScriptInContext(runtimeSource, context);
+
+    expect(installedMechanics).toEqual([
+      {
+        config: baseMechanic.config,
+        id: "mechanic_player_movement",
+        targetIds: ["entity_player"],
+      },
+      {
+        config: duplicateMechanic.config,
+        id: "mechanic_player_movement_second",
+        targetIds: ["entity_player_second"],
+      },
+    ]);
+  });
+
   it("registers built-in installers from runtime dependency scripts", () => {
     const context: {
       globalThis: {
