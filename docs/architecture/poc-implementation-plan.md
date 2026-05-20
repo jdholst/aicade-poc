@@ -1,6 +1,6 @@
 # AI-Cade POC Implementation Plan
 
-Draft status: planning draft. This document turns the Sparkline Architecture page into a build sequence for the AI-Cade POC. The POC is a proving ground for Sparkline's game generation and creation technology, not the full Sparkline community product.
+Draft status: implementation roadmap with Phase 3/4 closeout remarks. This document turns the Sparkline Architecture page into a build sequence for the AI-Cade POC. The POC is a proving ground for Sparkline's game generation and creation technology, not the full Sparkline community product.
 
 ## Purpose
 
@@ -14,6 +14,14 @@ The POC should answer these questions:
 - Can the app validate and repair generated specs/builds enough to protect the first playable experience?
 - Can projects, checkpoints, builds, edit records, and generation telemetry be saved lightly enough to test the future Game Pack model?
 - Which modules are stable enough to promote into Sparkline v1?
+
+## Related Architecture Docs
+
+These Phase 3/4 model docs describe the current authoring contracts behind this roadmap:
+
+- [Game Spec Authoring Model](./game-spec-authoring-model.md)
+- [Mechanic Registry Authoring Model](./mechanic-registry-authoring-model.md)
+- [Phase 5 Prep Notes](./phase-5-prep-notes.md)
 
 ## Scope
 
@@ -75,8 +83,40 @@ Resolved Phase 3/4 shape:
 - Mechanics should be explicit Game Spec entries even when starter specs include common defaults such as player movement or win/loss.
 - Objectives should remain separate from mechanics. Objectives declare player-facing success, while mechanics provide the runtime behavior that makes the objective achievable and measurable.
 - Active mechanics should live as top-level module entries that can target entities, scenes, regions, or objectives by stable ID.
+- Mechanic Modules should be installable behavior units, not only labels or data definitions. The Mechanic Registry should map each active mechanic type to an installer/factory that receives a narrow runtime context plus the Game Spec mechanic entry.
+- The core top-down template should own Phaser boot, iframe protocol, scene lifecycle, layout/static collision setup, starter entity tracking, and module orchestration. Mechanic Modules should own opt-in gameplay behavior and may return `update`/`dispose` hooks.
+- The first module extraction should use a strict vertical-slice order: `player_movement` first as the install seam tracer bullet, then `pickup_collection`, then `enemy_chase`.
+- The runtime should use a middle-path object ownership model: the core creates and tracks stable world substrate and spec-declared starter entities, while modules may create dynamic mechanic-owned objects through controlled helpers for lifecycle, collision, cleanup, and error reporting.
+- Mechanic install/update/dispose failures should be handled defensively so a broken mechanic can be disabled and reported without crashing the editor. Deeper sandboxing and performance checks are required before AI-generated extension modules can be trusted like built-ins.
 - The schema should support an objectives list from the start, while the first top-down template only needs to fully honor one primary active objective.
 - Validation goals should remain separate from objectives so the system can ask both "what is the player trying to do?" and "what must be true for Sparkline to trust this draft as playable?"
+
+## Phase 3/4 Closeout Remarks
+
+Phase 4 can be closed as completed for the POC. The remaining cleanup notes have been carried forward into [Phase 5 Prep Notes](./phase-5-prep-notes.md) rather than keeping Phase 4 open.
+
+What Phase 3/4 proved:
+
+- The existing Canvas path and the new Phaser path can share the runtime adapter and iframe host Interface.
+- A compact top-down Game Spec can configure the hand-authored Phaser template.
+- Mechanics can be explicit Game Spec entries, bridged through the Mechanic Registry, and installed as external runtime Mechanic Modules.
+- Built-in mechanics can use a narrow typed context instead of raw Phaser scene access.
+- Mechanic-aware validation can catch missing targets, missing objectives, missing pickup coverage, unsupported mechanics, and unused authoring modules before runtime boot.
+- Runtime failures now distinguish recoverable mechanic warnings from fatal runtime errors.
+- A second valid fixture can prove a different mechanic combination without changing runtime code.
+- The editor runtime panel can present validation errors, warnings, fatal runtime errors, loading, and mounted hosts without one component owning every runtime state.
+
+Implementation findings that shifted the plan:
+
+- `game-error` remained the right runtime transport. Instead of adding a separate `mechanic-disabled` event, recoverable mechanic failures became typed `game-error.issue` payloads.
+- Invalid Game Spec handling needed to be data-shaped instead of import-time throwing. Fixture/template state now returns valid or invalid state so the editor can render a validation screen.
+- Mechanic validation belongs with declarative registry metadata, not custom validator branches per mechanic. This keeps built-ins precise while preserving a future manifest shape for generated mechanics.
+- Fixture authoring needed a catalog. The original single fixture grew into named valid fixtures, with `Crystal Spec Chase` as default and `Prism Relay Gauntlet` proving a no-enemy mechanic combination.
+- The runtime core needed internal Modules before further extraction. The single public classic script stayed in place, but its Implementation is now split into runtime config, layout, entity, objective, mechanic lifecycle, host protocol, and scene boot factories.
+- Mechanic authoring helpers belong on the existing runtime context. A separate public helper script would have added load-order surface without enough Leverage.
+- Editor runtime display needed a view model. Runtime panel behavior is now derived in a pure Module while `useEditorSession` remains the state owner.
+
+Phase 5 should start from the carried prep notes and the next milestones below, especially generated-pack completion, persistence/checkpoints, prompt-to-spec generation, and telemetry.
 
 ## Milestones
 
@@ -176,17 +216,26 @@ Goal: make top-down game behavior modular and opt-in through Game Spec.
 Deliverables:
 
 - Add a Mechanic Registry.
-- Implement a small initial module set: player movement, enemy chase, pickups, health/damage, score/timer, win/loss, simple obstacles.
+- Implement a small initial module set over time: player movement, enemy chase, pickups, health/damage, score/timer, win/loss, simple obstacles.
+- Extract the first built-in top-down modules structurally before behavior polish: `player_movement`, then `pickup_collection`, then `enemy_chase`.
+- Treat Mechanic Modules as installable behavior units with installer/factory functions, optional `update`/`dispose` hooks, and a narrow runtime context.
+- Keep the top-down template core responsible for Phaser boot, iframe protocol, scene lifecycle, layout/static collision, starter entity tracking, and module orchestration.
+- Allow modules to create dynamic mechanic-owned objects only through controlled runtime helpers so ownership, collision registration, cleanup, and error reporting remain centralized.
 - Let the Game Spec list active mechanics and configs.
 - Keep common defaults such as player movement or win/loss explicit in starter specs rather than hidden in template assumptions.
+- Add `pickup_collection` explicitly to the known top-down Game Spec fixture before the runtime installs pickup/scoring behavior.
 - Make mechanic configs target entities, scenes, regions, or objectives by stable ID where needed.
 - Add basic validation checks per mechanic where practical.
 - Keep unused modules out of a given game config.
+- Keep pickup spawn quality improvements and enemy pathfinding/obstacle-aware steering out of the first extraction task; handle those as follow-up behavior-quality work after the module seam exists.
 
 Acceptance criteria:
 
 - A Game Spec can turn mechanics on/off and tune values.
 - Mechanics map from spec entries to code through the registry.
+- The authored top-down runtime installs behavior from declared active mechanics instead of relying on hidden chaser-game assumptions.
+- A missing active mechanic should not silently install its behavior.
+- Mechanic installation, update, and disposal failures should be reported gracefully without crashing the editor.
 - Basic mechanic validation can detect obvious missing/broken behavior.
 - The first registry surface stays game-level and inspectable instead of hiding behavior inside entity-local blobs.
 

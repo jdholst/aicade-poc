@@ -12,7 +12,45 @@ describe("runtime adapter protocol", () => {
       parseRuntimeEvent({ type: "game-error", message: "Boot failed" })
     ).toEqual({
       type: "game-error",
+      issue: {
+        message: "Boot failed",
+        recoverable: false,
+        severity: "error",
+        type: "runtime-error",
+      },
       message: "Boot failed",
+    });
+  });
+
+  it("parses structured recoverable runtime issues from game-error events", () => {
+    expect(
+      parseRuntimeEvent({
+        type: "game-error",
+        issue: {
+          type: "mechanic-disabled",
+          severity: "warning",
+          recoverable: true,
+          mechanicId: "mechanic_player_movement",
+          mechanicType: "player_movement",
+          phase: "install",
+          message:
+            "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+        },
+      })
+    ).toEqual({
+      type: "game-error",
+      issue: {
+        type: "mechanic-disabled",
+        severity: "warning",
+        recoverable: true,
+        mechanicId: "mechanic_player_movement",
+        mechanicType: "player_movement",
+        phase: "install",
+        message:
+          "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+      },
+      message:
+        "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
     });
   });
 
@@ -37,7 +75,35 @@ describe("runtime adapter protocol", () => {
 
     expect(parseRuntimeEvent({ type: "game-error" })).toEqual({
       type: "game-error",
+      issue: {
+        message: "Generated module crashed.",
+        recoverable: false,
+        severity: "error",
+        type: "runtime-error",
+      },
       message: "Generated module crashed.",
+    });
+
+    expect(
+      parseRuntimeEvent({
+        type: "game-error",
+        issue: {
+          type: "future-runtime-warning",
+          severity: "warning",
+          recoverable: true,
+          message: "A future issue type was emitted.",
+        },
+        message: "Fallback message.",
+      })
+    ).toEqual({
+      type: "game-error",
+      issue: {
+        message: "Fallback message.",
+        recoverable: false,
+        severity: "error",
+        type: "runtime-error",
+      },
+      message: "Fallback message.",
     });
   });
 

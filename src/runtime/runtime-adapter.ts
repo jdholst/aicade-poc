@@ -12,9 +12,26 @@ export type RuntimeViewport = {
   scaling: "stretch_to_fill";
 };
 
+export type RuntimeIssue =
+  | {
+      type: "mechanic-disabled";
+      severity: "warning";
+      recoverable: true;
+      mechanicId: string;
+      mechanicType: string;
+      phase: "install" | "update" | "dispose";
+      message: string;
+    }
+  | {
+      type: "runtime-error";
+      severity: "error";
+      recoverable: false;
+      message: string;
+    };
+
 export type RuntimeEvent =
   | { type: "game-ready"; manifest?: unknown; viewport?: RuntimeViewport }
-  | { type: "game-error"; message: string }
+  | { type: "game-error"; issue: RuntimeIssue; message: string }
   | { type: "game-debug-event"; message: string; data?: unknown };
 
 export type RuntimeMountDescriptor = {
@@ -33,6 +50,14 @@ type RuntimeCommandTarget = {
   postMessage: (command: RuntimeCommand, targetOrigin: string) => void;
 };
 
+type RuntimeIssueCandidate = Record<string, unknown>;
+type RuntimeIssueParser = (issue: RuntimeIssueCandidate) => RuntimeIssue | null;
+
+const runtimeIssueParsers = {
+  "mechanic-disabled": parseMechanicDisabledIssue,
+  "runtime-error": parseRuntimeErrorIssue,
+} satisfies Record<RuntimeIssue["type"], RuntimeIssueParser>;
+
 export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
   if (!data || typeof data !== "object") {
     return null;
@@ -43,6 +68,7 @@ export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
     type?: unknown;
     manifest?: unknown;
     message?: unknown;
+    issue?: unknown;
     viewport?: unknown;
   };
 
@@ -62,12 +88,12 @@ export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
   }
 
   if (event.type === "game-error") {
+    const issue = parseRuntimeIssue(event.issue, event.message);
+
     return {
       type: "game-error",
-      message:
-        typeof event.message === "string"
-          ? event.message
-          : "Generated module crashed.",
+      issue,
+      message: issue.message,
     };
   }
 
@@ -88,6 +114,99 @@ export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
   }
 
   return null;
+}
+
+function parseRuntimeIssue(
+  issue: unknown,
+  fallbackMessage: unknown
+): RuntimeIssue {
+  if (!isRecord(issue) || typeof issue.type !== "string") {
+    return createRuntimeErrorIssue(fallbackMessage);
+  }
+
+  const parser = isRuntimeIssueType(issue.type)
+    ? runtimeIssueParsers[issue.type]
+    : undefined;
+
+  return parser?.(issue) ?? createRuntimeErrorIssue(fallbackMessage);
+}
+
+function parseMechanicDisabledIssue(
+  issue: RuntimeIssueCandidate
+): RuntimeIssue | null {
+  const mechanicId = readString(issue, "mechanicId");
+  const mechanicType = readString(issue, "mechanicType");
+  const message = readString(issue, "message");
+  const phase = issue.phase;
+
+  if (
+    issue.severity !== "warning" ||
+    issue.recoverable !== true ||
+    !mechanicId ||
+    !mechanicType ||
+    !message ||
+    !isMechanicFailurePhase(phase)
+  ) {
+    return null;
+  }
+
+  return {
+    type: "mechanic-disabled",
+    severity: "warning",
+    recoverable: true,
+    mechanicId,
+    mechanicType,
+    phase,
+    message,
+  };
+}
+
+function parseRuntimeErrorIssue(
+  issue: RuntimeIssueCandidate
+): RuntimeIssue | null {
+  const message = readString(issue, "message");
+
+  if (
+    issue.severity !== "error" ||
+    issue.recoverable !== false ||
+    !message
+  ) {
+    return null;
+  }
+
+  return createRuntimeErrorIssue(message);
+}
+
+function createRuntimeErrorIssue(message: unknown): RuntimeIssue {
+  return {
+    type: "runtime-error",
+    severity: "error",
+    recoverable: false,
+    message: typeof message === "string" ? message : "Generated module crashed.",
+  };
+}
+
+function isRuntimeIssueType(
+  type: string
+): type is keyof typeof runtimeIssueParsers {
+  return type in runtimeIssueParsers;
+}
+
+function readString(
+  record: RuntimeIssueCandidate,
+  key: string
+): string | undefined {
+  return typeof record[key] === "string" ? record[key] : undefined;
+}
+
+function isRecord(value: unknown): value is RuntimeIssueCandidate {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isMechanicFailurePhase(
+  phase: unknown
+): phase is Extract<RuntimeIssue, { type: "mechanic-disabled" }>["phase"] {
+  return phase === "install" || phase === "update" || phase === "dispose";
 }
 
 export function postRuntimeCommand(

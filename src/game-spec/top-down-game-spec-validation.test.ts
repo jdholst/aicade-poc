@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { validateTopDownGameSpec } from ".";
+import { GameSpecValidationError, validateTopDownGameSpec } from ".";
 
 const validTopDownGameSpec = {
   schemaVersion: "game-spec/v1",
@@ -113,7 +113,9 @@ const validTopDownGameSpec = {
     {
       id: "mechanic_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player"],
+      targetIds: ["entity_player", "entity_crystal"],
+      sceneIds: ["scene_arena"],
+      assetIds: ["asset_crystal"],
       objectiveIds: ["objective_collect_crystal"],
       config: {
         assetId: "asset_crystal",
@@ -121,6 +123,18 @@ const validTopDownGameSpec = {
     },
   ],
 };
+
+function getValidationIssues(input: unknown) {
+  try {
+    validateTopDownGameSpec(input);
+  } catch (error) {
+    expect(error).toBeInstanceOf(GameSpecValidationError);
+
+    return (error as GameSpecValidationError).issues;
+  }
+
+  throw new Error("Expected Game Spec validation to fail.");
+}
 
 describe("Top-down Game Spec pre-runtime validation", () => {
   it("accepts a structurally and semantically valid top-down fixture", () => {
@@ -160,60 +174,96 @@ describe("Top-down Game Spec pre-runtime validation", () => {
   it("rejects broken objective, validation goal, entity, and asset references", () => {
     const scene = validTopDownGameSpec.template.config.scenes[0];
 
-    expect(() =>
-      validateTopDownGameSpec({
-        ...validTopDownGameSpec,
-        validationGoals: [
-          {
-            ...validTopDownGameSpec.validationGoals[0],
-            objectiveId: "objective_missing",
-          },
-        ],
-        mechanics: [
-          {
-            ...validTopDownGameSpec.mechanics[0],
-            targetIds: ["entity_missing"],
-            objectiveIds: ["objective_missing"],
-          },
-        ],
-        template: {
-          ...validTopDownGameSpec.template,
-          config: {
-            scenes: [
-              {
-                ...scene,
-                objectiveIds: ["objective_missing"],
-                validationGoalIds: ["validation_missing"],
-                layout: {
-                  ...scene.layout,
-                  spawnZones: [
-                    {
-                      ...scene.layout.spawnZones[0],
-                      entityIds: ["entity_missing"],
-                    },
-                  ],
-                  pickupZones: [
-                    {
-                      ...scene.layout.pickupZones[0],
-                      assetIds: ["asset_missing"],
-                    },
-                  ],
-                },
-              },
-            ],
-          },
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      validationGoals: [
+        {
+          ...validTopDownGameSpec.validationGoals[0],
+          objectiveId: "objective_missing",
         },
-      })
-    ).toThrow(
-      [
-        "validationGoals.validation_collectible_reachable.objectiveId: Unknown objective ID \"objective_missing\".",
-        "mechanics.mechanic_player_movement.targetIds: Unknown entity ID \"entity_missing\".",
-        "mechanics.mechanic_player_movement.objectiveIds: Unknown objective ID \"objective_missing\".",
-        "scenes.scene_arena.objectiveIds: Unknown objective ID \"objective_missing\".",
-        "scenes.scene_arena.validationGoalIds: Unknown validation goal ID \"validation_missing\".",
-        "scenes.scene_arena.layout.spawnZones.spawn_player.entityIds: Unknown entity ID \"entity_missing\".",
-        "scenes.scene_arena.layout.pickupZones.pickup_crystals.assetIds: Unknown asset ID \"asset_missing\".",
-      ].join(" ")
+      ],
+      mechanics: [
+        {
+          ...validTopDownGameSpec.mechanics[0],
+          targetIds: ["entity_missing"],
+          sceneIds: ["scene_missing"],
+          regionIds: ["region_missing"],
+          assetIds: ["asset_missing"],
+          objectiveIds: ["objective_missing"],
+        },
+      ],
+      template: {
+        ...validTopDownGameSpec.template,
+        config: {
+          scenes: [
+            {
+              ...scene,
+              objectiveIds: ["objective_missing"],
+              validationGoalIds: ["validation_missing"],
+              layout: {
+                ...scene.layout,
+                spawnZones: [
+                  {
+                    ...scene.layout.spawnZones[0],
+                    entityIds: ["entity_missing"],
+                  },
+                ],
+                pickupZones: [
+                  {
+                    ...scene.layout.pickupZones[0],
+                    assetIds: ["asset_missing"],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        {
+          path: "validationGoals.validation_collectible_reachable.objectiveId",
+          message: 'Unknown objective ID "objective_missing".',
+        },
+        {
+          path: "mechanics.mechanic_player_movement.targetIds",
+          message: 'Unknown entity ID "entity_missing".',
+        },
+        {
+          path: "mechanics.mechanic_player_movement.sceneIds",
+          message: 'Unknown scene ID "scene_missing".',
+        },
+        {
+          path: "mechanics.mechanic_player_movement.regionIds",
+          message: 'Unknown region ID "region_missing".',
+        },
+        {
+          path: "mechanics.mechanic_player_movement.assetIds",
+          message: 'Unknown asset ID "asset_missing".',
+        },
+        {
+          path: "mechanics.mechanic_player_movement.objectiveIds",
+          message: 'Unknown objective ID "objective_missing".',
+        },
+        {
+          path: "scenes.scene_arena.objectiveIds",
+          message: 'Unknown objective ID "objective_missing".',
+        },
+        {
+          path: "scenes.scene_arena.validationGoalIds",
+          message: 'Unknown validation goal ID "validation_missing".',
+        },
+        {
+          path: "scenes.scene_arena.layout.spawnZones.spawn_player.entityIds",
+          message: 'Unknown entity ID "entity_missing".',
+        },
+        {
+          path: "scenes.scene_arena.layout.pickupZones.pickup_crystals.assetIds",
+          message: 'Unknown asset ID "asset_missing".',
+        },
+      ])
     );
   });
 
@@ -230,6 +280,139 @@ describe("Top-down Game Spec pre-runtime validation", () => {
       })
     ).toThrow(
       'mechanics.mechanic_player_movement.type: Unsupported mechanic type "teleport_player".'
+    );
+  });
+
+  it("rejects mechanics missing required target roles", () => {
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      mechanics: [
+        {
+          ...validTopDownGameSpec.mechanics[0],
+          targetIds: ["entity_crystal"],
+        },
+      ],
+    });
+
+    expect(issues).toContainEqual({
+      path: "mechanics.mechanic_player_movement.targetIds",
+      message: 'Expected target role "player".',
+    });
+  });
+
+  it("rejects mechanics missing required asset roles and objective references", () => {
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      mechanics: [
+        {
+          ...validTopDownGameSpec.mechanics[1],
+          assetIds: ["asset_player"],
+          objectiveIds: [],
+        },
+      ],
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        {
+          path: "mechanics.mechanic_pickup_collection.assetIds",
+          message: 'Expected asset role "pickup".',
+        },
+        {
+          path: "mechanics.mechanic_pickup_collection.objectiveIds",
+          message: "Expected an objective reference.",
+        },
+      ])
+    );
+  });
+
+  it("rejects pickup collection when referenced pickup assets are not covered by a pickup zone", () => {
+    const scene = validTopDownGameSpec.template.config.scenes[0];
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      template: {
+        ...validTopDownGameSpec.template,
+        config: {
+          scenes: [
+            {
+              ...scene,
+              layout: {
+                ...scene.layout,
+                pickupZones: [],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(issues).toContainEqual({
+      path: "mechanics.mechanic_pickup_collection.assetIds",
+      message: "Expected a referenced pickup asset to be placed in a pickup zone.",
+    });
+  });
+
+  it("rejects unused non-player entities, pickup assets, objectives, and validation goals", () => {
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      entities: [
+        ...validTopDownGameSpec.entities,
+        {
+          id: "entity_unused_enemy",
+          role: "enemy",
+          name: "Unused Enemy",
+        },
+      ],
+      assets: [
+        ...validTopDownGameSpec.assets,
+        {
+          id: "asset_unused_pickup",
+          role: "pickup",
+          name: "Unused Pickup",
+          source: "template",
+        },
+      ],
+      objectives: [
+        ...validTopDownGameSpec.objectives,
+        {
+          id: "objective_unused_bonus",
+          label: "Unused bonus",
+          description: "This objective is not wired into the scene or mechanics.",
+          primary: false,
+        },
+      ],
+      validationGoals: [
+        ...validTopDownGameSpec.validationGoals,
+        {
+          id: "validation_unused_bonus",
+          label: "Unused validation",
+          description: "This validation goal is not wired into the scene.",
+          objectiveId: "objective_collect_crystal",
+        },
+      ],
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        {
+          path: "entities.entity_unused_enemy",
+          message: "Entity is not referenced by any spawn zone or active mechanic.",
+        },
+        {
+          path: "assets.asset_unused_pickup",
+          message:
+            "Pickup asset is not referenced by any pickup zone or active mechanic.",
+        },
+        {
+          path: "objectives.objective_unused_bonus",
+          message:
+            "Objective is not referenced by any scene, validation goal, or active mechanic.",
+        },
+        {
+          path: "validationGoals.validation_unused_bonus",
+          message: "Validation goal is not referenced by any scene.",
+        },
+      ])
     );
   });
 });

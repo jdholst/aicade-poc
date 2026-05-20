@@ -6,6 +6,7 @@ import { DEFAULT_OPENAI_MODEL } from "@/constants";
 import type { RuntimeIframeStatus } from "@/components/runtime-iframe-host";
 import { useStarterProjectGeneration } from "@/hooks/use-starter-project-generation";
 import { createInitialGameStatus } from "@/runtime/editor-runtime-mode";
+import type { RuntimeIssue } from "@/runtime/runtime-adapter";
 import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
@@ -53,7 +54,10 @@ export type EditorGameCanvasSession = {
   gameStatus: GeneratedGameStatus;
   isGamePaused: boolean;
   loadState: StarterProjectLoadState;
+  runtimeWarnings: RuntimeWarningIssue[];
 };
+
+export type RuntimeWarningIssue = Extract<RuntimeIssue, { recoverable: true }>;
 
 export type GeneratedGameStatus =
   | { state: "loading"; message: string }
@@ -89,8 +93,12 @@ export function useEditorSession({
   const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>(() =>
     createInitialGameStatus()
   );
+  const [runtimeWarnings, setRuntimeWarnings] = useState<RuntimeWarningIssue[]>(
+    []
+  );
 
   const handleGenerationStarted = useCallback(() => {
+    setRuntimeWarnings([]);
     setGameStatus({
       state: "loading",
       message: "Waiting for generated module...",
@@ -146,6 +154,7 @@ export function useEditorSession({
 
   function resetGame() {
     setIsGamePaused(false);
+    setRuntimeWarnings([]);
     setGameStatus({
       state: "loading",
       message: "Resetting Phaser runtime...",
@@ -155,11 +164,26 @@ export function useEditorSession({
 
   const handleRuntimeStatusChange = useCallback(
     (status: RuntimeIframeStatus) => {
+      if (status.state === "warning") {
+        setRuntimeWarnings((warnings) =>
+          appendRuntimeWarning(warnings, status.issue)
+        );
+        return;
+      }
+
       if (status.state === "loading") {
-        setGameStatus({
-          state: "loading",
-          message: "Booting Phaser runtime...",
-        });
+        setRuntimeWarnings((warnings) =>
+          warnings.length === 0 ? warnings : []
+        );
+        setGameStatus((currentStatus) =>
+          currentStatus.state === "loading" &&
+          currentStatus.message === "Booting Phaser runtime..."
+            ? currentStatus
+            : {
+                state: "loading",
+                message: "Booting Phaser runtime...",
+              }
+        );
         return;
       }
 
@@ -196,6 +220,7 @@ export function useEditorSession({
     gameStatus,
     isGamePaused,
     loadState,
+    runtimeWarnings,
   };
 
   return {
@@ -220,4 +245,18 @@ export function useEditorSession({
       },
     },
   };
+}
+
+function appendRuntimeWarning(
+  warnings: RuntimeWarningIssue[],
+  nextWarning: RuntimeWarningIssue
+) {
+  const hasWarning = warnings.some(
+    (warning) =>
+      warning.mechanicId === nextWarning.mechanicId &&
+      warning.phase === nextWarning.phase &&
+      warning.message === nextWarning.message
+  );
+
+  return hasWarning ? warnings : [...warnings, nextWarning];
 }

@@ -86,6 +86,7 @@ function createCanvasSession(
     loadState: {
       status: "idle",
     },
+    runtimeWarnings: [],
     ...overrides,
   };
 }
@@ -93,6 +94,7 @@ function createCanvasSession(
 describe("EditorGameCanvas", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.doUnmock("@/runtime/phaser");
     vi.restoreAllMocks();
   });
 
@@ -111,8 +113,8 @@ describe("EditorGameCanvas", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows a recoverable validation state when the Phaser Game Spec is invalid", () => {
-    vi.stubEnv("NEXT_PUBLIC_AICADE_USE_INVALID_GAME_SPEC", "1");
+  it("mounts the selected top-down Phaser fixture", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
 
     render(
       <EditorGameCanvas
@@ -121,16 +123,9 @@ describe("EditorGameCanvas", () => {
       />
     );
 
-    expect(screen.getByText("Game Spec validation failed")).toBeVisible();
-    expect(screen.getByText("The runtime was not started.")).toBeVisible();
-    expect(
-      screen.getByText(
-        "Game Spec validation failed: objectives: Expected exactly one primary objective."
-      )
-    ).toBeVisible();
+    expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reset game" })).toBeDisabled();
+    expect(screen.getByText("Phaser runtime")).toBeVisible();
   });
 
   it("shows the Canvas initial runtime screen when the runtime override is canvas2d", () => {
@@ -235,6 +230,106 @@ describe("EditorGameCanvas", () => {
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
+  it("shows recoverable runtime warnings without blocking controls", () => {
+    const onReset = vi.fn();
+    const onTogglePaused = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onReset, onTogglePaused })}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "ready",
+            message: "Phaser runtime is running in the sandbox.",
+          },
+          runtimeWarnings: [
+            {
+              type: "mechanic-disabled",
+              severity: "warning",
+              recoverable: true,
+              mechanicId: "mechanic_player_movement",
+              mechanicType: "player_movement",
+              phase: "install",
+              message:
+                "Mechanic mechanic_player_movement install failed: Keyboard setup failed",
+            },
+          ],
+        })}
+      />
+    );
+
+    const pauseButton = screen.getByRole("button", { name: "Pause game" });
+    const resetButton = screen.getByRole("button", { name: "Reset game" });
+
+    expect(screen.getByText("Mechanic warning")).toBeVisible();
+    expect(screen.getByText("Warning 1 of 1")).toBeVisible();
+    expect(screen.getByText("player_movement disabled")).toBeVisible();
+    expect(screen.getByText("install")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Mechanic mechanic_player_movement install failed: Keyboard setup failed"
+      )
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Previous warning" })
+    ).not.toBeInTheDocument();
+    expect(pauseButton).toBeEnabled();
+    expect(resetButton).toBeEnabled();
+
+    fireEvent.click(pauseButton);
+    fireEvent.click(resetButton);
+
+    expect(onTogglePaused).toHaveBeenCalledTimes(1);
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets users cycle through multiple recoverable runtime warnings", () => {
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "ready",
+            message: "Phaser runtime is running in the sandbox.",
+          },
+          runtimeWarnings: [
+            {
+              type: "mechanic-disabled",
+              severity: "warning",
+              recoverable: true,
+              mechanicId: "mechanic_player_movement",
+              mechanicType: "player_movement",
+              phase: "install",
+              message: "Movement failed.",
+            },
+            {
+              type: "mechanic-disabled",
+              severity: "warning",
+              recoverable: true,
+              mechanicId: "mechanic_chaser_enemy",
+              mechanicType: "enemy_chase",
+              phase: "update",
+              message: "Chase failed.",
+            },
+          ],
+        })}
+      />
+    );
+
+    expect(screen.getByText("Warning 1 of 2")).toBeVisible();
+    expect(screen.getByText("player_movement disabled")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next warning" }));
+
+    expect(screen.getByText("Warning 2 of 2")).toBeVisible();
+    expect(screen.getByText("enemy_chase disabled")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous warning" }));
+
+    expect(screen.getByText("Warning 1 of 2")).toBeVisible();
+    expect(screen.getByText("player_movement disabled")).toBeVisible();
+  });
+
   it("shows the loading runtime screen while generation is running", () => {
     render(
       <EditorGameCanvas
@@ -281,5 +376,43 @@ describe("EditorGameCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Phaser Game Spec validation errors without crashing the editor", async () => {
+    vi.resetModules();
+    vi.doMock("@/runtime/phaser", () => ({
+      getTopDownPhaserTemplateState: () => ({
+        status: "invalid",
+        message:
+          'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+        issues: [
+          {
+            path: "mechanics.mechanic_player_movement.targetIds",
+            message: 'Expected target role "player".',
+          },
+        ],
+      }),
+      phaserRuntimeAdapter: {},
+    }));
+
+    const { EditorGameCanvas: MockedEditorGameCanvas } = await import(
+      "./editor-game-canvas"
+    );
+
+    render(
+      <MockedEditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    expect(screen.getByText("Game Spec validation failed")).toBeVisible();
+    expect(screen.getByText("The runtime was not started.")).toBeVisible();
+    expect(
+      screen.getByText(
+        'mechanics.mechanic_player_movement.targetIds: Expected target role "player".'
+      )
+    ).toBeVisible();
+    expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });
 });

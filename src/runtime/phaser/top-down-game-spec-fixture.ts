@@ -5,198 +5,23 @@ import {
   type TopDownGameSpec,
 } from "@/game-spec";
 
-const validTopDownGameSpecFixtureInput = {
-  schemaVersion: "game-spec/v1",
-  id: "game_crystal_spec_chase",
-  title: "Crystal Spec Chase",
-  currentIntentSummary: "Collect crystals in a spec-authored arena.",
-  template: {
-    id: "template_top_down",
-    version: "1.0.0",
-    config: {
-      scenes: [
-        {
-          id: "scene_arena",
-          name: "Crystal Arena",
-          objectiveIds: ["objective_collect_crystals"],
-          validationGoalIds: ["validation_collectible_reachable"],
-          arena: {
-            id: "arena_main",
-            width: 800,
-            height: 600,
-          },
-          layout: {
-            walls: [
-              {
-                id: "wall_north",
-                x: 0,
-                y: 0,
-                width: 800,
-                height: 24,
-              },
-              {
-                id: "wall_south",
-                x: 0,
-                y: 576,
-                width: 800,
-                height: 24,
-              },
-            ],
-            obstacles: [
-              {
-                id: "obstacle_crate",
-                shape: "rect",
-                x: 380,
-                y: 280,
-                width: 64,
-                height: 48,
-              },
-              {
-                id: "obstacle_boulder",
-                shape: "circle",
-                x: 560,
-                y: 180,
-                radius: 28,
-              },
-              {
-                id: "obstacle_boulder2",
-                shape: "circle",
-                x: 300,
-                y: 100,
-                radius: 14,
-              },
-            ],
-            spawnZones: [
-              {
-                id: "spawn_player",
-                x: 96,
-                y: 256,
-                width: 120,
-                height: 120,
-                entityIds: ["entity_player"],
-              },
-              {
-                id: "spawn_chaser",
-                x: 620,
-                y: 380,
-                width: 96,
-                height: 96,
-                entityIds: ["entity_chaser"],
-              },
-            ],
-            pickupZones: [
-              {
-                id: "pickup_crystals",
-                x: 200,
-                y: 200,
-                width: 400,
-                height: 400,
-                assetIds: ["asset_crystal"],
-              },
-            ],
-            regions: [
-              {
-                id: "region_safe_start",
-                label: "Safe Start",
-                x: 72,
-                y: 232,
-                width: 160,
-                height: 160,
-              },
-            ],
-          },
-        },
-      ],
-    },
-  },
-  controls: [
-    {
-      id: "control_move",
-      action: "move",
-      label: "Move",
-      kind: "axis",
-      keys: ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
-    },
-  ],
-  entities: [
-    {
-      id: "entity_player",
-      role: "player",
-      name: "Player",
-    },
-    {
-      id: "entity_crystal",
-      role: "pickup",
-      name: "Crystal",
-    },
-    {
-      id: "entity_chaser",
-      role: "enemy",
-      name: "Chaser",
-    },
-  ],
-  assets: [
-    {
-      id: "asset_player",
-      role: "player",
-      name: "Player Placeholder",
-      source: "template",
-    },
-    {
-      id: "asset_crystal",
-      role: "pickup",
-      name: "Crystal Placeholder",
-      source: "template",
-    },
-  ],
-  objectives: [
-    {
-      id: "objective_collect_crystals",
-      label: "Collect crystals",
-      description: "Collect 5 crystals before the chaser catches you.",
-      primary: true,
-    },
-  ],
-  validationGoals: [
-    {
-      id: "validation_collectible_reachable",
-      label: "Collectible reachable",
-      description: "At least one collectible can be reached by the player.",
-      objectiveId: "objective_collect_crystals",
-    },
-  ],
-  mechanics: [
-    {
-      id: "mechanic_player_movement",
-      type: "player_movement",
-      targetIds: ["entity_player"],
-      objectiveIds: ["objective_collect_crystals"],
-      config: {},
-    },
-    {
-      id: "mechanic_chaser_enemy",
-      type: "enemy_chase",
-      targetIds: ["entity_chaser", "entity_player"],
-      objectiveIds: ["objective_collect_crystals"],
-      config: {
-        speed: 96,
-      },
-    },
-  ],
-};
+import { crystalSpecChaseGameSpecFixtureInput } from "./fixtures/crystal-spec-chase";
+import { prismRelayGauntletGameSpecFixtureInput } from "./fixtures/prism-relay-gauntlet";
 
-const invalidTopDownGameSpecFixtureInput = {
-  ...validTopDownGameSpecFixtureInput,
-  title: "Invalid Crystal Spec Chase",
-  objectives: validTopDownGameSpecFixtureInput.objectives.map((objective) => ({
-    ...objective,
-    primary: false,
-  })),
-};
+export const TOP_DOWN_GAME_SPEC_FIXTURE_ENV =
+  "NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE";
+export const DEFAULT_TOP_DOWN_GAME_SPEC_FIXTURE_ID = "crystal_spec_chase";
+
+const topDownGameSpecFixtureInputs = {
+  crystal_spec_chase: crystalSpecChaseGameSpecFixtureInput,
+  prism_relay_gauntlet: prismRelayGauntletGameSpecFixtureInput,
+} as const;
+
+export type TopDownGameSpecFixtureId = keyof typeof topDownGameSpecFixtureInputs;
 
 export type TopDownGameSpecFixtureState =
   | {
-      gameSpec: TopDownGameSpec;
+      fixture: TopDownGameSpec;
       status: "valid";
     }
   | {
@@ -205,43 +30,91 @@ export type TopDownGameSpecFixtureState =
       status: "invalid";
     };
 
-export function getTopDownGameSpecFixtureState(
-  useValidFixture = true
-): TopDownGameSpecFixtureState {
-  const input = useValidFixture
-    ? validTopDownGameSpecFixtureInput
-    : invalidTopDownGameSpecFixtureInput;
+const topDownGameSpecFixtureStateById = new Map<
+  TopDownGameSpecFixtureId,
+  TopDownGameSpecFixtureState
+>();
 
+function createInvalidFixtureState(error: unknown): TopDownGameSpecFixtureState {
+  if (error instanceof GameSpecValidationError) {
+    return {
+      status: "invalid",
+      issues: error.issues,
+      message: error.message.replace(/^Game Spec validation failed: /, ""),
+    };
+  }
+
+  return {
+    status: "invalid",
+    issues: [],
+    message:
+      error instanceof Error
+        ? error.message
+        : "Game Spec validation failed for the selected fixture.",
+  };
+}
+
+export function createTopDownGameSpecFixtureState(
+  fixtureInput: unknown
+): TopDownGameSpecFixtureState {
   try {
     return {
-      gameSpec: validateTopDownGameSpec(input),
       status: "valid",
+      fixture: validateTopDownGameSpec(fixtureInput),
     };
   } catch (error) {
-    if (error instanceof GameSpecValidationError) {
-      return {
-        issues: error.issues,
-        message: error.message,
-        status: "invalid",
-      };
-    }
-
-    if (error instanceof Error) {
-      return {
-        issues: [],
-        message: error.message,
-        status: "invalid",
-      };
-    }
-
-    return {
-      issues: [],
-      message: "Unknown Game Spec validation failure.",
-      status: "invalid",
-    };
+    return createInvalidFixtureState(error);
   }
 }
 
-export const topDownGameSpecFixture = validateTopDownGameSpec(
-  validTopDownGameSpecFixtureInput
-);
+function createTopDownGameSpecFixtureStateForId(
+  fixtureId: TopDownGameSpecFixtureId
+): TopDownGameSpecFixtureState {
+  return createTopDownGameSpecFixtureState(
+    topDownGameSpecFixtureInputs[fixtureId]
+  );
+}
+
+export function getTopDownGameSpecFixture(
+  fixtureId = process.env[TOP_DOWN_GAME_SPEC_FIXTURE_ENV]
+): TopDownGameSpec {
+  const fixtureState = getTopDownGameSpecFixtureState(fixtureId);
+
+  if (fixtureState.status === "valid") {
+    return fixtureState.fixture;
+  }
+
+  throw new GameSpecValidationError(fixtureState.issues);
+}
+
+export function getTopDownGameSpecFixtureState(
+  fixtureId = process.env[TOP_DOWN_GAME_SPEC_FIXTURE_ENV]
+): TopDownGameSpecFixtureState {
+  const resolvedFixtureId = resolveTopDownGameSpecFixtureId(fixtureId);
+  const cachedState = topDownGameSpecFixtureStateById.get(resolvedFixtureId);
+
+  if (cachedState) {
+    return cachedState;
+  }
+
+  const fixtureState = createTopDownGameSpecFixtureStateForId(resolvedFixtureId);
+  topDownGameSpecFixtureStateById.set(resolvedFixtureId, fixtureState);
+
+  return fixtureState;
+}
+
+function resolveTopDownGameSpecFixtureId(
+  fixtureId: string | undefined
+): TopDownGameSpecFixtureId {
+  if (fixtureId && fixtureId in topDownGameSpecFixtureInputs) {
+    return fixtureId as TopDownGameSpecFixtureId;
+  }
+
+  return DEFAULT_TOP_DOWN_GAME_SPEC_FIXTURE_ID;
+}
+
+export function getDefaultTopDownGameSpecFixture(): TopDownGameSpec {
+  return getTopDownGameSpecFixture(DEFAULT_TOP_DOWN_GAME_SPEC_FIXTURE_ID);
+}
+
+export const topDownGameSpecFixture = getDefaultTopDownGameSpecFixture();

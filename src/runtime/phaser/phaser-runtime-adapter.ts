@@ -19,6 +19,9 @@ export function createPhaserRuntimeDocument(
   template: HandAuthoredPhaserTemplate
 ) {
   const templateJson = escapeJsonForScript(template);
+  const dependencyScriptTags = template.runtimeDependencyScriptPaths
+    .map((scriptPath) => `    <script src="${scriptPath}"></script>`)
+    .join("\n");
 
   return `<!doctype html>
 <html>
@@ -75,6 +78,7 @@ export function createPhaserRuntimeDocument(
       })();
     </script>
     <script src="${PHASER_ARCADE_RUNTIME_PATH}"></script>
+${dependencyScriptTags}
     <script src="${template.runtimeScriptPath}"></script>
   </body>
 </html>`;

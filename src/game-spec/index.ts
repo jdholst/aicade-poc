@@ -10,6 +10,23 @@ export {
 } from "./game-spec-schema";
 
 export {
+  createMechanicRuntimeBridge,
+  getMechanicDefinitionForScope,
+  getMechanicDefinitionsForScope,
+  getTopDownMechanicDefinition,
+  getTopDownMechanicDefinitionsForSpec,
+  TOP_DOWN_PHASER_MECHANIC_SCOPE,
+  topDownMechanicRegistry,
+  type MechanicCapabilityTag,
+  type MechanicRegistryEntry,
+  type MechanicRuntimeBridge,
+  type MechanicRuntimeBridgeInput,
+  type MechanicRuntimeScope,
+  type MechanicValidationLayoutCoverageRequirement,
+  type MechanicValidationRequirements,
+} from "./mechanics/mechanic-registry";
+
+export {
   GameSpecValidationError,
   getTopDownGameSpecValidationIssues,
   validateTopDownGameSpec,
