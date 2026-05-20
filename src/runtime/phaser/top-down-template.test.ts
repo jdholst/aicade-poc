@@ -1,7 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { runInNewContext } from "node:vm";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getTopDownMechanicDefinition, validateTopDownGameSpec } from "@/game-spec";
@@ -18,307 +14,15 @@ import {
   getTopDownGameSpecFixture,
   TOP_DOWN_GAME_SPEC_FIXTURE_ENV,
 } from "./top-down-game-spec-fixture";
+import {
+  createRuntimeHarness,
+  createTemplateWithSceneLayout,
+  loadPublicRuntimeSource,
+  loadTopDownRuntimeSource,
+  runScriptInContext,
+  runTopDownRuntime,
+} from "./testing/top-down-runtime-harness";
 import type { TopDownMechanicInstaller } from "./top-down-mechanic-runtime";
-
-type PostedMessage = {
-  manifest?: {
-    title?: string;
-  };
-  type: string;
-  viewport?: {
-    height: number;
-    width: number;
-  };
-};
-
-type GameElement = {
-  body?: {
-    setAllowGravity: () => void;
-    setCollideWorldBounds: () => void;
-    setVelocity: (x: number, y: number) => void;
-    velocityCalls: Array<{ x: number; y: number }>;
-  };
-  kind: string;
-  setPosition?: (x: number, y: number) => void;
-  setStrokeStyle?: () => GameElement;
-  x: number;
-  y: number;
-};
-
-type RuntimeHarnessContext = {
-  Phaser: Record<string, unknown>;
-  globalThis: {
-    __AICADE_PHASER_TEMPLATE__: unknown;
-    Phaser: unknown;
-    __AICADE_TOP_DOWN_MECHANICS__?: Record<string, unknown>;
-  };
-  location: { reload: () => void };
-  parent: { postMessage: (message: PostedMessage) => void };
-  window: {
-    addEventListener: (
-      type: string,
-      listener: (event?: { data?: unknown }) => void
-    ) => void;
-  };
-};
-
-function createTemplateWithSceneLayout(
-  layout: typeof topDownPhaserTemplate.gameSpec.template.config.scenes[0]["layout"]
-) {
-  const scene = topDownPhaserTemplate.gameSpec.template.config.scenes[0];
-
-  return {
-    ...topDownPhaserTemplate,
-    gameSpec: {
-      ...topDownPhaserTemplate.gameSpec,
-      template: {
-        ...topDownPhaserTemplate.gameSpec.template,
-        config: {
-          scenes: [
-            {
-              ...scene,
-              layout,
-            },
-          ],
-        },
-      },
-    },
-  };
-}
-
-function createRuntimeHarness(
-  template: unknown,
-  cursorState: Partial<Record<"down" | "left" | "right" | "up", boolean>> = {},
-  options: {
-    throwOnCreateCursorKeys?: boolean;
-    throwOnSetVelocity?: boolean;
-  } = {}
-) {
-  const messages: PostedMessage[] = [];
-  const textLabels: string[] = [];
-  const gameElements: GameElement[] = [];
-  const moveToObjectCalls: Array<{ speed: number }> = [];
-  const overlapCalls: Array<{
-    first: GameElement;
-    handler?: () => void;
-    second: GameElement;
-  }> = [];
-  const windowEventListeners: Record<
-    string,
-    Array<(event?: { data?: unknown }) => void>
-  > = {};
-  let sceneConfig: { create: () => void; update?: () => void } | null = null;
-
-  const createBody = () => {
-    const body = {
-      velocityCalls: [] as Array<{ x: number; y: number }>,
-      setAllowGravity() {},
-      setCollideWorldBounds() {},
-      setVelocity(x: number, y: number) {
-        if (options.throwOnSetVelocity) {
-          throw new Error("Velocity update failed");
-        }
-
-        body.velocityCalls.push({ x, y });
-      },
-    };
-
-    return body;
-  };
-
-  const attachBody = (element: GameElement) => {
-    element.body = createBody();
-  };
-
-  const scene = {
-    add: {
-      circle(x: number, y: number) {
-        const element: GameElement = {
-          kind: "circle",
-          setPosition(nextX: number, nextY: number) {
-            element.x = nextX;
-            element.y = nextY;
-          },
-          x,
-          y,
-        };
-        gameElements.push(element);
-        return element;
-      },
-      rectangle(x: number, y: number) {
-        const element: GameElement = {
-          kind: "rectangle",
-          setPosition(nextX: number, nextY: number) {
-            element.x = nextX;
-            element.y = nextY;
-          },
-          setStrokeStyle() {
-            return element;
-          },
-          x,
-          y,
-        };
-        gameElements.push(element);
-        return element;
-      },
-      star(x: number, y: number) {
-        const element: GameElement = {
-          kind: "star",
-          setPosition(nextX: number, nextY: number) {
-            element.x = nextX;
-            element.y = nextY;
-          },
-          x,
-          y,
-        };
-        gameElements.push(element);
-        return element;
-      },
-      text(_x: number, _y: number, label: string) {
-        textLabels.push(label);
-        return {
-          setText(nextLabel: string) {
-            textLabels.push(nextLabel);
-          },
-        };
-      },
-    },
-    cameras: {
-      main: {
-        setBackgroundColor() {},
-        setSize() {},
-      },
-    },
-    input: {
-      keyboard: {
-        createCursorKeys() {
-          if (options.throwOnCreateCursorKeys) {
-            throw new Error("Keyboard setup failed");
-          }
-
-          return {
-            down: { isDown: cursorState.down ?? false },
-            left: { isDown: cursorState.left ?? false },
-            right: { isDown: cursorState.right ?? false },
-            up: { isDown: cursorState.up ?? false },
-          };
-        },
-      },
-    },
-    physics: {
-      add: {
-        collider() {},
-        existing(element: GameElement) {
-          attachBody(element);
-        },
-        overlap(first: GameElement, second: GameElement, handler?: () => void) {
-          overlapCalls.push({ first, handler, second });
-        },
-      },
-      moveToObject(_from: GameElement, _to: GameElement, speed: number) {
-        moveToObjectCalls.push({ speed });
-      },
-      world: {
-        setBounds() {},
-      },
-    },
-  };
-
-  const phaser = {
-    AUTO: "AUTO",
-    Game: class FakeGame {
-      scale = {
-        resize() {},
-      };
-      scene = {
-        pause() {},
-        resume() {},
-      };
-
-      constructor(config: { scene: { create: () => void; update?: () => void } }) {
-        sceneConfig = config.scene;
-        sceneConfig.create.call(scene);
-      }
-
-      destroy() {}
-    },
-    Math: {
-      Between(min: number) {
-        return min;
-      },
-      Vector2: class FakeVector2 {
-        x: number;
-        y: number;
-
-        constructor(x: number, y: number) {
-          this.x = x;
-          this.y = y;
-        }
-
-        normalize() {
-          return this;
-        }
-
-        scale(nextScale: number) {
-          this.x *= nextScale;
-          this.y *= nextScale;
-          return this;
-        }
-      },
-    },
-  };
-
-  const context: RuntimeHarnessContext = {
-    Phaser: phaser,
-    globalThis: {
-      __AICADE_PHASER_TEMPLATE__: template,
-      Phaser: phaser,
-    },
-    location: {
-      reload() {},
-    },
-    parent: {
-      postMessage(message: PostedMessage) {
-        messages.push(message);
-      },
-    },
-    window: {
-      addEventListener(type: string, listener: (event?: { data?: unknown }) => void) {
-        windowEventListeners[type] = windowEventListeners[type] || [];
-        windowEventListeners[type].push(listener);
-      },
-    },
-  };
-
-  return {
-    context,
-    gameElements,
-    moveToObjectCalls,
-    overlapCalls,
-    messages,
-    dispatchWindowEvent(type: string, event?: { data?: unknown }) {
-      windowEventListeners[type]?.forEach((listener) => listener(event));
-    },
-    runUpdate() {
-      sceneConfig?.update?.call(scene);
-    },
-    textLabels,
-  };
-}
-
-function runTopDownRuntime(
-  runtimeSource: string,
-  context: object,
-  template = topDownPhaserTemplate
-) {
-  template.runtimeDependencyScriptPaths.forEach((scriptPath) => {
-    runInNewContext(
-      readFileSync(join(process.cwd(), "public", scriptPath), "utf8"),
-      context
-    );
-  });
-  runInNewContext(runtimeSource, context);
-}
 
 describe("top-down Phaser template", () => {
   afterEach(() => {
@@ -543,10 +247,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("installs active mechanics through the external runtime mechanic registry", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const installedTypes: string[] = [];
     const installerContexts: Array<Record<string, unknown>> = [];
     const { context } = createRuntimeHarness(topDownPhaserTemplate);
@@ -576,7 +277,7 @@ describe("top-down Phaser template", () => {
       },
     });
 
-    runInNewContext(runtimeSource, context);
+    runScriptInContext(runtimeSource, context);
 
     expect(installedTypes).toEqual([
       "player_movement",
@@ -643,10 +344,7 @@ describe("top-down Phaser template", () => {
     };
 
     topDownPhaserTemplate.runtimeDependencyScriptPaths.forEach((scriptPath) => {
-      runInNewContext(
-        readFileSync(join(process.cwd(), "public", scriptPath), "utf8"),
-        context
-      );
+      runScriptInContext(loadPublicRuntimeSource(scriptPath), context);
     });
 
     expect(
@@ -691,10 +389,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("installs the declared movement, pickup, and chase mechanics for the valid fixture", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const { context, gameElements, moveToObjectCalls, runUpdate } =
       createRuntimeHarness(topDownPhaserTemplate, { right: true });
 
@@ -722,10 +417,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("does not apply player movement when the player_movement mechanic is omitted", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const templateWithoutMovement = {
       ...topDownPhaserTemplate,
       gameSpec: {
@@ -750,10 +442,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("does not install pickup collection when the pickup_collection mechanic is omitted", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const templateWithoutPickupCollection = {
       ...topDownPhaserTemplate,
       gameSpec: {
@@ -780,10 +469,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("places pickup crystals away from wall and obstacle geometry", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const templateWithBlockedPickupCenter = createTemplateWithSceneLayout({
       ...topDownPhaserTemplate.gameSpec.template.config.scenes[0].layout,
       obstacles: [
@@ -820,10 +506,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("does not install enemy chase when the enemy_chase mechanic is omitted", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const templateWithoutEnemyChase = {
       ...topDownPhaserTemplate,
       gameSpec: {
@@ -849,10 +532,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("installs hazard contact as a typed service-backed mechanic", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const { context, gameElements, overlapCalls, textLabels } =
       createRuntimeHarness(topDownPhaserTemplate);
 
@@ -888,10 +568,7 @@ describe("top-down Phaser template", () => {
     const relayTemplate = createTopDownPhaserTemplate(
       getTopDownGameSpecFixture("prism_relay_gauntlet")
     );
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", relayTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource(relayTemplate);
     const { context, gameElements, overlapCalls, runUpdate, textLabels } =
       createRuntimeHarness(relayTemplate, { right: true });
 
@@ -935,10 +612,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("steers the enemy around blocking obstacles instead of chasing directly into them", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const templateWithBlockedChaseLine = createTemplateWithSceneLayout({
       ...topDownPhaserTemplate.gameSpec.template.config.scenes[0].layout,
       obstacles: [
@@ -986,10 +660,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("does not keep pushing the enemy into an obstacle face while detouring", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const templateWithChaserPressedAgainstObstacle =
       createTemplateWithSceneLayout({
         ...topDownPhaserTemplate.gameSpec.template.config.scenes[0].layout,
@@ -1043,10 +714,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("reports mechanic install failures without preventing the runtime from becoming ready", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const { context, messages } = createRuntimeHarness(
       topDownPhaserTemplate,
       {},
@@ -1080,13 +748,10 @@ describe("top-down Phaser template", () => {
   });
 
   it("reports missing external installers without preventing the runtime from becoming ready", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const { context, messages } = createRuntimeHarness(topDownPhaserTemplate);
 
-    runInNewContext(runtimeSource, context);
+    runScriptInContext(runtimeSource, context);
 
     expect(messages).toEqual(
       expect.arrayContaining([
@@ -1113,10 +778,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("reports mechanic update failures without throwing out of the frame loop", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const { context, messages, runUpdate } = createRuntimeHarness(
       topDownPhaserTemplate,
       { right: true },
@@ -1146,10 +808,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("reports mechanic dispose failures without interrupting teardown", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const disposedTypes: string[] = [];
     const { context, dispatchWindowEvent, messages } =
       createRuntimeHarness(topDownPhaserTemplate);
@@ -1188,7 +847,7 @@ describe("top-down Phaser template", () => {
       },
     });
 
-    runInNewContext(runtimeSource, context);
+    runScriptInContext(runtimeSource, context);
 
     expect(() => dispatchWindowEvent("beforeunload")).not.toThrow();
     expect(disposedTypes).toEqual([
@@ -1217,17 +876,9 @@ describe("top-down Phaser template", () => {
   });
 
   it("points to an authored Phaser runtime script with protocol and gameplay hooks", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
-    const playerMovementSource = readFileSync(
-      join(
-        process.cwd(),
-        "public",
-        "/runtime/phaser/mechanics/player-movement.js"
-      ),
-      "utf8"
+    const runtimeSource = loadTopDownRuntimeSource();
+    const playerMovementSource = loadPublicRuntimeSource(
+      "/runtime/phaser/mechanics/player-movement.js"
     );
 
     expect(runtimeSource).toContain("new Phaser.Game");
@@ -1245,10 +896,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("reads title, objective, and entity placement from Game Spec input", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
 
     expect(runtimeSource).toContain("template.gameSpec");
     expect(runtimeSource).toContain("const gameSpec");
@@ -1263,21 +911,12 @@ describe("top-down Phaser template", () => {
   });
 
   it("consumes deterministic layout primitives from the top-down spec", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
+    const runtimeSource = loadTopDownRuntimeSource();
+    const enemyChaseSource = loadPublicRuntimeSource(
+      "/runtime/phaser/mechanics/enemy-chase.js"
     );
-    const enemyChaseSource = readFileSync(
-      join(process.cwd(), "public", "/runtime/phaser/mechanics/enemy-chase.js"),
-      "utf8"
-    );
-    const pickupCollectionSource = readFileSync(
-      join(
-        process.cwd(),
-        "public",
-        "/runtime/phaser/mechanics/pickup-collection.js"
-      ),
-      "utf8"
+    const pickupCollectionSource = loadPublicRuntimeSource(
+      "/runtime/phaser/mechanics/pickup-collection.js"
     );
 
     expect(runtimeSource).toContain("function createWall(scene, wall)");
@@ -1298,10 +937,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("keeps the authored runtime bootable without hidden pickup behavior when optional spec pieces are missing", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
     const { context, gameElements, messages, textLabels } =
       createRuntimeHarness({});
 
@@ -1330,10 +966,7 @@ describe("top-down Phaser template", () => {
   });
 
   it("handles the shared host command protocol", () => {
-    const runtimeSource = readFileSync(
-      join(process.cwd(), "public", topDownPhaserTemplate.runtimeScriptPath),
-      "utf8"
-    );
+    const runtimeSource = loadTopDownRuntimeSource();
 
     expect(runtimeSource).toContain('window.addEventListener("message"');
     expect(runtimeSource).toContain('event.data.type === "game-reload"');
