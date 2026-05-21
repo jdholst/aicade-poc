@@ -41,6 +41,7 @@ const validationIssueSchema = z
 export const validationEvidenceSchema = z
   .object({
     id: stableIdSchema,
+    checkId: stableIdSchema,
     stage: validationEvidenceStageSchema,
     status: validationEvidenceStatusSchema,
     durationMs: z.number().finite().nonnegative(),
@@ -117,7 +118,169 @@ export const gamePackSchema = z
     generationRuns: z.array(generationRunSchema),
     metadata: metadataSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((pack, ctx) => {
+    const validationEvidenceIds = new Set(
+      pack.validationEvidence.map((evidence) => evidence.id)
+    );
+    const buildIds = new Set(pack.builds.map((build) => build.id));
+    const checkpointIds = new Set(
+      pack.checkpoints.map((checkpoint) => checkpoint.id)
+    );
+
+    addDuplicateIdIssues(
+      pack.validationEvidence,
+      "validationEvidence",
+      ctx
+    );
+    addDuplicateIdIssues(pack.builds, "builds", ctx);
+    addDuplicateIdIssues(pack.checkpoints, "checkpoints", ctx);
+    addDuplicateIdIssues(pack.failedAttempts, "failedAttempts", ctx);
+    addDuplicateIdIssues(pack.generationRuns, "generationRuns", ctx);
+
+    pack.builds.forEach((build, buildIndex) => {
+      if (build.gameSpecId !== pack.gameSpec.id) {
+        addRelationshipIssue(ctx, {
+          path: ["builds", buildIndex, "gameSpecId"],
+          message: "Build gameSpecId must match the saved Game Spec ID.",
+        });
+      }
+
+      if (build.checkpointId && !checkpointIds.has(build.checkpointId)) {
+        addRelationshipIssue(ctx, {
+          path: ["builds", buildIndex, "checkpointId"],
+          message: "Build checkpointId must reference an existing checkpoint.",
+        });
+      }
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: build.validationEvidenceIds,
+        pathPrefix: ["builds", buildIndex, "validationEvidenceIds"],
+        knownIds: validationEvidenceIds,
+        message:
+          "Build validationEvidenceIds must reference existing validation evidence.",
+      });
+    });
+
+    pack.checkpoints.forEach((checkpoint, checkpointIndex) => {
+      if (checkpoint.gameSpecId !== pack.gameSpec.id) {
+        addRelationshipIssue(ctx, {
+          path: ["checkpoints", checkpointIndex, "gameSpecId"],
+          message:
+            "Checkpoint gameSpecId must match the saved Game Spec ID.",
+        });
+      }
+
+      if (checkpoint.buildId && !buildIds.has(checkpoint.buildId)) {
+        addRelationshipIssue(ctx, {
+          path: ["checkpoints", checkpointIndex, "buildId"],
+          message: "Checkpoint buildId must reference an existing build.",
+        });
+      }
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: checkpoint.validationEvidenceIds,
+        pathPrefix: ["checkpoints", checkpointIndex, "validationEvidenceIds"],
+        knownIds: validationEvidenceIds,
+        message:
+          "Checkpoint validationEvidenceIds must reference existing validation evidence.",
+      });
+    });
+
+    pack.failedAttempts.forEach((failedAttempt, failedAttemptIndex) => {
+      if (
+        failedAttempt.gameSpecId &&
+        failedAttempt.gameSpecId !== pack.gameSpec.id
+      ) {
+        addRelationshipIssue(ctx, {
+          path: ["failedAttempts", failedAttemptIndex, "gameSpecId"],
+          message:
+            "Failed attempt gameSpecId must match the saved Game Spec ID.",
+        });
+      }
+
+      if (failedAttempt.buildId && !buildIds.has(failedAttempt.buildId)) {
+        addRelationshipIssue(ctx, {
+          path: ["failedAttempts", failedAttemptIndex, "buildId"],
+          message: "Failed attempt buildId must reference an existing build.",
+        });
+      }
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: failedAttempt.validationEvidenceIds,
+        pathPrefix: [
+          "failedAttempts",
+          failedAttemptIndex,
+          "validationEvidenceIds",
+        ],
+        knownIds: validationEvidenceIds,
+        message:
+          "Failed attempt validationEvidenceIds must reference existing validation evidence.",
+      });
+    });
+  });
+
+type IdRecord = {
+  id: string;
+};
+
+type RelationshipPath = (string | number)[];
+
+function addDuplicateIdIssues<TRecord extends IdRecord>(
+  records: readonly TRecord[],
+  collectionPath: string,
+  ctx: z.RefinementCtx
+) {
+  const seenIds = new Set<string>();
+
+  records.forEach((record, index) => {
+    if (seenIds.has(record.id)) {
+      addRelationshipIssue(ctx, {
+        path: [collectionPath, index, "id"],
+        message: `Duplicate ${collectionPath} ID "${record.id}".`,
+      });
+    }
+
+    seenIds.add(record.id);
+  });
+}
+
+function addMissingReferenceIssues({
+  ctx,
+  ids,
+  pathPrefix,
+  knownIds,
+  message,
+}: {
+  ctx: z.RefinementCtx;
+  ids: readonly string[];
+  pathPrefix: RelationshipPath;
+  knownIds: ReadonlySet<string>;
+  message: string;
+}) {
+  ids.forEach((id, index) => {
+    if (!knownIds.has(id)) {
+      addRelationshipIssue(ctx, {
+        path: [...pathPrefix, index],
+        message,
+      });
+    }
+  });
+}
+
+function addRelationshipIssue(
+  ctx: z.RefinementCtx,
+  issue: { path: RelationshipPath; message: string }
+) {
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: issue.path,
+    message: issue.message,
+  });
+}
 
 export function parseGamePack(input: unknown): GamePack {
   return gamePackSchema.parse(input);
