@@ -10,6 +10,28 @@ export {
 } from "./game-spec-schema";
 
 export {
+  failedAttemptSchema,
+  gamePackRuntimeKindSchema,
+  gamePackSchema,
+  generationRunSchema,
+  parseGamePack,
+  playableBuildSchema,
+  validationEvidenceSchema,
+  validationEvidenceStageSchema,
+  validationEvidenceStatusSchema,
+  versionCheckpointSchema,
+  type FailedAttempt,
+  type GamePack,
+  type GamePackRuntimeKind,
+  type GenerationRun,
+  type PlayableBuild,
+  type ValidationEvidence,
+  type ValidationEvidenceStage,
+  type ValidationEvidenceStatus,
+  type VersionCheckpoint,
+} from "./game-pack-schema";
+
+export {
   createMechanicRuntimeBridge,
   getMechanicDefinitionForScope,
   getMechanicDefinitionsForScope,
