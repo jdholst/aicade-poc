@@ -29,7 +29,12 @@ export {
   type ValidationEvidenceStage,
   type ValidationEvidenceStatus,
   type VersionCheckpoint,
-} from "./game-pack-schema";
+} from "./game-pack/game-pack-schema";
+
+export {
+  createInitialGamePack,
+  type CreateInitialGamePackInput,
+} from "./game-pack/game-pack-factory";
 
 export {
   createMechanicRuntimeBridge,

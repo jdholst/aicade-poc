@@ -6,7 +6,7 @@ import {
   gameSpecSchema,
   jsonValueSchema,
   stableIdSchema,
-} from "./game-spec-schema";
+} from "../game-spec-schema";
 
 const runtimeKindValues = ["canvas2d", "phaser"] as const satisfies readonly RuntimeKind[];
 
