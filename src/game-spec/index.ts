@@ -37,6 +37,16 @@ export {
 } from "./game-pack/game-pack-factory";
 
 export {
+  recordFirstPlayableRuntimeStatus,
+  startFirstPlayableValidation,
+  type FirstPlayableRuntimeStatus,
+  type FirstPlayableValidationAttempt,
+  type FirstPlayableValidationStatus,
+  type RecordFirstPlayableRuntimeStatusInput,
+  type StartFirstPlayableValidationInput,
+} from "./game-pack/first-playable-validation";
+
+export {
   createMechanicRuntimeBridge,
   getMechanicDefinitionForScope,
   getMechanicDefinitionsForScope,

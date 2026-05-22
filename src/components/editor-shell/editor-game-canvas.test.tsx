@@ -113,6 +113,58 @@ describe("EditorGameCanvas", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("blocks the Phaser host when first-playable validation fails before boot", async () => {
+    vi.resetModules();
+    vi.doMock("@/runtime/phaser", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/runtime/phaser")>();
+      const gameSpec = {
+        ...actual.topDownPhaserTemplate.gameSpec,
+        objectives: actual.topDownPhaserTemplate.gameSpec.objectives.map(
+          (objective) => ({
+            ...objective,
+            primary: false,
+          })
+        ),
+      };
+
+      return {
+        ...actual,
+        getTopDownPhaserTemplateState: () => ({
+          status: "valid",
+          template: {
+            ...actual.topDownPhaserTemplate,
+            gameSpec,
+          },
+        }),
+      };
+    });
+
+    const { EditorGameCanvas: MockedEditorGameCanvas } = await import(
+      "./editor-game-canvas"
+    );
+
+    render(
+      <MockedEditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    expect(
+      screen.getByText("First-playable validation failed")
+    ).toBeVisible();
+    expect(
+      screen.getByText("The runtime was not marked playable.")
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "The Game Spec needs one primary objective before the runtime can be presented as playable."
+      )
+    ).toBeVisible();
+    expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+  });
+
   it("mounts the selected top-down Phaser fixture", () => {
     vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
 

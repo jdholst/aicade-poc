@@ -125,9 +125,13 @@ export function RuntimeErrorScreen({
 }
 
 export function GameSpecValidationErrorScreen({
+  eyebrow = "Game Spec validation failed",
   message,
+  title = "The runtime was not started.",
 }: {
+  eyebrow?: string;
   message: string;
+  title?: string;
 }) {
   return (
     <RuntimeScreenShell statusLabel="Validation stopped">
@@ -137,10 +141,10 @@ export function GameSpecValidationErrorScreen({
         </div>
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
-            Game Spec validation failed
+            {eyebrow}
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            The runtime was not started.
+            {title}
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-white/65">
             {message}

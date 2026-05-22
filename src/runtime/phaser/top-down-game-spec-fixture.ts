@@ -117,4 +117,24 @@ export function getDefaultTopDownGameSpecFixture(): TopDownGameSpec {
   return getTopDownGameSpecFixture(DEFAULT_TOP_DOWN_GAME_SPEC_FIXTURE_ID);
 }
 
-export const topDownGameSpecFixture = getDefaultTopDownGameSpecFixture();
+export function getFirstValidTopDownGameSpecFixture(): TopDownGameSpec {
+  const fixtureIds = Object.keys(
+    topDownGameSpecFixtureInputs
+  ) as TopDownGameSpecFixtureId[];
+
+  for (const fixtureId of fixtureIds) {
+    const fixtureState = getTopDownGameSpecFixtureState(fixtureId);
+
+    if (fixtureState.status === "valid") {
+      return fixtureState.fixture;
+    }
+  }
+
+  throw new GameSpecValidationError(
+    fixtureIds.flatMap((fixtureId) => {
+      const fixtureState = getTopDownGameSpecFixtureState(fixtureId);
+
+      return fixtureState.status === "invalid" ? fixtureState.issues : [];
+    })
+  );
+}

@@ -1,6 +1,9 @@
-import { useRef } from "react";
+import { type RefObject, useRef } from "react";
 
-import type { RuntimeIframeHostHandle } from "@/components/runtime-iframe-host";
+import type {
+  RuntimeIframeHostHandle,
+  RuntimeIframeStatus,
+} from "@/components/runtime-iframe-host";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
@@ -8,7 +11,12 @@ import type {
 import { getEditorRuntimeMode } from "@/runtime/editor-runtime-mode";
 import { getTopDownPhaserTemplateState } from "@/runtime/phaser";
 
-import { createEditorRuntimePanelViewModel } from "./editor-game-canvas-view-model";
+import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
+import {
+  createEditorRuntimePanelViewModel,
+  type EditorRuntimePrimarySurface,
+  type EditorRuntimeSecondarySurface,
+} from "./editor-game-canvas-view-model";
 import { RuntimeControls } from "./editor-runtime-controls";
 import { RuntimeErrorBanner } from "./editor-runtime-error-banner";
 import { EditorRuntimeHostMount } from "./editor-runtime-host-mount";
@@ -29,21 +37,25 @@ export function EditorGameCanvas({
   actions,
   canvas,
 }: EditorGameCanvasProps) {
-  const {
-    currentGenerationStage,
-    gameResetNonce,
-    gameStatus,
-    isGamePaused,
-    loadState,
-    runtimeWarnings,
-  } = canvas;
+  const { gameResetNonce, isGamePaused, loadState } = canvas;
   const { onGameStatusChange, onRegenerate, onReset, onTogglePaused } =
     actions;
   const gameHostRef = useRef<RuntimeIframeHostHandle | null>(null);
   const runtimeMode = getEditorRuntimeMode();
   const phaserTemplateState = getTopDownPhaserTemplateState();
+  const {
+    firstPlayableValidationAttempt,
+    handleRuntimeStatusChange,
+  } = useFirstPlayableValidationGate({
+    gameResetNonce,
+    loadStateStatus: loadState.status,
+    onGameStatusChange,
+    phaserTemplateState,
+    runtimeMode,
+  });
   const runtimePanel = createEditorRuntimePanelViewModel({
     canvas,
+    firstPlayableValidationAttempt,
     phaserTemplateState,
     runtimeMode,
   });
@@ -77,41 +89,102 @@ export function EditorGameCanvas({
         onReset={handleResetGame}
         onTogglePaused={toggleGamePaused}
       />
-      {runtimePanel.isLoading ? (
-        <LoadingRuntimeScreen stage={currentGenerationStage} />
-      ) : (
-        <>
-          {runtimePanel.showRuntimeErrorBanner &&
-          gameStatus.state === "error" ? (
-            <RuntimeErrorBanner
-              message={gameStatus.message}
-              onRegenerate={onRegenerate}
-            />
-          ) : null}
-          {runtimePanel.showWarningPanel ? (
-            <RuntimeWarningPanel warnings={runtimeWarnings} />
-          ) : null}
-          {runtimePanel.showCanvasInitial ? <InitialRuntimeScreen /> : null}
-          {runtimePanel.showGenerationError && loadState.status === "error" ? (
-            <RuntimeErrorScreen
-              message={loadState.message}
-              onRegenerate={onRegenerate}
-            />
-          ) : null}
-          {runtimePanel.showPhaserValidationError ? (
-            <GameSpecValidationErrorScreen
-              message={runtimePanel.phaserValidationErrorMessage ?? ""}
-            />
-          ) : null}
-          <EditorRuntimeHostMount
-            focusOnReadyKey={gameResetNonce}
-            host={runtimePanel.host}
-            hostRef={gameHostRef}
-            isPaused={isGamePaused}
-            onStatusChange={onGameStatusChange}
-          />
-        </>
+      {runtimePanel.secondarySurfaces.map((surface) =>
+        renderRuntimeSecondarySurface({
+          onRegenerate,
+          surface,
+        })
       )}
+      {renderRuntimePrimarySurface({
+        focusOnReadyKey: gameResetNonce,
+        hostRef: gameHostRef,
+        isPaused: isGamePaused,
+        onRegenerate,
+        onStatusChange: handleRuntimeStatusChange,
+        surface: runtimePanel.primarySurface,
+      })}
     </section>
+  );
+}
+
+function renderRuntimeSecondarySurface({
+  onRegenerate,
+  surface,
+}: {
+  onRegenerate: () => void;
+  surface: EditorRuntimeSecondarySurface;
+}) {
+  if (surface.type === "runtime-error-banner") {
+    return (
+      <RuntimeErrorBanner
+        key="runtime-error-banner"
+        message={surface.message}
+        onRegenerate={onRegenerate}
+      />
+    );
+  }
+
+  return (
+    <RuntimeWarningPanel
+      key="runtime-warning-panel"
+      warnings={surface.warnings}
+    />
+  );
+}
+
+function renderRuntimePrimarySurface({
+  focusOnReadyKey,
+  hostRef,
+  isPaused,
+  onRegenerate,
+  onStatusChange,
+  surface,
+}: {
+  focusOnReadyKey: number;
+  hostRef: RefObject<RuntimeIframeHostHandle | null>;
+  isPaused: boolean;
+  onRegenerate: () => void;
+  onStatusChange: (status: RuntimeIframeStatus) => void;
+  surface: EditorRuntimePrimarySurface;
+}) {
+  if (surface.type === "loading") {
+    return <LoadingRuntimeScreen stage={surface.stage} />;
+  }
+
+  if (surface.type === "canvas-initial") {
+    return <InitialRuntimeScreen />;
+  }
+
+  if (surface.type === "generation-error") {
+    return (
+      <RuntimeErrorScreen
+        message={surface.message}
+        onRegenerate={onRegenerate}
+      />
+    );
+  }
+
+  if (surface.type === "phaser-validation-error") {
+    return <GameSpecValidationErrorScreen message={surface.message} />;
+  }
+
+  if (surface.type === "first-playable-validation-error") {
+    return (
+      <GameSpecValidationErrorScreen
+        eyebrow="First-playable validation failed"
+        title="The runtime was not marked playable."
+        message={surface.message}
+      />
+    );
+  }
+
+  return (
+    <EditorRuntimeHostMount
+      focusOnReadyKey={focusOnReadyKey}
+      host={surface.host}
+      hostRef={hostRef}
+      isPaused={isPaused}
+      onStatusChange={onStatusChange}
+    />
   );
 }
