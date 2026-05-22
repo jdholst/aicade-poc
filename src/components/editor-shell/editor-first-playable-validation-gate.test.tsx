@@ -1,30 +1,16 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  topDownPhaserTemplate,
-  type TopDownPhaserTemplateState,
-} from "@/runtime/phaser";
+import { topDownPhaserTemplate } from "@/runtime/phaser";
 
 import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
+import type { FirstPlayableValidationSource } from "./editor-runtime-template-plan";
 
 type GateInput = Parameters<typeof useFirstPlayableValidationGate>[0];
 
-const validPhaserState: TopDownPhaserTemplateState = {
-  status: "valid",
-  template: topDownPhaserTemplate,
-};
-
-const invalidPhaserState: TopDownPhaserTemplateState = {
-  status: "invalid",
-  issues: [
-    {
-      path: "mechanics.mechanic_player_movement.targetIds",
-      message: 'Expected target role "player".',
-    },
-  ],
-  message:
-    'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+const validationSource: FirstPlayableValidationSource = {
+  gameSpec: topDownPhaserTemplate.gameSpec,
+  runtimeKind: "phaser",
 };
 
 function createInput(overrides: Partial<GateInput> = {}): GateInput {
@@ -32,8 +18,7 @@ function createInput(overrides: Partial<GateInput> = {}): GateInput {
     gameResetNonce: 0,
     loadStateStatus: "idle",
     onGameStatusChange: vi.fn(),
-    phaserTemplateState: validPhaserState,
-    runtimeMode: "phaser",
+    validationSource,
     ...overrides,
   };
 }
@@ -45,7 +30,10 @@ describe("useFirstPlayableValidationGate", () => {
     );
 
     expect(result.current.firstPlayableValidationAttempt).toMatchObject({
-      gamePackId: "game_pack_crystal_spec_chase",
+      gamePackId: `game_pack_${topDownPhaserTemplate.gameSpec.id.replace(
+        /^game_/,
+        ""
+      )}`,
       shouldBlockPlayable: false,
       status: "running",
       evidence: [
@@ -63,7 +51,7 @@ describe("useFirstPlayableValidationGate", () => {
       useFirstPlayableValidationGate(
         createInput({
           onGameStatusChange,
-          phaserTemplateState: invalidPhaserState,
+          validationSource: null,
         })
       )
     );
@@ -137,12 +125,9 @@ describe("useFirstPlayableValidationGate", () => {
     const { result } = renderHook(() =>
       useFirstPlayableValidationGate(
         createInput({
-          phaserTemplateState: {
-            status: "valid",
-            template: {
-              ...topDownPhaserTemplate,
-              gameSpec,
-            },
+          validationSource: {
+            gameSpec,
+            runtimeKind: "phaser",
           },
         })
       )

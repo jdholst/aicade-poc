@@ -8,7 +8,7 @@ import {
 } from "@/components/runtime-iframe-host";
 import { phaserRuntimeAdapter } from "@/runtime/phaser";
 
-import type { EditorRuntimeHostViewModel } from "./editor-game-canvas-view-model";
+import type { EditorRuntimeHostViewModel } from "./editor-runtime-template-plan";
 
 type EditorRuntimeHostMountProps = {
   focusOnReadyKey: number;

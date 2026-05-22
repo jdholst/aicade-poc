@@ -1,23 +1,12 @@
 import type { FirstPlayableValidationAttempt } from "@/game-spec";
 import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
-import type { EditorRuntimeMode } from "@/runtime/editor-runtime-mode";
-import type {
-  HandAuthoredPhaserTemplate,
-  TopDownPhaserTemplateState,
-} from "@/runtime/phaser";
-import type { GeneratedGamePack } from "@/service/starter-project";
 
-export type EditorRuntimeHostViewModel =
-  | {
-      key: string;
-      template: HandAuthoredPhaserTemplate;
-      type: "phaser";
-    }
-  | {
-      key: string;
-      pack: GeneratedGamePack;
-      type: "canvas";
-    };
+import {
+  createCanvasRuntimeHostViewModel,
+  createPhaserRuntimeHostViewModel,
+  type EditorRuntimeHostViewModel,
+  type EditorRuntimeTemplatePlan,
+} from "./editor-runtime-template-plan";
 
 export type EditorRuntimePanelViewModel = {
   canPauseRuntime: boolean;
@@ -64,21 +53,18 @@ export type EditorRuntimeSecondarySurface =
 type CreateEditorRuntimePanelViewModelInput = {
   canvas: EditorGameCanvasSession;
   firstPlayableValidationAttempt?: FirstPlayableValidationAttempt | null;
-  phaserTemplateState: TopDownPhaserTemplateState;
-  runtimeMode: EditorRuntimeMode;
+  runtimeTemplate: EditorRuntimeTemplatePlan;
 };
 
 export function createEditorRuntimePanelViewModel({
   canvas,
   firstPlayableValidationAttempt = null,
-  phaserTemplateState,
-  runtimeMode,
+  runtimeTemplate,
 }: CreateEditorRuntimePanelViewModelInput): EditorRuntimePanelViewModel {
   const primarySurface = createEditorRuntimePrimarySurface({
     canvas,
     firstPlayableValidationAttempt,
-    phaserTemplateState,
-    runtimeMode,
+    runtimeTemplate,
   });
   const hasMountedRuntime = primarySurface.type === "runtime-host";
 
@@ -103,8 +89,7 @@ export function createEditorRuntimePanelViewModel({
 function createEditorRuntimePrimarySurface({
   canvas,
   firstPlayableValidationAttempt = null,
-  phaserTemplateState,
-  runtimeMode,
+  runtimeTemplate,
 }: CreateEditorRuntimePanelViewModelInput): EditorRuntimePrimarySurface {
   const { currentGenerationStage, gameResetNonce, loadState } = canvas;
   const firstPlayableValidationErrorMessage =
@@ -124,12 +109,12 @@ function createEditorRuntimePrimarySurface({
     };
   }
 
-  if (runtimeMode === "canvas2d") {
+  if (runtimeTemplate.type === "canvas") {
     if (loadState.status === "success") {
       return {
         host: createCanvasRuntimeHostViewModel({
           gameResetNonce,
-          loadState,
+          pack: loadState.pack,
         }),
         type: "runtime-host",
       };
@@ -140,9 +125,9 @@ function createEditorRuntimePrimarySurface({
     };
   }
 
-  if (phaserTemplateState.status === "invalid") {
+  if (runtimeTemplate.type === "phaser-invalid") {
     return {
-      message: phaserTemplateState.message,
+      message: runtimeTemplate.message,
       type: "phaser-validation-error",
     };
   }
@@ -157,7 +142,7 @@ function createEditorRuntimePrimarySurface({
   return {
     host: createPhaserRuntimeHostViewModel({
       gameResetNonce,
-      phaserTemplateState,
+      runtimeTemplate,
     }),
     type: "runtime-host",
   };
@@ -204,35 +189,4 @@ function getFirstPlayableValidationErrorMessage(
     attempt.failureMessage ??
     "First-playable validation failed before the runtime could be marked playable."
   );
-}
-
-function createPhaserRuntimeHostViewModel({
-  gameResetNonce,
-  phaserTemplateState,
-}: {
-  gameResetNonce: number;
-  phaserTemplateState: Extract<TopDownPhaserTemplateState, { status: "valid" }>;
-}): EditorRuntimeHostViewModel {
-  return {
-    type: "phaser",
-    key: `${phaserTemplateState.template.id}-${gameResetNonce}`,
-    template: phaserTemplateState.template,
-  };
-}
-
-function createCanvasRuntimeHostViewModel({
-  gameResetNonce,
-  loadState,
-}: {
-  gameResetNonce: number;
-  loadState: Extract<
-    EditorGameCanvasSession["loadState"],
-    { status: "success" }
-  >;
-}): EditorRuntimeHostViewModel {
-  return {
-    type: "canvas",
-    key: `${loadState.pack.manifest.title}-${gameResetNonce}`,
-    pack: loadState.pack,
-  };
 }

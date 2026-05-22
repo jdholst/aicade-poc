@@ -11,8 +11,8 @@ import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
-import type { EditorRuntimeMode } from "@/runtime/editor-runtime-mode";
-import type { TopDownPhaserTemplateState } from "@/runtime/phaser";
+
+import type { FirstPlayableValidationSource } from "./editor-runtime-template-plan";
 
 type FirstPlayableValidationState = {
   attempt: FirstPlayableValidationAttempt;
@@ -23,8 +23,7 @@ type UseFirstPlayableValidationGateInput = {
   gameResetNonce: EditorGameCanvasSession["gameResetNonce"];
   loadStateStatus: EditorGameCanvasSession["loadState"]["status"];
   onGameStatusChange: EditorGameCanvasActions["onGameStatusChange"];
-  phaserTemplateState: TopDownPhaserTemplateState;
-  runtimeMode: EditorRuntimeMode;
+  validationSource: FirstPlayableValidationSource | null;
 };
 
 export type FirstPlayableValidationGate = {
@@ -36,18 +35,16 @@ export function useFirstPlayableValidationGate({
   gameResetNonce,
   loadStateStatus,
   onGameStatusChange,
-  phaserTemplateState,
-  runtimeMode,
+  validationSource,
 }: UseFirstPlayableValidationGateInput): FirstPlayableValidationGate {
   const validationSeed = useMemo(
     () =>
       createFirstPlayableValidationSeed({
         gameResetNonce,
         loadStateStatus,
-        phaserTemplateState,
-        runtimeMode,
+        validationSource,
       }),
-    [gameResetNonce, loadStateStatus, phaserTemplateState, runtimeMode]
+    [gameResetNonce, loadStateStatus, validationSource]
   );
   const [runtimeValidationState, setRuntimeValidationState] =
     useState<FirstPlayableValidationState | null>(validationSeed);
@@ -115,25 +112,22 @@ export function useFirstPlayableValidationGate({
 function createFirstPlayableValidationSeed({
   gameResetNonce,
   loadStateStatus,
-  phaserTemplateState,
-  runtimeMode,
+  validationSource,
 }: {
   gameResetNonce: EditorGameCanvasSession["gameResetNonce"];
   loadStateStatus: EditorGameCanvasSession["loadState"]["status"];
-  phaserTemplateState: TopDownPhaserTemplateState;
-  runtimeMode: EditorRuntimeMode;
+  validationSource: FirstPlayableValidationSource | null;
 }): FirstPlayableValidationState | null {
   if (
-    runtimeMode !== "phaser" ||
-    phaserTemplateState.status !== "valid" ||
+    !validationSource ||
     (loadStateStatus !== "idle" && loadStateStatus !== "success")
   ) {
     return null;
   }
 
   const gamePack = createInitialGamePack({
-    gameSpec: phaserTemplateState.template.gameSpec,
-    runtimeKind: "phaser",
+    gameSpec: validationSource.gameSpec,
+    runtimeKind: validationSource.runtimeKind,
   });
   const key = `${gamePack.id}-${gameResetNonce}-${loadStateStatus}`;
 

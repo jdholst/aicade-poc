@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -98,7 +98,9 @@ describe("EditorGameCanvas", () => {
     vi.restoreAllMocks();
   });
 
-  it("mounts the hand-authored Phaser runtime before generation starts by default", () => {
+  it("mounts a valid hand-authored Phaser runtime before generation starts", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     render(
       <EditorGameCanvas
         actions={createActions()}
@@ -106,7 +108,7 @@ describe("EditorGameCanvas", () => {
       />
     );
 
-    expect(screen.getByTitle("Crystal Spec Chase")).toBeVisible();
+    expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.getByText("Phaser runtime")).toBeVisible();
     expect(
       screen.queryByText("The generated game module will boot here.")
@@ -180,6 +182,38 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByText("Phaser runtime")).toBeVisible();
   });
 
+  it("keeps the Phaser boot listener stable while the editor records loading state", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
+    const actions = createActions();
+    const canvas = createCanvasSession();
+    const { rerender } = render(
+      <EditorGameCanvas actions={actions} canvas={canvas} />
+    );
+
+    await waitFor(() => {
+      expect(actions.onGameStatusChange).toHaveBeenCalledWith({
+        state: "loading",
+      });
+    });
+
+    expect(actions.onGameStatusChange).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <EditorGameCanvas
+        actions={actions}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "loading",
+            message: "Booting Phaser runtime...",
+          },
+        })}
+      />
+    );
+
+    expect(actions.onGameStatusChange).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the Canvas initial runtime screen when the runtime override is canvas2d", () => {
     vi.stubEnv("NEXT_PUBLIC_AICADE_EDITOR_RUNTIME", "canvas2d");
 
@@ -224,6 +258,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("enables runtime controls when the runtime is ready", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     const onReset = vi.fn();
     const onTogglePaused = vi.fn();
 
@@ -253,6 +289,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("keeps reset available when a mounted runtime reports an error", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     const onReset = vi.fn();
     const onTogglePaused = vi.fn();
 
@@ -283,6 +321,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("shows recoverable runtime warnings without blocking controls", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     const onReset = vi.fn();
     const onTogglePaused = vi.fn();
 
@@ -336,6 +376,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("lets users cycle through multiple recoverable runtime warnings", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     render(
       <EditorGameCanvas
         actions={createActions()}

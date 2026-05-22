@@ -1,4 +1,4 @@
-import { type RefObject, useRef } from "react";
+import { type RefObject, useMemo, useRef } from "react";
 
 import type {
   RuntimeIframeHostHandle,
@@ -8,8 +8,6 @@ import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
-import { getEditorRuntimeMode } from "@/runtime/editor-runtime-mode";
-import { getTopDownPhaserTemplateState } from "@/runtime/phaser";
 
 import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
 import {
@@ -17,6 +15,7 @@ import {
   type EditorRuntimePrimarySurface,
   type EditorRuntimeSecondarySurface,
 } from "./editor-game-canvas-view-model";
+import { createEditorRuntimeTemplatePlan } from "./editor-runtime-template-plan";
 import { RuntimeControls } from "./editor-runtime-controls";
 import { RuntimeErrorBanner } from "./editor-runtime-error-banner";
 import { EditorRuntimeHostMount } from "./editor-runtime-host-mount";
@@ -41,8 +40,7 @@ export function EditorGameCanvas({
   const { onGameStatusChange, onRegenerate, onReset, onTogglePaused } =
     actions;
   const gameHostRef = useRef<RuntimeIframeHostHandle | null>(null);
-  const runtimeMode = getEditorRuntimeMode();
-  const phaserTemplateState = getTopDownPhaserTemplateState();
+  const runtimeTemplate = useMemo(() => createEditorRuntimeTemplatePlan(), []);
   const {
     firstPlayableValidationAttempt,
     handleRuntimeStatusChange,
@@ -50,14 +48,12 @@ export function EditorGameCanvas({
     gameResetNonce,
     loadStateStatus: loadState.status,
     onGameStatusChange,
-    phaserTemplateState,
-    runtimeMode,
+    validationSource: runtimeTemplate.firstPlayableValidationSource,
   });
   const runtimePanel = createEditorRuntimePanelViewModel({
     canvas,
     firstPlayableValidationAttempt,
-    phaserTemplateState,
-    runtimeMode,
+    runtimeTemplate,
   });
 
   const toggleGamePaused = () => {

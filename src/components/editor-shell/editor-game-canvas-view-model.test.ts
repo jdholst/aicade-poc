@@ -2,13 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { FirstPlayableValidationAttempt } from "@/game-spec";
 import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
-import {
-  topDownPhaserTemplate,
-  type TopDownPhaserTemplateState,
-} from "@/runtime/phaser";
+import { topDownPhaserTemplate } from "@/runtime/phaser";
 import type { GeneratedGamePack } from "@/service/starter-project";
 
 import { createEditorRuntimePanelViewModel } from "./editor-game-canvas-view-model";
+import type { EditorRuntimeTemplatePlan } from "./editor-runtime-template-plan";
 
 const currentGenerationStage = {
   title: "Booting the sandbox",
@@ -61,13 +59,17 @@ const pack: GeneratedGamePack = {
     "globalThis.createGameModule = function createGameModule() {};",
 };
 
-const validPhaserState: TopDownPhaserTemplateState = {
-  status: "valid",
+const validRuntimeTemplate: EditorRuntimeTemplatePlan = {
+  firstPlayableValidationSource: {
+    gameSpec: topDownPhaserTemplate.gameSpec,
+    runtimeKind: "phaser",
+  },
   template: topDownPhaserTemplate,
+  type: "phaser-valid",
 };
 
-const invalidPhaserState: TopDownPhaserTemplateState = {
-  status: "invalid",
+const invalidRuntimeTemplate: EditorRuntimeTemplatePlan = {
+  firstPlayableValidationSource: null,
   issues: [
     {
       path: "mechanics.mechanic_player_movement.targetIds",
@@ -76,6 +78,12 @@ const invalidPhaserState: TopDownPhaserTemplateState = {
   ],
   message:
     'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+  type: "phaser-invalid",
+};
+
+const canvasRuntimeTemplate: EditorRuntimeTemplatePlan = {
+  firstPlayableValidationSource: null,
+  type: "canvas",
 };
 
 function createCanvasSession(
@@ -120,8 +128,7 @@ describe("createEditorRuntimePanelViewModel", () => {
         },
       }),
       firstPlayableValidationAttempt: createFirstPlayableValidationAttempt(),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
 
     expect(viewModel.primarySurface).toMatchObject({
@@ -151,8 +158,7 @@ describe("createEditorRuntimePanelViewModel", () => {
         shouldBlockPlayable: true,
         status: "failed",
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
 
     expect(viewModel.primarySurface).toEqual({
@@ -167,8 +173,7 @@ describe("createEditorRuntimePanelViewModel", () => {
   it("derives Canvas idle, success, and error surfaces", () => {
     const idleViewModel = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession(),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "canvas2d",
+      runtimeTemplate: canvasRuntimeTemplate,
     });
     const successViewModel = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession({
@@ -181,8 +186,7 @@ describe("createEditorRuntimePanelViewModel", () => {
           pack,
         },
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "canvas2d",
+      runtimeTemplate: canvasRuntimeTemplate,
     });
     const errorViewModel = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession({
@@ -191,8 +195,7 @@ describe("createEditorRuntimePanelViewModel", () => {
           message: "Generated game creation failed.",
         },
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "canvas2d",
+      runtimeTemplate: canvasRuntimeTemplate,
     });
 
     expect(idleViewModel.primarySurface).toEqual({
@@ -235,8 +238,7 @@ describe("createEditorRuntimePanelViewModel", () => {
           },
         ],
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
 
     expect(viewModel.primarySurface).toEqual({
@@ -249,12 +251,11 @@ describe("createEditorRuntimePanelViewModel", () => {
   it("derives Phaser validation error state", () => {
     const viewModel = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession(),
-      phaserTemplateState: invalidPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: invalidRuntimeTemplate,
     });
 
     expect(viewModel.primarySurface).toEqual({
-      message: invalidPhaserState.message,
+      message: invalidRuntimeTemplate.message,
       type: "phaser-validation-error",
     });
     expect(viewModel.secondarySurfaces).toEqual([]);
@@ -268,8 +269,7 @@ describe("createEditorRuntimePanelViewModel", () => {
           message: "Phaser runtime is running in the sandbox.",
         },
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
     const pausedViewModel = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession({
@@ -278,8 +278,7 @@ describe("createEditorRuntimePanelViewModel", () => {
           message: "Phaser runtime is paused in the sandbox.",
         },
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
     const errorViewModel = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession({
@@ -288,13 +287,11 @@ describe("createEditorRuntimePanelViewModel", () => {
           message: "The runtime crashed.",
         },
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
     const unmountedViewModel = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession(),
-      phaserTemplateState: invalidPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: invalidRuntimeTemplate,
     });
 
     expect(readyViewModel.canPauseRuntime).toBe(true);
@@ -325,8 +322,7 @@ describe("createEditorRuntimePanelViewModel", () => {
         },
         runtimeWarnings: [warning],
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
     const hostWithError = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession({
@@ -335,8 +331,7 @@ describe("createEditorRuntimePanelViewModel", () => {
           message: "The runtime crashed.",
         },
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
     const validationFailure = createEditorRuntimePanelViewModel({
       canvas: createCanvasSession({
@@ -353,8 +348,7 @@ describe("createEditorRuntimePanelViewModel", () => {
         shouldBlockPlayable: true,
         status: "failed",
       }),
-      phaserTemplateState: validPhaserState,
-      runtimeMode: "phaser",
+      runtimeTemplate: validRuntimeTemplate,
     });
 
     expect(hostWithWarnings.secondarySurfaces).toEqual([
