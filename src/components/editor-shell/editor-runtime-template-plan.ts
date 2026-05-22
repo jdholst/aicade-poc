@@ -1,4 +1,8 @@
-import type { GameSpec, GameSpecValidationIssue } from "@/game-spec";
+import type {
+  FirstPlayableRuntimeCandidate,
+  GameSpec,
+  GameSpecValidationIssue,
+} from "@/game-spec";
 import type {
   EditorRuntimeMode,
 } from "@/runtime/editor-runtime-mode";
@@ -25,6 +29,7 @@ export type EditorRuntimeHostViewModel =
 
 export type FirstPlayableValidationSource = {
   gameSpec: GameSpec;
+  runtimeCandidate: FirstPlayableRuntimeCandidate;
   runtimeKind: Extract<RuntimeKind, "phaser">;
 };
 
@@ -73,6 +78,13 @@ export function createEditorRuntimeTemplatePlan({
   return {
     firstPlayableValidationSource: {
       gameSpec: phaserTemplateState.template.gameSpec,
+      runtimeCandidate: {
+        runtimeDependencyScriptPaths:
+          phaserTemplateState.template.runtimeDependencyScriptPaths,
+        runtimeKind: "phaser",
+        runtimeScriptPath: phaserTemplateState.template.runtimeScriptPath,
+        templateId: phaserTemplateState.template.gameSpec.template.id,
+      },
       runtimeKind: "phaser",
     },
     template: phaserTemplateState.template,

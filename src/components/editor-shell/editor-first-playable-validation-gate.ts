@@ -135,6 +135,7 @@ function createFirstPlayableValidationSeed({
     key,
     attempt: startFirstPlayableValidation({
       gamePack,
+      runtimeCandidate: validationSource.runtimeCandidate,
       startedAt: new Date().toISOString(),
     }),
   };

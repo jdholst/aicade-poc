@@ -159,9 +159,7 @@ describe("EditorGameCanvas", () => {
       screen.getByText("The runtime was not marked playable.")
     ).toBeVisible();
     expect(
-      screen.getByText(
-        "The Game Spec needs one primary objective before the runtime can be presented as playable."
-      )
+      screen.getByText("Expected exactly one primary objective.")
     ).toBeVisible();
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
     expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();

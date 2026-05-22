@@ -39,6 +39,7 @@ export {
 export {
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
+  type FirstPlayableRuntimeCandidate,
   type FirstPlayableRuntimeStatus,
   type FirstPlayableValidationAttempt,
   type FirstPlayableValidationStatus,

@@ -62,6 +62,13 @@ const pack: GeneratedGamePack = {
 const validRuntimeTemplate: EditorRuntimeTemplatePlan = {
   firstPlayableValidationSource: {
     gameSpec: topDownPhaserTemplate.gameSpec,
+    runtimeCandidate: {
+      runtimeDependencyScriptPaths:
+        topDownPhaserTemplate.runtimeDependencyScriptPaths,
+      runtimeKind: "phaser",
+      runtimeScriptPath: topDownPhaserTemplate.runtimeScriptPath,
+      templateId: topDownPhaserTemplate.gameSpec.template.id,
+    },
     runtimeKind: "phaser",
   },
   template: topDownPhaserTemplate,

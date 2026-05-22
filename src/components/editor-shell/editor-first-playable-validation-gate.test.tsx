@@ -10,6 +10,13 @@ type GateInput = Parameters<typeof useFirstPlayableValidationGate>[0];
 
 const validationSource: FirstPlayableValidationSource = {
   gameSpec: topDownPhaserTemplate.gameSpec,
+  runtimeCandidate: {
+    runtimeDependencyScriptPaths:
+      topDownPhaserTemplate.runtimeDependencyScriptPaths,
+    runtimeKind: "phaser",
+    runtimeScriptPath: topDownPhaserTemplate.runtimeScriptPath,
+    templateId: topDownPhaserTemplate.gameSpec.template.id,
+  },
   runtimeKind: "phaser",
 };
 
@@ -36,12 +43,16 @@ describe("useFirstPlayableValidationGate", () => {
       )}`,
       shouldBlockPlayable: false,
       status: "running",
-      evidence: [
+      evidence: expect.arrayContaining([
         expect.objectContaining({
           checkId: "basic_objective_presence",
           status: "passed",
         }),
-      ],
+        expect.objectContaining({
+          checkId: "runtime_template_entrypoint",
+          status: "passed",
+        }),
+      ]),
     });
   });
 
@@ -127,6 +138,9 @@ describe("useFirstPlayableValidationGate", () => {
         createInput({
           validationSource: {
             gameSpec,
+            runtimeCandidate: {
+              ...validationSource.runtimeCandidate,
+            },
             runtimeKind: "phaser",
           },
         })
@@ -134,8 +148,7 @@ describe("useFirstPlayableValidationGate", () => {
     );
 
     expect(result.current.firstPlayableValidationAttempt).toMatchObject({
-      failureMessage:
-        "The Game Spec needs one primary objective before the runtime can be presented as playable.",
+      failureMessage: "Expected exactly one primary objective.",
       shouldBlockPlayable: true,
       status: "failed",
     });
