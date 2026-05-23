@@ -54,6 +54,11 @@ describe("useFirstPlayableValidationGate", () => {
         }),
       ]),
     });
+    expect(result.current.firstPlayableGamePack).toMatchObject({
+      builds: [],
+      checkpoints: [],
+      failedAttempts: [],
+    });
   });
 
   it("stays inactive outside a mountable Phaser runtime", () => {
@@ -68,6 +73,7 @@ describe("useFirstPlayableValidationGate", () => {
     );
 
     expect(result.current.firstPlayableValidationAttempt).toBeNull();
+    expect(result.current.firstPlayableGamePack).toBeNull();
 
     act(() => {
       result.current.handleRuntimeStatusChange({ state: "ready" });
@@ -96,6 +102,11 @@ describe("useFirstPlayableValidationGate", () => {
           status: "passed",
         }),
       ]),
+    });
+    expect(result.current.firstPlayableGamePack).toMatchObject({
+      builds: [],
+      checkpoints: [],
+      failedAttempts: [],
     });
   });
 
@@ -139,6 +150,22 @@ describe("useFirstPlayableValidationGate", () => {
         }),
       ]),
     });
+    expect(result.current.firstPlayableGamePack).toMatchObject({
+      builds: [
+        expect.objectContaining({
+          id: "build_initial_playable",
+          checkpointId: "checkpoint_initial_playable",
+          status: "validated",
+        }),
+      ],
+      checkpoints: [
+        expect.objectContaining({
+          id: "checkpoint_initial_playable",
+          buildId: "build_initial_playable",
+        }),
+      ],
+      failedAttempts: [],
+    });
   });
 
   it("blocks editor state when runtime validation evidence fails", () => {
@@ -172,6 +199,21 @@ describe("useFirstPlayableValidationGate", () => {
       shouldBlockPlayable: true,
       status: "failed",
     });
+    expect(result.current.firstPlayableGamePack).toMatchObject({
+      builds: [
+        expect.objectContaining({
+          id: "build_failed_first_playable",
+          status: "failed",
+        }),
+      ],
+      checkpoints: [],
+      failedAttempts: [
+        expect.objectContaining({
+          id: "failed_attempt_first_playable_runtime",
+          buildId: "build_failed_first_playable",
+        }),
+      ],
+    });
   });
 
   it("records fatal runtime errors as blocking editor errors", () => {
@@ -195,6 +237,20 @@ describe("useFirstPlayableValidationGate", () => {
       failureMessage: "Runtime crashed during boot.",
       shouldBlockPlayable: true,
       status: "failed",
+    });
+    expect(result.current.firstPlayableGamePack).toMatchObject({
+      builds: [
+        expect.objectContaining({
+          id: "build_failed_first_playable",
+          status: "failed",
+        }),
+      ],
+      failedAttempts: [
+        expect.objectContaining({
+          id: "failed_attempt_first_playable_runtime",
+          buildId: "build_failed_first_playable",
+        }),
+      ],
     });
   });
 
@@ -226,6 +282,15 @@ describe("useFirstPlayableValidationGate", () => {
       failureMessage: "Expected exactly one primary objective.",
       shouldBlockPlayable: true,
       status: "failed",
+    });
+    expect(result.current.firstPlayableGamePack).toMatchObject({
+      builds: [],
+      checkpoints: [],
+      failedAttempts: [
+        expect.objectContaining({
+          id: "failed_attempt_first_playable_pre_runtime",
+        }),
+      ],
     });
   });
 

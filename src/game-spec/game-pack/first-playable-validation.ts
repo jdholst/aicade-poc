@@ -10,10 +10,15 @@ import {
   type StableId,
 } from "../game-spec-schema";
 import type {
+  FailedAttempt,
   GamePack,
   GamePackRuntimeKind,
+  PlayableBuild,
   ValidationEvidence,
+  ValidationEvidenceStage,
+  VersionCheckpoint,
 } from "./game-pack-schema";
+import { parseGamePack } from "./game-pack-schema";
 
 export type FirstPlayableValidationStatus = "running" | "passed" | "failed";
 
@@ -49,6 +54,12 @@ export type RecordFirstPlayableRuntimeEvidenceInput = {
   attempt: FirstPlayableValidationAttempt;
   evidence: RuntimeValidationEvidenceReport;
   observedAt: string;
+};
+
+export type WriteFirstPlayableValidationResultInput = {
+  attempt: FirstPlayableValidationAttempt;
+  completedAt: string;
+  gamePack: GamePack;
 };
 
 export type FirstPlayableRuntimeStatus =
@@ -217,6 +228,83 @@ export function recordFirstPlayableRuntimeEvidence({
       report: evidence,
     })
   );
+}
+
+export function writeFirstPlayableValidationResult({
+  attempt,
+  completedAt,
+  gamePack,
+}: WriteFirstPlayableValidationResultInput): GamePack {
+  if (attempt.gamePackId !== gamePack.id) {
+    throw new Error("Validation attempt must belong to the target Game Pack.");
+  }
+
+  if (attempt.status === "running") {
+    throw new Error("Cannot write a running first-playable validation attempt.");
+  }
+
+  const validationEvidence = upsertRecordsById(
+    gamePack.validationEvidence,
+    attempt.evidence
+  );
+
+  if (attempt.status === "passed") {
+    const checkpointId = getInitialCheckpointId(gamePack);
+    const build = createPlayableBuild({
+      attempt,
+      completedAt,
+      gamePack,
+      checkpointId,
+      status: "validated",
+    });
+    const checkpoints =
+      gamePack.checkpoints.length === 0
+        ? [
+            createInitialVersionCheckpoint({
+              attempt,
+              build,
+              completedAt,
+              gamePack,
+            }),
+          ]
+        : gamePack.checkpoints;
+
+    return parseGamePack({
+      ...gamePack,
+      updatedAt: completedAt,
+      validationEvidence,
+      builds: upsertRecordsById(gamePack.builds, [build]),
+      checkpoints,
+    });
+  }
+
+  const hasRuntimeArtifact = hasMountedRuntimeArtifact(attempt.evidence);
+  const failedBuild = hasRuntimeArtifact
+    ? createPlayableBuild({
+        attempt,
+        completedAt,
+        gamePack,
+        status: "failed",
+      })
+    : null;
+  const failedAttempt = createFailedAttempt({
+    attempt,
+    buildId: failedBuild?.id,
+    completedAt,
+    gamePack,
+  });
+
+  return parseGamePack({
+    ...gamePack,
+    updatedAt: completedAt,
+    validationEvidence,
+    builds: failedBuild
+      ? upsertRecordsById(gamePack.builds, [failedBuild])
+      : gamePack.builds,
+    failedAttempts: upsertRecordsById(gamePack.failedAttempts, [
+      failedAttempt,
+    ]),
+  });
 }
 
 function createBasicObjectivePresenceEvidence(
@@ -843,4 +931,162 @@ function toJsonRecord(record: Record<string, unknown>): Record<string, JsonValue
   }
 
   return jsonRecord;
+}
+
+function createPlayableBuild({
+  attempt,
+  checkpointId,
+  completedAt,
+  gamePack,
+  status,
+}: {
+  attempt: FirstPlayableValidationAttempt;
+  checkpointId?: StableId;
+  completedAt: string;
+  gamePack: GamePack;
+  status: PlayableBuild["status"];
+}): PlayableBuild {
+  return {
+    id:
+      status === "failed"
+        ? "build_failed_first_playable"
+        : "build_initial_playable",
+    createdAt: completedAt,
+    runtimeKind: gamePack.runtimeKind,
+    templateId: gamePack.templateId,
+    gameSpecId: gamePack.gameSpec.id,
+    ...(checkpointId ? { checkpointId } : {}),
+    validationEvidenceIds: getValidationEvidenceIds(attempt),
+    status,
+    artifactMetadata: {
+      validationAttemptStartedAt: attempt.startedAt,
+      validationCompletedAt: completedAt,
+      validationEvidenceByStage: groupValidationEvidenceReceipts(
+        attempt.evidence
+      ),
+    },
+  };
+}
+
+function createInitialVersionCheckpoint({
+  attempt,
+  build,
+  completedAt,
+  gamePack,
+}: {
+  attempt: FirstPlayableValidationAttempt;
+  build: PlayableBuild;
+  completedAt: string;
+  gamePack: GamePack;
+}): VersionCheckpoint {
+  return {
+    id: getInitialCheckpointId(gamePack),
+    createdAt: completedAt,
+    label: "Initial playable",
+    summary: "First validated playable build for this Game Pack.",
+    gameSpecId: gamePack.gameSpec.id,
+    buildId: build.id,
+    validationEvidenceIds: getValidationEvidenceIds(attempt),
+    metadata: {
+      validationAttemptStartedAt: attempt.startedAt,
+      validationCompletedAt: completedAt,
+    },
+  };
+}
+
+function createFailedAttempt({
+  attempt,
+  buildId,
+  completedAt,
+  gamePack,
+}: {
+  attempt: FirstPlayableValidationAttempt;
+  buildId?: StableId;
+  completedAt: string;
+  gamePack: GamePack;
+}): FailedAttempt {
+  const failedStage = getFirstFailedStage(attempt.evidence);
+
+  return {
+    id: buildId
+      ? "failed_attempt_first_playable_runtime"
+      : "failed_attempt_first_playable_pre_runtime",
+    createdAt: completedAt,
+    stage: failedStage,
+    summary:
+      attempt.failureMessage ??
+      "First-playable validation failed before the draft was accepted.",
+    gameSpecId: gamePack.gameSpec.id,
+    ...(buildId ? { buildId } : {}),
+    validationEvidenceIds: getValidationEvidenceIds(attempt),
+    metadata: {
+      validationAttemptStartedAt: attempt.startedAt,
+      validationCompletedAt: completedAt,
+      validationEvidenceByStage: groupValidationEvidenceReceipts(
+        attempt.evidence
+      ),
+    },
+  };
+}
+
+function getInitialCheckpointId(gamePack: GamePack): StableId {
+  return gamePack.checkpoints[0]?.id ?? "checkpoint_initial_playable";
+}
+
+function getValidationEvidenceIds(
+  attempt: FirstPlayableValidationAttempt
+): StableId[] {
+  return attempt.evidence.map((evidence) => evidence.id);
+}
+
+function getFirstFailedStage(
+  evidence: ValidationEvidence[]
+): ValidationEvidenceStage {
+  return evidence.find((item) => item.status === "failed")?.stage ?? "schema";
+}
+
+function hasMountedRuntimeArtifact(evidence: ValidationEvidence[]) {
+  return evidence.some(
+    (item) => item.stage === "runtime-boot" || item.stage === "browser-check"
+  );
+}
+
+function groupValidationEvidenceReceipts(
+  evidence: ValidationEvidence[]
+): Record<string, JsonValue> {
+  const grouped: Record<
+    string,
+    Array<{
+      checkId: StableId;
+      id: StableId;
+      status: ValidationEvidence["status"];
+    }>
+  > = {};
+
+  for (const item of evidence) {
+    grouped[item.stage] = grouped[item.stage] ?? [];
+    grouped[item.stage].push({
+      id: item.id,
+      checkId: item.checkId,
+      status: item.status,
+    });
+  }
+
+  return grouped;
+}
+
+function upsertRecordsById<TRecord extends { id: StableId }>(
+  existingRecords: TRecord[],
+  nextRecords: TRecord[]
+): TRecord[] {
+  const nextRecordsById = new Map(
+    nextRecords.map((record) => [record.id, record])
+  );
+  const updatedRecords = existingRecords.map((record) =>
+    nextRecordsById.get(record.id) ?? record
+  );
+  const existingIds = new Set(existingRecords.map((record) => record.id));
+  const newRecords = nextRecords.filter((record) => !existingIds.has(record.id));
+
+  return [...updatedRecords, ...newRecords];
 }

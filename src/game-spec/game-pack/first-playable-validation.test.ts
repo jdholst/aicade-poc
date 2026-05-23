@@ -8,11 +8,13 @@ import {
   recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
+  writeFirstPlayableValidationResult,
 } from "./first-playable-validation";
-import type { GamePack } from "./game-pack-schema";
+import { gamePackSchema, type GamePack } from "./game-pack-schema";
 
 const startedAt = "2026-05-21T13:00:00.000Z";
 const observedAt = "2026-05-21T13:00:01.500Z";
+const completedAt = "2026-05-21T13:00:02.000Z";
 
 function createGamePack() {
   return createInitialGamePack({
@@ -403,6 +405,151 @@ describe("first-playable validation orchestration", () => {
         }),
       ])
     );
+  });
+
+  it("writes successful validation evidence into a Playable Build and initial checkpoint", () => {
+    const gamePack = createGamePack();
+    const attempt = recordPassingRuntimeEvidence(
+      recordRuntimeReady(startValidation(gamePack))
+    );
+    const validationEvidenceIds = attempt.evidence.map(
+      (evidence) => evidence.id
+    );
+
+    const nextGamePack = writeFirstPlayableValidationResult({
+      gamePack,
+      attempt,
+      completedAt,
+    });
+
+    expect(gamePackSchema.parse(nextGamePack)).toEqual(nextGamePack);
+    expect(nextGamePack.validationEvidence.map((evidence) => evidence.id)).toEqual(
+      validationEvidenceIds
+    );
+    expect(nextGamePack.failedAttempts).toEqual([]);
+    expect(nextGamePack.builds).toEqual([
+      expect.objectContaining({
+        id: "build_initial_playable",
+        checkpointId: "checkpoint_initial_playable",
+        createdAt: completedAt,
+        gameSpecId: gamePack.gameSpec.id,
+        status: "validated",
+        validationEvidenceIds,
+        artifactMetadata: expect.objectContaining({
+          validationEvidenceByStage: expect.objectContaining({
+            "browser-check": [
+              {
+                id: "evidence_nonblank_render",
+                checkId: "nonblank_render",
+                status: "passed",
+              },
+              {
+                id: "evidence_player_visible",
+                checkId: "player_visible",
+                status: "passed",
+              },
+              {
+                id: "evidence_input_response",
+                checkId: "input_response",
+                status: "passed",
+              },
+            ],
+            "runtime-boot": [
+              {
+                id: "evidence_runtime_boot",
+                checkId: "runtime_boot",
+                status: "passed",
+              },
+            ],
+          }),
+        }),
+      }),
+    ]);
+    expect(nextGamePack.checkpoints).toEqual([
+      expect.objectContaining({
+        id: "checkpoint_initial_playable",
+        buildId: "build_initial_playable",
+        gameSpecId: gamePack.gameSpec.id,
+        validationEvidenceIds,
+      }),
+    ]);
+  });
+
+  it("writes pre-runtime failures into failedAttempts without creating a normal build or checkpoint", () => {
+    const gameSpec = getDefaultTopDownGameSpecFixture();
+    const gamePack = createInitialGamePack({
+      gameSpec: {
+        ...gameSpec,
+        objectives: gameSpec.objectives.map((objective) => ({
+          ...objective,
+          primary: false,
+        })),
+      },
+      runtimeKind: "phaser",
+      createdAt: startedAt,
+    });
+    const attempt = startValidation(gamePack);
+    const validationEvidenceIds = attempt.evidence.map(
+      (evidence) => evidence.id
+    );
+
+    const nextGamePack = writeFirstPlayableValidationResult({
+      gamePack,
+      attempt,
+      completedAt,
+    });
+
+    expect(gamePackSchema.parse(nextGamePack)).toEqual(nextGamePack);
+    expect(nextGamePack.builds).toEqual([]);
+    expect(nextGamePack.checkpoints).toEqual([]);
+    expect(nextGamePack.failedAttempts).toEqual([
+      expect.objectContaining({
+        id: "failed_attempt_first_playable_pre_runtime",
+        gameSpecId: gamePack.gameSpec.id,
+        stage: "spec-validation",
+        validationEvidenceIds,
+      }),
+    ]);
+    expect(nextGamePack.failedAttempts[0]).not.toHaveProperty("buildId");
+  });
+
+  it("writes runtime-mounted failures into a failed build and linked failed attempt", () => {
+    const gamePack = createGamePack();
+    const attempt = recordFirstPlayableRuntimeStatus({
+      attempt: startValidation(gamePack),
+      observedAt,
+      status: { state: "error", message: "Runtime crashed during boot." },
+    });
+    const validationEvidenceIds = attempt.evidence.map(
+      (evidence) => evidence.id
+    );
+
+    const nextGamePack = writeFirstPlayableValidationResult({
+      gamePack,
+      attempt,
+      completedAt,
+    });
+
+    expect(gamePackSchema.parse(nextGamePack)).toEqual(nextGamePack);
+    expect(nextGamePack.checkpoints).toEqual([]);
+    expect(nextGamePack.builds).toEqual([
+      expect.objectContaining({
+        id: "build_failed_first_playable",
+        gameSpecId: gamePack.gameSpec.id,
+        status: "failed",
+        validationEvidenceIds,
+      }),
+    ]);
+    expect(nextGamePack.builds[0]).not.toHaveProperty("checkpointId");
+    expect(nextGamePack.failedAttempts).toEqual([
+      expect.objectContaining({
+        id: "failed_attempt_first_playable_runtime",
+        buildId: "build_failed_first_playable",
+        gameSpecId: gamePack.gameSpec.id,
+        stage: "runtime-boot",
+        validationEvidenceIds,
+      }),
+    ]);
   });
 
   it.each([

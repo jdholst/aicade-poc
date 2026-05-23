@@ -40,6 +40,7 @@ export {
   recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
+  writeFirstPlayableValidationResult,
   type FirstPlayableRuntimeCandidate,
   type FirstPlayableRuntimeStatus,
   type FirstPlayableValidationAttempt,
@@ -47,6 +48,7 @@ export {
   type RecordFirstPlayableRuntimeEvidenceInput,
   type RecordFirstPlayableRuntimeStatusInput,
   type StartFirstPlayableValidationInput,
+  type WriteFirstPlayableValidationResultInput,
 } from "./game-pack/first-playable-validation";
 
 export {

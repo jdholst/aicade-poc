@@ -7,6 +7,8 @@ import {
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
   type FirstPlayableValidationAttempt,
+  type GamePack,
+  writeFirstPlayableValidationResult,
 } from "@/game-spec";
 import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
@@ -18,7 +20,9 @@ import type { FirstPlayableValidationSource } from "./editor-runtime-template-pl
 
 type FirstPlayableValidationState = {
   attempt: FirstPlayableValidationAttempt;
+  gamePack: GamePack;
   key: string;
+  resultWritten: boolean;
 };
 
 type UseFirstPlayableValidationGateInput = {
@@ -29,6 +33,7 @@ type UseFirstPlayableValidationGateInput = {
 };
 
 export type FirstPlayableValidationGate = {
+  firstPlayableGamePack: GamePack | null;
   firstPlayableValidationAttempt: FirstPlayableValidationAttempt | null;
   handleRuntimeStatusChange: (status: RuntimeIframeStatus) => void;
   handleRuntimeValidationEvidence: (
@@ -82,10 +87,10 @@ export function useFirstPlayableValidationGate({
         status,
       });
 
-      const nextValidationState = {
-        key: currentValidationState.key,
+      const nextValidationState = writeTerminalValidationResult({
+        currentValidationState,
         attempt: nextAttempt,
-      };
+      });
 
       activeValidationStateRef.current = nextValidationState;
 
@@ -125,10 +130,10 @@ export function useFirstPlayableValidationGate({
         observedAt: new Date().toISOString(),
       });
 
-      const nextValidationState = {
-        key: currentValidationState.key,
+      const nextValidationState = writeTerminalValidationResult({
+        currentValidationState,
         attempt: nextAttempt,
-      };
+      });
 
       activeValidationStateRef.current = nextValidationState;
 
@@ -149,6 +154,7 @@ export function useFirstPlayableValidationGate({
   );
 
   return {
+    firstPlayableGamePack: activeValidationState?.gamePack ?? null,
     firstPlayableValidationAttempt: activeValidationState?.attempt ?? null,
     handleRuntimeStatusChange,
     handleRuntimeValidationEvidence,
@@ -177,12 +183,47 @@ function createFirstPlayableValidationSeed({
   });
   const key = `${gamePack.id}-${gameResetNonce}-${loadStateStatus}`;
 
-  return {
-    key,
-    attempt: startFirstPlayableValidation({
+  const attempt = startFirstPlayableValidation({
+    gamePack,
+    runtimeCandidate: validationSource.runtimeCandidate,
+    startedAt: new Date().toISOString(),
+  });
+
+  return writeTerminalValidationResult({
+    currentValidationState: {
+      key,
       gamePack,
-      runtimeCandidate: validationSource.runtimeCandidate,
-      startedAt: new Date().toISOString(),
-    }),
+      attempt,
+      resultWritten: false,
+    },
+    attempt,
+  });
+}
+
+function writeTerminalValidationResult({
+  currentValidationState,
+  attempt,
+}: {
+  currentValidationState: FirstPlayableValidationState;
+  attempt: FirstPlayableValidationAttempt;
+}): FirstPlayableValidationState {
+  if (attempt.status === "running" || currentValidationState.resultWritten) {
+    return {
+      ...currentValidationState,
+      attempt,
+    };
+  }
+
+  const nextGamePack = writeFirstPlayableValidationResult({
+    gamePack: currentValidationState.gamePack,
+    attempt,
+    completedAt: new Date().toISOString(),
+  });
+
+  return {
+    ...currentValidationState,
+    attempt,
+    gamePack: nextGamePack,
+    resultWritten: true,
   };
 }
