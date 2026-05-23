@@ -181,10 +181,20 @@ function createFirstPlayableValidationSeed({
     gameSpec: validationSource.gameSpec,
     runtimeKind: validationSource.runtimeKind,
   });
-  const key = `${gamePack.id}-${gameResetNonce}-${loadStateStatus}`;
+  const restoredGamePack = validationSource.gamePack;
+  const activeGamePack = restoredGamePack ?? gamePack;
+  const validationSourceKey = restoredGamePack
+    ? [
+        restoredGamePack.id,
+        restoredGamePack.updatedAt,
+        restoredGamePack.builds.length,
+        restoredGamePack.checkpoints.length,
+      ].join("-")
+    : activeGamePack.id;
+  const key = `${validationSourceKey}-${gameResetNonce}-${loadStateStatus}`;
 
   const attempt = startFirstPlayableValidation({
-    gamePack,
+    gamePack: activeGamePack,
     runtimeCandidate: validationSource.runtimeCandidate,
     startedAt: new Date().toISOString(),
   });
@@ -192,7 +202,7 @@ function createFirstPlayableValidationSeed({
   return writeTerminalValidationResult({
     currentValidationState: {
       key,
-      gamePack,
+      gamePack: activeGamePack,
       attempt,
       resultWritten: false,
     },

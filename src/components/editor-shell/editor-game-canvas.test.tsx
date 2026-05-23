@@ -7,10 +7,18 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  createGamePackRepository,
+  parseGamePack,
+  type GamePack,
+  type GamePackStorageDriver,
+  type StoredGamePackRecord,
+} from "@/game-spec";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
+import { topDownPhaserTemplate } from "@/runtime/phaser";
 import type { GeneratedGamePack } from "@/service/starter-project";
 
 import { EditorGameCanvas } from "./editor-game-canvas";
@@ -65,6 +73,7 @@ const pack: GeneratedGamePack = {
   moduleSourceJs:
     "globalThis.createGameModule = function createGameModule() {};",
 };
+const createdAt = "2026-05-23T14:00:00.000Z";
 
 function createActions(
   overrides: Partial<EditorGameCanvasActions> = {}
@@ -216,6 +225,89 @@ describe("EditorGameCanvas", () => {
         "*"
       );
     });
+  });
+
+  it("saves a first validated Phaser Game Pack through the repository boundary", async () => {
+    const repository = createGamePackRepository(new MemoryGamePackStorage());
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+        gamePackRepository={repository}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Crystal Spec Chase");
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "nonblank_render");
+      dispatchValidationEvidence(iframe, "player_visible");
+      dispatchValidationEvidence(iframe, "input_response");
+    });
+
+    await waitFor(async () => {
+      const savedGamePack = await repository.load(
+        "game_pack_crystal_spec_chase"
+      );
+
+      expect(savedGamePack).toMatchObject({
+        builds: [
+          expect.objectContaining({
+            id: "build_initial_playable",
+            checkpointId: "checkpoint_initial_playable",
+          }),
+        ],
+        checkpoints: [
+          expect.objectContaining({
+            id: "checkpoint_initial_playable",
+            buildId: "build_initial_playable",
+          }),
+        ],
+        validationEvidence: expect.arrayContaining([
+          expect.objectContaining({
+            id: "evidence_runtime_boot",
+          }),
+          expect.objectContaining({
+            id: "evidence_nonblank_render",
+          }),
+        ]),
+      });
+    });
+  });
+
+  it("remounts the Phaser runtime from a saved Game Pack after repository load", async () => {
+    const repository = createGamePackRepository(new MemoryGamePackStorage());
+    const restoredGameSpec = {
+      ...topDownPhaserTemplate.gameSpec,
+      title: "Restored Crystal Checkpoint",
+    };
+
+    await repository.save(
+      createValidatedGamePack({
+        gameSpec: restoredGameSpec,
+        title: restoredGameSpec.title,
+      })
+    );
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+        gamePackRepository={repository}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Restored Crystal Checkpoint")).toBeVisible();
+    });
+    expect(screen.getByText("Phaser runtime")).toBeVisible();
   });
 
   it("keeps the Phaser boot listener stable while the editor records loading state", async () => {
@@ -546,3 +638,111 @@ describe("EditorGameCanvas", () => {
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });
 });
+
+function dispatchValidationEvidence(
+  iframe: HTMLIFrameElement,
+  checkId: "input_response" | "nonblank_render" | "player_visible"
+) {
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      data: {
+        type: "game-validation-evidence",
+        data: {
+          checkId,
+          status: "passed",
+        },
+      },
+      source: iframe.contentWindow,
+    })
+  );
+}
+
+function createValidatedGamePack({
+  gameSpec = topDownPhaserTemplate.gameSpec,
+  title = gameSpec.title,
+}: {
+  gameSpec?: typeof topDownPhaserTemplate.gameSpec;
+  title?: string;
+} = {}): GamePack {
+  return parseGamePack({
+    schemaVersion: "game-pack/v1",
+    id: "game_pack_crystal_spec_chase",
+    title,
+    createdAt,
+    updatedAt: createdAt,
+    runtimeKind: "phaser",
+    templateId: gameSpec.template.id,
+    gameSpec,
+    validationEvidence: [
+      {
+        id: "evidence_runtime_boot",
+        checkId: "runtime_boot",
+        stage: "runtime-boot",
+        status: "passed",
+        durationMs: 42,
+      },
+    ],
+    builds: [
+      {
+        id: "build_initial_playable",
+        createdAt,
+        runtimeKind: "phaser",
+        templateId: gameSpec.template.id,
+        gameSpecId: gameSpec.id,
+        checkpointId: "checkpoint_initial_playable",
+        validationEvidenceIds: ["evidence_runtime_boot"],
+        status: "validated",
+      },
+    ],
+    checkpoints: [
+      {
+        id: "checkpoint_initial_playable",
+        createdAt,
+        label: "Initial playable",
+        summary: "First validated top-down playable state.",
+        gameSpecId: gameSpec.id,
+        buildId: "build_initial_playable",
+        validationEvidenceIds: ["evidence_runtime_boot"],
+      },
+    ],
+    failedAttempts: [
+      {
+        id: "failed_attempt_preflight",
+        createdAt,
+        stage: "spec-validation",
+        summary: "Failed drafts are preserved outside checkpoints.",
+        gameSpecId: gameSpec.id,
+        validationEvidenceIds: ["evidence_runtime_boot"],
+      },
+    ],
+    generationRuns: [
+      {
+        id: "generation_run_reserved",
+        createdAt,
+        status: "reserved",
+      },
+    ],
+  });
+}
+
+class MemoryGamePackStorage implements GamePackStorageDriver {
+  readonly records = new Map<string, StoredGamePackRecord>();
+
+  async put(record: StoredGamePackRecord) {
+    this.records.set(record.id, cloneRecord(record));
+  }
+
+  async get(gamePackId: string) {
+    const record = this.records.get(gamePackId);
+
+    return record ? cloneRecord(record) : null;
+  }
+
+  async getAll() {
+    return Array.from(this.records.values()).map(cloneRecord);
+  }
+}
+
+function cloneRecord(record: StoredGamePackRecord): StoredGamePackRecord {
+  return JSON.parse(JSON.stringify(record)) as StoredGamePackRecord;
+}

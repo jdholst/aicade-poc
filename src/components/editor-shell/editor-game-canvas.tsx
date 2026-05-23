@@ -1,9 +1,10 @@
-import { type RefObject, useMemo, useRef } from "react";
+import { type RefObject, useEffect, useMemo, useRef } from "react";
 
 import type {
   RuntimeIframeHostHandle,
   RuntimeIframeStatus,
 } from "@/components/runtime-iframe-host";
+import type { GamePack, GamePackRepository } from "@/game-spec";
 import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
   EditorGameCanvasActions,
@@ -11,6 +12,7 @@ import type {
 } from "@/hooks/use-editor-session";
 
 import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
+import { useEditorGamePackPersistence } from "./editor-game-pack-persistence";
 import {
   createEditorRuntimePanelViewModel,
   type EditorRuntimePrimarySurface,
@@ -31,18 +33,35 @@ import { RuntimeWarningPanel } from "./editor-runtime-warning-panel";
 type EditorGameCanvasProps = {
   actions: EditorGameCanvasActions;
   canvas: EditorGameCanvasSession;
+  gamePackRepository?: GamePackRepository;
 };
 
 export function EditorGameCanvas({
   actions,
   canvas,
+  gamePackRepository,
 }: EditorGameCanvasProps) {
   const { gameResetNonce, isGamePaused, loadState } = canvas;
   const { onGameStatusChange, onRegenerate, onReset, onTogglePaused } =
     actions;
   const gameHostRef = useRef<RuntimeIframeHostHandle | null>(null);
-  const runtimeTemplate = useMemo(() => createEditorRuntimeTemplatePlan(), []);
+  const lastPersistedGamePackKeyRef = useRef<string | null>(null);
   const {
+    loadStatus: gamePackPersistenceStatus,
+    persistValidatedGamePack,
+    restoredGamePack,
+  } = useEditorGamePackPersistence({
+    repository: gamePackRepository,
+  });
+  const runtimeTemplate = useMemo(
+    () =>
+      createEditorRuntimeTemplatePlan({
+        restoredGamePack,
+      }),
+    [restoredGamePack]
+  );
+  const {
+    firstPlayableGamePack,
     firstPlayableValidationAttempt,
     handleRuntimeStatusChange,
     handleRuntimeValidationEvidence,
@@ -52,6 +71,33 @@ export function EditorGameCanvas({
     onGameStatusChange,
     validationSource: runtimeTemplate.firstPlayableValidationSource,
   });
+
+  useEffect(() => {
+    if (
+      gamePackPersistenceStatus !== "loaded" ||
+      firstPlayableValidationAttempt?.status !== "passed" ||
+      !firstPlayableGamePack
+    ) {
+      return;
+    }
+
+    const gamePackKey = createPersistedGamePackKey(firstPlayableGamePack);
+
+    if (lastPersistedGamePackKeyRef.current === gamePackKey) {
+      return;
+    }
+
+    lastPersistedGamePackKeyRef.current = gamePackKey;
+    void persistValidatedGamePack(firstPlayableGamePack).catch(() => {
+      lastPersistedGamePackKeyRef.current = null;
+    });
+  }, [
+    firstPlayableGamePack,
+    firstPlayableValidationAttempt?.status,
+    gamePackPersistenceStatus,
+    persistValidatedGamePack,
+  ]);
+
   const runtimePanel = createEditorRuntimePanelViewModel({
     canvas,
     firstPlayableValidationAttempt,
@@ -104,6 +150,16 @@ export function EditorGameCanvas({
       })}
     </section>
   );
+}
+
+function createPersistedGamePackKey(gamePack: GamePack) {
+  return [
+    gamePack.id,
+    gamePack.updatedAt,
+    gamePack.builds.length,
+    gamePack.checkpoints.length,
+    gamePack.validationEvidence.length,
+  ].join(":");
 }
 
 function renderRuntimeSecondarySurface({

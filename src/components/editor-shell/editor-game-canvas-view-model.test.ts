@@ -71,6 +71,7 @@ const validRuntimeTemplate: EditorRuntimeTemplatePlan = {
     },
     runtimeKind: "phaser",
   },
+  sourceKey: topDownPhaserTemplate.id,
   template: topDownPhaserTemplate,
   type: "phaser-valid",
 };

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { parseGamePack } from "@/game-spec";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
 
 import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
@@ -19,6 +20,7 @@ const validationSource: FirstPlayableValidationSource = {
   },
   runtimeKind: "phaser",
 };
+const createdAt = "2026-05-23T14:00:00.000Z";
 
 function createInput(overrides: Partial<GateInput> = {}): GateInput {
   return {
@@ -58,6 +60,83 @@ describe("useFirstPlayableValidationGate", () => {
       builds: [],
       checkpoints: [],
       failedAttempts: [],
+    });
+  });
+
+  it("seeds first-playable state from a restored Game Pack with its checkpoint", () => {
+    const restoredGamePack = parseGamePack({
+      schemaVersion: "game-pack/v1",
+      id: "game_pack_crystal_spec_chase",
+      title: topDownPhaserTemplate.gameSpec.title,
+      createdAt,
+      updatedAt: createdAt,
+      runtimeKind: "phaser",
+      templateId: topDownPhaserTemplate.gameSpec.template.id,
+      gameSpec: topDownPhaserTemplate.gameSpec,
+      validationEvidence: [
+        {
+          id: "evidence_runtime_boot",
+          checkId: "runtime_boot",
+          stage: "runtime-boot",
+          status: "passed",
+          durationMs: 42,
+        },
+      ],
+      builds: [
+        {
+          id: "build_initial_playable",
+          createdAt,
+          runtimeKind: "phaser",
+          templateId: topDownPhaserTemplate.gameSpec.template.id,
+          gameSpecId: topDownPhaserTemplate.gameSpec.id,
+          checkpointId: "checkpoint_initial_playable",
+          validationEvidenceIds: ["evidence_runtime_boot"],
+          status: "validated",
+        },
+      ],
+      checkpoints: [
+        {
+          id: "checkpoint_initial_playable",
+          createdAt,
+          label: "Initial playable",
+          summary: "First validated top-down playable state.",
+          gameSpecId: topDownPhaserTemplate.gameSpec.id,
+          buildId: "build_initial_playable",
+          validationEvidenceIds: ["evidence_runtime_boot"],
+        },
+      ],
+      failedAttempts: [],
+      generationRuns: [],
+    });
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          validationSource: {
+            ...validationSource,
+            gamePack: restoredGamePack,
+          },
+        })
+      )
+    );
+
+    expect(result.current.firstPlayableGamePack).toMatchObject({
+      id: restoredGamePack.id,
+      builds: [
+        expect.objectContaining({
+          id: "build_initial_playable",
+          checkpointId: "checkpoint_initial_playable",
+        }),
+      ],
+      checkpoints: [
+        expect.objectContaining({
+          id: "checkpoint_initial_playable",
+          buildId: "build_initial_playable",
+        }),
+      ],
+    });
+    expect(result.current.firstPlayableValidationAttempt).toMatchObject({
+      gamePackId: restoredGamePack.id,
+      status: "running",
     });
   });
 

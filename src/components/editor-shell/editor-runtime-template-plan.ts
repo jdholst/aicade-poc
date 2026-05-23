@@ -1,13 +1,16 @@
 import type {
   FirstPlayableRuntimeCandidate,
+  GamePack,
   GameSpec,
   GameSpecValidationIssue,
 } from "@/game-spec";
+import { parseTopDownGameSpec as parseSavedTopDownGameSpec } from "@/game-spec";
 import type {
   EditorRuntimeMode,
 } from "@/runtime/editor-runtime-mode";
 import { getEditorRuntimeMode } from "@/runtime/editor-runtime-mode";
 import {
+  createTopDownPhaserTemplate,
   getTopDownPhaserTemplateState,
   type HandAuthoredPhaserTemplate,
   type TopDownPhaserTemplateState,
@@ -28,6 +31,7 @@ export type EditorRuntimeHostViewModel =
     };
 
 export type FirstPlayableValidationSource = {
+  gamePack?: GamePack;
   gameSpec: GameSpec;
   runtimeCandidate: FirstPlayableRuntimeCandidate;
   runtimeKind: Extract<RuntimeKind, "phaser">;
@@ -46,17 +50,20 @@ export type EditorRuntimeTemplatePlan =
     }
   | {
       firstPlayableValidationSource: FirstPlayableValidationSource;
+      sourceKey: string;
       template: HandAuthoredPhaserTemplate;
       type: "phaser-valid";
     };
 
 type CreateEditorRuntimeTemplatePlanInput = {
   phaserTemplateState?: TopDownPhaserTemplateState;
+  restoredGamePack?: GamePack | null;
   runtimeMode?: EditorRuntimeMode;
 };
 
 export function createEditorRuntimeTemplatePlan({
   phaserTemplateState = getTopDownPhaserTemplateState(),
+  restoredGamePack = null,
   runtimeMode = getEditorRuntimeMode(),
 }: CreateEditorRuntimeTemplatePlanInput = {}): EditorRuntimeTemplatePlan {
   if (runtimeMode === "canvas2d") {
@@ -64,6 +71,10 @@ export function createEditorRuntimeTemplatePlan({
       firstPlayableValidationSource: null,
       type: "canvas",
     };
+  }
+
+  if (restoredGamePack) {
+    return createRestoredGamePackRuntimeTemplatePlan(restoredGamePack);
   }
 
   if (phaserTemplateState.status === "invalid") {
@@ -76,19 +87,77 @@ export function createEditorRuntimeTemplatePlan({
   }
 
   return {
-    firstPlayableValidationSource: {
-      gameSpec: phaserTemplateState.template.gameSpec,
-      runtimeCandidate: {
-        runtimeDependencyScriptPaths:
-          phaserTemplateState.template.runtimeDependencyScriptPaths,
-        runtimeKind: "phaser",
-        runtimeScriptPath: phaserTemplateState.template.runtimeScriptPath,
-        templateId: phaserTemplateState.template.gameSpec.template.id,
-      },
-      runtimeKind: "phaser",
-    },
+    firstPlayableValidationSource: createFirstPlayableValidationSource(
+      phaserTemplateState.template
+    ),
+    sourceKey: phaserTemplateState.template.id,
     template: phaserTemplateState.template,
     type: "phaser-valid",
+  };
+}
+
+function createRestoredGamePackRuntimeTemplatePlan(
+  gamePack: GamePack
+): EditorRuntimeTemplatePlan {
+  if (gamePack.runtimeKind !== "phaser") {
+    return createInvalidRestoredGamePackPlan(
+      `Saved Game Pack runtime "${gamePack.runtimeKind}" cannot be mounted by the Phaser editor.`
+    );
+  }
+
+  try {
+    const gameSpec = parseSavedTopDownGameSpec(gamePack.gameSpec);
+    const template = createTopDownPhaserTemplate(gameSpec);
+
+    return {
+      firstPlayableValidationSource: {
+        ...createFirstPlayableValidationSource(template),
+        gamePack,
+      },
+      sourceKey: [
+        template.id,
+        gamePack.updatedAt,
+        gamePack.builds.length,
+        gamePack.checkpoints.length,
+      ].join("-"),
+      template,
+      type: "phaser-valid",
+    };
+  } catch {
+    return createInvalidRestoredGamePackPlan(
+      "Saved Game Pack cannot be restored because its Game Spec is not a valid top-down Phaser spec."
+    );
+  }
+}
+
+function createInvalidRestoredGamePackPlan(
+  message: string
+): Extract<EditorRuntimeTemplatePlan, { type: "phaser-invalid" }> {
+  return {
+    firstPlayableValidationSource: null,
+    issues: [
+      {
+        path: "gamePack.gameSpec",
+        message,
+      },
+    ],
+    message,
+    type: "phaser-invalid",
+  };
+}
+
+function createFirstPlayableValidationSource(
+  template: HandAuthoredPhaserTemplate
+): FirstPlayableValidationSource {
+  return {
+    gameSpec: template.gameSpec,
+    runtimeCandidate: {
+      runtimeDependencyScriptPaths: template.runtimeDependencyScriptPaths,
+      runtimeKind: "phaser",
+      runtimeScriptPath: template.runtimeScriptPath,
+      templateId: template.gameSpec.template.id,
+    },
+    runtimeKind: "phaser",
   };
 }
 
@@ -101,7 +170,7 @@ export function createPhaserRuntimeHostViewModel({
 }): EditorRuntimeHostViewModel {
   return {
     type: "phaser",
-    key: `${runtimeTemplate.template.id}-${gameResetNonce}`,
+    key: `${runtimeTemplate.sourceKey}-${gameResetNonce}`,
     template: runtimeTemplate.template,
   };
 }
