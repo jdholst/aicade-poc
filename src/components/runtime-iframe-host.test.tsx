@@ -79,6 +79,19 @@ const runtimeAdapter: RuntimeAdapter<TestRuntimeArtifact> = {
       };
     }
 
+    if (event.type === "validation-evidence") {
+      return {
+        type: "game-validation-evidence",
+        evidence: {
+          checkId: "nonblank_render",
+          status: "passed",
+          evidence: {
+            renderedObjectCount: 4,
+          },
+        },
+      };
+    }
+
     return null;
   },
 };
@@ -175,6 +188,43 @@ describe("RuntimeIframeHost", () => {
     dispatchRuntimeMessage(iframe, { type: "ready" }, window);
 
     expect(statuses).toEqual([{ state: "loading" }]);
+  });
+
+  it("forwards runtime validation evidence without changing status", async () => {
+    const statuses: RuntimeIframeStatus[] = [];
+    const validationEvidence: unknown[] = [];
+
+    render(
+      <RuntimeIframeHost
+        artifact={artifact}
+        runtimeAdapter={runtimeAdapter}
+        onStatusChange={(status) => {
+          statuses.push(status);
+        }}
+        onValidationEvidence={(evidence) => {
+          validationEvidence.push(evidence);
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(statuses.at(-1)).toEqual({ state: "loading" });
+    });
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Test Runtime");
+
+    dispatchRuntimeMessage(iframe, { type: "validation-evidence" });
+
+    expect(statuses).toEqual([{ state: "loading" }]);
+    expect(validationEvidence).toEqual([
+      {
+        checkId: "nonblank_render",
+        status: "passed",
+        evidence: {
+          renderedObjectCount: 4,
+        },
+      },
+    ]);
   });
 
   it("reports recoverable warnings without settling the runtime", async () => {
@@ -309,6 +359,30 @@ describe("RuntimeIframeHost", () => {
     expect(iframeFocus).toHaveBeenCalledTimes(2);
     expect(windowFocus).toHaveBeenCalledTimes(2);
     expect(postMessage).toHaveBeenCalledWith({ type: "game-focus" }, "*");
+  });
+
+  it("posts a first-playable check command after ready when enabled", async () => {
+    render(
+      <RuntimeIframeHost
+        artifact={artifact}
+        runtimeAdapter={runtimeAdapter}
+        runFirstPlayableChecksOnReady
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Test Runtime");
+    const postMessage = vi
+      .spyOn(iframe.contentWindow!, "postMessage")
+      .mockImplementation(() => undefined);
+
+    dispatchRuntimeMessage(iframe, { type: "ready" });
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: "game-run-first-playable-checks" },
+        "*"
+      );
+    });
   });
 
   it("posts pause commands when the host pause state changes", async () => {

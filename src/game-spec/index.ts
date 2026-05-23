@@ -37,12 +37,14 @@ export {
 } from "./game-pack/game-pack-factory";
 
 export {
+  recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
   type FirstPlayableRuntimeCandidate,
   type FirstPlayableRuntimeStatus,
   type FirstPlayableValidationAttempt,
   type FirstPlayableValidationStatus,
+  type RecordFirstPlayableRuntimeEvidenceInput,
   type RecordFirstPlayableRuntimeStatusInput,
   type StartFirstPlayableValidationInput,
 } from "./game-pack/first-playable-validation";

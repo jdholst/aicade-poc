@@ -1068,6 +1068,94 @@ describe("top-down Phaser template", () => {
     expect(gameElements.some((element) => element.kind === "star")).toBe(false);
   });
 
+  it("emits first-playable runtime evidence from the host validation command", () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const { context, dispatchWindowEvent, messages } = createRuntimeHarness(
+      topDownPhaserTemplate
+    );
+
+    runTopDownRuntime(runtimeSource, context);
+    dispatchWindowEvent("message", {
+      data: { type: "game-run-first-playable-checks" },
+    });
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "game-validation-evidence",
+          data: expect.objectContaining({
+            checkId: "nonblank_render",
+            status: "passed",
+            evidence: expect.objectContaining({
+              renderedObjectCount: expect.any(Number),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          type: "game-validation-evidence",
+          data: expect.objectContaining({
+            checkId: "player_visible",
+            status: "passed",
+            evidence: expect.objectContaining({
+              hasBody: true,
+              playerPosition: { x: 156, y: expect.any(Number) },
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          type: "game-validation-evidence",
+          data: expect.objectContaining({
+            checkId: "input_response",
+            status: "passed",
+            evidence: expect.objectContaining({
+              inputAction: "move_right",
+              playerVelocity: { x: 220, y: 0 },
+            }),
+          }),
+        }),
+      ])
+    );
+  });
+
+  it("fails input-response runtime evidence when movement is not installed", () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const templateWithoutMovement = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: topDownPhaserTemplate.gameSpec.mechanics.filter(
+          (mechanic) => mechanic.type !== "player_movement"
+        ),
+      },
+    };
+    const { context, dispatchWindowEvent, messages } = createRuntimeHarness(
+      templateWithoutMovement
+    );
+
+    runTopDownRuntime(runtimeSource, context, templateWithoutMovement);
+    dispatchWindowEvent("message", {
+      data: { type: "game-run-first-playable-checks" },
+    });
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: "game-validation-evidence",
+        data: expect.objectContaining({
+          checkId: "input_response",
+          status: "failed",
+          issues: [
+            {
+              code: "input_probe_no_velocity",
+              path: "runtime.input",
+              message:
+                "Expected player velocity to change during the movement probe.",
+            },
+          ],
+        }),
+      })
+    );
+  });
+
   it("handles the shared host command protocol", () => {
     const runtimeSource = loadTopDownRuntimeSource();
 
@@ -1076,8 +1164,12 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain('event.data.type === "game-focus"');
     expect(runtimeSource).toContain('event.data.type === "game-pause"');
     expect(runtimeSource).toContain('event.data.type === "game-resize"');
+    expect(runtimeSource).toContain(
+      'event.data.type === "game-run-first-playable-checks"'
+    );
     expect(runtimeSource).toContain("function setPaused(nextIsPaused)");
     expect(runtimeSource).toContain("function applyHostViewport(nextViewport)");
+    expect(runtimeSource).toContain("function runFirstPlayableChecks()");
     expect(runtimeSource).toContain("game.scene.pause");
     expect(runtimeSource).toContain("game.scene.resume");
     expect(runtimeSource).toContain("game.scale.resize");

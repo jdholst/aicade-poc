@@ -76,7 +76,7 @@ describe("useFirstPlayableValidationGate", () => {
     expect(onGameStatusChange).toHaveBeenCalledWith({ state: "ready" });
   });
 
-  it("records runtime boot success and forwards ready status", () => {
+  it("records runtime boot success, forwards ready status, and waits for runtime evidence", () => {
     const onGameStatusChange = vi.fn();
     const { result } = renderHook(() =>
       useFirstPlayableValidationGate(createInput({ onGameStatusChange }))
@@ -89,13 +89,88 @@ describe("useFirstPlayableValidationGate", () => {
     expect(onGameStatusChange).toHaveBeenCalledWith({ state: "ready" });
     expect(result.current.firstPlayableValidationAttempt).toMatchObject({
       shouldBlockPlayable: false,
-      status: "passed",
+      status: "running",
       evidence: expect.arrayContaining([
         expect.objectContaining({
           checkId: "runtime_boot",
           status: "passed",
         }),
       ]),
+    });
+  });
+
+  it("passes after nonblank, player, and input runtime evidence all pass", () => {
+    const onGameStatusChange = vi.fn();
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(createInput({ onGameStatusChange }))
+    );
+
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+
+    expect(result.current.firstPlayableValidationAttempt).toMatchObject({
+      shouldBlockPlayable: false,
+      status: "passed",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "nonblank_render",
+          status: "passed",
+        }),
+        expect.objectContaining({
+          checkId: "player_visible",
+          status: "passed",
+        }),
+        expect.objectContaining({
+          checkId: "input_response",
+          status: "passed",
+        }),
+      ]),
+    });
+  });
+
+  it("blocks editor state when runtime validation evidence fails", () => {
+    const onGameStatusChange = vi.fn();
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(createInput({ onGameStatusChange }))
+    );
+
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "failed",
+        message: "Runtime did not respond to movement input.",
+        issues: [
+          {
+            code: "input_probe_no_velocity",
+            path: "runtime.input",
+            message: "Runtime did not respond to movement input.",
+          },
+        ],
+      });
+    });
+
+    expect(onGameStatusChange).toHaveBeenLastCalledWith({
+      state: "error",
+      message: "Runtime did not respond to movement input.",
+    });
+    expect(result.current.firstPlayableValidationAttempt).toMatchObject({
+      failureMessage: "Runtime did not respond to movement input.",
+      shouldBlockPlayable: true,
+      status: "failed",
     });
   });
 

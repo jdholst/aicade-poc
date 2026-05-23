@@ -59,6 +59,14 @@
       activeScene: null,
       game: null,
       isPaused: false,
+      playerHandle: null,
+      renderedObjectCount: 0,
+      validationInputState: {
+        down: false,
+        left: false,
+        right: false,
+        up: false,
+      },
     };
   }
 
@@ -555,7 +563,31 @@
     const mathModule = dependencies.mathModule;
     const objectiveModule = dependencies.objectiveModule;
     const reporter = dependencies.reporter;
+    const runtimeState = dependencies.runtimeState;
     let installedMechanics = [];
+
+    function createRuntimeCursorKeys(scene) {
+      const cursors = scene.input.keyboard.createCursorKeys();
+
+      function createKey(key) {
+        const cursor = cursors[key] || {};
+
+        return {
+          get isDown() {
+            return Boolean(
+              cursor.isDown || runtimeState.validationInputState[key]
+            );
+          },
+        };
+      }
+
+      return {
+        down: createKey("down"),
+        left: createKey("left"),
+        right: createKey("right"),
+        up: createKey("up"),
+      };
+    }
 
     function createMechanicContext(scene, mechanic, contextExtras) {
       const staticBodies =
@@ -624,7 +656,7 @@
         },
         input: {
           createCursorKeys() {
-            return scene.input.keyboard.createCursorKeys();
+            return createRuntimeCursorKeys(scene);
           },
         },
         math: {
@@ -762,6 +794,205 @@
   }
 
   function createHostProtocolModule(config, runtimeState, mechanicsModule) {
+    function emitValidationEvidence(checkId, status, message, evidence, issues) {
+      notify("game-validation-evidence", {
+        data: {
+          checkId,
+          status,
+          message,
+          evidence,
+          issues,
+        },
+      });
+    }
+
+    function isFiniteNumber(value) {
+      return typeof value === "number" && Number.isFinite(value);
+    }
+
+    function readVelocity(handle) {
+      const velocity =
+        handle &&
+        handle.body &&
+        handle.body.velocity &&
+        isFiniteNumber(handle.body.velocity.x) &&
+        isFiniteNumber(handle.body.velocity.y)
+          ? handle.body.velocity
+          : null;
+
+      return velocity
+        ? {
+            x: velocity.x,
+            y: velocity.y,
+          }
+        : {
+            x: 0,
+            y: 0,
+          };
+    }
+
+    function clearValidationInput(player) {
+      runtimeState.validationInputState = {
+        down: false,
+        left: false,
+        right: false,
+        up: false,
+      };
+
+      if (
+        player &&
+        player.body &&
+        typeof player.body.setVelocity === "function"
+      ) {
+        try {
+          player.body.setVelocity(0, 0);
+        } catch {
+          // The response receipt below captures failed velocity updates.
+        }
+      }
+    }
+
+    function runInputResponseCheck() {
+      const player = runtimeState.playerHandle;
+
+      if (
+        !player ||
+        !player.body ||
+        typeof player.body.setVelocity !== "function"
+      ) {
+        return {
+          status: "failed",
+          message: "Runtime could not verify player input response.",
+          evidence: {
+            hasPlayer: Boolean(player),
+          },
+          issues: [
+            {
+              code: "input_probe_missing_player_body",
+              path: "runtime.player.body",
+              message:
+                "Expected the runtime player to have a velocity-capable body.",
+            },
+          ],
+        };
+      }
+
+      runtimeState.validationInputState = {
+        down: false,
+        left: false,
+        right: true,
+        up: false,
+      };
+
+      mechanicsModule.updateInstalledMechanics();
+
+      const velocity = readVelocity(player);
+      const responded = velocity.x !== 0 || velocity.y !== 0;
+
+      clearValidationInput(player);
+
+      if (responded) {
+        return {
+          status: "passed",
+          message: "Runtime responded to a synthetic movement input.",
+          evidence: {
+            inputAction: "move_right",
+            playerVelocity: velocity,
+          },
+        };
+      }
+
+      return {
+        status: "failed",
+        message: "Runtime did not respond to a synthetic movement input.",
+        evidence: {
+          inputAction: "move_right",
+          playerVelocity: velocity,
+        },
+        issues: [
+          {
+            code: "input_probe_no_velocity",
+            path: "runtime.input",
+            message:
+              "Expected player velocity to change during the movement probe.",
+          },
+        ],
+      };
+    }
+
+    function runFirstPlayableChecks() {
+      const renderedObjectCount = runtimeState.renderedObjectCount;
+      const player = runtimeState.playerHandle;
+      const playerHasFinitePosition =
+        player && isFiniteNumber(player.x) && isFiniteNumber(player.y);
+      const playerInsideViewport =
+        playerHasFinitePosition &&
+        player.x >= 0 &&
+        player.x <= config.viewport.width &&
+        player.y >= 0 &&
+        player.y <= config.viewport.height;
+      const playerVisible =
+        Boolean(player && player.body) && Boolean(playerInsideViewport);
+      const inputResponse = runInputResponseCheck();
+
+      emitValidationEvidence(
+        "nonblank_render",
+        renderedObjectCount > 0 ? "passed" : "failed",
+        renderedObjectCount > 0
+          ? "Runtime reported nonblank render output."
+          : "Runtime did not report nonblank render output.",
+        {
+          renderedObjectCount,
+          viewport: config.viewport,
+        },
+        renderedObjectCount > 0
+          ? undefined
+          : [
+              {
+                code: "blank_runtime_render",
+                path: "runtime.render",
+                message: "Expected at least one visible render object.",
+              },
+            ]
+      );
+
+      emitValidationEvidence(
+        "player_visible",
+        playerVisible ? "passed" : "failed",
+        playerVisible
+          ? "Runtime reported a visible player."
+          : "Runtime did not report a visible player.",
+        {
+          hasBody: Boolean(player && player.body),
+          playerPosition: playerHasFinitePosition
+            ? {
+                x: player.x,
+                y: player.y,
+              }
+            : null,
+          viewport: config.viewport,
+        },
+        playerVisible
+          ? undefined
+          : [
+              {
+                code: "player_not_visible",
+                path: "runtime.player",
+                message:
+                  "Expected the player to exist inside the runtime viewport.",
+              },
+            ]
+      );
+
+      emitValidationEvidence(
+        "input_response",
+        inputResponse.status,
+        inputResponse.message,
+        inputResponse.evidence,
+        inputResponse.issues
+      );
+    }
+
     function applyHostViewport(nextViewport) {
       if (
         !nextViewport ||
@@ -838,6 +1069,13 @@
         if (event.data && event.data.type === "game-resize") {
           applyHostViewport(event.data.viewport);
         }
+
+        if (
+          event.data &&
+          event.data.type === "game-run-first-playable-checks"
+        ) {
+          runFirstPlayableChecks();
+        }
       });
     }
 
@@ -907,6 +1145,9 @@
 
         const staticLayoutBodies = modules.layoutModule.createLayoutBodies(this);
         const player = modules.entityModule.createPlayer(this);
+        runtimeState.playerHandle = player;
+        runtimeState.renderedObjectCount =
+          3 + staticLayoutBodies.length + (player ? 1 : 0);
         modules.mechanicsModule.installActiveMechanics(this, {
           staticLayoutBodies,
         });
@@ -948,6 +1189,7 @@
       mathModule,
       objectiveModule,
       reporter,
+      runtimeState,
     });
     const hostProtocolModule = createHostProtocolModule(
       config,

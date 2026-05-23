@@ -4,6 +4,7 @@ import type {
   RuntimeIframeHostHandle,
   RuntimeIframeStatus,
 } from "@/components/runtime-iframe-host";
+import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
@@ -44,6 +45,7 @@ export function EditorGameCanvas({
   const {
     firstPlayableValidationAttempt,
     handleRuntimeStatusChange,
+    handleRuntimeValidationEvidence,
   } = useFirstPlayableValidationGate({
     gameResetNonce,
     loadStateStatus: loadState.status,
@@ -97,6 +99,7 @@ export function EditorGameCanvas({
         isPaused: isGamePaused,
         onRegenerate,
         onStatusChange: handleRuntimeStatusChange,
+        onValidationEvidence: handleRuntimeValidationEvidence,
         surface: runtimePanel.primarySurface,
       })}
     </section>
@@ -134,6 +137,7 @@ function renderRuntimePrimarySurface({
   isPaused,
   onRegenerate,
   onStatusChange,
+  onValidationEvidence,
   surface,
 }: {
   focusOnReadyKey: number;
@@ -141,6 +145,7 @@ function renderRuntimePrimarySurface({
   isPaused: boolean;
   onRegenerate: () => void;
   onStatusChange: (status: RuntimeIframeStatus) => void;
+  onValidationEvidence: (evidence: RuntimeValidationEvidence) => void;
   surface: EditorRuntimePrimarySurface;
 }) {
   if (surface.type === "loading") {
@@ -181,6 +186,7 @@ function renderRuntimePrimarySurface({
       hostRef={hostRef}
       isPaused={isPaused}
       onStatusChange={onStatusChange}
+      onValidationEvidence={onValidationEvidence}
     />
   );
 }

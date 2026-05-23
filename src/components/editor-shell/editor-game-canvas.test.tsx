@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -178,6 +184,38 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
     expect(screen.getByText("Phaser runtime")).toBeVisible();
+  });
+
+  it("runs Phaser first-playable checks after the runtime reports ready", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Prism Relay Gauntlet");
+    const postMessage = vi
+      .spyOn(iframe.contentWindow!, "postMessage")
+      .mockImplementation(() => undefined);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: "game-run-first-playable-checks" },
+        "*"
+      );
+    });
   });
 
   it("keeps the Phaser boot listener stable while the editor records loading state", async () => {

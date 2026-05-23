@@ -3,10 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RuntimeIframeStatus } from "@/components/runtime-iframe-host";
 import {
   createInitialGamePack,
+  recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
   type FirstPlayableValidationAttempt,
 } from "@/game-spec";
+import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
@@ -29,6 +31,9 @@ type UseFirstPlayableValidationGateInput = {
 export type FirstPlayableValidationGate = {
   firstPlayableValidationAttempt: FirstPlayableValidationAttempt | null;
   handleRuntimeStatusChange: (status: RuntimeIframeStatus) => void;
+  handleRuntimeValidationEvidence: (
+    evidence: RuntimeValidationEvidence
+  ) => void;
 };
 
 export function useFirstPlayableValidationGate({
@@ -103,9 +108,50 @@ export function useFirstPlayableValidationGate({
     [onGameStatusChange, validationSeed]
   );
 
+  const handleRuntimeValidationEvidence = useCallback(
+    (evidence: RuntimeValidationEvidence) => {
+      const currentValidationState =
+        activeValidationStateRef.current?.key === validationSeed?.key
+          ? activeValidationStateRef.current
+          : validationSeed;
+
+      if (!currentValidationState) {
+        return;
+      }
+
+      const nextAttempt = recordFirstPlayableRuntimeEvidence({
+        attempt: currentValidationState.attempt,
+        evidence,
+        observedAt: new Date().toISOString(),
+      });
+
+      const nextValidationState = {
+        key: currentValidationState.key,
+        attempt: nextAttempt,
+      };
+
+      activeValidationStateRef.current = nextValidationState;
+
+      if (nextAttempt !== currentValidationState.attempt) {
+        setRuntimeValidationState(nextValidationState);
+      }
+
+      if (nextAttempt.shouldBlockPlayable && nextAttempt.status === "failed") {
+        onGameStatusChange({
+          state: "error",
+          message:
+            nextAttempt.failureMessage ??
+            "First-playable validation failed.",
+        });
+      }
+    },
+    [onGameStatusChange, validationSeed]
+  );
+
   return {
     firstPlayableValidationAttempt: activeValidationState?.attempt ?? null,
     handleRuntimeStatusChange,
+    handleRuntimeValidationEvidence,
   };
 }
 

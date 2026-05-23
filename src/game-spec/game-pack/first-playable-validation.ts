@@ -1,6 +1,14 @@
-import type { RuntimeIssue } from "@/runtime/runtime-adapter";
+import type {
+  RuntimeIssue,
+  RuntimeValidationEvidence as RuntimeValidationEvidenceReport,
+  RuntimeValidationEvidenceCheckId,
+} from "@/runtime/runtime-adapter";
 
-import type { JsonValue, StableId } from "../game-spec-schema";
+import {
+  jsonValueSchema,
+  type JsonValue,
+  type StableId,
+} from "../game-spec-schema";
 import type {
   GamePack,
   GamePackRuntimeKind,
@@ -37,6 +45,12 @@ export type RecordFirstPlayableRuntimeStatusInput = {
   status: FirstPlayableRuntimeStatus;
 };
 
+export type RecordFirstPlayableRuntimeEvidenceInput = {
+  attempt: FirstPlayableValidationAttempt;
+  evidence: RuntimeValidationEvidenceReport;
+  observedAt: string;
+};
+
 export type FirstPlayableRuntimeStatus =
   | { state: "loading" }
   | { state: "ready" }
@@ -59,6 +73,56 @@ const RENDER_PLACEHOLDER_ASSET_EVIDENCE_ID =
 const RENDER_PLACEHOLDER_ASSET_CHECK_ID = "render_placeholder_asset_refs";
 const RUNTIME_BOOT_EVIDENCE_ID = "evidence_runtime_boot";
 const RUNTIME_BOOT_CHECK_ID = "runtime_boot";
+const NONBLANK_RENDER_EVIDENCE_ID = "evidence_nonblank_render";
+const PLAYER_VISIBLE_EVIDENCE_ID = "evidence_player_visible";
+const INPUT_RESPONSE_EVIDENCE_ID = "evidence_input_response";
+
+const runtimeBrowserEvidenceConfig = {
+  nonblank_render: {
+    evidenceId: NONBLANK_RENDER_EVIDENCE_ID,
+    passedMessage: "Runtime reported nonblank render output.",
+    failedMessage: "Runtime did not report nonblank render output.",
+    defaultIssue: {
+      code: "blank_runtime_render",
+      path: "runtime.render",
+      message: "Expected the runtime to report at least one visible render object.",
+    },
+  },
+  player_visible: {
+    evidenceId: PLAYER_VISIBLE_EVIDENCE_ID,
+    passedMessage: "Runtime reported a visible player.",
+    failedMessage: "Runtime did not report a visible player.",
+    defaultIssue: {
+      code: "player_not_visible",
+      path: "runtime.player",
+      message: "Expected the runtime to report a visible player.",
+    },
+  },
+  input_response: {
+    evidenceId: INPUT_RESPONSE_EVIDENCE_ID,
+    passedMessage: "Runtime reported player input response.",
+    failedMessage: "Runtime did not report player input response.",
+    defaultIssue: {
+      code: "input_not_responsive",
+      path: "runtime.input",
+      message: "Expected the runtime to report a response to movement input.",
+    },
+  },
+} satisfies Record<
+  RuntimeValidationEvidenceCheckId,
+  {
+    defaultIssue: NonNullable<ValidationEvidence["issues"]>[number];
+    evidenceId: StableId;
+    failedMessage: string;
+    passedMessage: string;
+  }
+>;
+
+const REQUIRED_RUNTIME_EVIDENCE_CHECK_IDS = [
+  "nonblank_render",
+  "player_visible",
+  "input_response",
+] as const satisfies readonly RuntimeValidationEvidenceCheckId[];
 
 export function startFirstPlayableValidation({
   gamePack,
@@ -132,6 +196,25 @@ export function recordFirstPlayableRuntimeStatus({
           message: status.message,
         },
       ],
+    })
+  );
+}
+
+export function recordFirstPlayableRuntimeEvidence({
+  attempt,
+  evidence,
+  observedAt,
+}: RecordFirstPlayableRuntimeEvidenceInput): FirstPlayableValidationAttempt {
+  if (attempt.status === "failed") {
+    return attempt;
+  }
+
+  return updateAttemptWithRuntimeEvidence(
+    attempt,
+    createRuntimeBrowserEvidence({
+      attempt,
+      observedAt,
+      report: evidence,
     })
   );
 }
@@ -545,6 +628,35 @@ function createRuntimeBootEvidence({
   };
 }
 
+function createRuntimeBrowserEvidence({
+  attempt,
+  observedAt,
+  report,
+}: {
+  attempt: FirstPlayableValidationAttempt;
+  observedAt: string;
+  report: RuntimeValidationEvidenceReport;
+}): ValidationEvidence {
+  const config = runtimeBrowserEvidenceConfig[report.checkId];
+  const status = report.status;
+  const failed = status === "failed";
+
+  return {
+    id: config.evidenceId,
+    checkId: report.checkId,
+    stage: "browser-check",
+    status,
+    durationMs: getDurationMs(attempt.startedAt, observedAt),
+    message:
+      report.message ??
+      (failed ? config.failedMessage : config.passedMessage),
+    evidence: createRuntimeEvidenceDetails(report.evidence),
+    issues: failed
+      ? createRuntimeValidationIssues(report.issues, config.defaultIssue)
+      : report.issues,
+  };
+}
+
 type IdRecord = {
   id: StableId;
 };
@@ -645,11 +757,20 @@ function updateAttemptWithRuntimeEvidence(
     (item) =>
       item.checkId === RUNTIME_BOOT_CHECK_ID && item.status === "passed"
   );
+  const hasRequiredRuntimeEvidencePass =
+    REQUIRED_RUNTIME_EVIDENCE_CHECK_IDS.every((checkId) =>
+      evidence.some((item) => item.checkId === checkId && item.status === "passed")
+    );
 
   return {
     ...attempt,
     evidence,
-    status: failed ? "failed" : hasRuntimeBootPass ? "passed" : "running",
+    status:
+      failed
+        ? "failed"
+        : hasRuntimeBootPass && hasRequiredRuntimeEvidencePass
+          ? "passed"
+          : "running",
     shouldBlockPlayable: failed,
     failureMessage: failed
       ? getFirstFailureMessage(evidence)
@@ -684,4 +805,42 @@ function getDurationMs(startedAt: string, observedAt: string) {
   const durationMs = Date.parse(observedAt) - Date.parse(startedAt);
 
   return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : 0;
+}
+
+function createRuntimeEvidenceDetails(
+  evidence: Record<string, unknown> | undefined
+): Record<string, JsonValue> {
+  return {
+    source: "runtime-self-report",
+    ...(evidence ? toJsonRecord(evidence) : {}),
+  };
+}
+
+function createRuntimeValidationIssues(
+  issues: RuntimeValidationEvidenceReport["issues"],
+  defaultIssue: NonNullable<ValidationEvidence["issues"]>[number]
+): NonNullable<ValidationEvidence["issues"]> {
+  if (!issues?.length) {
+    return [defaultIssue];
+  }
+
+  return issues.map((issue) => ({
+    ...(issue.code ? { code: issue.code } : {}),
+    ...(issue.path ? { path: issue.path } : {}),
+    message: issue.message,
+  }));
+}
+
+function toJsonRecord(record: Record<string, unknown>): Record<string, JsonValue> {
+  const jsonRecord: Record<string, JsonValue> = {};
+
+  for (const [key, value] of Object.entries(record)) {
+    const parsedValue = jsonValueSchema.safeParse(value);
+
+    if (parsedValue.success) {
+      jsonRecord[key] = parsedValue.data;
+    }
+  }
+
+  return jsonRecord;
 }

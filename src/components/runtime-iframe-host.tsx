@@ -12,7 +12,11 @@ import {
 } from "react";
 
 import { SANDBOX_BOOT_TIMEOUT_MS } from "@/constants";
-import type { RuntimeAdapter, RuntimeIssue } from "@/runtime/runtime-adapter";
+import type {
+  RuntimeAdapter,
+  RuntimeIssue,
+  RuntimeValidationEvidence,
+} from "@/runtime/runtime-adapter";
 import {
   focusRuntimeIframe,
   postRuntimeIframeCommand,
@@ -37,6 +41,8 @@ export type RuntimeIframeHostProps<TArtifact> = {
   frameLabel?: string;
   frameDetail?: string;
   onStatusChange?: (status: RuntimeIframeStatus) => void;
+  onValidationEvidence?: (evidence: RuntimeValidationEvidence) => void;
+  runFirstPlayableChecksOnReady?: boolean;
 };
 
 function RuntimeIframeHostInner<TArtifact>(
@@ -48,6 +54,8 @@ function RuntimeIframeHostInner<TArtifact>(
     frameLabel = "Runtime",
     frameDetail = "Sandboxed iframe",
     onStatusChange,
+    onValidationEvidence,
+    runFirstPlayableChecksOnReady = false,
   }: RuntimeIframeHostProps<TArtifact>,
   ref: ForwardedRef<RuntimeIframeHostHandle>
 ) {
@@ -102,6 +110,11 @@ function RuntimeIframeHostInner<TArtifact>(
         return;
       }
 
+      if (sandboxEvent.type === "game-validation-evidence") {
+        onValidationEvidence?.(sandboxEvent.evidence);
+        return;
+      }
+
       if (sandboxEvent.type === "game-ready") {
         hasSettled = true;
         window.clearTimeout(timeoutId);
@@ -109,6 +122,12 @@ function RuntimeIframeHostInner<TArtifact>(
         onStatusChange?.({
           state: "ready",
         });
+
+        if (runFirstPlayableChecksOnReady) {
+          postRuntimeIframeCommand(iframeRef.current?.contentWindow, {
+            type: "game-run-first-playable-checks",
+          });
+        }
 
         if (focusOnReadyKey > 0) {
           clearScheduledFocus?.();
@@ -144,7 +163,14 @@ function RuntimeIframeHostInner<TArtifact>(
       window.clearTimeout(timeoutId);
       window.removeEventListener("message", handleMessage);
     };
-  }, [artifact, focusOnReadyKey, onStatusChange, runtimeAdapter]);
+  }, [
+    artifact,
+    focusOnReadyKey,
+    onStatusChange,
+    onValidationEvidence,
+    runFirstPlayableChecksOnReady,
+    runtimeAdapter,
+  ]);
 
   useEffect(() => {
     postRuntimeIframeCommand(iframeRef.current?.contentWindow, {

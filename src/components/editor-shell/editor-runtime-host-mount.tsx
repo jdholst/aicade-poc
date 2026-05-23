@@ -6,6 +6,7 @@ import {
   type RuntimeIframeHostHandle,
   type RuntimeIframeStatus,
 } from "@/components/runtime-iframe-host";
+import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import { phaserRuntimeAdapter } from "@/runtime/phaser";
 
 import type { EditorRuntimeHostViewModel } from "./editor-runtime-template-plan";
@@ -16,6 +17,7 @@ type EditorRuntimeHostMountProps = {
   hostRef: RefObject<RuntimeIframeHostHandle | null>;
   isPaused: boolean;
   onStatusChange: (status: RuntimeIframeStatus) => void;
+  onValidationEvidence?: (evidence: RuntimeValidationEvidence) => void;
 };
 
 export function EditorRuntimeHostMount({
@@ -24,6 +26,7 @@ export function EditorRuntimeHostMount({
   hostRef,
   isPaused,
   onStatusChange,
+  onValidationEvidence,
 }: EditorRuntimeHostMountProps) {
   if (!host) {
     return null;
@@ -41,6 +44,8 @@ export function EditorRuntimeHostMount({
         frameLabel="Phaser runtime"
         frameDetail="Sandboxed iframe"
         onStatusChange={onStatusChange}
+        onValidationEvidence={onValidationEvidence}
+        runFirstPlayableChecksOnReady={Boolean(onValidationEvidence)}
       />
     );
   }

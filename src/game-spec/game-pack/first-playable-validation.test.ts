@@ -5,6 +5,7 @@ import { getDefaultTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game
 import { createInitialGamePack } from "./game-pack-factory";
 import {
   type FirstPlayableRuntimeCandidate,
+  recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
 } from "./first-playable-validation";
@@ -42,6 +43,55 @@ function startValidation(gamePack = createGamePack()) {
     runtimeCandidate: createRuntimeCandidate(gamePack),
     startedAt,
   });
+}
+
+function recordRuntimeReady(attempt: ReturnType<typeof startValidation>) {
+  return recordFirstPlayableRuntimeStatus({
+    attempt,
+    observedAt,
+    status: { state: "ready" },
+  });
+}
+
+function recordPassingRuntimeEvidence(
+  attempt: ReturnType<typeof startValidation>
+) {
+  return ([
+    {
+      checkId: "nonblank_render",
+      status: "passed",
+      message: "Runtime reported nonblank render output.",
+      evidence: {
+        renderedObjectCount: 4,
+      },
+    },
+    {
+      checkId: "player_visible",
+      status: "passed",
+      message: "Runtime reported a visible player.",
+      evidence: {
+        hasBody: true,
+        playerPosition: { x: 160, y: 270 },
+      },
+    },
+    {
+      checkId: "input_response",
+      status: "passed",
+      message: "Runtime reported player input response.",
+      evidence: {
+        inputAction: "move_right",
+        playerVelocity: { x: 220, y: 0 },
+      },
+    },
+  ] as const).reduce(
+    (nextAttempt, evidence) =>
+      recordFirstPlayableRuntimeEvidence({
+        attempt: nextAttempt,
+        evidence,
+        observedAt,
+      }),
+    attempt
+  );
 }
 
 describe("first-playable validation orchestration", () => {
@@ -299,16 +349,12 @@ describe("first-playable validation orchestration", () => {
     );
   });
 
-  it("records runtime boot success from a ready status", () => {
+  it("records runtime boot success from a ready status without passing before runtime evidence", () => {
     const attempt = startValidation();
 
-    const nextAttempt = recordFirstPlayableRuntimeStatus({
-      attempt,
-      observedAt,
-      status: { state: "ready" },
-    });
+    const nextAttempt = recordRuntimeReady(attempt);
 
-    expect(nextAttempt.status).toBe("passed");
+    expect(nextAttempt.status).toBe("running");
     expect(nextAttempt.shouldBlockPlayable).toBe(false);
     expect(nextAttempt.evidence).toContainEqual(
       expect.objectContaining({
@@ -319,6 +365,129 @@ describe("first-playable validation orchestration", () => {
         durationMs: 1500,
         evidence: {
           runtimeStatus: "ready",
+        },
+      })
+    );
+  });
+
+  it("passes after runtime boot and nonblank/player/input evidence all pass", () => {
+    const attempt = recordRuntimeReady(startValidation());
+
+    const nextAttempt = recordPassingRuntimeEvidence(attempt);
+
+    expect(nextAttempt.status).toBe("passed");
+    expect(nextAttempt.shouldBlockPlayable).toBe(false);
+    expect(nextAttempt.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "evidence_nonblank_render",
+          checkId: "nonblank_render",
+          stage: "browser-check",
+          status: "passed",
+          evidence: {
+            source: "runtime-self-report",
+            renderedObjectCount: 4,
+          },
+        }),
+        expect.objectContaining({
+          id: "evidence_player_visible",
+          checkId: "player_visible",
+          stage: "browser-check",
+          status: "passed",
+        }),
+        expect.objectContaining({
+          id: "evidence_input_response",
+          checkId: "input_response",
+          stage: "browser-check",
+          status: "passed",
+        }),
+      ])
+    );
+  });
+
+  it.each([
+    [
+      "nonblank_render",
+      "evidence_nonblank_render",
+      "runtime.render",
+      "Expected the runtime to report at least one visible render object.",
+    ],
+    [
+      "player_visible",
+      "evidence_player_visible",
+      "runtime.player",
+      "Expected the runtime to report a visible player.",
+    ],
+    [
+      "input_response",
+      "evidence_input_response",
+      "runtime.input",
+      "Expected the runtime to report a response to movement input.",
+    ],
+  ] as const)(
+    "blocks playable state when %s runtime evidence fails",
+    (checkId, evidenceId, issuePath, message) => {
+      const attempt = recordRuntimeReady(startValidation());
+
+      const nextAttempt = recordFirstPlayableRuntimeEvidence({
+        attempt,
+        observedAt,
+        evidence: {
+          checkId,
+          status: "failed",
+          message,
+          evidence: {
+            probe: "first_playable",
+          },
+        },
+      });
+
+      expect(nextAttempt.status).toBe("failed");
+      expect(nextAttempt.shouldBlockPlayable).toBe(true);
+      expect(nextAttempt.failureMessage).toBe(message);
+      expect(nextAttempt.evidence).toContainEqual(
+        expect.objectContaining({
+          id: evidenceId,
+          checkId,
+          stage: "browser-check",
+          status: "failed",
+          issues: [
+            expect.objectContaining({
+              path: issuePath,
+              message,
+            }),
+          ],
+          evidence: {
+            source: "runtime-self-report",
+            probe: "first_playable",
+          },
+        })
+      );
+    }
+  );
+
+  it("keeps runtime evidence JSON-safe by dropping unsupported details", () => {
+    const attempt = recordRuntimeReady(startValidation());
+
+    const nextAttempt = recordFirstPlayableRuntimeEvidence({
+      attempt,
+      observedAt,
+      evidence: {
+        checkId: "nonblank_render",
+        status: "passed",
+        evidence: {
+          ok: true,
+          bad: Number.POSITIVE_INFINITY,
+        },
+      },
+    });
+
+    expect(nextAttempt.evidence).toContainEqual(
+      expect.objectContaining({
+        checkId: "nonblank_render",
+        evidence: {
+          source: "runtime-self-report",
+          ok: true,
         },
       })
     );
@@ -404,6 +573,30 @@ describe("first-playable validation orchestration", () => {
         attempt,
         observedAt,
         status: { state: "ready" },
+      })
+    ).toBe(attempt);
+  });
+
+  it("does not mutate an already failed pre-runtime attempt from runtime evidence", () => {
+    const gameSpec = getDefaultTopDownGameSpecFixture();
+    const gamePack = createInitialGamePack({
+      gameSpec: {
+        ...gameSpec,
+        entities: gameSpec.entities.filter((entity) => entity.role !== "player"),
+      },
+      runtimeKind: "phaser",
+      createdAt: startedAt,
+    });
+    const attempt = startValidation(gamePack);
+
+    expect(
+      recordFirstPlayableRuntimeEvidence({
+        attempt,
+        observedAt,
+        evidence: {
+          checkId: "nonblank_render",
+          status: "passed",
+        },
       })
     ).toBe(attempt);
   });

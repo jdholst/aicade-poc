@@ -68,6 +68,86 @@ describe("runtime adapter protocol", () => {
     });
   });
 
+  it("parses first-playable runtime validation evidence events", () => {
+    expect(
+      parseRuntimeEvent({
+        type: "game-validation-evidence",
+        data: {
+          checkId: "input_response",
+          status: "passed",
+          message: "Runtime responded to a synthetic movement input.",
+          evidence: {
+            inputAction: "move_right",
+            playerVelocity: { x: 220, y: 0 },
+          },
+        },
+      })
+    ).toEqual({
+      type: "game-validation-evidence",
+      evidence: {
+        checkId: "input_response",
+        status: "passed",
+        message: "Runtime responded to a synthetic movement input.",
+        evidence: {
+          inputAction: "move_right",
+          playerVelocity: { x: 220, y: 0 },
+        },
+      },
+    });
+
+    expect(
+      parseRuntimeEvent({
+        type: "game-validation-evidence",
+        data: {
+          checkId: "player_visible",
+          status: "failed",
+          issues: [
+            {
+              code: "player_not_visible",
+              path: "runtime.player",
+              message: "Player was not visible.",
+            },
+          ],
+        },
+      })
+    ).toEqual({
+      type: "game-validation-evidence",
+      evidence: {
+        checkId: "player_visible",
+        status: "failed",
+        issues: [
+          {
+            code: "player_not_visible",
+            path: "runtime.player",
+            message: "Player was not visible.",
+          },
+        ],
+      },
+    });
+  });
+
+  it("ignores malformed runtime validation evidence", () => {
+    expect(
+      parseRuntimeEvent({
+        type: "game-validation-evidence",
+        data: {
+          checkId: "future_check",
+          status: "passed",
+        },
+      })
+    ).toBeNull();
+
+    expect(
+      parseRuntimeEvent({
+        type: "game-validation-evidence",
+        data: {
+          checkId: "input_response",
+          status: "warning",
+        },
+      })
+    ).toBeNull();
+  });
+
   it("ignores unrelated messages and normalizes malformed runtime errors", () => {
     expect(parseRuntimeEvent(null)).toBeNull();
     expect(parseRuntimeEvent({ type: "analytics-ping" })).toBeNull();
@@ -125,6 +205,7 @@ describe("runtime adapter protocol", () => {
         scaling: "stretch_to_fill",
       },
     });
+    postRuntimeCommand(target, { type: "game-run-first-playable-checks" });
 
     expect(posted).toEqual([
       {
@@ -144,6 +225,10 @@ describe("runtime adapter protocol", () => {
             scaling: "stretch_to_fill",
           },
         },
+        origin: "*",
+      },
+      {
+        command: { type: "game-run-first-playable-checks" },
         origin: "*",
       },
     ]);
