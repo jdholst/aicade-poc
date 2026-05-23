@@ -37,6 +37,18 @@ export {
 } from "./game-pack/game-pack-factory";
 
 export {
+  createGamePackRepository,
+  createIndexedDbGamePackRepository,
+  GamePackRepositoryError,
+  type GamePackRepository,
+  type GamePackRepositoryErrorCode,
+  type GamePackRepositoryOperation,
+  type GamePackStorageDriver,
+  type IndexedDbGamePackRepositoryOptions,
+  type StoredGamePackRecord,
+} from "./game-pack/game-pack-repository";
+
+export {
   recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
