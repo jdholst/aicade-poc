@@ -113,6 +113,10 @@ export function getCurrentCheckpoint(gamePack: GamePack) {
   );
 }
 
+export function getCheckpointIdForValidationWrite(gamePack: GamePack): StableId {
+  return getCurrentCheckpoint(gamePack)?.id ?? getInitialCheckpointId(gamePack);
+}
+
 export function createPlayableBuildRecord({
   checkpointId,
   completedAt,

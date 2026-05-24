@@ -11,6 +11,10 @@ import {
   writeFirstPlayableValidationResult,
 } from "./first-playable-validation";
 import { gamePackSchema, type GamePack } from "./game-pack-schema";
+import {
+  createRestoredForwardGamePackFixture,
+  createValidatedGamePackFixture,
+} from "./testing/game-pack-fixtures";
 
 const startedAt = "2026-05-21T13:00:00.000Z";
 const observedAt = "2026-05-21T13:00:01.500Z";
@@ -476,6 +480,69 @@ describe("first-playable validation orchestration", () => {
         validationEvidenceIds,
       }),
     ]);
+  });
+
+  it("preserves a restored-forward checkpoint as current when successful validation is written after reload", () => {
+    const gamePack = createRestoredForwardGamePackFixture();
+    const attempt = recordPassingRuntimeEvidence(
+      recordRuntimeReady(startValidation(gamePack))
+    );
+
+    const nextGamePack = writeFirstPlayableValidationResult({
+      gamePack,
+      attempt,
+      completedAt,
+    });
+
+    expect(gamePackSchema.parse(nextGamePack)).toEqual(nextGamePack);
+    expect(nextGamePack.currentCheckpointId).toBe(
+      "checkpoint_restored_initial_playable_1"
+    );
+    expect(nextGamePack.checkpoints.map((checkpoint) => checkpoint.id)).toEqual([
+      "checkpoint_initial_playable",
+      "checkpoint_second_playable",
+      "checkpoint_restored_initial_playable_1",
+    ]);
+    expect(nextGamePack.checkpoints).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "checkpoint_second_playable",
+          buildId: "build_second_playable",
+        }),
+        expect.objectContaining({
+          id: "checkpoint_restored_initial_playable_1",
+          restoredFromCheckpointId: "checkpoint_initial_playable",
+        }),
+      ])
+    );
+  });
+
+  it("falls back to the initial checkpoint when successful validation is written without a current pointer", () => {
+    const gamePack = createValidatedGamePackFixture({
+      currentCheckpointId: undefined,
+    });
+    const attempt = recordPassingRuntimeEvidence(
+      recordRuntimeReady(startValidation(gamePack))
+    );
+
+    const nextGamePack = writeFirstPlayableValidationResult({
+      gamePack,
+      attempt,
+      completedAt,
+    });
+
+    expect(gamePackSchema.parse(nextGamePack)).toEqual(nextGamePack);
+    expect(nextGamePack.currentCheckpointId).toBe(
+      "checkpoint_initial_playable"
+    );
+    expect(nextGamePack.builds).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "build_initial_playable",
+          checkpointId: "checkpoint_initial_playable",
+        }),
+      ])
+    );
   });
 
   it("writes pre-runtime failures into failedAttempts without creating a normal build or checkpoint", () => {

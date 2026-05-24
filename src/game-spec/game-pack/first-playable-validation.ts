@@ -9,7 +9,7 @@ import {
   createFailedAttemptRecord,
   createInitialVersionCheckpointRecord,
   createPlayableBuildRecord,
-  getInitialCheckpointId,
+  getCheckpointIdForValidationWrite,
   hasMountedRuntimeValidationArtifact,
   upsertGamePackRecordsById,
 } from "./game-pack-lineage";
@@ -176,7 +176,7 @@ export function writeFirstPlayableValidationResult({
   );
 
   if (attempt.status === "passed") {
-    const checkpointId = getInitialCheckpointId(gamePack);
+    const checkpointId = getCheckpointIdForValidationWrite(gamePack);
     const build = createPlayableBuildRecord({
       id: "build_initial_playable",
       startedAt: attempt.startedAt,

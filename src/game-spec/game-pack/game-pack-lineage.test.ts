@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { restoreGamePackCheckpoint } from "./game-pack-lineage";
+import {
+  getCheckpointIdForValidationWrite,
+  restoreGamePackCheckpoint,
+} from "./game-pack-lineage";
 import { parseGamePack } from "./game-pack-schema";
 import {
+  createEmptyGamePackFixture,
   createGamePackWithSecondCheckpointFixture,
   GAME_PACK_FIXTURE_RESTORED_AT,
 } from "./testing/game-pack-fixtures";
@@ -10,6 +14,43 @@ import {
 const restoredAt = GAME_PACK_FIXTURE_RESTORED_AT;
 
 describe("append-only checkpoint restore", () => {
+  it("preserves an existing valid current checkpoint for validation writes", () => {
+    const gamePack = createGamePackWithSecondCheckpointFixture();
+
+    expect(getCheckpointIdForValidationWrite(gamePack)).toBe(
+      "checkpoint_second_playable"
+    );
+  });
+
+  it("falls back to the initial checkpoint for validation writes when no current checkpoint is set", () => {
+    const gamePack = createGamePackWithSecondCheckpointFixture({
+      currentCheckpointId: undefined,
+    });
+
+    expect(getCheckpointIdForValidationWrite(gamePack)).toBe(
+      "checkpoint_initial_playable"
+    );
+  });
+
+  it("falls back deterministically for validation writes when the current checkpoint is stale", () => {
+    const gamePack = {
+      ...createGamePackWithSecondCheckpointFixture(),
+      currentCheckpointId: "checkpoint_missing",
+    };
+
+    expect(getCheckpointIdForValidationWrite(gamePack)).toBe(
+      "checkpoint_initial_playable"
+    );
+  });
+
+  it("uses the initial checkpoint ID for validation writes before checkpoints exist", () => {
+    const gamePack = createEmptyGamePackFixture();
+
+    expect(getCheckpointIdForValidationWrite(gamePack)).toBe(
+      "checkpoint_initial_playable"
+    );
+  });
+
   it("restores an older checkpoint by appending a restored-forward checkpoint", () => {
     const gamePack = createGamePackWithSecondCheckpointFixture();
     const originalCheckpoints = gamePack.checkpoints.map((checkpoint) => ({
