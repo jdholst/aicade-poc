@@ -28,8 +28,10 @@ type UseEditorSessionOptions = {
 
 export type EditorAIChatSession = {
   canStartGeneration: boolean;
+  canSubmitPrompt: boolean;
   generationStages: EditorGenerationStage[];
   generationStepIndex: number;
+  hasSubmittedPrompt: boolean;
   isGenerating: boolean;
   loadState: StarterProjectLoadState;
   needsOpenAiApiKey: boolean;
@@ -37,6 +39,7 @@ export type EditorAIChatSession = {
   openAiApiKey: string;
   openAiKeyword: string;
   openAiModel: OpenAIModelId;
+  promptDraft: string;
   submittedPrompt: string;
 };
 
@@ -44,6 +47,8 @@ export type EditorAIChatActions = {
   onOpenAiApiKeyChange: (value: string) => void;
   onOpenAiKeywordChange: (value: string) => void;
   onOpenAiModelChange: (value: OpenAIModelId) => void;
+  onPromptDraftChange: (value: string) => void;
+  onPromptSubmit: () => void;
   onRegenerateGame: () => void;
   onStartGeneration: () => void;
 };
@@ -81,6 +86,9 @@ export function useEditorSession({
   needsOpenAiApiKey,
   needsOpenAiModel,
 }: UseEditorSessionOptions) {
+  const initialPrompt = enteredPrompt.trim();
+  const [promptDraft, setPromptDraft] = useState(initialPrompt);
+  const [submittedPrompt, setSubmittedPrompt] = useState(initialPrompt);
   const [openAiApiKey, setOpenAiApiKey] = useState(enteredOpenAiApiKey);
   const [openAiKeyword, setOpenAiKeyword] = useState(enteredOpenAiKeyword);
   const [openAiModel, setOpenAiModel] = useState<OpenAIModelId>(
@@ -114,10 +122,10 @@ export function useEditorSession({
 
   const currentGenerationStage = generationStages[generationStepIndex];
   const isGenerating = loadState.status === "loading";
-  const submittedPrompt =
-    enteredPrompt.trim() ||
-    "No prompt was provided, so AI-Cade will use the default starter platformer prompt.";
+  const hasSubmittedPrompt = Boolean(submittedPrompt);
+  const canSubmitPrompt = !isGenerating && Boolean(promptDraft.trim());
   const canStartGeneration =
+    hasSubmittedPrompt &&
     !isGenerating &&
     (!needsOpenAiApiKey ||
       Boolean(openAiApiKey.trim() || openAiKeyword.trim()));
@@ -126,6 +134,16 @@ export function useEditorSession({
       ? loadState.pack.project.name
       : "Starter Project";
 
+  function submitPrompt() {
+    const normalizedPrompt = promptDraft.replace(/\s+/g, " ").trim();
+
+    if (!normalizedPrompt || isGenerating) {
+      return;
+    }
+
+    setSubmittedPrompt(normalizedPrompt);
+  }
+
   function startGeneration() {
     if (!canStartGeneration) {
       return;
@@ -133,7 +151,7 @@ export function useEditorSession({
 
     setGameResetNonce(0);
     startGenerationRequest({
-      prompt: enteredPrompt.trim(),
+      prompt: submittedPrompt,
       openAiApiKey: needsOpenAiApiKey ? openAiApiKey.trim() : undefined,
       openAiKeyword: needsOpenAiApiKey ? openAiKeyword.trim() : undefined,
       openAiModel: needsOpenAiModel ? openAiModel : undefined,
@@ -202,8 +220,10 @@ export function useEditorSession({
 
   const chat: EditorAIChatSession = {
     canStartGeneration,
+    canSubmitPrompt,
     generationStages,
     generationStepIndex,
+    hasSubmittedPrompt,
     isGenerating,
     loadState,
     needsOpenAiApiKey,
@@ -211,6 +231,7 @@ export function useEditorSession({
     openAiApiKey,
     openAiKeyword,
     openAiModel,
+    promptDraft,
     submittedPrompt,
   };
 
@@ -240,6 +261,8 @@ export function useEditorSession({
         onOpenAiApiKeyChange: setOpenAiApiKey,
         onOpenAiKeywordChange: setOpenAiKeyword,
         onOpenAiModelChange: setOpenAiModel,
+        onPromptDraftChange: setPromptDraft,
+        onPromptSubmit: submitPrompt,
         onRegenerateGame: startGeneration,
         onStartGeneration: startGeneration,
       },

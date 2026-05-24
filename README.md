@@ -104,6 +104,14 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+For Codex/manual QA, prefer the loopback-bound server:
+
+```bash
+npm run dev:local
+```
+
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+
 ## Configuration
 
 AI-Cade supports a few ways to provide model access.
@@ -142,9 +150,16 @@ If `OPENAI_MODEL` is not set in the environment, the UI allows selecting from th
 ## Available Scripts
 
 - `npm run dev` - start the local development server
+- `npm run dev:local` - start the local development server on `127.0.0.1:3000`
 - `npm run build` - create a production build
 - `npm run start` - run the production server
 - `npm run lint` - run ESLint
+- `npm run test` - run the full Vitest suite
+- `npm run test:editor-prompt-flow` - run the focused editor prompt-flow regression tests
+- `npm run qa:editor-prompt-flow` - run prompt-flow tests and print the manual QA path for `/editor`
+- `npm run qa:editor-prompt-flow:browser` - run the prompt-flow tests, drive `/editor` in a real browser, and save screenshots under `.qa/editor-prompt-flow`
+
+See [`docs/manual-qa.md`](./docs/manual-qa.md) for the low-friction manual testing checklist.
 
 ## Repository Guide
 
