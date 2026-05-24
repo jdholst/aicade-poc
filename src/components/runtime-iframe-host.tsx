@@ -14,20 +14,17 @@ import {
 import { SANDBOX_BOOT_TIMEOUT_MS } from "@/constants";
 import type {
   RuntimeAdapter,
-  RuntimeIssue,
+  RuntimeHostStatus,
   RuntimeValidationEvidence,
 } from "@/runtime/runtime-adapter";
+import { createRuntimeHostStatusFromEvent } from "@/runtime/runtime-adapter";
 import {
   focusRuntimeIframe,
   postRuntimeIframeCommand,
   scheduleRuntimeIframeFocus,
 } from "@/runtime/runtime-iframe-commands";
 
-export type RuntimeIframeStatus =
-  | { state: "loading" }
-  | { state: "ready" }
-  | { state: "warning"; issue: Extract<RuntimeIssue, { recoverable: true }> }
-  | { state: "error"; message: string };
+export type RuntimeIframeStatus = RuntimeHostStatus;
 
 export type RuntimeIframeHostHandle = {
   focusGame: () => void;
@@ -115,13 +112,16 @@ function RuntimeIframeHostInner<TArtifact>(
         return;
       }
 
-      if (sandboxEvent.type === "game-ready") {
+      const runtimeStatus = createRuntimeHostStatusFromEvent(sandboxEvent);
+      if (!runtimeStatus) {
+        return;
+      }
+
+      if (runtimeStatus.state === "ready") {
         hasSettled = true;
         window.clearTimeout(timeoutId);
 
-        onStatusChange?.({
-          state: "ready",
-        });
+        onStatusChange?.(runtimeStatus);
 
         if (runFirstPlayableChecksOnReady) {
           postRuntimeIframeCommand(iframeRef.current?.contentWindow, {
@@ -137,23 +137,15 @@ function RuntimeIframeHostInner<TArtifact>(
         return;
       }
 
-      if (sandboxEvent.type === "game-error") {
-        if (sandboxEvent.issue.recoverable) {
-          onStatusChange?.({
-            state: "warning",
-            issue: sandboxEvent.issue,
-          });
-          return;
-        }
-
-        hasSettled = true;
-        window.clearTimeout(timeoutId);
-
-        onStatusChange?.({
-          state: "error",
-          message: sandboxEvent.message,
-        });
+      if (runtimeStatus.state === "warning") {
+        onStatusChange?.(runtimeStatus);
+        return;
       }
+
+      hasSettled = true;
+      window.clearTimeout(timeoutId);
+
+      onStatusChange?.(runtimeStatus);
     }
 
     window.addEventListener("message", handleMessage);

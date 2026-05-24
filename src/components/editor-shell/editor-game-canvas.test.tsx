@@ -9,11 +9,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createGamePackRepository,
-  parseGamePack,
-  type GamePack,
   type GamePackStorageDriver,
   type StoredGamePackRecord,
 } from "@/game-spec";
+import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
@@ -73,7 +72,6 @@ const pack: GeneratedGamePack = {
   moduleSourceJs:
     "globalThis.createGameModule = function createGameModule() {};",
 };
-const createdAt = "2026-05-23T14:00:00.000Z";
 
 function createActions(
   overrides: Partial<EditorGameCanvasActions> = {}
@@ -354,7 +352,8 @@ describe("EditorGameCanvas", () => {
     };
 
     await repository.save(
-      createValidatedGamePack({
+      createValidatedGamePackFixture({
+        id: "game_pack_crystal_spec_chase",
         gameSpec: restoredGameSpec,
         title: restoredGameSpec.title,
       })
@@ -720,74 +719,6 @@ function dispatchValidationEvidence(
       source: iframe.contentWindow,
     })
   );
-}
-
-function createValidatedGamePack({
-  gameSpec = topDownPhaserTemplate.gameSpec,
-  title = gameSpec.title,
-}: {
-  gameSpec?: typeof topDownPhaserTemplate.gameSpec;
-  title?: string;
-} = {}): GamePack {
-  return parseGamePack({
-    schemaVersion: "game-pack/v1",
-    id: "game_pack_crystal_spec_chase",
-    title,
-    createdAt,
-    updatedAt: createdAt,
-    runtimeKind: "phaser",
-    templateId: gameSpec.template.id,
-    gameSpec,
-    validationEvidence: [
-      {
-        id: "evidence_runtime_boot",
-        checkId: "runtime_boot",
-        stage: "runtime-boot",
-        status: "passed",
-        durationMs: 42,
-      },
-    ],
-    builds: [
-      {
-        id: "build_initial_playable",
-        createdAt,
-        runtimeKind: "phaser",
-        templateId: gameSpec.template.id,
-        gameSpecId: gameSpec.id,
-        checkpointId: "checkpoint_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-        status: "validated",
-      },
-    ],
-    checkpoints: [
-      {
-        id: "checkpoint_initial_playable",
-        createdAt,
-        label: "Initial playable",
-        summary: "First validated top-down playable state.",
-        gameSpecId: gameSpec.id,
-        buildId: "build_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-      },
-    ],
-    failedAttempts: [
-      {
-        id: "failed_attempt_preflight",
-        createdAt,
-        stage: "spec-validation",
-        summary: "Failed drafts are preserved outside checkpoints.",
-        gameSpecId: gameSpec.id,
-        validationEvidenceIds: ["evidence_runtime_boot"],
-      },
-    ],
-    generationRuns: [
-      {
-        id: "generation_run_reserved",
-        createdAt,
-        status: "reserved",
-      },
-    ],
-  });
 }
 
 class MemoryGamePackStorage implements GamePackStorageDriver {

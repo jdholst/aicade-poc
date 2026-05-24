@@ -57,6 +57,12 @@ export type RuntimeEvent =
   | { type: "game-debug-event"; message: string; data?: unknown }
   | { type: "game-validation-evidence"; evidence: RuntimeValidationEvidence };
 
+export type RuntimeHostStatus =
+  | { state: "loading" }
+  | { state: "ready" }
+  | { state: "warning"; issue: Extract<RuntimeIssue, { recoverable: true }> }
+  | { state: "error"; message: string };
+
 export type RuntimeMountDescriptor = {
   title: string;
   sandbox: "allow-scripts";
@@ -148,6 +154,32 @@ export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
   }
 
   return null;
+}
+
+export function createRuntimeHostStatusFromEvent(
+  event: RuntimeEvent
+): RuntimeHostStatus | null {
+  if (event.type === "game-ready") {
+    return {
+      state: "ready",
+    };
+  }
+
+  if (event.type !== "game-error") {
+    return null;
+  }
+
+  if (event.issue.recoverable) {
+    return {
+      state: "warning",
+      issue: event.issue,
+    };
+  }
+
+  return {
+    state: "error",
+    message: event.message,
+  };
 }
 
 function parseRuntimeValidationEvidence(

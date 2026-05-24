@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { getDefaultTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
+import { restoreGamePackCheckpoint } from "./game-pack-lineage";
+import { parseGamePack } from "./game-pack-schema";
+import {
+  createGamePackWithSecondCheckpointFixture,
+  GAME_PACK_FIXTURE_RESTORED_AT,
+} from "./testing/game-pack-fixtures";
 
-import { restoreGamePackCheckpoint } from "./checkpoint-restore";
-import { parseGamePack, type GamePack } from "./game-pack-schema";
-
-const createdAt = "2026-05-21T00:00:00.000Z";
-const laterAt = "2026-05-21T00:10:00.000Z";
-const restoredAt = "2026-05-21T00:20:00.000Z";
+const restoredAt = GAME_PACK_FIXTURE_RESTORED_AT;
 
 describe("append-only checkpoint restore", () => {
   it("restores an older checkpoint by appending a restored-forward checkpoint", () => {
-    const gamePack = createGamePackWithLaterCheckpoint();
+    const gamePack = createGamePackWithSecondCheckpointFixture();
     const originalCheckpoints = gamePack.checkpoints.map((checkpoint) => ({
       ...checkpoint,
     }));
@@ -39,7 +39,7 @@ describe("append-only checkpoint restore", () => {
   });
 
   it("records restore metadata and preserves source build/evidence references", () => {
-    const gamePack = createGamePackWithLaterCheckpoint();
+    const gamePack = createGamePackWithSecondCheckpointFixture();
 
     const restoredGamePack = restoreGamePackCheckpoint({
       gamePack,
@@ -73,7 +73,7 @@ describe("append-only checkpoint restore", () => {
   });
 
   it("keeps later checkpoints present when restoring an older checkpoint", () => {
-    const gamePack = createGamePackWithLaterCheckpoint();
+    const gamePack = createGamePackWithSecondCheckpointFixture();
 
     const restoredGamePack = restoreGamePackCheckpoint({
       gamePack,
@@ -93,7 +93,7 @@ describe("append-only checkpoint restore", () => {
 
   it("creates unique restored checkpoint IDs for repeated restores", () => {
     const firstRestore = restoreGamePackCheckpoint({
-      gamePack: createGamePackWithLaterCheckpoint(),
+      gamePack: createGamePackWithSecondCheckpointFixture(),
       restoredAt,
       sourceCheckpointId: "checkpoint_initial_playable",
     });
@@ -118,86 +118,10 @@ describe("append-only checkpoint restore", () => {
   it("fails when the source checkpoint does not exist", () => {
     expect(() =>
       restoreGamePackCheckpoint({
-        gamePack: createGamePackWithLaterCheckpoint(),
+        gamePack: createGamePackWithSecondCheckpointFixture(),
         restoredAt,
         sourceCheckpointId: "checkpoint_missing",
       })
     ).toThrow('Cannot restore missing checkpoint "checkpoint_missing".');
   });
 });
-
-function createGamePackWithLaterCheckpoint(): GamePack {
-  const gameSpec = getDefaultTopDownGameSpecFixture();
-
-  return parseGamePack({
-    schemaVersion: "game-pack/v1",
-    id: "game_pack_crystal_chase",
-    title: "Crystal Spec Chase",
-    createdAt,
-    updatedAt: laterAt,
-    runtimeKind: "phaser",
-    templateId: gameSpec.template.id,
-    currentCheckpointId: "checkpoint_second_playable",
-    gameSpec,
-    validationEvidence: [
-      {
-        id: "evidence_runtime_boot",
-        checkId: "runtime_boot",
-        stage: "runtime-boot",
-        status: "passed",
-        durationMs: 42,
-      },
-      {
-        id: "evidence_second_validation",
-        checkId: "second_validation",
-        stage: "browser-check",
-        status: "passed",
-        durationMs: 18,
-      },
-    ],
-    builds: [
-      {
-        id: "build_initial_playable",
-        createdAt,
-        runtimeKind: "phaser",
-        templateId: gameSpec.template.id,
-        gameSpecId: gameSpec.id,
-        checkpointId: "checkpoint_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-        status: "validated",
-      },
-      {
-        id: "build_second_playable",
-        createdAt: laterAt,
-        runtimeKind: "phaser",
-        templateId: gameSpec.template.id,
-        gameSpecId: gameSpec.id,
-        checkpointId: "checkpoint_second_playable",
-        validationEvidenceIds: ["evidence_second_validation"],
-        status: "validated",
-      },
-    ],
-    checkpoints: [
-      {
-        id: "checkpoint_initial_playable",
-        createdAt,
-        label: "Initial playable",
-        summary: "First validated top-down playable state.",
-        gameSpecId: gameSpec.id,
-        buildId: "build_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-      },
-      {
-        id: "checkpoint_second_playable",
-        createdAt: laterAt,
-        label: "Second playable",
-        summary: "Later validated top-down playable state.",
-        gameSpecId: gameSpec.id,
-        buildId: "build_second_playable",
-        validationEvidenceIds: ["evidence_second_validation"],
-      },
-    ],
-    failedAttempts: [],
-    generationRuns: [],
-  });
-}

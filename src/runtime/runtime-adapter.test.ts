@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseRuntimeEvent, postRuntimeCommand } from "./runtime-adapter";
+import {
+  createRuntimeHostStatusFromEvent,
+  parseRuntimeEvent,
+  postRuntimeCommand,
+} from "./runtime-adapter";
 
 describe("runtime adapter protocol", () => {
   it("parses ready and error events from the runtime iframe", () => {
@@ -185,6 +189,66 @@ describe("runtime adapter protocol", () => {
       },
       message: "Fallback message.",
     });
+  });
+
+  it("translates runtime events into shared host statuses", () => {
+    expect(
+      createRuntimeHostStatusFromEvent({
+        type: "game-ready",
+      })
+    ).toEqual({
+      state: "ready",
+    });
+
+    expect(
+      createRuntimeHostStatusFromEvent({
+        type: "game-error",
+        message: "Movement mechanic failed.",
+        issue: {
+          type: "mechanic-disabled",
+          severity: "warning",
+          recoverable: true,
+          mechanicId: "mechanic_player_movement",
+          mechanicType: "player_movement",
+          phase: "install",
+          message: "Movement mechanic failed.",
+        },
+      })
+    ).toEqual({
+      state: "warning",
+      issue: {
+        type: "mechanic-disabled",
+        severity: "warning",
+        recoverable: true,
+        mechanicId: "mechanic_player_movement",
+        mechanicType: "player_movement",
+        phase: "install",
+        message: "Movement mechanic failed.",
+      },
+    });
+
+    expect(
+      createRuntimeHostStatusFromEvent({
+        type: "game-error",
+        message: "Runtime crashed.",
+        issue: {
+          type: "runtime-error",
+          severity: "error",
+          recoverable: false,
+          message: "Runtime crashed.",
+        },
+      })
+    ).toEqual({
+      state: "error",
+      message: "Runtime crashed.",
+    });
+
+    expect(
+      createRuntimeHostStatusFromEvent({
+        type: "game-debug-event",
+        message: "Debug only.",
+      })
+    ).toBeNull();
   });
 
   it("posts runtime commands to the iframe window", () => {

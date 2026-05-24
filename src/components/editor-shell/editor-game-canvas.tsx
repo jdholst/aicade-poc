@@ -1,27 +1,25 @@
-import { type RefObject, useEffect, useMemo, useRef } from "react";
+import { type RefObject, useRef } from "react";
 
 import type {
   RuntimeIframeHostHandle,
   RuntimeIframeStatus,
 } from "@/components/runtime-iframe-host";
-import type { GamePack, GamePackRepository } from "@/game-spec";
+import type { GamePackRepository } from "@/game-spec";
 import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
 
-import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
-import { useEditorGamePackPersistence } from "./editor-game-pack-persistence";
 import {
   createEditorRuntimePanelViewModel,
   type EditorRuntimePrimarySurface,
   type EditorRuntimeSecondarySurface,
 } from "./editor-game-canvas-view-model";
-import { createEditorRuntimeTemplatePlan } from "./editor-runtime-template-plan";
 import { RuntimeControls } from "./editor-runtime-controls";
 import { RuntimeErrorBanner } from "./editor-runtime-error-banner";
 import { EditorRuntimeHostMount } from "./editor-runtime-host-mount";
+import { useEditorRuntimeSession } from "./editor-runtime-session";
 import {
   FirstPlayableValidationBlockedScreen,
   GameSpecValidationErrorScreen,
@@ -42,62 +40,20 @@ export function EditorGameCanvas({
   canvas,
   gamePackRepository,
 }: EditorGameCanvasProps) {
-  const { gameResetNonce, isGamePaused, loadState } = canvas;
+  const { gameResetNonce, isGamePaused } = canvas;
   const { onGameStatusChange, onRegenerate, onReset, onTogglePaused } =
     actions;
   const gameHostRef = useRef<RuntimeIframeHostHandle | null>(null);
-  const lastPersistedGamePackKeyRef = useRef<string | null>(null);
   const {
-    loadStatus: gamePackPersistenceStatus,
-    persistValidatedGamePack,
-    restoredGamePack,
-  } = useEditorGamePackPersistence({
-    repository: gamePackRepository,
-  });
-  const runtimeTemplate = useMemo(
-    () =>
-      createEditorRuntimeTemplatePlan({
-        restoredGamePack,
-      }),
-    [restoredGamePack]
-  );
-  const {
-    firstPlayableGamePack,
     firstPlayableValidationAttempt,
     handleRuntimeStatusChange,
     handleRuntimeValidationEvidence,
-  } = useFirstPlayableValidationGate({
-    gameResetNonce,
-    loadStateStatus: loadState.status,
+    runtimeTemplate,
+  } = useEditorRuntimeSession({
+    canvas,
+    gamePackRepository,
     onGameStatusChange,
-    validationSource: runtimeTemplate.firstPlayableValidationSource,
   });
-
-  useEffect(() => {
-    if (
-      gamePackPersistenceStatus !== "loaded" ||
-      firstPlayableValidationAttempt?.status !== "passed" ||
-      !firstPlayableGamePack
-    ) {
-      return;
-    }
-
-    const gamePackKey = createPersistedGamePackKey(firstPlayableGamePack);
-
-    if (lastPersistedGamePackKeyRef.current === gamePackKey) {
-      return;
-    }
-
-    lastPersistedGamePackKeyRef.current = gamePackKey;
-    void persistValidatedGamePack(firstPlayableGamePack).catch(() => {
-      lastPersistedGamePackKeyRef.current = null;
-    });
-  }, [
-    firstPlayableGamePack,
-    firstPlayableValidationAttempt?.status,
-    gamePackPersistenceStatus,
-    persistValidatedGamePack,
-  ]);
 
   const runtimePanel = createEditorRuntimePanelViewModel({
     canvas,
@@ -152,16 +108,6 @@ export function EditorGameCanvas({
       })}
     </section>
   );
-}
-
-function createPersistedGamePackKey(gamePack: GamePack) {
-  return [
-    gamePack.id,
-    gamePack.updatedAt,
-    gamePack.builds.length,
-    gamePack.checkpoints.length,
-    gamePack.validationEvidence.length,
-  ].join(":");
 }
 
 function renderRuntimeSecondarySurface({
@@ -226,16 +172,16 @@ function renderRuntimePrimarySurface({
   }
 
   if (surface.type === "phaser-validation-error") {
-    return <GameSpecValidationErrorScreen message={surface.message} />;
+    return <GameSpecValidationErrorScreen message={surface.failure.summary} />;
   }
 
   if (surface.type === "first-playable-validation-error") {
     return (
       <FirstPlayableValidationBlockedScreen
-        debugReceipts={surface.debugReceipts}
+        debugReceipts={surface.failure.debugReceipts}
         onRegenerate={onRegenerate}
         onReset={onReset}
-        summary={surface.summary}
+        summary={surface.failure.summary}
       />
     );
   }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { getDefaultTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
+import {
+  createRestoredForwardGamePackFixture,
+  createValidatedGamePackFixture,
+  GAME_PACK_FIXTURE_LATER_UPDATED_AT,
+  GAME_PACK_FIXTURE_UPDATED_AT,
+} from "./testing/game-pack-fixtures";
 
 import {
   GamePackRepositoryError,
@@ -9,18 +14,13 @@ import {
   type GamePackStorageDriver,
   type StoredGamePackRecord,
 } from "./game-pack-repository";
-import { parseGamePack, type GamePack } from "./game-pack-schema";
-import { restoreGamePackCheckpoint } from "./checkpoint-restore";
-
-const createdAt = "2026-05-23T12:00:00.000Z";
-const updatedAt = "2026-05-23T12:05:00.000Z";
-const laterUpdatedAt = "2026-05-23T12:10:00.000Z";
+import { parseGamePack } from "./game-pack-schema";
 
 describe("Game Pack repository", () => {
   it("saves and loads a valid Game Pack through the repository boundary", async () => {
     const storage = new MemoryGamePackStorage();
     const repository = createGamePackRepository(storage);
-    const gamePack = createPersistedGamePack();
+    const gamePack = createValidatedGamePackFixture();
 
     await expect(repository.save(gamePack)).resolves.toEqual(gamePack);
 
@@ -34,13 +34,13 @@ describe("Game Pack repository", () => {
 
   it("lists saved Game Packs by updatedAt descending", async () => {
     const repository = createGamePackRepository(new MemoryGamePackStorage());
-    const olderGamePack = createPersistedGamePack({
+    const olderGamePack = createValidatedGamePackFixture({
       id: "game_pack_older",
-      updatedAt,
+      updatedAt: GAME_PACK_FIXTURE_UPDATED_AT,
     });
-    const newerGamePack = createPersistedGamePack({
+    const newerGamePack = createValidatedGamePackFixture({
       id: "game_pack_newer",
-      updatedAt: laterUpdatedAt,
+      updatedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
     });
 
     await repository.save(olderGamePack);
@@ -54,7 +54,7 @@ describe("Game Pack repository", () => {
 
   it("updates an existing Game Pack and returns the saved value", async () => {
     const repository = createGamePackRepository(new MemoryGamePackStorage());
-    const gamePack = createPersistedGamePack();
+    const gamePack = createValidatedGamePackFixture();
 
     await repository.save(gamePack);
 
@@ -62,21 +62,21 @@ describe("Game Pack repository", () => {
       parseGamePack({
         ...current,
         title: "Crystal Spec Chase Updated",
-        updatedAt: laterUpdatedAt,
+        updatedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
       })
     );
 
     expect(nextGamePack).toMatchObject({
       id: gamePack.id,
       title: "Crystal Spec Chase Updated",
-      updatedAt: laterUpdatedAt,
+      updatedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
     });
     await expect(repository.load(gamePack.id)).resolves.toEqual(nextGamePack);
   });
 
   it("preserves validation evidence, builds, checkpoints, failed attempts, and generation runs", async () => {
     const repository = createGamePackRepository(new MemoryGamePackStorage());
-    const gamePack = createPersistedGamePack();
+    const gamePack = createValidatedGamePackFixture();
 
     await repository.save(gamePack);
 
@@ -121,16 +121,11 @@ describe("Game Pack repository", () => {
 
   it("reloads restored-forward checkpoint history without dropping later checkpoints", async () => {
     const repository = createGamePackRepository(new MemoryGamePackStorage());
-    const gamePack = createPersistedGamePackWithLaterCheckpoint();
-    const restoredGamePack = restoreGamePackCheckpoint({
-      gamePack,
-      restoredAt: "2026-05-23T12:15:00.000Z",
-      sourceCheckpointId: "checkpoint_initial_playable",
-    });
+    const restoredGamePack = createRestoredForwardGamePackFixture();
 
     await repository.save(restoredGamePack);
 
-    await expect(repository.load(gamePack.id)).resolves.toMatchObject({
+    await expect(repository.load(restoredGamePack.id)).resolves.toMatchObject({
       currentCheckpointId: "checkpoint_restored_initial_playable_1",
       checkpoints: [
         expect.objectContaining({ id: "checkpoint_initial_playable" }),
@@ -159,7 +154,7 @@ describe("Game Pack repository", () => {
     const repository = createGamePackRepository(
       new MemoryGamePackStorage({ failOn: "put" })
     );
-    const gamePack = createPersistedGamePack();
+    const gamePack = createValidatedGamePackFixture();
 
     await expect(repository.save(gamePack)).rejects.toMatchObject({
       code: "save_failed",
@@ -182,130 +177,6 @@ describe("Game Pack repository", () => {
     });
   });
 });
-
-function createPersistedGamePack(
-  overrides: Partial<GamePack> = {}
-): GamePack {
-  const gameSpec = getDefaultTopDownGameSpecFixture();
-  const gamePack = parseGamePack({
-    schemaVersion: "game-pack/v1",
-    id: "game_pack_crystal_chase",
-    title: "Crystal Spec Chase",
-    createdAt,
-    updatedAt,
-    runtimeKind: "phaser",
-    templateId: gameSpec.template.id,
-    gameSpec,
-    validationEvidence: [
-      {
-        id: "evidence_runtime_boot",
-        checkId: "runtime_boot",
-        stage: "runtime-boot",
-        status: "passed",
-        durationMs: 42,
-        message: "Runtime booted without fatal errors.",
-        evidence: {
-          viewport: {
-            width: 800,
-            height: 600,
-          },
-        },
-      },
-    ],
-    builds: [
-      {
-        id: "build_initial_playable",
-        createdAt,
-        runtimeKind: "phaser",
-        templateId: gameSpec.template.id,
-        gameSpecId: gameSpec.id,
-        checkpointId: "checkpoint_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-        status: "validated",
-        artifactMetadata: {
-          runtimeScriptPath: "/runtime/phaser/top-down-template.js",
-        },
-      },
-    ],
-    checkpoints: [
-      {
-        id: "checkpoint_initial_playable",
-        createdAt,
-        label: "Initial playable",
-        summary: "First validated top-down playable state.",
-        gameSpecId: gameSpec.id,
-        buildId: "build_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-      },
-    ],
-    failedAttempts: [
-      {
-        id: "failed_attempt_preflight",
-        createdAt,
-        stage: "spec-validation",
-        summary: "A pre-runtime consistency pass failed before mounting.",
-        gameSpecId: gameSpec.id,
-        validationEvidenceIds: ["evidence_runtime_boot"],
-      },
-    ],
-    generationRuns: [
-      {
-        id: "generation_run_reserved",
-        createdAt,
-        status: "reserved",
-      },
-    ],
-    ...overrides,
-  });
-
-  return gamePack;
-}
-
-function createPersistedGamePackWithLaterCheckpoint(): GamePack {
-  const gameSpec = getDefaultTopDownGameSpecFixture();
-  const baseGamePack = createPersistedGamePack();
-
-  return parseGamePack({
-    ...baseGamePack,
-    updatedAt: laterUpdatedAt,
-    currentCheckpointId: "checkpoint_second_playable",
-    validationEvidence: [
-      ...baseGamePack.validationEvidence,
-      {
-        id: "evidence_second_validation",
-        checkId: "second_validation",
-        stage: "browser-check",
-        status: "passed",
-        durationMs: 18,
-      },
-    ],
-    builds: [
-      ...baseGamePack.builds,
-      {
-        id: "build_second_playable",
-        createdAt: laterUpdatedAt,
-        runtimeKind: "phaser",
-        templateId: gameSpec.template.id,
-        gameSpecId: gameSpec.id,
-        checkpointId: "checkpoint_second_playable",
-        validationEvidenceIds: ["evidence_second_validation"],
-        status: "validated",
-      },
-    ],
-    checkpoints: [
-      ...baseGamePack.checkpoints,
-      {
-        id: "checkpoint_second_playable",
-        createdAt: laterUpdatedAt,
-        label: "Second playable",
-        summary: "Later validated top-down playable state.",
-        gameSpecId: gameSpec.id,
-        buildId: "build_second_playable",
-        validationEvidenceIds: ["evidence_second_validation"],
-      },
-    ],
-  });
-}
 
 class MemoryGamePackStorage implements GamePackStorageDriver {
   readonly records = new Map<string, StoredGamePackRecord>();

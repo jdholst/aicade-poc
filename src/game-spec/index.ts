@@ -37,9 +37,12 @@ export {
 } from "./game-pack/game-pack-factory";
 
 export {
+  createGamePackPersistenceKey,
+  getCurrentCheckpoint,
+  hasCreatorFacingCheckpoint,
   restoreGamePackCheckpoint,
   type RestoreGamePackCheckpointInput,
-} from "./game-pack/checkpoint-restore";
+} from "./game-pack/game-pack-lineage";
 
 export {
   createGamePackRepository,

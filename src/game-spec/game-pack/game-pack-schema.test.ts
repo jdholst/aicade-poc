@@ -3,89 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   gamePackSchema,
   parseGamePack,
-  type GamePack,
 } from "@/game-spec";
-import { getDefaultTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
+import { createValidatedGamePackFixture } from "./testing/game-pack-fixtures";
 
-const createdAt = "2026-05-21T00:00:00.000Z";
-const updatedAt = "2026-05-21T00:01:00.000Z";
-
-function createMinimalGamePack(): GamePack {
-  const gameSpec = getDefaultTopDownGameSpecFixture();
-
-  return {
-    schemaVersion: "game-pack/v1",
-    id: "game_pack_crystal_chase",
-    title: "Crystal Spec Chase",
-    createdAt,
-    updatedAt,
-    runtimeKind: "phaser",
-    templateId: gameSpec.template.id,
-    gameSpec,
-    validationEvidence: [
-      {
-        id: "evidence_runtime_boot",
-        checkId: "runtime_boot",
-        stage: "runtime-boot",
-        status: "passed",
-        durationMs: 42,
-        message: "Runtime booted without fatal errors.",
-        evidence: {
-          viewport: {
-            width: 800,
-            height: 600,
-          },
-        },
-      },
-    ],
-    builds: [
-      {
-        id: "build_initial_playable",
-        createdAt,
-        runtimeKind: "phaser",
-        templateId: gameSpec.template.id,
-        gameSpecId: gameSpec.id,
-        checkpointId: "checkpoint_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-        status: "validated",
-        artifactMetadata: {
-          runtimeScriptPath: "/runtime/phaser/top-down-template.js",
-        },
-      },
-    ],
-    checkpoints: [
-      {
-        id: "checkpoint_initial_playable",
-        createdAt,
-        label: "Initial playable",
-        summary: "First validated top-down playable state.",
-        gameSpecId: gameSpec.id,
-        buildId: "build_initial_playable",
-        validationEvidenceIds: ["evidence_runtime_boot"],
-      },
-    ],
-    failedAttempts: [
-      {
-        id: "failed_attempt_preflight",
-        createdAt,
-        stage: "spec-validation",
-        summary: "A pre-runtime consistency pass failed before mounting.",
-        gameSpecId: gameSpec.id,
-        validationEvidenceIds: ["evidence_runtime_boot"],
-        metadata: {
-          assetKeys: ["asset_player"],
-        },
-      },
-    ],
-    generationRuns: [
-      {
-        id: "generation_run_reserved",
-        createdAt,
-        status: "reserved",
-      },
-    ],
-  };
-}
+const createMinimalGamePack = createValidatedGamePackFixture;
 
 describe("Game Pack schema", () => {
   it("parses a minimal runtime-agnostic Phaser Game Pack with a top-down Game Spec snapshot", () => {

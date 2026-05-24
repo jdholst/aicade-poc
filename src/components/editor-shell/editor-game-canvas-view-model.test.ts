@@ -191,19 +191,21 @@ describe("createEditorRuntimePanelViewModel", () => {
     });
 
     expect(viewModel.primarySurface).toMatchObject({
-      summary:
-        "The Game Spec needs one primary objective before the runtime can be presented as playable.",
-      debugReceipts: [
-        {
-          checkId: "basic_objective_presence",
-          evidenceJson: '{\n  "primaryObjectiveCount": 0\n}',
-          issueMessages: ["Expected exactly one primary objective."],
-          message:
-            "Game Spec must include exactly one primary objective before runtime boot can be treated as playable.",
-          stage: "spec-validation",
-          status: "failed",
-        },
-      ],
+      failure: {
+        summary:
+          "The Game Spec needs one primary objective before the runtime can be presented as playable.",
+        debugReceipts: [
+          {
+            checkId: "basic_objective_presence",
+            evidenceJson: '{\n  "primaryObjectiveCount": 0\n}',
+            issueMessages: ["Expected exactly one primary objective."],
+            message:
+              "Game Spec must include exactly one primary objective before runtime boot can be treated as playable.",
+            stage: "spec-validation",
+            status: "failed",
+          },
+        ],
+      },
       type: "first-playable-validation-error",
     });
     expect(viewModel.secondarySurfaces).toEqual([]);
@@ -253,19 +255,21 @@ describe("createEditorRuntimePanelViewModel", () => {
     });
 
     expect(viewModel.primarySurface).toEqual({
-      summary: "Runtime did not report nonblank render output.",
-      debugReceipts: [
-        {
-          checkId: "nonblank_render",
-          evidenceJson: null,
-          issueMessages: [
-            "Expected the runtime to report at least one visible render object.",
-          ],
-          message: "Runtime did not report nonblank render output.",
-          stage: "browser-check",
-          status: "failed",
-        },
-      ],
+      failure: {
+        summary: "Runtime did not report nonblank render output.",
+        debugReceipts: [
+          {
+            checkId: "nonblank_render",
+            evidenceJson: null,
+            issueMessages: [
+              "Expected the runtime to report at least one visible render object.",
+            ],
+            message: "Runtime did not report nonblank render output.",
+            stage: "browser-check",
+            status: "failed",
+          },
+        ],
+      },
       type: "first-playable-validation-error",
     });
     expect(viewModel.canPauseRuntime).toBe(false);
@@ -356,8 +360,18 @@ describe("createEditorRuntimePanelViewModel", () => {
       runtimeTemplate: invalidRuntimeTemplate,
     });
 
-    expect(viewModel.primarySurface).toEqual({
-      message: invalidRuntimeTemplate.message,
+    expect(viewModel.primarySurface).toMatchObject({
+      failure: {
+        summary: invalidRuntimeTemplate.message,
+        debugReceipts: [
+          {
+            checkId: "game_spec_validation",
+            issueMessages: ['Expected target role "player".'],
+            stage: "spec-validation",
+            status: "failed",
+          },
+        ],
+      },
       type: "phaser-validation-error",
     });
     expect(viewModel.secondarySurfaces).toEqual([]);

@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { parseGamePack } from "@/game-spec";
+import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
 
 import { createEditorRuntimeTemplatePlan } from "./editor-runtime-template-plan";
-
-const createdAt = "2026-05-23T14:00:00.000Z";
 
 describe("createEditorRuntimeTemplatePlan", () => {
   it("resolves Canvas mode without Phaser validation state", () => {
@@ -74,49 +72,8 @@ describe("createEditorRuntimeTemplatePlan", () => {
   });
 
   it("restores a valid Phaser runtime plan from a saved Game Pack", () => {
-    const restoredGamePack = parseGamePack({
-      schemaVersion: "game-pack/v1",
-      id: "game_pack_crystal_chase",
-      title: "Crystal Spec Chase",
-      createdAt,
-      updatedAt: createdAt,
-      runtimeKind: "phaser",
-      templateId: topDownPhaserTemplate.gameSpec.template.id,
+    const restoredGamePack = createValidatedGamePackFixture({
       gameSpec: topDownPhaserTemplate.gameSpec,
-      validationEvidence: [
-        {
-          id: "evidence_runtime_boot",
-          checkId: "runtime_boot",
-          stage: "runtime-boot",
-          status: "passed",
-          durationMs: 42,
-        },
-      ],
-      builds: [
-        {
-          id: "build_initial_playable",
-          createdAt,
-          runtimeKind: "phaser",
-          templateId: topDownPhaserTemplate.gameSpec.template.id,
-          gameSpecId: topDownPhaserTemplate.gameSpec.id,
-          checkpointId: "checkpoint_initial_playable",
-          validationEvidenceIds: ["evidence_runtime_boot"],
-          status: "validated",
-        },
-      ],
-      checkpoints: [
-        {
-          id: "checkpoint_initial_playable",
-          createdAt,
-          label: "Initial playable",
-          summary: "First validated top-down playable state.",
-          gameSpecId: topDownPhaserTemplate.gameSpec.id,
-          buildId: "build_initial_playable",
-          validationEvidenceIds: ["evidence_runtime_boot"],
-        },
-      ],
-      failedAttempts: [],
-      generationRuns: [],
     });
 
     const plan = createEditorRuntimeTemplatePlan({

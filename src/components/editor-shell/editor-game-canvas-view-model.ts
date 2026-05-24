@@ -1,9 +1,11 @@
-import type {
-  FirstPlayableValidationAttempt,
-  ValidationEvidence,
-} from "@/game-spec";
+import type { FirstPlayableValidationAttempt } from "@/game-spec";
 import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
 
+import {
+  createFirstPlayableValidationFailureSurface,
+  createGameSpecValidationFailureSurface,
+  type ValidationFailureSurfaceViewModel,
+} from "./editor-validation-failure-surface";
 import {
   createCanvasRuntimeHostViewModel,
   createPhaserRuntimeHostViewModel,
@@ -31,12 +33,11 @@ export type EditorRuntimePrimarySurface =
       type: "generation-error";
     }
   | {
-      message: string;
+      failure: ValidationFailureSurfaceViewModel;
       type: "phaser-validation-error";
     }
   | {
-      debugReceipts: ValidationFailureReceiptViewModel[];
-      summary: string;
+      failure: ValidationFailureSurfaceViewModel;
       type: "first-playable-validation-error";
     }
   | {
@@ -53,15 +54,6 @@ export type EditorRuntimeSecondarySurface =
       type: "runtime-warning-panel";
       warnings: EditorGameCanvasSession["runtimeWarnings"];
     };
-
-export type ValidationFailureReceiptViewModel = {
-  checkId: string;
-  evidenceJson: string | null;
-  issueMessages: string[];
-  message: string;
-  stage: ValidationEvidence["stage"];
-  status: ValidationEvidence["status"];
-};
 
 type CreateEditorRuntimePanelViewModelInput = {
   canvas: EditorGameCanvasSession;
@@ -106,7 +98,7 @@ function createEditorRuntimePrimarySurface({
 }: CreateEditorRuntimePanelViewModelInput): EditorRuntimePrimarySurface {
   const { currentGenerationStage, gameResetNonce, loadState } = canvas;
   const firstPlayableValidationFailure =
-    getFirstPlayableValidationFailure(firstPlayableValidationAttempt);
+    createFirstPlayableValidationFailureSurface(firstPlayableValidationAttempt);
 
   if (loadState.status === "loading") {
     return {
@@ -140,14 +132,17 @@ function createEditorRuntimePrimarySurface({
 
   if (runtimeTemplate.type === "phaser-invalid") {
     return {
-      message: runtimeTemplate.message,
+      failure: createGameSpecValidationFailureSurface({
+        issues: runtimeTemplate.issues,
+        message: runtimeTemplate.message,
+      }),
       type: "phaser-validation-error",
     };
   }
 
   if (firstPlayableValidationFailure) {
     return {
-      ...firstPlayableValidationFailure,
+      failure: firstPlayableValidationFailure,
       type: "first-playable-validation-error",
     };
   }
@@ -189,46 +184,4 @@ function createEditorRuntimeSecondarySurfaces({
   }
 
   return secondarySurfaces;
-}
-
-function getFirstPlayableValidationFailure(
-  attempt: FirstPlayableValidationAttempt | null
-) {
-  if (!attempt?.shouldBlockPlayable) {
-    return null;
-  }
-
-  const failedReceipts = attempt.evidence.filter(
-    (receipt) => receipt.status === "failed"
-  );
-  const debugReceipts = (
-    failedReceipts.length > 0 ? failedReceipts : attempt.evidence
-  ).map(createValidationFailureReceiptViewModel);
-  const primaryReceipt = debugReceipts[0] ?? null;
-  const primaryIssueMessage = primaryReceipt?.issueMessages[0];
-
-  return {
-    debugReceipts,
-    summary:
-      attempt.failureMessage ??
-      primaryIssueMessage ??
-      primaryReceipt?.message ??
-      "First-playable validation failed before the runtime could be marked playable.",
-  };
-}
-
-function createValidationFailureReceiptViewModel(
-  receipt: ValidationEvidence
-): ValidationFailureReceiptViewModel {
-  return {
-    checkId: receipt.checkId,
-    evidenceJson: receipt.evidence
-      ? JSON.stringify(receipt.evidence, null, 2)
-      : null,
-    issueMessages:
-      receipt.issues?.map((issue) => issue.message) ?? [],
-    message: receipt.message ?? "Validation receipt did not include a message.",
-    stage: receipt.stage,
-    status: receipt.status,
-  };
 }

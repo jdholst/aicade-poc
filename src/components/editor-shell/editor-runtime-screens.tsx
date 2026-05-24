@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 
 import type { EditorGenerationStage } from "@/hooks/use-editor-session";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
-import type { ValidationFailureReceiptViewModel } from "./editor-game-canvas-view-model";
+
+import type { ValidationFailureReceiptViewModel } from "./editor-validation-failure-surface";
 
 function RuntimeScreenShell({
   children,

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   createIndexedDbGamePackRepository,
+  hasCreatorFacingCheckpoint,
   type GamePack,
   type GamePackRepository,
 } from "@/game-spec";
@@ -117,17 +118,6 @@ export function useEditorGamePackPersistence({
     restoredGamePack,
     storageError,
   };
-}
-
-function hasCreatorFacingCheckpoint(gamePack: GamePack) {
-  return gamePack.checkpoints.some((checkpoint) =>
-    gamePack.builds.some(
-      (build) =>
-        build.id === checkpoint.buildId &&
-        build.status === "validated" &&
-        build.validationEvidenceIds.length > 0
-    )
-  );
 }
 
 function toError(error: unknown) {

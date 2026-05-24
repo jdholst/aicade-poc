@@ -12,6 +12,7 @@ import {
 import {
   createTopDownGameSpecFixtureState,
   getTopDownGameSpecFixture,
+  getTopDownGameSpecFixtureState,
   TOP_DOWN_GAME_SPEC_FIXTURE_ENV,
 } from "./top-down-game-spec-fixture";
 import {
@@ -159,6 +160,46 @@ describe("top-down Phaser template", () => {
       "Crystal Spec Chase"
     );
   });
+
+  it.each([
+    ["malformed_top_down_template", "Invalid input"],
+    ["missing_primary_objective", "Expected exactly one primary objective."],
+    ["multiple_primary_objectives", "Expected exactly one primary objective."],
+    ["missing_player_entity", 'Expected target role "player".'],
+    ["missing_enemy_target_role", 'Expected target role "enemy".'],
+    ["missing_hazard_target_role", 'Expected target role "hazard".'],
+    ["missing_pickup_asset_reference", 'Expected asset role "pickup".'],
+    [
+      "missing_pickup_zone_coverage",
+      "Expected a referenced pickup asset to be placed in a pickup zone.",
+    ],
+    ["unknown_scene_reference", 'Unknown scene ID "scene_missing".'],
+    [
+      "missing_mechanic_objective_reference",
+      "Expected an objective reference.",
+    ],
+    ["unsupported_mechanic_type", 'Unsupported mechanic type "teleport_player".'],
+    [
+      "unknown_validation_goal_objective_reference",
+      'Unknown objective ID "objective_missing".',
+    ],
+    ["unknown_mechanic_references", 'Unknown entity ID "entity_missing".'],
+    ["unknown_scene_references", 'Unknown validation goal ID "validation_missing".'],
+    ["unused_modules", "Entity is not referenced by any spawn zone or active mechanic."],
+  ] as const)(
+    "exposes invalid fixture %s for manual failure-surface checks",
+    (fixtureId, expectedMessage) => {
+      const fixtureState = getTopDownGameSpecFixtureState(fixtureId);
+
+      expect(fixtureState).toMatchObject({
+        status: "invalid",
+      });
+      expect(fixtureState.message).toContain(expectedMessage);
+      expect(createTopDownPhaserTemplateState(fixtureState)).toMatchObject({
+        status: "invalid",
+      });
+    }
+  );
 
   it("uses the selected fixture when building the Phaser template state", () => {
     vi.stubEnv(TOP_DOWN_GAME_SPEC_FIXTURE_ENV, "prism_relay_gauntlet");
