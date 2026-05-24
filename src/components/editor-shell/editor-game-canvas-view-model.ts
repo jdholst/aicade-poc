@@ -1,4 +1,7 @@
-import type { FirstPlayableValidationAttempt } from "@/game-spec";
+import type {
+  FirstPlayableValidationAttempt,
+  ValidationEvidence,
+} from "@/game-spec";
 import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
 
 import {
@@ -32,7 +35,8 @@ export type EditorRuntimePrimarySurface =
       type: "phaser-validation-error";
     }
   | {
-      message: string;
+      debugReceipts: ValidationFailureReceiptViewModel[];
+      summary: string;
       type: "first-playable-validation-error";
     }
   | {
@@ -49,6 +53,15 @@ export type EditorRuntimeSecondarySurface =
       type: "runtime-warning-panel";
       warnings: EditorGameCanvasSession["runtimeWarnings"];
     };
+
+export type ValidationFailureReceiptViewModel = {
+  checkId: string;
+  evidenceJson: string | null;
+  issueMessages: string[];
+  message: string;
+  stage: ValidationEvidence["stage"];
+  status: ValidationEvidence["status"];
+};
 
 type CreateEditorRuntimePanelViewModelInput = {
   canvas: EditorGameCanvasSession;
@@ -92,8 +105,8 @@ function createEditorRuntimePrimarySurface({
   runtimeTemplate,
 }: CreateEditorRuntimePanelViewModelInput): EditorRuntimePrimarySurface {
   const { currentGenerationStage, gameResetNonce, loadState } = canvas;
-  const firstPlayableValidationErrorMessage =
-    getFirstPlayableValidationErrorMessage(firstPlayableValidationAttempt);
+  const firstPlayableValidationFailure =
+    getFirstPlayableValidationFailure(firstPlayableValidationAttempt);
 
   if (loadState.status === "loading") {
     return {
@@ -132,9 +145,9 @@ function createEditorRuntimePrimarySurface({
     };
   }
 
-  if (firstPlayableValidationErrorMessage) {
+  if (firstPlayableValidationFailure) {
     return {
-      message: firstPlayableValidationErrorMessage,
+      ...firstPlayableValidationFailure,
       type: "first-playable-validation-error",
     };
   }
@@ -178,15 +191,44 @@ function createEditorRuntimeSecondarySurfaces({
   return secondarySurfaces;
 }
 
-function getFirstPlayableValidationErrorMessage(
+function getFirstPlayableValidationFailure(
   attempt: FirstPlayableValidationAttempt | null
 ) {
   if (!attempt?.shouldBlockPlayable) {
     return null;
   }
 
-  return (
-    attempt.failureMessage ??
-    "First-playable validation failed before the runtime could be marked playable."
+  const failedReceipts = attempt.evidence.filter(
+    (receipt) => receipt.status === "failed"
   );
+  const debugReceipts = (
+    failedReceipts.length > 0 ? failedReceipts : attempt.evidence
+  ).map(createValidationFailureReceiptViewModel);
+  const primaryReceipt = debugReceipts[0] ?? null;
+  const primaryIssueMessage = primaryReceipt?.issueMessages[0];
+
+  return {
+    debugReceipts,
+    summary:
+      attempt.failureMessage ??
+      primaryIssueMessage ??
+      primaryReceipt?.message ??
+      "First-playable validation failed before the runtime could be marked playable.",
+  };
+}
+
+function createValidationFailureReceiptViewModel(
+  receipt: ValidationEvidence
+): ValidationFailureReceiptViewModel {
+  return {
+    checkId: receipt.checkId,
+    evidenceJson: receipt.evidence
+      ? JSON.stringify(receipt.evidence, null, 2)
+      : null,
+    issueMessages:
+      receipt.issues?.map((issue) => issue.message) ?? [],
+    message: receipt.message ?? "Validation receipt did not include a message.",
+    stage: receipt.stage,
+    status: receipt.status,
+  };
 }

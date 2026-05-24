@@ -161,6 +161,27 @@ describe("createEditorRuntimePanelViewModel", () => {
         },
       }),
       firstPlayableValidationAttempt: createFirstPlayableValidationAttempt({
+        evidence: [
+          {
+            id: "evidence_basic_objective_presence",
+            checkId: "basic_objective_presence",
+            stage: "spec-validation",
+            status: "failed",
+            durationMs: 0,
+            message:
+              "Game Spec must include exactly one primary objective before runtime boot can be treated as playable.",
+            issues: [
+              {
+                code: "missing_primary_objective",
+                path: "gameSpec.objectives",
+                message: "Expected exactly one primary objective.",
+              },
+            ],
+            evidence: {
+              primaryObjectiveCount: 0,
+            },
+          },
+        ],
         failureMessage:
           "The Game Spec needs one primary objective before the runtime can be presented as playable.",
         shouldBlockPlayable: true,
@@ -169,12 +190,85 @@ describe("createEditorRuntimePanelViewModel", () => {
       runtimeTemplate: validRuntimeTemplate,
     });
 
-    expect(viewModel.primarySurface).toEqual({
-      message:
+    expect(viewModel.primarySurface).toMatchObject({
+      summary:
         "The Game Spec needs one primary objective before the runtime can be presented as playable.",
+      debugReceipts: [
+        {
+          checkId: "basic_objective_presence",
+          evidenceJson: '{\n  "primaryObjectiveCount": 0\n}',
+          issueMessages: ["Expected exactly one primary objective."],
+          message:
+            "Game Spec must include exactly one primary objective before runtime boot can be treated as playable.",
+          stage: "spec-validation",
+          status: "failed",
+        },
+      ],
       type: "first-playable-validation-error",
     });
     expect(viewModel.secondarySurfaces).toEqual([]);
+    expect(viewModel.canResetRuntime).toBe(false);
+  });
+
+  it("routes runtime validation failures away from the playable host with receipt details", () => {
+    const viewModel = createEditorRuntimePanelViewModel({
+      canvas: createCanvasSession({
+        gameStatus: {
+          state: "error",
+          message: "Runtime did not report nonblank render output.",
+        },
+      }),
+      firstPlayableValidationAttempt: createFirstPlayableValidationAttempt({
+        evidence: [
+          {
+            id: "evidence_runtime_boot",
+            checkId: "runtime_boot",
+            stage: "runtime-boot",
+            status: "passed",
+            durationMs: 400,
+            message: "Runtime booted and reported ready.",
+          },
+          {
+            id: "evidence_nonblank_render",
+            checkId: "nonblank_render",
+            stage: "browser-check",
+            status: "failed",
+            durationMs: 700,
+            message: "Runtime did not report nonblank render output.",
+            issues: [
+              {
+                code: "blank_runtime_render",
+                path: "runtime.render",
+                message:
+                  "Expected the runtime to report at least one visible render object.",
+              },
+            ],
+          },
+        ],
+        failureMessage: "Runtime did not report nonblank render output.",
+        shouldBlockPlayable: true,
+        status: "failed",
+      }),
+      runtimeTemplate: validRuntimeTemplate,
+    });
+
+    expect(viewModel.primarySurface).toEqual({
+      summary: "Runtime did not report nonblank render output.",
+      debugReceipts: [
+        {
+          checkId: "nonblank_render",
+          evidenceJson: null,
+          issueMessages: [
+            "Expected the runtime to report at least one visible render object.",
+          ],
+          message: "Runtime did not report nonblank render output.",
+          stage: "browser-check",
+          status: "failed",
+        },
+      ],
+      type: "first-playable-validation-error",
+    });
+    expect(viewModel.canPauseRuntime).toBe(false);
     expect(viewModel.canResetRuntime).toBe(false);
   });
 

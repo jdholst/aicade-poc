@@ -130,8 +130,10 @@ describe("EditorGameCanvas", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("blocks the Phaser host when first-playable validation fails before boot", async () => {
+  it("shows a friendly blocked state when first-playable validation fails before boot", async () => {
     vi.resetModules();
+    const onRegenerate = vi.fn();
+    const onReset = vi.fn();
     vi.doMock("@/runtime/phaser", async (importOriginal) => {
       const actual = await importOriginal<typeof import("@/runtime/phaser")>();
       const gameSpec = {
@@ -162,22 +164,81 @@ describe("EditorGameCanvas", () => {
 
     render(
       <MockedEditorGameCanvas
-        actions={createActions()}
+        actions={createActions({ onRegenerate, onReset })}
         canvas={createCanvasSession()}
       />
     );
 
+    expect(screen.getByText("Draft blocked")).toBeVisible();
+    expect(screen.getByText("This draft is not playable yet.")).toBeVisible();
     expect(
-      screen.getByText("First-playable validation failed")
-    ).toBeVisible();
-    expect(
-      screen.getByText("The runtime was not marked playable.")
-    ).toBeVisible();
-    expect(
-      screen.getByText("Expected exactly one primary objective.")
-    ).toBeVisible();
+      screen.getAllByText("Expected exactly one primary objective.")
+    ).toHaveLength(2);
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
     expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Try again" })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start over from prompt" })
+    );
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows validation receipt details for a runtime first-playable failure", async () => {
+    const onRegenerate = vi.fn();
+    const onReset = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onRegenerate, onReset })}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Crystal Spec Chase");
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "nonblank_render", "failed");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Draft blocked")).toBeVisible();
+    });
+
+    expect(screen.getByText("This draft is not playable yet.")).toBeVisible();
+    expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Inspect validation details"));
+
+    expect(screen.getByText("browser-check")).toBeVisible();
+    expect(screen.getByText("nonblank_render")).toBeVisible();
+    expect(
+      screen.getByText("Runtime did not report nonblank render output.")
+    ).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "Expected the runtime to report at least one visible render object."
+      )
+    ).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start over from prompt" })
+    );
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
   });
 
   it("mounts the selected top-down Phaser fixture", () => {
@@ -641,7 +702,8 @@ describe("EditorGameCanvas", () => {
 
 function dispatchValidationEvidence(
   iframe: HTMLIFrameElement,
-  checkId: "input_response" | "nonblank_render" | "player_visible"
+  checkId: "input_response" | "nonblank_render" | "player_visible",
+  status: "failed" | "passed" = "passed"
 ) {
   window.dispatchEvent(
     new MessageEvent("message", {
@@ -649,7 +711,7 @@ function dispatchValidationEvidence(
         type: "game-validation-evidence",
         data: {
           checkId,
-          status: "passed",
+          status,
         },
       },
       source: iframe.contentWindow,

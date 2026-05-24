@@ -23,6 +23,7 @@ import { RuntimeControls } from "./editor-runtime-controls";
 import { RuntimeErrorBanner } from "./editor-runtime-error-banner";
 import { EditorRuntimeHostMount } from "./editor-runtime-host-mount";
 import {
+  FirstPlayableValidationBlockedScreen,
   GameSpecValidationErrorScreen,
   InitialRuntimeScreen,
   LoadingRuntimeScreen,
@@ -144,6 +145,7 @@ export function EditorGameCanvas({
         hostRef: gameHostRef,
         isPaused: isGamePaused,
         onRegenerate,
+        onReset,
         onStatusChange: handleRuntimeStatusChange,
         onValidationEvidence: handleRuntimeValidationEvidence,
         surface: runtimePanel.primarySurface,
@@ -192,6 +194,7 @@ function renderRuntimePrimarySurface({
   hostRef,
   isPaused,
   onRegenerate,
+  onReset,
   onStatusChange,
   onValidationEvidence,
   surface,
@@ -200,6 +203,7 @@ function renderRuntimePrimarySurface({
   hostRef: RefObject<RuntimeIframeHostHandle | null>;
   isPaused: boolean;
   onRegenerate: () => void;
+  onReset: () => void;
   onStatusChange: (status: RuntimeIframeStatus) => void;
   onValidationEvidence: (evidence: RuntimeValidationEvidence) => void;
   surface: EditorRuntimePrimarySurface;
@@ -227,10 +231,11 @@ function renderRuntimePrimarySurface({
 
   if (surface.type === "first-playable-validation-error") {
     return (
-      <GameSpecValidationErrorScreen
-        eyebrow="First-playable validation failed"
-        title="The runtime was not marked playable."
-        message={surface.message}
+      <FirstPlayableValidationBlockedScreen
+        debugReceipts={surface.debugReceipts}
+        onRegenerate={onRegenerate}
+        onReset={onReset}
+        summary={surface.summary}
       />
     );
   }

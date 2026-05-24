@@ -14,6 +14,17 @@ export const DEFAULT_TOP_DOWN_GAME_SPEC_FIXTURE_ID = "crystal_spec_chase";
 
 const topDownGameSpecFixtureInputs = {
   crystal_spec_chase: crystalSpecChaseGameSpecFixtureInput,
+  missing_primary_objective: {
+    ...crystalSpecChaseGameSpecFixtureInput,
+    id: "game_missing_primary_objective",
+    title: "Missing Primary Objective",
+    objectives: crystalSpecChaseGameSpecFixtureInput.objectives.map(
+      (objective) => ({
+        ...objective,
+        primary: false,
+      })
+    ),
+  },
   prism_relay_gauntlet: prismRelayGauntletGameSpecFixtureInput,
 } as const;
 
