@@ -90,7 +90,7 @@ Phase 5A should store validation checks as compact evidence receipts rather than
 
 Phase 5A should include a narrow pre-runtime consistency pass before attempting iframe/browser validation. This pass should only check requirements that directly protect first playable: valid Game Spec references, required player entity, required primary objective, required template/runtime entrypoint, and placeholder asset references when those assets are needed for the draft to render. Broader checks such as TypeScript import rules, full animation-chain validation, and deep template-specific linting should wait until later milestones.
 
-Failed first-playable validation should block the draft from the normal playable view. Sparkline should not present broken games as playable; it should show a friendly repair or failure state with options such as trying repair again, starting over from the prompt, or opening debug details.
+Failed first-playable validation should block the draft from the normal playable view. Sparkline should not present broken games as playable; in Phase 5/6 it should show a friendly failure state with options such as retrying validation, starting over from the prompt, or opening debug details. Automated repair affordances should wait until the later repair loop exists.
 
 Sparkline should save failed generation attempts internally for repair, debugging, known-failure learning, and cost/quality analysis, but failed attempts should not clutter the creator's normal project history. Creator-facing Version Checkpoints should mostly represent meaningful saved playable states; if a failed attempt is repaired successfully, the successful version becomes the checkpoint.
 

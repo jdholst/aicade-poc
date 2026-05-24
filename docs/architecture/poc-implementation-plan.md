@@ -85,7 +85,7 @@ The agreed build sequence is:
 1. Phase 6A: define minimal in-code schemas/types for `Game Pack`, `Playable Build`, `Version Checkpoint`, and `Validation Evidence`.
 2. Phase 5A: implement first-playable validation and write results into that evidence shape.
 3. Phase 6B: add IndexedDB-backed lightweight persistence and reload for the validated project/checkpoint behind a small repository/service abstraction.
-4. Phase 5B: improve repair/failure UI once validation results survive reload, without implementing automated repair yet.
+4. Phase 5B: improve failure UI and repair-ready evidence once validation results survive reload, without implementing automated repair yet.
 
 Phase 5A's first-playable validation bar should require six checks from the start: boot success, no fatal runtime error, nonblank render, player visibility, input response, and basic objective presence. The implementation can stay lightweight, but a draft should not be called first-playable unless the player can see, affect, and understand the game at a basic level.
 
@@ -307,7 +307,7 @@ Deliverables:
 - Define the first-playable validation bar.
 - Check boot success, fatal runtime errors, nonblank render, player visibility, control response, and basic objective presence.
 - Store Validation Evidence for successful builds.
-- Show a friendly repair/failure state for broken drafts.
+- Show a friendly failure state for broken drafts, backed by repair-ready validation details.
 
 Acceptance criteria:
 

@@ -555,6 +555,106 @@ describe("first-playable validation orchestration", () => {
     ]);
   });
 
+  it("preserves repair-ready failed evidence and artifact references without running repair", () => {
+    const gamePack = createGamePack();
+    const attempt = recordFirstPlayableRuntimeEvidence({
+      attempt: recordRuntimeReady(startValidation(gamePack)),
+      observedAt,
+      evidence: {
+        checkId: "nonblank_render",
+        status: "failed",
+        message: "Canvas stayed blank after boot.",
+        issues: [
+          {
+            code: "blank_canvas",
+            path: "canvas.drawCalls",
+            message: "Expected at least one draw call.",
+          },
+        ],
+        evidence: {
+          renderedObjectCount: 0,
+          screenshotHash: "sha256-empty-canvas",
+        },
+      },
+    });
+
+    const nextGamePack = writeFirstPlayableValidationResult({
+      gamePack,
+      attempt,
+      completedAt,
+    });
+    const failedReceipt = nextGamePack.validationEvidence.find(
+      (evidence) => evidence.id === "evidence_nonblank_render"
+    );
+
+    expect(nextGamePack.generationRuns).toEqual([]);
+    expect(nextGamePack.checkpoints).toEqual([]);
+    expect(nextGamePack.builds).toEqual([
+      expect.objectContaining({
+        id: "build_failed_first_playable",
+        status: "failed",
+        validationEvidenceIds: attempt.evidence.map(
+          (evidence) => evidence.id
+        ),
+        artifactMetadata: expect.objectContaining({
+          validationEvidenceByStage: expect.objectContaining({
+            "browser-check": [
+              {
+                id: "evidence_nonblank_render",
+                checkId: "nonblank_render",
+                status: "failed",
+              },
+            ],
+          }),
+        }),
+      }),
+    ]);
+    expect(nextGamePack.failedAttempts).toEqual([
+      expect.objectContaining({
+        id: "failed_attempt_first_playable_runtime",
+        buildId: "build_failed_first_playable",
+        gameSpecId: gamePack.gameSpec.id,
+        stage: "browser-check",
+        summary: "Expected at least one draw call.",
+        validationEvidenceIds: attempt.evidence.map(
+          (evidence) => evidence.id
+        ),
+        metadata: expect.objectContaining({
+          validationEvidenceByStage: expect.objectContaining({
+            "browser-check": [
+              {
+                id: "evidence_nonblank_render",
+                checkId: "nonblank_render",
+                status: "failed",
+              },
+            ],
+          }),
+        }),
+      }),
+    ]);
+    expect(failedReceipt).toEqual(
+      expect.objectContaining({
+        id: "evidence_nonblank_render",
+        checkId: "nonblank_render",
+        stage: "browser-check",
+        status: "failed",
+        message: "Canvas stayed blank after boot.",
+        issues: [
+          {
+            code: "blank_canvas",
+            path: "canvas.drawCalls",
+            message: "Expected at least one draw call.",
+          },
+        ],
+        evidence: {
+          source: "runtime-self-report",
+          renderedObjectCount: 0,
+          screenshotHash: "sha256-empty-canvas",
+        },
+      })
+    );
+  });
+
   it.each([
     [
       "nonblank_render",

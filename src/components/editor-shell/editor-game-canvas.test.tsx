@@ -186,6 +186,9 @@ describe("EditorGameCanvas", () => {
 
     expect(onReset).toHaveBeenCalledTimes(1);
     expect(onRegenerate).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: /repair|fix automatically/i })
+    ).not.toBeInTheDocument();
   });
 
   it("shows validation receipt details for a runtime first-playable failure", async () => {
