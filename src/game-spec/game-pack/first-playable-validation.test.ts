@@ -427,6 +427,9 @@ describe("first-playable validation orchestration", () => {
       validationEvidenceIds
     );
     expect(nextGamePack.failedAttempts).toEqual([]);
+    expect(nextGamePack.currentCheckpointId).toBe(
+      "checkpoint_initial_playable"
+    );
     expect(nextGamePack.builds).toEqual([
       expect.objectContaining({
         id: "build_initial_playable",

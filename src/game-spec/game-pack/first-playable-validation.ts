@@ -272,6 +272,7 @@ export function writeFirstPlayableValidationResult({
     return parseGamePack({
       ...gamePack,
       updatedAt: completedAt,
+      currentCheckpointId: checkpointId,
       validationEvidence,
       builds: upsertRecordsById(gamePack.builds, [build]),
       checkpoints,

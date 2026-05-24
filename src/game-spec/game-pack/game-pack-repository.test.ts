@@ -10,6 +10,7 @@ import {
   type StoredGamePackRecord,
 } from "./game-pack-repository";
 import { parseGamePack, type GamePack } from "./game-pack-schema";
+import { restoreGamePackCheckpoint } from "./checkpoint-restore";
 
 const createdAt = "2026-05-23T12:00:00.000Z";
 const updatedAt = "2026-05-23T12:05:00.000Z";
@@ -113,6 +114,30 @@ describe("Game Pack repository", () => {
         expect.objectContaining({
           id: "generation_run_reserved",
           status: "reserved",
+        }),
+      ],
+    });
+  });
+
+  it("reloads restored-forward checkpoint history without dropping later checkpoints", async () => {
+    const repository = createGamePackRepository(new MemoryGamePackStorage());
+    const gamePack = createPersistedGamePackWithLaterCheckpoint();
+    const restoredGamePack = restoreGamePackCheckpoint({
+      gamePack,
+      restoredAt: "2026-05-23T12:15:00.000Z",
+      sourceCheckpointId: "checkpoint_initial_playable",
+    });
+
+    await repository.save(restoredGamePack);
+
+    await expect(repository.load(gamePack.id)).resolves.toMatchObject({
+      currentCheckpointId: "checkpoint_restored_initial_playable_1",
+      checkpoints: [
+        expect.objectContaining({ id: "checkpoint_initial_playable" }),
+        expect.objectContaining({ id: "checkpoint_second_playable" }),
+        expect.objectContaining({
+          id: "checkpoint_restored_initial_playable_1",
+          restoredFromCheckpointId: "checkpoint_initial_playable",
         }),
       ],
     });
@@ -234,6 +259,52 @@ function createPersistedGamePack(
   });
 
   return gamePack;
+}
+
+function createPersistedGamePackWithLaterCheckpoint(): GamePack {
+  const gameSpec = getDefaultTopDownGameSpecFixture();
+  const baseGamePack = createPersistedGamePack();
+
+  return parseGamePack({
+    ...baseGamePack,
+    updatedAt: laterUpdatedAt,
+    currentCheckpointId: "checkpoint_second_playable",
+    validationEvidence: [
+      ...baseGamePack.validationEvidence,
+      {
+        id: "evidence_second_validation",
+        checkId: "second_validation",
+        stage: "browser-check",
+        status: "passed",
+        durationMs: 18,
+      },
+    ],
+    builds: [
+      ...baseGamePack.builds,
+      {
+        id: "build_second_playable",
+        createdAt: laterUpdatedAt,
+        runtimeKind: "phaser",
+        templateId: gameSpec.template.id,
+        gameSpecId: gameSpec.id,
+        checkpointId: "checkpoint_second_playable",
+        validationEvidenceIds: ["evidence_second_validation"],
+        status: "validated",
+      },
+    ],
+    checkpoints: [
+      ...baseGamePack.checkpoints,
+      {
+        id: "checkpoint_second_playable",
+        createdAt: laterUpdatedAt,
+        label: "Second playable",
+        summary: "Later validated top-down playable state.",
+        gameSpecId: gameSpec.id,
+        buildId: "build_second_playable",
+        validationEvidenceIds: ["evidence_second_validation"],
+      },
+    ],
+  });
 }
 
 class MemoryGamePackStorage implements GamePackStorageDriver {

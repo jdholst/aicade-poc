@@ -282,6 +282,54 @@ describe("Game Pack schema", () => {
     ).toBe(false);
   });
 
+  it("requires the current checkpoint pointer to reference an existing checkpoint", () => {
+    const pack = createMinimalGamePack();
+
+    expect(
+      gamePackSchema.safeParse({
+        ...pack,
+        currentCheckpointId: "checkpoint_initial_playable",
+      }).success
+    ).toBe(true);
+
+    expect(
+      gamePackSchema.safeParse({
+        ...pack,
+        currentCheckpointId: "checkpoint_missing",
+      }).success
+    ).toBe(false);
+  });
+
+  it("requires restored checkpoint source IDs to reference existing checkpoints", () => {
+    const pack = createMinimalGamePack();
+
+    expect(
+      gamePackSchema.safeParse({
+        ...pack,
+        checkpoints: [
+          ...pack.checkpoints,
+          {
+            ...pack.checkpoints[0],
+            id: "checkpoint_restored_initial_playable_1",
+            restoredFromCheckpointId: "checkpoint_initial_playable",
+          },
+        ],
+      }).success
+    ).toBe(true);
+
+    expect(
+      gamePackSchema.safeParse({
+        ...pack,
+        checkpoints: [
+          {
+            ...pack.checkpoints[0],
+            restoredFromCheckpointId: "checkpoint_missing",
+          },
+        ],
+      }).success
+    ).toBe(false);
+  });
+
   it("allows failed attempts to preserve evidence without creating a build", () => {
     const pack = createMinimalGamePack();
     const { buildId, ...failedAttemptWithoutBuild } = pack.failedAttempts[0];

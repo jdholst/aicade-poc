@@ -110,6 +110,7 @@ export const gamePackSchema = z
     updatedAt: isoDateTimeSchema,
     runtimeKind: gamePackRuntimeKindSchema,
     templateId: stableIdSchema,
+    currentCheckpointId: stableIdSchema.optional(),
     gameSpec: gameSpecSchema,
     builds: z.array(playableBuildSchema),
     checkpoints: z.array(versionCheckpointSchema),
@@ -137,6 +138,16 @@ export const gamePackSchema = z
     addDuplicateIdIssues(pack.checkpoints, "checkpoints", ctx);
     addDuplicateIdIssues(pack.failedAttempts, "failedAttempts", ctx);
     addDuplicateIdIssues(pack.generationRuns, "generationRuns", ctx);
+
+    if (
+      pack.currentCheckpointId &&
+      !checkpointIds.has(pack.currentCheckpointId)
+    ) {
+      addRelationshipIssue(ctx, {
+        path: ["currentCheckpointId"],
+        message: "currentCheckpointId must reference an existing checkpoint.",
+      });
+    }
 
     pack.builds.forEach((build, buildIndex) => {
       if (build.gameSpecId !== pack.gameSpec.id) {
@@ -176,6 +187,24 @@ export const gamePackSchema = z
         addRelationshipIssue(ctx, {
           path: ["checkpoints", checkpointIndex, "buildId"],
           message: "Checkpoint buildId must reference an existing build.",
+        });
+      }
+
+      if (checkpoint.restoredFromCheckpointId === checkpoint.id) {
+        addRelationshipIssue(ctx, {
+          path: ["checkpoints", checkpointIndex, "restoredFromCheckpointId"],
+          message: "Checkpoint cannot be restored from itself.",
+        });
+      }
+
+      if (
+        checkpoint.restoredFromCheckpointId &&
+        !checkpointIds.has(checkpoint.restoredFromCheckpointId)
+      ) {
+        addRelationshipIssue(ctx, {
+          path: ["checkpoints", checkpointIndex, "restoredFromCheckpointId"],
+          message:
+            "Checkpoint restoredFromCheckpointId must reference an existing checkpoint.",
         });
       }
 

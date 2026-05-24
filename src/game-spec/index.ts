@@ -37,6 +37,11 @@ export {
 } from "./game-pack/game-pack-factory";
 
 export {
+  restoreGamePackCheckpoint,
+  type RestoreGamePackCheckpointInput,
+} from "./game-pack/checkpoint-restore";
+
+export {
   createGamePackRepository,
   createIndexedDbGamePackRepository,
   GamePackRepositoryError,
