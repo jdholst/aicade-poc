@@ -23,6 +23,10 @@ These architecture docs describe the current authoring contracts and prep notes 
 - [Mechanic Registry Authoring Model](./mechanic-registry-authoring-model.md)
 - [Phase 5 Prep Notes](./phase-5-prep-notes.md)
 
+Related Sparkline Research Notes:
+
+- [Source Code Research: OpenGame Patterns for Phase 7 Spec Generation - 2026-05-26](https://www.notion.so/36c9db009ee5813493a3ed86f7b57245)
+
 ## Scope
 
 In scope:
@@ -409,32 +413,80 @@ Likely rewrite for v1:
 
 ### Milestone 7: AI Prompt-To-Spec Generation
 
-Goal: add AI generation to the Phaser path only after the runtime/spec path works.
+Goal: generate a validated top-down Phaser Game Spec from the main prompt flow and prove it can become a playable draft without allowing invalid AI output into the runtime.
 
 Deliverables:
 
-- Define strict prompt-to-spec structured output schema.
-- Route model calls through a small task alias such as `spec_generation.primary`.
-- Validate schema and semantic references.
-- Repair invalid model output with exact validation errors and a small retry cap.
-- Fall back to simpler spec or friendly failure state if repair fails.
+- Add a new task-named Spec Generation service and API route for Phaser/top-down generation rather than branching the legacy `/api/starter-project` response shape.
+- Route the homepage prompt flow to the new Spec Generation API when the editor runtime is Phaser, while keeping Canvas mode on the existing starter-project path until it is later migrated.
+- Keep service language provider-neutral around a task alias such as `spec_generation.primary`, while reusing the current OpenAI key, keyword, and model input plumbing for the POC.
+- Add a compact top-down Spec Generation Guide, modeled after OpenGame's template capability docs but expressed as AI-Cade's allowed `TopDownGameSpec`, mechanics, stable IDs, references, layout primitives, placeholder assets, and objective rules.
+- Ask AI for a complete but narrow `TopDownGameSpec`: one scene, `template_top_down`, known built-in mechanics, stable ID references, placeholder/template assets, modest layout data, and exactly one primary objective.
+- Prompt with OpenGame-inspired capability-integrity rules: no Phaser source, no GDD, no unsupported mechanics, no unsupported fields, no unresolved references, and no behavior that cannot be represented in the current spec/registry contract.
+- Start with `player_movement` and `pickup_collection`, plus at most one early variation mechanic such as `enemy_chase` or `hazard_contact`.
+- Validate AI output on the API/server path with schema, semantic reference, and mechanic validation before returning it to the editor.
+- Return a validated spec plus generation metadata, or a structured failure with creator-friendly copy and developer/repair validation details.
+- Keep generated specs ephemeral in the first implementation; do not require durable IndexedDB persistence, Version Checkpoints, durable Validation Evidence, or full GenerationRun telemetry.
+- Build deterministic validation and friendly rejection before adding AI-assisted repair.
+- Add one bounded AI-assisted repair attempt as a later Milestone 7 task after real validation failures are available.
+- Distinguish Phaser fixture/test mode from Phaser AI generation mode. Hardcoded fixtures are explicit runtime-test inputs, not fallback content for failed AI generation.
+- Use plain creator-facing status copy such as designing the game, checking the game plan, building the playable draft, and testing that it loads.
+- Adapt the editor runtime plan so a successful generated spec can become the active runtime source and pass through the existing Phaser template and first-playable validation path.
+- Keep OpenGame's broader GDD, asset-pack, tilemap, Template Skill, and Debug Skill evolution patterns as later references, not first-spine Phase 7 scope.
 
 Acceptance criteria:
 
-- AI can generate valid Game Spec/config for the top-down template.
-- Invalid model output never reaches the runtime unchecked.
-- Repair attempts are bounded and recorded.
-- The generated spec can produce a playable draft through the trusted template.
+- In Phaser AI generation mode, the main homepage prompt calls the new Spec Generation path instead of the Canvas starter-project endpoint.
+- A successful prompt returns a server-validated top-down Game Spec and mounts it through the trusted Phaser template.
+- First-playable validation proves the generated draft boots, renders nonblank output, shows the player, responds to input, and has a basic objective before the editor treats it as playable.
+- A deterministic invalid-output test stub is rejected with structured validation issues and a friendly error, with no silent fallback to a hardcoded fixture.
+- The first invalid-output suite covers OpenGame-inspired high-frequency failure classes translated into AI-Cade terms: wrong template id, invalid stable IDs, unsupported mechanic types, missing entity/asset/objective references, missing pickup-zone coverage, and missing or duplicate primary objectives.
+- The hardcoded top-down fixture remains available only through explicit fixture/test mode.
+- AI-assisted repair is not part of the first server slice, but the structured failure shape is ready to feed a later one-attempt repair loop.
 
 Proves:
 
-- AI can configure the template reliably before Sparkline allows AI-generated source extensions.
+- AI can configure the trusted top-down Phaser template reliably enough to produce a validated playable draft before Sparkline allows AI-generated source extensions.
+- Sparkline can reject invalid AI specs honestly without masking failure behind runtime fixtures.
 
 Likely promotable to v1:
 
 - Prompt-to-spec schema.
-- Validation/repair loop structure.
+- Server-side validation boundary for AI output.
+- Structured validation issue payload for later repair.
 - Model Router task alias pattern.
+- Fixture/test versus AI-generation source-mode distinction.
+
+Likely follow-up after the first Milestone 7 spine:
+
+- Persist successful generated playable drafts as Game Packs, Playable Builds, Validation Evidence, and Version Checkpoints.
+- Add one bounded AI repair attempt using the invalid candidate spec plus exact validation errors.
+- Migrate Canvas mode toward the same Spec Generation architecture and deprecate the legacy starter-project endpoint.
+- Revisit OpenGame's Template Skill and Debug Skill concepts only after real GenerationRun receipts, successful specs, failed attempts, and validation evidence exist to mine.
+
+OpenGame research findings to apply during Milestone 7:
+
+- Borrow capability-bounded prompting from OpenGame's `template_api.md` and `generate_gdd` flow, but collapse it into a strict `TopDownGameSpec` contract instead of adding a separate GDD.
+- Treat `TopDownGameSpec` as the only first-spine generation artifact. Do not generate Phaser code, config files, tilemap JSON, asset packs, or a persisted Game Pack in the first server slice.
+- Defer archetype classification. Phase 7 is fixed to top-down Phaser through the runtime mode; OpenGame's physics-first classifier becomes useful later when multiple template families are active.
+- Shape failure payloads with a small stage vocabulary inspired by OpenGame Debug Skill, such as `model_generation`, `schema_validation`, `semantic_validation`, `mechanic_validation`, and later `repair`.
+- Keep friendly creator copy separate from developer/repair details so invalid output can be honestly rejected now and reused by a bounded repair prompt later.
+- Use placeholder/template asset records only. OpenGame's asset-pack and tilemap tools reinforce strict key/reference contracts, but their file-generation workflow belongs after the spec-only path works.
+- Keep Template Skill style learning loops out of Phase 7. Later phases can inspect repeated successful Game Specs, validation evidence, failed attempts, and GenerationRun receipts for mechanic/template promotion candidates.
+
+Implementation questions to resolve during Milestone 7:
+
+- What exact API route name should the Phaser Spec Generation path use: `/api/spec-generation`, `/api/phaser-spec-generation`, `/api/game-spec-generation`, or another task-oriented name?
+- What exact success and failure response types should the route return?
+- Should the model tool/schema contract be generated from Zod or hand-authored as JSON Schema?
+- Which generation metadata fields belong in the pre-telemetry response before Milestone 8?
+- What should the fixture-vs-AI source env flag be named, and what values should it accept?
+- Should generated specs be recoverable through URL or session state before durable persistence exists?
+- How much homepage copy should change when the app is in Phaser AI generation mode?
+- What deterministic normalization is allowed before validation, if any?
+- How should the compact Spec Generation Guide stay in sync with the Zod schema and top-down Mechanic Registry?
+- Which invalid stub cases should define the failure test suite beyond the first OpenGame-inspired set?
+- What first golden prompt should be used for the completion demo? Current candidate: "Make a tiny top-down collection game where a courier gathers lost stars in a small arena while avoiding one slow shadow."
 
 ### Milestone 8: GenerationRun Telemetry
 
@@ -551,6 +603,16 @@ These should not block the first milestones, but they need decisions before or d
 
 When moving into Plan Mode for coding after Phase 5/6, start with Milestone 7:
 
-> Generate compact top-down Game Spec/config data through a bounded AI prompt-to-spec path, validate it with the Phase 5/6 first-playable bar, and record generation/repair attempts without allowing invalid output to reach the runtime unchecked.
+> Generate compact top-down Game Spec/config data through a new Phaser Spec Generation path, validate AI output on the server, mount the validated spec through the trusted Phaser template, and prove first-playable behavior in the editor without allowing invalid output or hardcoded fixtures to mask generation failure.
 
-This is the right next slice because the trusted runtime, schema, validation evidence, checkpoint, and local persistence path now exist. Phase 7 should spend model tokens only after the deterministic path can prove whether generated specs are playable.
+This is the right next slice because the trusted runtime, schema, validation evidence, checkpoint, and local persistence path now exist. Milestone 7 should spend model tokens only after the deterministic path can prove whether generated specs are playable.
+
+Recommended implementation sequence:
+
+1. Start server-first with TDD: lock down the Spec Generation service and API route contract for success and structured failure, including the compact top-down Spec Generation Guide.
+2. Add deterministic validation and friendly rejection before AI-assisted repair, using invalid-output stubs for wrong template id, bad stable IDs, unsupported mechanics, missing references, pickup-zone coverage gaps, and primary-objective mistakes.
+3. Route the main homepage prompt flow to the Spec Generation API in Phaser AI generation mode while keeping fixture mode explicit.
+4. Store the validated generated spec as active ephemeral editor state.
+5. Build and mount the Phaser template from the generated spec, then run first-playable validation before treating the draft as playable.
+6. Add the one-attempt AI repair loop as a later Milestone 7 task once real validation failures shape the repair prompt.
+7. Keep OpenGame Template Skill, Debug Skill, asset-pack, and tilemap-generation ideas deferred unless they become explicit later-phase work.
