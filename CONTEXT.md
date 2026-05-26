@@ -14,11 +14,15 @@ The AI-Cade POC should serve as Sparkline's proving ground for game generation a
 
 Because the POC is meant to prove versioned game projects, it should introduce lightweight persistence for projects and checkpoints rather than staying purely session-based. It does not need production accounts or community storage, but it should save and reload enough Game Pack, Game Spec, edit history, checkpoint, validation, and repair data to test the creation architecture honestly.
 
-POC persistence should start local and lightweight before introducing a committed production backend database. Browser local storage, IndexedDB, local file import/export, simple JSON-backed dev storage, or a minimal database are acceptable proving-ground options. The goal is to validate what Sparkline needs to save before locking in where that data lives permanently.
+POC persistence should start local and lightweight before introducing a committed production backend database. IndexedDB should be the first real persistence target because it proves save and reload inside the browser editor experience without introducing server storage decisions too early. Persistence access should live behind a small repository or service boundary so IndexedDB can later be replaced by a production database without changing the Game Pack domain model or editor orchestration. JSON import/export can follow as a debugging and portability convenience, but it should not be the first durable store.
 
 The POC should define the Game Pack schema in code before the UI exposes every field. The schema can include optional or experimental fields for future concepts so generation, validation, persistence, and future UI work share a contract, while the product experience exposes the shape gradually.
 
 The Game Pack schema should remain runtime-agnostic even while Phaser becomes the main target. General project concepts such as runtimeKind, templateId, Game Spec, assets, builds, validation, checkpoints, and edit records should be decoupled from Phaser-specific details, which should live under runtime or template-specific config. This keeps Canvas, Phaser, and possible future runtimes supportable as adapters without redefining the whole project model.
+
+The Phase 5 and Phase 6 POC work should be treated as one connected Game Pack validation slice, not two unrelated efforts. The slice should start with a minimal Game Pack contract, then run first-playable validation into that contract, then persist and reload the resulting project/checkpoint, then refine repair and failure states around saved validation results.
+
+The first Game Pack contract should include thin arrays for checkpoints, builds, validation evidence, reserved generation runs, and internal failed attempts from the start. During Phase 5 and Phase 6, GenerationRun should be reserved as a schema relationship only; full run creation, cost tracking, telemetry views, failure analytics, and comparison behavior belong to the later telemetry milestone. These collections should prove the relationships between project history, playable output, validation proof, future telemetry, and hidden failed attempts without forcing the POC into a production storage design.
 
 The POC should add a runtime adapter interface so Canvas and Phaser can plug into the same host/editor flow. The editor should call a shared adapter contract for creating playable documents or builds, mounting in the sandbox, validating Game Specs, exposing Agent Contracts, running quick checks, producing screenshots or thumbnails, and eventually exporting. The editor should not couple directly to Canvas or Phaser internals.
 
@@ -48,9 +52,13 @@ A Game Spec is the structured design contract Sparkline creates before generatin
 
 The original prompt should be treated as creator-intent metadata and the game's origin story, not as the source of truth once the game exists. The Game Spec is the current design contract. Sparkline should preserve the original prompt, later prompt/edit history through Edit Records, and a current intent summary so future edits understand both where the game started and what it has become.
 
+For Phase 5/6, the saved Game Spec snapshot should be Sparkline's equivalent of OpenGame's intermediate `GAME_DESIGN.md` contract. The Game Spec snapshot should be saved into the Game Pack, Playable Build, and Version Checkpoint lineage rather than adding a second GDD-like artifact to the POC.
+
 The Game Spec should be split into a core spec and template-specific spec. The core spec should hold concepts that apply across runtimes and templates, such as identity, original prompt metadata, current intent summary, template ID, controls, assets, objectives, and validation goals, plus later publish/version metadata. Objectives should remain creator-facing declarations of what counts as success, while mechanics and validation systems read them to enforce, display, and test that success. Validation goals should remain separate system-facing checks about whether Sparkline can trust a draft as playable, even when some of those checks reference specific objectives. The schema should support an objectives list from the start, even if the first top-down template only fully honors one primary active objective. Template-specific spec sections should hold details for the active template, such as top-down camera settings, arena layout, enemy spawn rules, pickups, projectiles, waves, obstacles, and active top-down Mechanic Modules.
 
 The Game Spec should use strict schemas for core fields Sparkline must trust, such as template ID, controls, assets, active mechanics, objectives, validation goals, and runtime permissions. Even mechanics that most top-down games will usually include, such as player movement or win/loss conditions, should be explicit entries in the Game Spec rather than hidden template assumptions. It should allow flexible versioned extension fields for experimental mechanics, custom behavior parameters, AI-generated extension metadata, and template-specific extras that Sparkline is still learning how to model.
+
+Sparkline should not adopt OpenGame's `{ value, type, description }` config wrapper metadata for Phase 5/6 unless a direct implementation need appears. The Game Spec schema and Mechanic Registry should provide the type information, defaults, descriptions, validation rules, and editor-control metadata. If runtime config metadata is needed later, it should stay nested under template or runtime metadata rather than shaping the root Game Pack.
 
 Entities in the Game Spec should use generic roles Sparkline understands, such as player, enemy, pickup, projectile, obstacle, boss, hazard, and UI marker, rather than inventing totally custom entity schemas for every prompt. Custom behavior should live in versioned extension data attached to generic entities. This keeps entities inspectable, editable, validatable, and targetable by mechanics while still allowing unusual game-specific behavior. The primary behavior surface should remain top-level mechanic entries in the Game Spec, with those entries targeting entities by stable ID when needed, rather than hiding most behavior inside entity-local blobs.
 
@@ -74,11 +82,31 @@ The top-down template should support keyboard controls first for the POC and fir
 
 Sparkline should define separate validation bars for first playable draft and publish/discovery readiness. A first playable draft should optimize for speed and require only that the game boots, has no fatal runtime errors, renders a nonblank canvas, shows the player, responds to controls, and has a basic objective. Publish/discovery readiness should be stricter and require saved validation evidence, screenshot or thumbnail, documented controls, content rating, asset provenance clear enough for public use, AI disclosure, no unsafe runtime behavior, mobile/touch status eventually, and stronger playability/objective checks.
 
-Failed first-playable validation should block the draft from the normal playable view. Sparkline should not present broken games as playable; it should show a friendly repair or failure state with options such as trying repair again, starting over from the prompt, or opening debug details.
+First-playable validation should combine app-side runtime orchestration with real runtime evidence. App-side checks can prove boot status, fatal runtime errors, and declared objective presence, while a lightweight browser or runtime harness should prove nonblank render, player visibility, and input response. Schema checks alone are not enough to call a draft playable.
+
+Phase 5/6 Validation Evidence and failed attempts should use a small stage vocabulary inspired by OpenGame's staged pipeline without importing OpenGame's whole GDD/code-generation flow. The initial stages should distinguish `schema`, `spec-validation`, `artifact-build`, `runtime-boot`, `browser-check`, and later `persistence-check` so failures and evidence receipts can be grouped by where they occurred.
+
+Phase 5A should store validation checks as compact evidence receipts rather than one flat pass/fail flag. Each receipt should record the stable check ID, stage, pass/fail status, duration, issue or error details, and optional runtime or browser evidence so a failure can explain exactly what passed, what failed, and why the build did or did not become a checkpoint.
+
+Phase 5A should include a narrow pre-runtime consistency pass before attempting iframe/browser validation. This pass should only check requirements that directly protect first playable: valid Game Spec references, required player entity, required primary objective, required template/runtime entrypoint, and placeholder asset references when those assets are needed for the draft to render. Broader checks such as TypeScript import rules, full animation-chain validation, and deep template-specific linting should wait until later milestones.
+
+Failed first-playable validation should block the draft from the normal playable view. Sparkline should not present broken games as playable; in Phase 5/6 it should show a friendly failure state with options such as retrying validation, starting over from the prompt, or opening debug details. Automated repair affordances should wait until the later repair loop exists.
 
 Sparkline should save failed generation attempts internally for repair, debugging, known-failure learning, and cost/quality analysis, but failed attempts should not clutter the creator's normal project history. Creator-facing Version Checkpoints should mostly represent meaningful saved playable states; if a failed attempt is repaired successfully, the successful version becomes the checkpoint.
 
+A failed first-playable attempt should create a failed Playable Build only when a runtime artifact was built or mounted enough to inspect. Pure schema, config, or preflight failures should stay in internal failed-attempt and generation-run records, preserving repair evidence without weakening what Playable Build means.
+
+A successful first-playable validation should automatically create the initial creator-facing Version Checkpoint. The first playable draft becomes recoverable history as soon as Sparkline proves it is playable; later edits can still require explicit accept or save behavior before creating additional checkpoints.
+
+The Phase 5/6 slice should preserve validation evidence for future repair, but it should not implement automated repair attempts yet. Automated repair belongs after prompt-to-spec generation and telemetry exist, because repair needs model output, validation errors, and run tracking to be meaningful.
+
+Phase 5 prep cleanup should not be treated as milestone work unless it directly supports the Game Pack validation slice. Generated pack completion, shared test fixture builders, or mechanic config defaults can enter the slice only when they unblock schema, validation, persistence, or reload behavior; unrelated cleanup should remain separate backlog.
+
+The Phase 5/6 completion bar should favor velocity over exhaustive validation coverage. The slice is complete when one successful first-playable project can save, reload, preserve validation evidence, and create a recoverable checkpoint, with a lightweight proof that broken drafts are blocked from the normal play view. Broader failure fixture coverage can follow after the vertical slice is working.
+
 Asset generation should not be required in the first creation pass. The first playable draft can use simple shapes, generated sprites, or Sparkline-owned placeholders, then offer asset generation and replacement as follow-up actions such as generating art, replacing the player, generating enemy sprites, adding background music, or polishing visuals.
+
+During Phase 5/6, Sparkline should record only the asset identity needed to validate first playable drafts, such as placeholder asset keys used by the player, objective, background, or required visible entities. Full Asset Records with provenance, license, remix/export rules, moderation status, and replacement history should stay out of this slice unless a field directly supports first-playable validation.
 
 Asset replacement should update the project model before runtime code. Replacing an asset should update the relevant Asset Record, entity assetRef or usage reference, provenance/license fields, checkpoint summary, and runtime asset bundle/build. Asset identity should live in the Game Spec and Asset Records rather than being hidden as hardcoded file paths in generated code.
 
@@ -108,6 +136,8 @@ AI edits should update the Game Spec first, then update or regenerate the Phaser
 
 A Version Checkpoint is an immutable saved game state created whenever a saved change becomes part of the current game. Checkpoints should capture the Game Spec, template configuration, source/build references, assets, validation status, thumbnail/screenshot, author/source of change, and a short creator-friendly summary. Users should experience checkpoints as a simple history timeline for previewing, restoring, comparing, remixing, publishing, and exporting selected versions. Restoring an older checkpoint should create a new checkpoint rather than deleting newer history.
 
+Checkpoint history should be append-only. Restore is a new action that copies an older checkpoint state forward into a new checkpoint; it should not mutate the project backward in place or remove later checkpoints.
+
 A Version Checkpoint should be distinct from a Playable Build. The checkpoint is the saved project state or recipe, while the Playable Build is the compiled/runnable output produced from that checkpoint. Builds should store runnable output, build logs, runtime status, screenshots, and validation evidence. Public pages, validation evidence, and hosting should point to exact tested builds rather than rebuilding unpredictably from mutable state.
 
 Sparkline should eventually host public Playable Builds as static artifacts on isolated build URLs rather than rendering every public game dynamically from the app server. Static build hosting supports cheaper serving, faster loads, CDN caching, safer isolation, exact reproducibility, targeted takedowns, and export compatibility. The POC can simulate this locally, while Sparkline v1 can move toward object storage, CDN, and isolated origin hosting.
@@ -121,6 +151,8 @@ The POC should track basic generation and validation telemetry before Sparkline 
 Generation telemetry should inform POC graduation readiness, but it should not become hard success criteria by itself. Metrics such as first-playable success rate, time-to-first-play, repair frequency, failure classes, checkpoint usefulness, prompt variety, validation usefulness, and cost should guide judgment about when to move toward Sparkline v1, while leaving room for product and founder judgment.
 
 The POC should define a lightweight measurement strategy centered around a GenerationRun record. Each generation, edit, or repair attempt should leave a small internal receipt containing prompt or request, model/provider/task route, template and mechanics used, timestamps and duration, schema validation result, build result, validation result, repair attempts, failure class, approximate cost, and created checkpoint/build IDs when successful.
+
+OpenGame's `result.json` test receipt is a useful reference for Phase 8 GenerationRun telemetry. Sparkline should adapt the idea of a compact per-attempt receipt, but tie it into Game Pack relationships, Validation Evidence, Playable Builds, Version Checkpoints, and eventual cost/model tracking rather than copying OpenGame's CLI output shape directly.
 
 ## Collaboration Scope
 
@@ -180,9 +212,19 @@ A Publish Checklist is the lightweight but real set of requirements a game must 
 
 An Asset Record stores provenance, license, role, and usage for every asset Sparkline knows about. Assets should be created from explicit source types such as AI-generated, uploaded, template, remix-inherited, or external import. Each record should track role, creator/source, license status, attribution requirements, AI disclosure, derived-from links, usage in Version Checkpoints, and whether public use, remix, and export are allowed. Unknown or restricted assets can exist in private drafts, but public discovery, remix travel, and export should require clear enough provenance and rights.
 
+Phase 5/6 should not build the full Asset Record system. It may store lightweight asset keys or placeholder IDs inside Game Spec snapshots and Validation Evidence only when those keys are needed to prove a first playable draft can render.
+
 ## Validation Evidence
 
 Validation Evidence is the stored proof that a playable build loaded, rendered, responded, and did not obviously break. Publishable builds should keep build logs, boot status, console/runtime errors, screenshot or thumbnail evidence, canvas/activity checks, input simulation results, and simple objective/playability checks where possible. Discovery and broad sharing decisions should rely on this evidence rather than a bare pass/fail flag.
+
+Validation Evidence should include a compact stage field so early POC evidence can distinguish schema checks, Game Spec validation, artifact build results, runtime boot, browser/runtime interaction checks, and later persistence checks without needing the full telemetry model.
+
+Each validation check should be represented as a small inspection receipt. A receipt should be specific enough to answer questions like "did the Game Spec validate?", "did the runtime boot?", "did the canvas render?", "was the player visible?", and "did input change game state?", while staying lightweight enough for the first POC persistence slice.
+
+Pre-runtime evidence receipts should answer whether Sparkline should even try to boot the draft yet. Runtime and browser evidence receipts should answer whether the draft actually loaded, rendered, and responded once booted.
+
+Validation Evidence may include lightweight asset-key checks, such as whether the player sprite, placeholder background, or required objective visual exists, but it should not become the permanent asset provenance system.
 
 ## Validation And Repair Loop
 
@@ -283,3 +325,5 @@ Sparkline should prefer built-in Mechanic Modules whenever they can express the 
 AI-generated mechanic extensions should be validated more strictly than built-in Mechanic Modules because they are less trusted. Generated extensions should pass type/build checks, banned API scans, sandbox compatibility checks, direct DOM/network/storage restrictions unless explicitly allowed, performance budgets, basic behavior validation, and safe fallback handling when validation fails.
 
 Successful AI-generated mechanic extensions may later be promoted into official built-in Mechanic Modules, but this is a nice-to-have after the core creation loop is stable. Promotion should turn repeated successful extension patterns into Sparkline-owned, versioned modules with stable type names, config schemas, Phaser implementations, validation checks, agent contract fragments, editor controls, examples, and fixtures. Project-scoped generated extensions live inside individual Game Packs; promoted modules live in Sparkline's official versioned template/runtime library and Mechanic Registry.
+
+OpenGame's Template Skill evolution loop is a useful later reference for this promotion path, but it should be explicitly deferred beyond Phase 5/6. Phase 5/6 should not analyze completed projects into reusable template families or promote generated mechanics automatically. It should preserve Game Spec snapshots, Playable Builds, Version Checkpoints, Validation Evidence, and failed attempts well enough that a later POC phase can inspect repeated successful patterns and decide what deserves promotion into Sparkline-owned templates or Mechanic Modules.

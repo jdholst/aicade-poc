@@ -1,124 +1,187 @@
+import type { FirstPlayableValidationAttempt } from "@/game-spec";
 import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
-import type { EditorRuntimeMode } from "@/runtime/editor-runtime-mode";
-import type {
-  HandAuthoredPhaserTemplate,
-  TopDownPhaserTemplateState,
-} from "@/runtime/phaser";
-import type { GeneratedGamePack } from "@/service/starter-project";
 
-export type EditorRuntimeHostViewModel =
-  | {
-      key: string;
-      template: HandAuthoredPhaserTemplate;
-      type: "phaser";
-    }
-  | {
-      key: string;
-      pack: GeneratedGamePack;
-      type: "canvas";
-    };
+import {
+  createFirstPlayableValidationFailureSurface,
+  createGameSpecValidationFailureSurface,
+  type ValidationFailureSurfaceViewModel,
+} from "./editor-validation-failure-surface";
+import {
+  createCanvasRuntimeHostViewModel,
+  createPhaserRuntimeHostViewModel,
+  type EditorRuntimeHostViewModel,
+  type EditorRuntimeTemplatePlan,
+} from "./editor-runtime-template-plan";
 
 export type EditorRuntimePanelViewModel = {
   canPauseRuntime: boolean;
   canResetRuntime: boolean;
-  hasMountedRuntime: boolean;
-  host: EditorRuntimeHostViewModel | null;
-  isLoading: boolean;
-  phaserValidationErrorMessage: string | null;
-  showCanvasInitial: boolean;
-  showGenerationError: boolean;
-  showPhaserValidationError: boolean;
-  showRuntimeErrorBanner: boolean;
-  showWarningPanel: boolean;
+  primarySurface: EditorRuntimePrimarySurface;
+  secondarySurfaces: EditorRuntimeSecondarySurface[];
 };
+
+export type EditorRuntimePrimarySurface =
+  | {
+      stage: EditorGameCanvasSession["currentGenerationStage"];
+      type: "loading";
+    }
+  | {
+      type: "canvas-initial";
+    }
+  | {
+      message: string;
+      type: "generation-error";
+    }
+  | {
+      failure: ValidationFailureSurfaceViewModel;
+      type: "phaser-validation-error";
+    }
+  | {
+      failure: ValidationFailureSurfaceViewModel;
+      type: "first-playable-validation-error";
+    }
+  | {
+      host: EditorRuntimeHostViewModel;
+      type: "runtime-host";
+    };
+
+export type EditorRuntimeSecondarySurface =
+  | {
+      message: string;
+      type: "runtime-error-banner";
+    }
+  | {
+      type: "runtime-warning-panel";
+      warnings: EditorGameCanvasSession["runtimeWarnings"];
+    };
 
 type CreateEditorRuntimePanelViewModelInput = {
   canvas: EditorGameCanvasSession;
-  phaserTemplateState: TopDownPhaserTemplateState;
-  runtimeMode: EditorRuntimeMode;
+  firstPlayableValidationAttempt?: FirstPlayableValidationAttempt | null;
+  runtimeTemplate: EditorRuntimeTemplatePlan;
 };
 
 export function createEditorRuntimePanelViewModel({
   canvas,
-  phaserTemplateState,
-  runtimeMode,
+  firstPlayableValidationAttempt = null,
+  runtimeTemplate,
 }: CreateEditorRuntimePanelViewModelInput): EditorRuntimePanelViewModel {
-  const { gameResetNonce, gameStatus, loadState, runtimeWarnings } = canvas;
-  const isLoading = loadState.status === "loading";
-  const shouldShowPhaserRuntime =
-    !isLoading &&
-    runtimeMode === "phaser" &&
-    phaserTemplateState.status === "valid" &&
-    (loadState.status === "idle" || loadState.status === "success");
-  const shouldShowCanvasRuntime =
-    !isLoading && runtimeMode === "canvas2d" && loadState.status === "success";
-  const host = createRuntimeHostViewModel({
-    gameResetNonce,
-    loadState,
-    phaserTemplateState,
-    shouldShowCanvasRuntime,
-    shouldShowPhaserRuntime,
+  const primarySurface = createEditorRuntimePrimarySurface({
+    canvas,
+    firstPlayableValidationAttempt,
+    runtimeTemplate,
   });
-  const hasMountedRuntime = host !== null;
+  const hasMountedRuntime = primarySurface.type === "runtime-host";
 
   return {
     canPauseRuntime:
       hasMountedRuntime &&
-      (gameStatus.state === "ready" || gameStatus.state === "paused"),
+      (canvas.gameStatus.state === "ready" ||
+        canvas.gameStatus.state === "paused"),
     canResetRuntime:
       hasMountedRuntime &&
-      (gameStatus.state === "ready" ||
-        gameStatus.state === "paused" ||
-        gameStatus.state === "error"),
-    hasMountedRuntime,
-    host,
-    isLoading,
-    phaserValidationErrorMessage:
-      !isLoading &&
-      runtimeMode === "phaser" &&
-      phaserTemplateState.status === "invalid"
-        ? phaserTemplateState.message
-        : null,
-    showCanvasInitial:
-      !isLoading && runtimeMode === "canvas2d" && loadState.status === "idle",
-    showGenerationError: !isLoading && loadState.status === "error",
-    showPhaserValidationError:
-      !isLoading &&
-      runtimeMode === "phaser" &&
-      phaserTemplateState.status === "invalid",
-    showRuntimeErrorBanner: !isLoading && gameStatus.state === "error",
-    showWarningPanel: !isLoading && runtimeWarnings.length > 0,
+      (canvas.gameStatus.state === "ready" ||
+        canvas.gameStatus.state === "paused" ||
+        canvas.gameStatus.state === "error"),
+    primarySurface,
+    secondarySurfaces: createEditorRuntimeSecondarySurfaces({
+      canvas,
+      primarySurface,
+    }),
   };
 }
 
-function createRuntimeHostViewModel({
-  gameResetNonce,
-  loadState,
-  phaserTemplateState,
-  shouldShowCanvasRuntime,
-  shouldShowPhaserRuntime,
+function createEditorRuntimePrimarySurface({
+  canvas,
+  firstPlayableValidationAttempt = null,
+  runtimeTemplate,
+}: CreateEditorRuntimePanelViewModelInput): EditorRuntimePrimarySurface {
+  const { currentGenerationStage, gameResetNonce, loadState } = canvas;
+  const firstPlayableValidationFailure =
+    createFirstPlayableValidationFailureSurface(firstPlayableValidationAttempt);
+
+  if (loadState.status === "loading") {
+    return {
+      stage: currentGenerationStage,
+      type: "loading",
+    };
+  }
+
+  if (loadState.status === "error") {
+    return {
+      message: loadState.message,
+      type: "generation-error",
+    };
+  }
+
+  if (runtimeTemplate.type === "canvas") {
+    if (loadState.status === "success") {
+      return {
+        host: createCanvasRuntimeHostViewModel({
+          gameResetNonce,
+          pack: loadState.pack,
+        }),
+        type: "runtime-host",
+      };
+    }
+
+    return {
+      type: "canvas-initial",
+    };
+  }
+
+  if (runtimeTemplate.type === "phaser-invalid") {
+    return {
+      failure: createGameSpecValidationFailureSurface({
+        issues: runtimeTemplate.issues,
+        message: runtimeTemplate.message,
+      }),
+      type: "phaser-validation-error",
+    };
+  }
+
+  if (firstPlayableValidationFailure) {
+    return {
+      failure: firstPlayableValidationFailure,
+      type: "first-playable-validation-error",
+    };
+  }
+
+  return {
+    host: createPhaserRuntimeHostViewModel({
+      gameResetNonce,
+      runtimeTemplate,
+    }),
+    type: "runtime-host",
+  };
+}
+
+function createEditorRuntimeSecondarySurfaces({
+  canvas,
+  primarySurface,
 }: {
-  gameResetNonce: number;
-  loadState: EditorGameCanvasSession["loadState"];
-  phaserTemplateState: TopDownPhaserTemplateState;
-  shouldShowCanvasRuntime: boolean;
-  shouldShowPhaserRuntime: boolean;
-}): EditorRuntimeHostViewModel | null {
-  if (shouldShowPhaserRuntime && phaserTemplateState.status === "valid") {
-    return {
-      type: "phaser",
-      key: `${phaserTemplateState.template.id}-${gameResetNonce}`,
-      template: phaserTemplateState.template,
-    };
+  canvas: EditorGameCanvasSession;
+  primarySurface: EditorRuntimePrimarySurface;
+}): EditorRuntimeSecondarySurface[] {
+  if (primarySurface.type !== "runtime-host") {
+    return [];
   }
 
-  if (shouldShowCanvasRuntime && loadState.status === "success") {
-    return {
-      type: "canvas",
-      key: `${loadState.pack.manifest.title}-${gameResetNonce}`,
-      pack: loadState.pack,
-    };
+  const secondarySurfaces: EditorRuntimeSecondarySurface[] = [];
+
+  if (canvas.gameStatus.state === "error") {
+    secondarySurfaces.push({
+      message: canvas.gameStatus.message,
+      type: "runtime-error-banner",
+    });
   }
 
-  return null;
+  if (canvas.runtimeWarnings.length > 0) {
+    secondarySurfaces.push({
+      type: "runtime-warning-panel",
+      warnings: canvas.runtimeWarnings,
+    });
+  }
+
+  return secondarySurfaces;
 }

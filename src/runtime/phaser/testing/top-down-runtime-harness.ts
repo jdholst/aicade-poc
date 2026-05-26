@@ -8,6 +8,7 @@ import {
 } from "../top-down-template";
 
 export type PostedMessage = {
+  data?: unknown;
   manifest?: {
     title?: string;
   };
@@ -23,6 +24,7 @@ export type GameElement = {
     setAllowGravity: () => void;
     setCollideWorldBounds: () => void;
     setVelocity: (x: number, y: number) => void;
+    velocity: { x: number; y: number };
     velocityCalls: Array<{ x: number; y: number }>;
   };
   kind: string;
@@ -104,6 +106,7 @@ export function createRuntimeHarness(
 
   const createBody = () => {
     const body = {
+      velocity: { x: 0, y: 0 },
       velocityCalls: [] as Array<{ x: number; y: number }>,
       setAllowGravity() {},
       setCollideWorldBounds() {},
@@ -112,6 +115,7 @@ export function createRuntimeHarness(
           throw new Error("Velocity update failed");
         }
 
+        body.velocity = { x, y };
         body.velocityCalls.push({ x, y });
       },
     };

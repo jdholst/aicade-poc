@@ -78,6 +78,55 @@ prompt
 
 The initial AI-enabled Phaser flow should generate Game Spec/config only. Sparkline-owned template code should provide the runtime, mechanic modules, layout primitives, validation hooks, and runtime protocol.
 
+Phase 5 and Phase 6 should be developed as one connected vertical slice while still being split into separately completable sub-slices. The slice should move from `Game Spec` to `Playable Build`, run first-playable validation, save `Validation Evidence`, attach that evidence to a distinct `Version Checkpoint`, and prove that the project can be reloaded without losing failed attempt records or creator-facing history. This keeps validation and persistence from drifting apart while still allowing the board to mark validation, evidence, checkpointing, restore, and failed-attempt handling independently.
+
+The agreed build sequence is:
+
+1. Phase 6A: define minimal in-code schemas/types for `Game Pack`, `Playable Build`, `Version Checkpoint`, and `Validation Evidence`.
+2. Phase 5A: implement first-playable validation and write results into that evidence shape.
+3. Phase 6B: add IndexedDB-backed lightweight persistence and reload for the validated project/checkpoint behind a small repository/service abstraction.
+4. Phase 5B: improve failure UI and repair-ready evidence once validation results survive reload, without implementing automated repair yet.
+
+Phase 5A's first-playable validation bar should require six checks from the start: boot success, no fatal runtime error, nonblank render, player visibility, input response, and basic objective presence. The implementation can stay lightweight, but a draft should not be called first-playable unless the player can see, affect, and understand the game at a basic level.
+
+Phase 5A validation should use a two-layer approach. Start with app-side orchestration and runtime events for boot status, fatal errors, and objective presence, then add a lightweight browser/runtime harness check for nonblank render, player visibility, and input response. The first slice can land orchestration before the browser harness is polished, but the final first-playable result should include real runtime evidence rather than only inferred schema checks.
+
+Failed first-playable attempts should create a failed `Playable Build` record only when a runtime artifact was built or mounted enough to inspect. Pure schema, config, or preflight failures should stay in internal `failedAttempts`. This keeps `Playable Build` meaning "a runnable artifact existed to test" while still preserving earlier failures for repair, debugging, and later telemetry.
+
+A successful first-playable validation should automatically create the initial creator-facing `Version Checkpoint`. The first playable moment should become recoverable history as soon as Sparkline proves it is playable, instead of waiting for a separate user save action that could be lost on reload. Later edits can still use explicit accept/save behavior before creating additional checkpoints.
+
+Restoring an older `Version Checkpoint` should create a new checkpoint that copies the older state forward instead of mutating the project back in place or deleting later history. The history timeline should be append-only: restore is an action, not a rewind. This preserves rollback, auditability, remix lineage, and future publish/export references.
+
+Phase 5B should show friendly failure states with stored validation evidence and clear next actions, but should not include automated repair attempts yet. Automated repair belongs after prompt-to-spec generation and telemetry are active, because meaningful repair depends on model output, validation errors, and run tracking. Phase 5/6 should preserve enough evidence for later repair work without pulling that behavior forward.
+
+Phase 6A should include arrays for `checkpoints`, `builds`, `validationEvidence`, reserved `generationRuns`, and internal `failedAttempts` from the start, but each record should stay thin. `GenerationRun` fields should be reserved in the schema only during Phase 5/6; full run creation, cost tracking, telemetry views, failure analytics, and comparison behavior belong to Phase 8. The Phase 5/6 point is to prove the relationships early: checkpoints reference builds, builds reference validation evidence, failed attempts stay out of normal creator history, and future telemetry has a stable landing place without forcing a schema reshuffle.
+
+The minimal Game Pack contract should be runtime-agnostic from day one while only implementing Phaser/top-down values in the POC. The schema should expose project-level concepts such as `runtimeKind`, `templateId`, `gameSpec`, `builds`, `checkpoints`, and `validationEvidence`, with Phaser-specific or top-down-specific details nested under runtime/template metadata instead of shaping the root project model.
+
+Phase 6B should start with IndexedDB as the first real persistence target because it proves save/reload inside the browser editor experience without forcing server storage decisions. Persistence access should go through a small repository or service boundary so the POC can later swap IndexedDB for a production database without rewriting Game Pack, checkpoint, validation, or editor orchestration code. JSON import/export can follow as a debugging and portability convenience, but it should not be the first durable store.
+
+Phase 5 prep cleanup should be included in the Phase 5/6 taskboard only when it directly supports this vertical slice. Good candidates are the generated pack completion split if it blocks Game Pack schema work, shared test fixture builders if they reduce validation or persistence test drag, and mechanic config defaults only if first-playable validation needs normalized mechanic configs. General cleanup such as chat display splitting or runtime source bundling should stay out of the Phase 5/6 board unless it becomes a direct blocker.
+
+The Phase 5/6 taskboard should keep workflow status as the visible board grouping, with separate properties for `Parent Phase` and `Sub-slice`. `Parent Phase` should support Phase 5 and Phase 6 milestone reporting, while `Sub-slice` should support the execution sequence: `6A`, `5A`, `6B`, and `5B`. Tasks may carry both Phase 5 and Phase 6 in `Parent Phase` when they genuinely support both milestones, but every task should have one primary `Sub-slice` so execution order stays clear.
+
+The overall Phase 5/6 completion bar should optimize for velocity. Completion should require one successful first-playable project that saves, reloads, preserves validation evidence, and creates a recoverable checkpoint, plus a lightweight failure-state proof that broken drafts do not enter the normal play view. Broader fixture coverage for multiple failure classes can follow after the vertical slice is working.
+
+Initial Phase 5/6 taskboard seed:
+
+| Task | Parent Phase | Sub-slice |
+| --- | --- | --- |
+| Define minimal runtime-agnostic Game Pack schema | 5, 6 | 6A |
+| Add thin records for builds, checkpoints, validation evidence, failed attempts, and reserved generation runs | 5, 6 | 6A |
+| Create Game Pack factory/helpers for first playable project state | 5, 6 | 6A |
+| Add first-playable validation orchestration against runtime events | 5 | 5A |
+| Add lightweight runtime evidence checks for nonblank/player/input | 5 | 5A |
+| Write validation evidence into Playable Build and checkpoint flow | 5, 6 | 5A |
+| Add IndexedDB repository/service abstraction for Game Packs | 6 | 6B |
+| Save and reload the first validated project/checkpoint | 6 | 6B |
+| Implement append-only checkpoint restore | 6 | 6B |
+| Add friendly blocked/failure state for non-playable drafts | 5 | 5B |
+| Keep automated repair deferred but preserve repair-ready evidence | 5 | 5B |
+
 Resolved Phase 3/4 shape:
 
 - Mechanics should be explicit Game Spec entries even when starter specs include common defaults such as player movement or win/loss.
@@ -258,7 +307,7 @@ Deliverables:
 - Define the first-playable validation bar.
 - Check boot success, fatal runtime errors, nonblank render, player visibility, control response, and basic objective presence.
 - Store Validation Evidence for successful builds.
-- Show a friendly repair/failure state for broken drafts.
+- Show a friendly failure state for broken drafts, backed by repair-ready validation details.
 
 Acceptance criteria:
 
@@ -346,6 +395,7 @@ Deliverables:
 - Add GenerationRun records for generation, edit, and repair attempts.
 - Track prompt/request, model/provider/task route, template/mechanics used, timestamps/duration, schema validation, build result, validation result, repair attempts, failure class, approximate cost, and created checkpoint/build IDs.
 - Add a simple internal view, log, or export path for reviewing runs.
+- Use OpenGame's `result.json` receipt pattern as a reference for compact per-attempt receipts, adapted to Sparkline's Game Pack, Validation Evidence, Playable Build, and Version Checkpoint relationships.
 
 Acceptance criteria:
 
@@ -363,6 +413,10 @@ Likely promotable to v1:
 - GenerationRun model.
 - Failure class taxonomy seed.
 - Cost/duration tracking approach.
+
+Later-phase reference:
+
+- OpenGame's Template Skill evolution loop is a useful reference for a later template/mechanic-learning phase, but it is not part of Phase 5/6. Phase 5/6 should preserve enough Game Spec, build, checkpoint, validation, and failed-attempt evidence for that future analysis; Phase 8 telemetry can start making the repeated-pattern data reviewable.
 
 ### Milestone 9: Basic Creator Editing Loop
 
@@ -429,6 +483,8 @@ Before Sparkline v1 implementation, classify POC modules as:
 
 Transition rule: promote proven architecture, not POC scaffolding.
 
+Deferred learning loop: a later POC phase may inspect repeated successful Game Specs, builds, validation evidence, edit records, failed attempts, and GenerationRun receipts to identify candidates for promoted Mechanic Modules or template families. This should be treated as a deliberate later capability inspired by OpenGame's Template Skill, not as hidden Phase 5/6 scope.
+
 ## Open Decisions
 
 These should not block the first milestones, but they need decisions before or during v1 planning:
@@ -439,6 +495,7 @@ These should not block the first milestones, but they need decisions before or d
 - Whether Phaser dependency is bundled directly into the app or isolated in a template/runtime package.
 - How much of the runtime protocol is implemented in the POC vs reserved for v1.
 - Whether generated extension modules are attempted in the POC or deferred until after spec-only generation proves reliable.
+- Which later POC phase, if any, introduces an OpenGame-inspired template/mechanic promotion loop over completed projects and validation evidence.
 - Production database, auth, object storage/CDN, queue/worker, observability, search, and moderation stack.
 
 ## First Immediate Implementation Slice

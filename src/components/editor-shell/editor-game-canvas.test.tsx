@@ -1,10 +1,23 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  createGamePackRepository,
+  type GamePackStorageDriver,
+  type StoredGamePackRecord,
+} from "@/game-spec";
+import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
+import { topDownPhaserTemplate } from "@/runtime/phaser";
 import type { GeneratedGamePack } from "@/service/starter-project";
 
 import { EditorGameCanvas } from "./editor-game-canvas";
@@ -98,7 +111,9 @@ describe("EditorGameCanvas", () => {
     vi.restoreAllMocks();
   });
 
-  it("mounts the hand-authored Phaser runtime before generation starts by default", () => {
+  it("mounts a valid hand-authored Phaser runtime before generation starts", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     render(
       <EditorGameCanvas
         actions={createActions()}
@@ -106,11 +121,125 @@ describe("EditorGameCanvas", () => {
       />
     );
 
-    expect(screen.getByTitle("Crystal Spec Chase")).toBeVisible();
+    expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.getByText("Phaser runtime")).toBeVisible();
     expect(
       screen.queryByText("The generated game module will boot here.")
     ).not.toBeInTheDocument();
+  });
+
+  it("shows a friendly blocked state when first-playable validation fails before boot", async () => {
+    vi.resetModules();
+    const onRegenerate = vi.fn();
+    const onReset = vi.fn();
+    vi.doMock("@/runtime/phaser", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/runtime/phaser")>();
+      const gameSpec = {
+        ...actual.topDownPhaserTemplate.gameSpec,
+        objectives: actual.topDownPhaserTemplate.gameSpec.objectives.map(
+          (objective) => ({
+            ...objective,
+            primary: false,
+          })
+        ),
+      };
+
+      return {
+        ...actual,
+        getTopDownPhaserTemplateState: () => ({
+          status: "valid",
+          template: {
+            ...actual.topDownPhaserTemplate,
+            gameSpec,
+          },
+        }),
+      };
+    });
+
+    const { EditorGameCanvas: MockedEditorGameCanvas } = await import(
+      "./editor-game-canvas"
+    );
+
+    render(
+      <MockedEditorGameCanvas
+        actions={createActions({ onRegenerate, onReset })}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    expect(screen.getByText("Draft blocked")).toBeVisible();
+    expect(screen.getByText("This draft is not playable yet.")).toBeVisible();
+    expect(
+      screen.getAllByText("Expected exactly one primary objective.")
+    ).toHaveLength(2);
+    expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Try again" })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start over from prompt" })
+    );
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: /repair|fix automatically/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows validation receipt details for a runtime first-playable failure", async () => {
+    const onRegenerate = vi.fn();
+    const onReset = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onRegenerate, onReset })}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Crystal Spec Chase");
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "nonblank_render", "failed");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Draft blocked")).toBeVisible();
+    });
+
+    expect(screen.getByText("This draft is not playable yet.")).toBeVisible();
+    expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Inspect validation details"));
+
+    expect(screen.getByText("browser-check")).toBeVisible();
+    expect(screen.getByText("nonblank_render")).toBeVisible();
+    expect(
+      screen.getByText("Runtime did not report nonblank render output.")
+    ).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "Expected the runtime to report at least one visible render object."
+      )
+    ).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start over from prompt" })
+    );
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
   });
 
   it("mounts the selected top-down Phaser fixture", () => {
@@ -126,6 +255,154 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
     expect(screen.getByText("Phaser runtime")).toBeVisible();
+  });
+
+  it("runs Phaser first-playable checks after the runtime reports ready", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Prism Relay Gauntlet");
+    const postMessage = vi
+      .spyOn(iframe.contentWindow!, "postMessage")
+      .mockImplementation(() => undefined);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: "game-run-first-playable-checks" },
+        "*"
+      );
+    });
+  });
+
+  it("saves a first validated Phaser Game Pack through the repository boundary", async () => {
+    const repository = createGamePackRepository(new MemoryGamePackStorage());
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+        gamePackRepository={repository}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>("Crystal Spec Chase");
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "nonblank_render");
+      dispatchValidationEvidence(iframe, "player_visible");
+      dispatchValidationEvidence(iframe, "input_response");
+    });
+
+    await waitFor(async () => {
+      const savedGamePack = await repository.load(
+        "game_pack_crystal_spec_chase"
+      );
+
+      expect(savedGamePack).toMatchObject({
+        builds: [
+          expect.objectContaining({
+            id: "build_initial_playable",
+            checkpointId: "checkpoint_initial_playable",
+          }),
+        ],
+        checkpoints: [
+          expect.objectContaining({
+            id: "checkpoint_initial_playable",
+            buildId: "build_initial_playable",
+          }),
+        ],
+        validationEvidence: expect.arrayContaining([
+          expect.objectContaining({
+            id: "evidence_runtime_boot",
+          }),
+          expect.objectContaining({
+            id: "evidence_nonblank_render",
+          }),
+        ]),
+      });
+    });
+  });
+
+  it("remounts the Phaser runtime from a saved Game Pack after repository load", async () => {
+    const repository = createGamePackRepository(new MemoryGamePackStorage());
+    const restoredGameSpec = {
+      ...topDownPhaserTemplate.gameSpec,
+      title: "Restored Crystal Checkpoint",
+    };
+
+    await repository.save(
+      createValidatedGamePackFixture({
+        id: "game_pack_crystal_spec_chase",
+        gameSpec: restoredGameSpec,
+        title: restoredGameSpec.title,
+      })
+    );
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession()}
+        gamePackRepository={repository}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Restored Crystal Checkpoint")).toBeVisible();
+    });
+    expect(screen.getByText("Phaser runtime")).toBeVisible();
+  });
+
+  it("keeps the Phaser boot listener stable while the editor records loading state", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
+    const actions = createActions();
+    const canvas = createCanvasSession();
+    const { rerender } = render(
+      <EditorGameCanvas actions={actions} canvas={canvas} />
+    );
+
+    await waitFor(() => {
+      expect(actions.onGameStatusChange).toHaveBeenCalledWith({
+        state: "loading",
+      });
+    });
+
+    expect(actions.onGameStatusChange).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <EditorGameCanvas
+        actions={actions}
+        canvas={createCanvasSession({
+          gameStatus: {
+            state: "loading",
+            message: "Booting Phaser runtime...",
+          },
+        })}
+      />
+    );
+
+    expect(actions.onGameStatusChange).toHaveBeenCalledTimes(1);
   });
 
   it("shows the Canvas initial runtime screen when the runtime override is canvas2d", () => {
@@ -172,6 +449,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("enables runtime controls when the runtime is ready", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     const onReset = vi.fn();
     const onTogglePaused = vi.fn();
 
@@ -201,6 +480,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("keeps reset available when a mounted runtime reports an error", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     const onReset = vi.fn();
     const onTogglePaused = vi.fn();
 
@@ -231,6 +512,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("shows recoverable runtime warnings without blocking controls", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     const onReset = vi.fn();
     const onTogglePaused = vi.fn();
 
@@ -284,6 +567,8 @@ describe("EditorGameCanvas", () => {
   });
 
   it("lets users cycle through multiple recoverable runtime warnings", () => {
+    vi.stubEnv("NEXT_PUBLIC_AICADE_TOP_DOWN_FIXTURE", "prism_relay_gauntlet");
+
     render(
       <EditorGameCanvas
         actions={createActions()}
@@ -416,3 +701,44 @@ describe("EditorGameCanvas", () => {
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });
 });
+
+function dispatchValidationEvidence(
+  iframe: HTMLIFrameElement,
+  checkId: "input_response" | "nonblank_render" | "player_visible",
+  status: "failed" | "passed" = "passed"
+) {
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      data: {
+        type: "game-validation-evidence",
+        data: {
+          checkId,
+          status,
+        },
+      },
+      source: iframe.contentWindow,
+    })
+  );
+}
+
+class MemoryGamePackStorage implements GamePackStorageDriver {
+  readonly records = new Map<string, StoredGamePackRecord>();
+
+  async put(record: StoredGamePackRecord) {
+    this.records.set(record.id, cloneRecord(record));
+  }
+
+  async get(gamePackId: string) {
+    const record = this.records.get(gamePackId);
+
+    return record ? cloneRecord(record) : null;
+  }
+
+  async getAll() {
+    return Array.from(this.records.values()).map(cloneRecord);
+  }
+}
+
+function cloneRecord(record: StoredGamePackRecord): StoredGamePackRecord {
+  return JSON.parse(JSON.stringify(record)) as StoredGamePackRecord;
+}

@@ -4,7 +4,8 @@ export type RuntimeCommand =
   | { type: "game-focus" }
   | { type: "game-reload" }
   | { type: "game-resize"; viewport: RuntimeViewport }
-  | { type: "game-pause"; paused: boolean };
+  | { type: "game-pause"; paused: boolean }
+  | { type: "game-run-first-playable-checks" };
 
 export type RuntimeViewport = {
   width: number;
@@ -29,10 +30,38 @@ export type RuntimeIssue =
       message: string;
     };
 
+export type RuntimeValidationEvidenceCheckId =
+  | "nonblank_render"
+  | "player_visible"
+  | "input_response";
+
+export type RuntimeValidationEvidenceStatus = "passed" | "failed";
+
+export type RuntimeValidationIssue = {
+  code?: string;
+  path?: string;
+  message: string;
+};
+
+export type RuntimeValidationEvidence = {
+  checkId: RuntimeValidationEvidenceCheckId;
+  status: RuntimeValidationEvidenceStatus;
+  message?: string;
+  issues?: RuntimeValidationIssue[];
+  evidence?: Record<string, unknown>;
+};
+
 export type RuntimeEvent =
   | { type: "game-ready"; manifest?: unknown; viewport?: RuntimeViewport }
   | { type: "game-error"; issue: RuntimeIssue; message: string }
-  | { type: "game-debug-event"; message: string; data?: unknown };
+  | { type: "game-debug-event"; message: string; data?: unknown }
+  | { type: "game-validation-evidence"; evidence: RuntimeValidationEvidence };
+
+export type RuntimeHostStatus =
+  | { state: "loading" }
+  | { state: "ready" }
+  | { state: "warning"; issue: Extract<RuntimeIssue, { recoverable: true }> }
+  | { state: "error"; message: string };
 
 export type RuntimeMountDescriptor = {
   title: string;
@@ -113,7 +142,109 @@ export function parseRuntimeEvent(data: unknown): RuntimeEvent | null {
     return runtimeEvent;
   }
 
+  if (event.type === "game-validation-evidence") {
+    const evidence = parseRuntimeValidationEvidence(event.data);
+
+    return evidence
+      ? {
+          type: "game-validation-evidence",
+          evidence,
+        }
+      : null;
+  }
+
   return null;
+}
+
+export function createRuntimeHostStatusFromEvent(
+  event: RuntimeEvent
+): RuntimeHostStatus | null {
+  if (event.type === "game-ready") {
+    return {
+      state: "ready",
+    };
+  }
+
+  if (event.type !== "game-error") {
+    return null;
+  }
+
+  if (event.issue.recoverable) {
+    return {
+      state: "warning",
+      issue: event.issue,
+    };
+  }
+
+  return {
+    state: "error",
+    message: event.message,
+  };
+}
+
+function parseRuntimeValidationEvidence(
+  value: unknown
+): RuntimeValidationEvidence | null {
+  if (!isRecord(value) || !isRuntimeValidationEvidenceCheckId(value.checkId)) {
+    return null;
+  }
+
+  if (value.status !== "passed" && value.status !== "failed") {
+    return null;
+  }
+
+  const message =
+    typeof value.message === "string" && value.message.trim()
+      ? value.message
+      : undefined;
+  const issues = parseRuntimeValidationIssues(value.issues);
+  const evidence = parseRuntimeValidationEvidenceDetails(value.evidence);
+
+  return {
+    checkId: value.checkId,
+    status: value.status,
+    ...(message ? { message } : {}),
+    ...(issues ? { issues } : {}),
+    ...(evidence ? { evidence } : {}),
+  };
+}
+
+function parseRuntimeValidationIssues(
+  value: unknown
+): RuntimeValidationIssue[] | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const issues = value
+    .map((item): RuntimeValidationIssue | null => {
+      if (!isRecord(item) || typeof item.message !== "string") {
+        return null;
+      }
+
+      return {
+        ...(typeof item.code === "string" ? { code: item.code } : {}),
+        ...(typeof item.path === "string" ? { path: item.path } : {}),
+        message: item.message,
+      };
+    })
+    .filter((item): item is RuntimeValidationIssue => Boolean(item));
+
+  return issues.length > 0 ? issues : undefined;
+}
+
+function parseRuntimeValidationEvidenceDetails(
+  value: unknown
+): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  return value;
 }
 
 function parseRuntimeIssue(
@@ -190,6 +321,16 @@ function isRuntimeIssueType(
   type: string
 ): type is keyof typeof runtimeIssueParsers {
   return type in runtimeIssueParsers;
+}
+
+function isRuntimeValidationEvidenceCheckId(
+  checkId: unknown
+): checkId is RuntimeValidationEvidenceCheckId {
+  return (
+    checkId === "nonblank_render" ||
+    checkId === "player_visible" ||
+    checkId === "input_response"
+  );
 }
 
 function readString(

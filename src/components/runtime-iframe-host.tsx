@@ -12,18 +12,19 @@ import {
 } from "react";
 
 import { SANDBOX_BOOT_TIMEOUT_MS } from "@/constants";
-import type { RuntimeAdapter, RuntimeIssue } from "@/runtime/runtime-adapter";
+import type {
+  RuntimeAdapter,
+  RuntimeHostStatus,
+  RuntimeValidationEvidence,
+} from "@/runtime/runtime-adapter";
+import { createRuntimeHostStatusFromEvent } from "@/runtime/runtime-adapter";
 import {
   focusRuntimeIframe,
   postRuntimeIframeCommand,
   scheduleRuntimeIframeFocus,
 } from "@/runtime/runtime-iframe-commands";
 
-export type RuntimeIframeStatus =
-  | { state: "loading" }
-  | { state: "ready" }
-  | { state: "warning"; issue: Extract<RuntimeIssue, { recoverable: true }> }
-  | { state: "error"; message: string };
+export type RuntimeIframeStatus = RuntimeHostStatus;
 
 export type RuntimeIframeHostHandle = {
   focusGame: () => void;
@@ -37,6 +38,8 @@ export type RuntimeIframeHostProps<TArtifact> = {
   frameLabel?: string;
   frameDetail?: string;
   onStatusChange?: (status: RuntimeIframeStatus) => void;
+  onValidationEvidence?: (evidence: RuntimeValidationEvidence) => void;
+  runFirstPlayableChecksOnReady?: boolean;
 };
 
 function RuntimeIframeHostInner<TArtifact>(
@@ -48,6 +51,8 @@ function RuntimeIframeHostInner<TArtifact>(
     frameLabel = "Runtime",
     frameDetail = "Sandboxed iframe",
     onStatusChange,
+    onValidationEvidence,
+    runFirstPlayableChecksOnReady = false,
   }: RuntimeIframeHostProps<TArtifact>,
   ref: ForwardedRef<RuntimeIframeHostHandle>
 ) {
@@ -102,13 +107,27 @@ function RuntimeIframeHostInner<TArtifact>(
         return;
       }
 
-      if (sandboxEvent.type === "game-ready") {
+      if (sandboxEvent.type === "game-validation-evidence") {
+        onValidationEvidence?.(sandboxEvent.evidence);
+        return;
+      }
+
+      const runtimeStatus = createRuntimeHostStatusFromEvent(sandboxEvent);
+      if (!runtimeStatus) {
+        return;
+      }
+
+      if (runtimeStatus.state === "ready") {
         hasSettled = true;
         window.clearTimeout(timeoutId);
 
-        onStatusChange?.({
-          state: "ready",
-        });
+        onStatusChange?.(runtimeStatus);
+
+        if (runFirstPlayableChecksOnReady) {
+          postRuntimeIframeCommand(iframeRef.current?.contentWindow, {
+            type: "game-run-first-playable-checks",
+          });
+        }
 
         if (focusOnReadyKey > 0) {
           clearScheduledFocus?.();
@@ -118,23 +137,15 @@ function RuntimeIframeHostInner<TArtifact>(
         return;
       }
 
-      if (sandboxEvent.type === "game-error") {
-        if (sandboxEvent.issue.recoverable) {
-          onStatusChange?.({
-            state: "warning",
-            issue: sandboxEvent.issue,
-          });
-          return;
-        }
-
-        hasSettled = true;
-        window.clearTimeout(timeoutId);
-
-        onStatusChange?.({
-          state: "error",
-          message: sandboxEvent.message,
-        });
+      if (runtimeStatus.state === "warning") {
+        onStatusChange?.(runtimeStatus);
+        return;
       }
+
+      hasSettled = true;
+      window.clearTimeout(timeoutId);
+
+      onStatusChange?.(runtimeStatus);
     }
 
     window.addEventListener("message", handleMessage);
@@ -144,7 +155,14 @@ function RuntimeIframeHostInner<TArtifact>(
       window.clearTimeout(timeoutId);
       window.removeEventListener("message", handleMessage);
     };
-  }, [artifact, focusOnReadyKey, onStatusChange, runtimeAdapter]);
+  }, [
+    artifact,
+    focusOnReadyKey,
+    onStatusChange,
+    onValidationEvidence,
+    runFirstPlayableChecksOnReady,
+    runtimeAdapter,
+  ]);
 
   useEffect(() => {
     postRuntimeIframeCommand(iframeRef.current?.contentWindow, {

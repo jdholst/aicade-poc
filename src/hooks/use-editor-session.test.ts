@@ -158,4 +158,30 @@ describe("useEditorSession", () => {
       message: "Booting Phaser runtime...",
     });
   });
+
+  it("preserves fatal runtime errors in the editor game status", () => {
+    const { result } = renderHook(() =>
+      useEditorSession({
+        enteredPrompt: "",
+        enteredOpenAiApiKey: "",
+        enteredOpenAiKeyword: "",
+        enteredOpenAiModel: "",
+        generationStages,
+        needsOpenAiApiKey: false,
+        needsOpenAiModel: false,
+      })
+    );
+
+    act(() => {
+      result.current.actions.canvas.onGameStatusChange({
+        state: "error",
+        message: "Runtime crashed during boot.",
+      });
+    });
+
+    expect(result.current.session.canvas.gameStatus).toEqual({
+      state: "error",
+      message: "Runtime crashed during boot.",
+    });
+  });
 });

@@ -10,6 +10,68 @@ export {
 } from "./game-spec-schema";
 
 export {
+  failedAttemptSchema,
+  gamePackRuntimeKindSchema,
+  gamePackSchema,
+  generationRunSchema,
+  parseGamePack,
+  playableBuildSchema,
+  validationEvidenceSchema,
+  validationEvidenceStageSchema,
+  validationEvidenceStatusSchema,
+  versionCheckpointSchema,
+  type FailedAttempt,
+  type GamePack,
+  type GamePackRuntimeKind,
+  type GenerationRun,
+  type PlayableBuild,
+  type ValidationEvidence,
+  type ValidationEvidenceStage,
+  type ValidationEvidenceStatus,
+  type VersionCheckpoint,
+} from "./game-pack/game-pack-schema";
+
+export {
+  createInitialGamePack,
+  type CreateInitialGamePackInput,
+} from "./game-pack/game-pack-factory";
+
+export {
+  createGamePackPersistenceKey,
+  getCurrentCheckpoint,
+  hasCreatorFacingCheckpoint,
+  restoreGamePackCheckpoint,
+  type RestoreGamePackCheckpointInput,
+} from "./game-pack/game-pack-lineage";
+
+export {
+  createGamePackRepository,
+  createIndexedDbGamePackRepository,
+  GamePackRepositoryError,
+  type GamePackRepository,
+  type GamePackRepositoryErrorCode,
+  type GamePackRepositoryOperation,
+  type GamePackStorageDriver,
+  type IndexedDbGamePackRepositoryOptions,
+  type StoredGamePackRecord,
+} from "./game-pack/game-pack-repository";
+
+export {
+  recordFirstPlayableRuntimeEvidence,
+  recordFirstPlayableRuntimeStatus,
+  startFirstPlayableValidation,
+  writeFirstPlayableValidationResult,
+  type FirstPlayableRuntimeCandidate,
+  type FirstPlayableRuntimeStatus,
+  type FirstPlayableValidationAttempt,
+  type FirstPlayableValidationStatus,
+  type RecordFirstPlayableRuntimeEvidenceInput,
+  type RecordFirstPlayableRuntimeStatusInput,
+  type StartFirstPlayableValidationInput,
+  type WriteFirstPlayableValidationResultInput,
+} from "./game-pack/first-playable-validation";
+
+export {
   createMechanicRuntimeBridge,
   getMechanicDefinitionForScope,
   getMechanicDefinitionsForScope,

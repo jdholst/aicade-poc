@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import type { EditorGenerationStage } from "@/hooks/use-editor-session";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
+import type { ValidationFailureReceiptViewModel } from "./editor-validation-failure-surface";
+
 function RuntimeScreenShell({
   children,
   statusLabel,
@@ -125,9 +127,13 @@ export function RuntimeErrorScreen({
 }
 
 export function GameSpecValidationErrorScreen({
+  eyebrow = "Game Spec validation failed",
   message,
+  title = "The runtime was not started.",
 }: {
+  eyebrow?: string;
   message: string;
+  title?: string;
 }) {
   return (
     <RuntimeScreenShell statusLabel="Validation stopped">
@@ -137,10 +143,10 @@ export function GameSpecValidationErrorScreen({
         </div>
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
-            Game Spec validation failed
+            {eyebrow}
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            The runtime was not started.
+            {title}
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-white/65">
             {message}
@@ -148,5 +154,115 @@ export function GameSpecValidationErrorScreen({
         </div>
       </div>
     </RuntimeScreenShell>
+  );
+}
+
+export function FirstPlayableValidationBlockedScreen({
+  debugReceipts,
+  onRegenerate,
+  onReset,
+  summary,
+}: {
+  debugReceipts: ValidationFailureReceiptViewModel[];
+  onRegenerate: () => void;
+  onReset: () => void;
+  summary: string;
+}) {
+  return (
+    <RuntimeScreenShell statusLabel="Blocked">
+      <div className="w-full max-w-2xl space-y-6 px-4">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#f1b7a3]/30 bg-[#9d4b31]/10">
+          <div className="h-12 w-12 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
+        </div>
+        <div className="text-center">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
+            Draft blocked
+          </div>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
+            This draft is not playable yet.
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-white/65">
+            {summary}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex items-center justify-center border border-[#f6c46b]/35 bg-[#f6c46b] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#10171e] transition hover:bg-[#dba84d]"
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className="inline-flex items-center justify-center border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-white/10"
+          >
+            Start over from prompt
+          </button>
+        </div>
+        <details className="border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+            Inspect validation details
+          </summary>
+          <div className="mt-4 space-y-4">
+            {debugReceipts.length > 0 ? (
+              debugReceipts.map((receipt) => (
+                <ValidationReceiptDetail
+                  key={`${receipt.stage}-${receipt.checkId}`}
+                  receipt={receipt}
+                />
+              ))
+            ) : (
+              <p>No validation receipts were recorded for this failure.</p>
+            )}
+          </div>
+        </details>
+      </div>
+    </RuntimeScreenShell>
+  );
+}
+
+function ValidationReceiptDetail({
+  receipt,
+}: {
+  receipt: ValidationFailureReceiptViewModel;
+}) {
+  return (
+    <section className="space-y-3 border border-white/10 bg-white/[0.03] p-4">
+      <div className="grid gap-2 text-xs uppercase tracking-[0.16em] text-white/50 sm:grid-cols-3">
+        <div>
+          <span className="block text-white/35">Stage</span>
+          <span className="normal-case tracking-normal text-white/80">
+            {receipt.stage}
+          </span>
+        </div>
+        <div>
+          <span className="block text-white/35">Check ID</span>
+          <span className="normal-case tracking-normal text-white/80">
+            {receipt.checkId}
+          </span>
+        </div>
+        <div>
+          <span className="block text-white/35">Status</span>
+          <span className="normal-case tracking-normal text-white/80">
+            {receipt.status}
+          </span>
+        </div>
+      </div>
+      <p className="text-sm leading-6 text-white/75">{receipt.message}</p>
+      {receipt.issueMessages.length > 0 ? (
+        <ul className="space-y-2 text-sm leading-6 text-white/70">
+          {receipt.issueMessages.map((issueMessage) => (
+            <li key={issueMessage}>{issueMessage}</li>
+          ))}
+        </ul>
+      ) : null}
+      {receipt.evidenceJson ? (
+        <pre className="max-h-48 overflow-auto border border-white/10 bg-black/25 p-3 text-xs leading-5 text-white/60">
+          {receipt.evidenceJson}
+        </pre>
+      ) : null}
+    </section>
   );
 }

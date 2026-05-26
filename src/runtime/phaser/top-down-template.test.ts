@@ -12,6 +12,7 @@ import {
 import {
   createTopDownGameSpecFixtureState,
   getTopDownGameSpecFixture,
+  getTopDownGameSpecFixtureState,
   TOP_DOWN_GAME_SPEC_FIXTURE_ENV,
 } from "./top-down-game-spec-fixture";
 import {
@@ -159,6 +160,46 @@ describe("top-down Phaser template", () => {
       "Crystal Spec Chase"
     );
   });
+
+  it.each([
+    ["malformed_top_down_template", "Invalid input"],
+    ["missing_primary_objective", "Expected exactly one primary objective."],
+    ["multiple_primary_objectives", "Expected exactly one primary objective."],
+    ["missing_player_entity", 'Expected target role "player".'],
+    ["missing_enemy_target_role", 'Expected target role "enemy".'],
+    ["missing_hazard_target_role", 'Expected target role "hazard".'],
+    ["missing_pickup_asset_reference", 'Expected asset role "pickup".'],
+    [
+      "missing_pickup_zone_coverage",
+      "Expected a referenced pickup asset to be placed in a pickup zone.",
+    ],
+    ["unknown_scene_reference", 'Unknown scene ID "scene_missing".'],
+    [
+      "missing_mechanic_objective_reference",
+      "Expected an objective reference.",
+    ],
+    ["unsupported_mechanic_type", 'Unsupported mechanic type "teleport_player".'],
+    [
+      "unknown_validation_goal_objective_reference",
+      'Unknown objective ID "objective_missing".',
+    ],
+    ["unknown_mechanic_references", 'Unknown entity ID "entity_missing".'],
+    ["unknown_scene_references", 'Unknown validation goal ID "validation_missing".'],
+    ["unused_modules", "Entity is not referenced by any spawn zone or active mechanic."],
+  ] as const)(
+    "exposes invalid fixture %s for manual failure-surface checks",
+    (fixtureId, expectedMessage) => {
+      const fixtureState = getTopDownGameSpecFixtureState(fixtureId);
+
+      expect(fixtureState).toMatchObject({
+        status: "invalid",
+      });
+      expect(fixtureState.message).toContain(expectedMessage);
+      expect(createTopDownPhaserTemplateState(fixtureState)).toMatchObject({
+        status: "invalid",
+      });
+    }
+  );
 
   it("uses the selected fixture when building the Phaser template state", () => {
     vi.stubEnv(TOP_DOWN_GAME_SPEC_FIXTURE_ENV, "prism_relay_gauntlet");
@@ -1068,6 +1109,94 @@ describe("top-down Phaser template", () => {
     expect(gameElements.some((element) => element.kind === "star")).toBe(false);
   });
 
+  it("emits first-playable runtime evidence from the host validation command", () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const { context, dispatchWindowEvent, messages } = createRuntimeHarness(
+      topDownPhaserTemplate
+    );
+
+    runTopDownRuntime(runtimeSource, context);
+    dispatchWindowEvent("message", {
+      data: { type: "game-run-first-playable-checks" },
+    });
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "game-validation-evidence",
+          data: expect.objectContaining({
+            checkId: "nonblank_render",
+            status: "passed",
+            evidence: expect.objectContaining({
+              renderedObjectCount: expect.any(Number),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          type: "game-validation-evidence",
+          data: expect.objectContaining({
+            checkId: "player_visible",
+            status: "passed",
+            evidence: expect.objectContaining({
+              hasBody: true,
+              playerPosition: { x: 156, y: expect.any(Number) },
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          type: "game-validation-evidence",
+          data: expect.objectContaining({
+            checkId: "input_response",
+            status: "passed",
+            evidence: expect.objectContaining({
+              inputAction: "move_right",
+              playerVelocity: { x: 220, y: 0 },
+            }),
+          }),
+        }),
+      ])
+    );
+  });
+
+  it("fails input-response runtime evidence when movement is not installed", () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const templateWithoutMovement = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: topDownPhaserTemplate.gameSpec.mechanics.filter(
+          (mechanic) => mechanic.type !== "player_movement"
+        ),
+      },
+    };
+    const { context, dispatchWindowEvent, messages } = createRuntimeHarness(
+      templateWithoutMovement
+    );
+
+    runTopDownRuntime(runtimeSource, context, templateWithoutMovement);
+    dispatchWindowEvent("message", {
+      data: { type: "game-run-first-playable-checks" },
+    });
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        type: "game-validation-evidence",
+        data: expect.objectContaining({
+          checkId: "input_response",
+          status: "failed",
+          issues: [
+            {
+              code: "input_probe_no_velocity",
+              path: "runtime.input",
+              message:
+                "Expected player velocity to change during the movement probe.",
+            },
+          ],
+        }),
+      })
+    );
+  });
+
   it("handles the shared host command protocol", () => {
     const runtimeSource = loadTopDownRuntimeSource();
 
@@ -1076,8 +1205,12 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain('event.data.type === "game-focus"');
     expect(runtimeSource).toContain('event.data.type === "game-pause"');
     expect(runtimeSource).toContain('event.data.type === "game-resize"');
+    expect(runtimeSource).toContain(
+      'event.data.type === "game-run-first-playable-checks"'
+    );
     expect(runtimeSource).toContain("function setPaused(nextIsPaused)");
     expect(runtimeSource).toContain("function applyHostViewport(nextViewport)");
+    expect(runtimeSource).toContain("function runFirstPlayableChecks()");
     expect(runtimeSource).toContain("game.scene.pause");
     expect(runtimeSource).toContain("game.scene.resume");
     expect(runtimeSource).toContain("game.scale.resize");
