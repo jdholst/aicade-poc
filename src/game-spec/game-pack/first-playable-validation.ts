@@ -93,7 +93,7 @@ export function recordFirstPlayableRuntimeStatus({
   observedAt,
   status,
 }: RecordFirstPlayableRuntimeStatusInput): FirstPlayableValidationAttempt {
-  if (attempt.status === "failed" || status.state === "loading") {
+  if (attempt.status !== "running" || status.state === "loading") {
     return attempt;
   }
 
@@ -143,7 +143,7 @@ export function recordFirstPlayableRuntimeEvidence({
   evidence,
   observedAt,
 }: RecordFirstPlayableRuntimeEvidenceInput): FirstPlayableValidationAttempt {
-  if (attempt.status === "failed") {
+  if (attempt.status !== "running") {
     return attempt;
   }
 

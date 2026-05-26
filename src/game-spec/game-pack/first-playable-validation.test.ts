@@ -839,6 +839,40 @@ describe("first-playable validation orchestration", () => {
     );
   });
 
+  it("does not downgrade a passed attempt when a later runtime error arrives", () => {
+    const attempt = recordPassingRuntimeEvidence(
+      recordRuntimeReady(startValidation())
+    );
+
+    expect(attempt.status).toBe("passed");
+    expect(
+      recordFirstPlayableRuntimeStatus({
+        attempt,
+        observedAt,
+        status: { state: "error", message: "Runtime crashed after validation." },
+      })
+    ).toBe(attempt);
+  });
+
+  it("does not downgrade a passed attempt when later runtime evidence fails", () => {
+    const attempt = recordPassingRuntimeEvidence(
+      recordRuntimeReady(startValidation())
+    );
+
+    expect(attempt.status).toBe("passed");
+    expect(
+      recordFirstPlayableRuntimeEvidence({
+        attempt,
+        observedAt,
+        evidence: {
+          checkId: "input_response",
+          status: "failed",
+          message: "Input stopped responding after validation.",
+        },
+      })
+    ).toBe(attempt);
+  });
+
   it("does not finalize validation for loading or recoverable warning statuses", () => {
     const attempt = startValidation();
 

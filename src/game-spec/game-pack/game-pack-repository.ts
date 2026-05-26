@@ -29,6 +29,7 @@ export type GamePackRepositoryErrorCode =
   | "load_failed"
   | "list_failed"
   | "update_failed"
+  | "update_id_mismatch"
   | "not_found"
   | "invalid_game_pack";
 
@@ -173,6 +174,15 @@ export function createGamePackRepository(
           gamePackId,
           operation: "update",
           message: `Failed to update Game Pack "${gamePackId}".`,
+        });
+      }
+
+      if (nextGamePack.id !== gamePackId) {
+        throw createRepositoryError({
+          code: "update_id_mismatch",
+          gamePackId,
+          operation: "update",
+          message: `Cannot update Game Pack "${gamePackId}" with payload for "${nextGamePack.id}".`,
         });
       }
 

@@ -150,6 +150,29 @@ describe("Game Pack repository", () => {
     });
   });
 
+  it("rejects update payloads that change the requested Game Pack ID", async () => {
+    const storage = new MemoryGamePackStorage();
+    const repository = createGamePackRepository(storage);
+    const gamePack = createValidatedGamePackFixture();
+
+    await repository.save(gamePack);
+
+    await expect(
+      repository.update(gamePack.id, (current) =>
+        parseGamePack({
+          ...current,
+          id: "game_pack_other",
+        })
+      )
+    ).rejects.toMatchObject({
+      code: "update_id_mismatch",
+      gamePackId: gamePack.id,
+      operation: "update",
+    });
+    expect(storage.records.has(gamePack.id)).toBe(true);
+    expect(storage.records.has("game_pack_other")).toBe(false);
+  });
+
   it("wraps storage failures in typed repository errors", async () => {
     const repository = createGamePackRepository(
       new MemoryGamePackStorage({ failOn: "put" })
