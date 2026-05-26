@@ -476,7 +476,7 @@ OpenGame research findings to apply during Milestone 7:
 
 Implementation questions to resolve during Milestone 7:
 
-- What exact API route name should the Phaser Spec Generation path use: `/api/spec-generation`, `/api/phaser-spec-generation`, `/api/game-spec-generation`, or another task-oriented name?
+- The Phaser Spec Generation path uses the task-oriented route `/api/spec-generation`.
 - What exact success and failure response types should the route return?
 - Should the model tool/schema contract be generated from Zod or hand-authored as JSON Schema?
 - Which generation metadata fields belong in the pre-telemetry response before Milestone 8?
