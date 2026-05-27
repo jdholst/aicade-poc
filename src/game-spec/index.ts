@@ -1,4 +1,7 @@
 export {
+  GAME_SPEC_SCHEMA_VERSION,
+  STABLE_ID_PATTERN,
+  STABLE_ID_PATTERN_SOURCE,
   gameSpecSchema,
   parseGameSpec,
   stableIdSchema,
@@ -79,6 +82,7 @@ export {
   getTopDownMechanicDefinitionsForSpec,
   TOP_DOWN_PHASER_MECHANIC_SCOPE,
   topDownMechanicRegistry,
+  topDownSpecGenerationMechanicTypes,
   type MechanicCapabilityTag,
   type MechanicRegistryEntry,
   type MechanicRuntimeBridge,
@@ -96,6 +100,7 @@ export {
 } from "./game-spec-validation";
 
 export {
+  TOP_DOWN_TEMPLATE_ID,
   parseTopDownGameSpec,
   parseTopDownSpec,
   topDownGameSpecSchema,

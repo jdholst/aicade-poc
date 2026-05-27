@@ -125,6 +125,46 @@ describe("Spec Generation service contract", () => {
     }
   );
 
+  it.each([
+    {
+      name: "source-code shaped output",
+      candidate: {
+        ...getMutableFixture(),
+        moduleSourceTs: "const phaserSource = 'not allowed';",
+      },
+    },
+    {
+      name: "Game Pack shaped output",
+      candidate: {
+        project: {
+          name: "Wrong Artifact",
+          summary: "This is a Game Pack, not a TopDownGameSpec.",
+        },
+        manifest: {
+          runtime: "canvas2d",
+        },
+        moduleSourceTs: "globalThis.createGameModule = function () {};",
+      },
+    },
+  ])("rejects $name from provider output", async ({ candidate }) => {
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => candidate,
+      includeDebugCandidate: true,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      stage: "schema_validation",
+      taskRoute: "spec_generation.primary",
+      attemptCount: 1,
+      debugCandidate: candidate,
+    });
+    expect(result.validationIssues.length).toBeGreaterThan(0);
+  });
+
   it("returns a model generation failure when the provider request fails", async () => {
     const result = await generateTopDownGameSpec({
       prompt: "Make a tiny top-down collection game.",

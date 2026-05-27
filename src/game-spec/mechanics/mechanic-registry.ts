@@ -126,6 +126,10 @@ export const topDownMechanicRegistry = [
   },
 ] as const satisfies readonly MechanicRegistryEntry[];
 
+export const topDownSpecGenerationMechanicTypes = topDownMechanicRegistry.map(
+  (mechanic) => mechanic.type
+);
+
 function isSameMechanicScope(
   first: MechanicRuntimeScope,
   second: MechanicRuntimeScope

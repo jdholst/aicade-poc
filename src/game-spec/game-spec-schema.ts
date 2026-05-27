@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const GAME_SPEC_SCHEMA_VERSION = "game-spec/v1";
+export const STABLE_ID_PATTERN_SOURCE =
+  "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$";
+export const STABLE_ID_PATTERN = new RegExp(STABLE_ID_PATTERN_SOURCE);
+
 export type JsonValue =
   | string
   | number
@@ -51,10 +56,12 @@ export const jsonValueSchema = z.custom<JsonValue>(isJsonValue, {
   message: "Game Spec JSON fields must contain only JSON-compatible values.",
 });
 
-export const stableIdSchema = z.string().regex(
-  /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
-  "Use lowercase stable IDs with underscore-separated segments."
-);
+export const stableIdSchema = z
+  .string()
+  .regex(
+    STABLE_ID_PATTERN,
+    "Use lowercase stable IDs with underscore-separated segments."
+  );
 
 const controlBindingSchema = z
   .object({
@@ -131,7 +138,7 @@ const gameSpecMechanicEntrySchema = z
 
 export const gameSpecSchema = z
   .object({
-    schemaVersion: z.literal("game-spec/v1"),
+    schemaVersion: z.literal(GAME_SPEC_SCHEMA_VERSION),
     id: stableIdSchema,
     title: z.string().min(1).max(80),
     currentIntentSummary: z.string().min(1).max(240),
