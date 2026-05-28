@@ -55,7 +55,7 @@ const minimalCoreGameSpec = {
     {
       id: "mechanic_player_movement",
       type: "player_movement",
-      targetIds: ["entity_player"],
+      entityIds: ["entity_player"],
       config: {},
     },
   ],
@@ -96,7 +96,7 @@ describe("Game Spec schema", () => {
         {
           id: "mechanic_collect_crystals",
           type: "pickup_collection",
-          targetIds: ["entity_player"],
+          entityIds: ["entity_player"],
           objectiveIds: ["objective_collect_crystals"],
           config: {
             requiredCount: 5,
@@ -118,7 +118,7 @@ describe("Game Spec schema", () => {
       {
         id: "mechanic_collect_crystals",
         type: "pickup_collection",
-        targetIds: ["entity_player"],
+        entityIds: ["entity_player"],
         objectiveIds: ["objective_collect_crystals"],
         config: {
           requiredCount: 5,

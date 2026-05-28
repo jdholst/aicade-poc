@@ -123,7 +123,7 @@ const topDownGameSpecFixture = {
     {
       id: "mechanic_player_movement",
       type: "player_movement",
-      targetIds: ["entity_player"],
+      entityIds: ["entity_player"],
       objectiveIds: ["objective_collect_crystals"],
       config: {},
     },

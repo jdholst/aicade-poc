@@ -78,8 +78,8 @@ function addMechanicReferenceIssues(
 ) {
   addUnknownReferenceIssues(
     issues,
-    `mechanics.${mechanic.id}.targetIds`,
-    mechanic.targetIds,
+    `mechanics.${mechanic.id}.entityIds`,
+    mechanic.entityIds,
     context.entityIds,
     "entity"
   );
@@ -128,7 +128,7 @@ function addActiveMechanicIssues(
     return;
   }
 
-  addReferences(context.activeMechanicEntityIds, mechanic.targetIds);
+  addReferences(context.activeMechanicEntityIds, mechanic.entityIds);
   addReferences(context.activeMechanicAssetIds, mechanic.assetIds);
   addReferences(context.activeMechanicObjectiveIds, mechanic.objectiveIds);
   addMechanicContractIssues(

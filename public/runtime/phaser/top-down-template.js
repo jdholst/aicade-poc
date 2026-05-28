@@ -596,13 +596,13 @@
           : [];
 
       function findTargetByRole(role) {
-        const targetIds =
-          mechanic && Array.isArray(mechanic.targetIds)
-            ? mechanic.targetIds
+        const entityIds =
+          mechanic && Array.isArray(mechanic.entityIds)
+            ? mechanic.entityIds
             : [];
 
-        for (let index = 0; index < targetIds.length; index += 1) {
-          const entity = entityModule.findById(targetIds[index]);
+        for (let index = 0; index < entityIds.length; index += 1) {
+          const entity = entityModule.findById(entityIds[index]);
 
           if (entity && entity.role === role) {
             return entity;

@@ -48,6 +48,8 @@ Reference rules:
 - Every entity, asset, objective, validation goal, scene, zone, and mechanic ID must be stable and reusable.
 - The scene must reference the primary objective and validation goal.
 - The player spawn zone must reference the player entity.
+- Mechanic entityIds must reference entities only: actors, participants, controlled objects, or objects directly affected by the behavior.
+- Mechanic assetIds must reference assets only: visual/content assets the behavior places, collects, displays, scores, or otherwise uses.
 - Pickup collection must reference a pickup asset that is placed in a pickup zone.
 - The spec must include originalPrompt exactly matching the creator prompt above.
 

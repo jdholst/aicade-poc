@@ -299,8 +299,8 @@ function createReferenceConsistencyEvidence(
     addUnknownReferenceIssues({
       issues,
       code: "unknown_entity_reference",
-      path: `gameSpec.mechanics.${mechanic.id}.targetIds`,
-      referenceIds: mechanic.targetIds,
+      path: `gameSpec.mechanics.${mechanic.id}.entityIds`,
+      referenceIds: mechanic.entityIds,
       knownIds: entityIds,
       label: "entity",
     });

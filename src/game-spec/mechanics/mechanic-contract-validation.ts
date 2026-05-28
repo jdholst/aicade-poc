@@ -36,12 +36,12 @@ function addRequiredTargetRoleIssues(
 ) {
   if (
     !requirements.requiredTargetRoles ||
-    !referencesAreKnown(mechanic.targetIds, context.entityIds)
+    !referencesAreKnown(mechanic.entityIds, context.entityIds)
   ) {
     return;
   }
 
-  const targetEntities = (mechanic.targetIds ?? [])
+  const targetEntities = (mechanic.entityIds ?? [])
     .map((targetId) => context.entitiesById.get(targetId))
     .filter((entity): entity is GameSpec["entities"][number] =>
       Boolean(entity)
@@ -50,7 +50,7 @@ function addRequiredTargetRoleIssues(
   for (const requiredRole of requirements.requiredTargetRoles) {
     if (!targetEntities.some((entity) => entity.role === requiredRole)) {
       issues.push({
-        path: `mechanics.${mechanic.id}.targetIds`,
+        path: `mechanics.${mechanic.id}.entityIds`,
         message: `Expected target role "${requiredRole}".`,
       });
     }

@@ -44,14 +44,14 @@ Stable IDs are the connective tissue of the spec. They use lowercase underscore-
 
 Current reference fields:
 
-- Mechanics use `targetIds` for entity IDs.
+- Mechanics use `entityIds` for the entities a mechanic acts on.
 - Mechanics use `objectiveIds`, `sceneIds`, `regionIds`, and `assetIds` for the matching top-level or template-local modules.
 - Scenes use `objectiveIds` and `validationGoalIds`.
 - Spawn zones use `entityIds`.
 - Pickup zones use `assetIds`.
 - Validation goals may reference one `objectiveId`.
 
-For the current POC, `targetIds` means entity IDs by convention. A later contract pass may rename it to `entityIds` or `targetEntityIds` for symmetry with the other reference fields.
+Mechanic `entityIds` is intentionally explicit so generated specs do not confuse entity references with asset references.
 
 ## Authoring Rules
 

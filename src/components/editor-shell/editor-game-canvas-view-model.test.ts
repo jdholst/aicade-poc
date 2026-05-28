@@ -80,12 +80,12 @@ const invalidRuntimeTemplate: EditorRuntimeTemplatePlan = {
   firstPlayableValidationSource: null,
   issues: [
     {
-      path: "mechanics.mechanic_player_movement.targetIds",
+      path: "mechanics.mechanic_player_movement.entityIds",
       message: 'Expected target role "player".',
     },
   ],
   message:
-    'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+    'mechanics.mechanic_player_movement.entityIds: Expected target role "player".',
   type: "phaser-invalid",
 };
 

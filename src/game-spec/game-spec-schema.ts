@@ -127,7 +127,7 @@ const gameSpecMechanicEntrySchema = z
   .object({
     id: stableIdSchema,
     type: stableIdSchema,
-    targetIds: z.array(stableIdSchema).optional(),
+    entityIds: z.array(stableIdSchema).optional(),
     objectiveIds: z.array(stableIdSchema).optional(),
     sceneIds: z.array(stableIdSchema).optional(),
     regionIds: z.array(stableIdSchema).optional(),

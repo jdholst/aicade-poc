@@ -58,9 +58,9 @@ describe("Spec Generation service contract", () => {
       name: "missing entity reference",
       stage: "semantic_validation",
       mutate: (spec: ReturnType<typeof getMutableFixture>) => {
-        spec.mechanics[0].targetIds = ["entity_missing"];
+        spec.mechanics[0].entityIds = ["entity_missing"];
       },
-      expectedPath: `mechanics.${getMutableFixture().mechanics[0].id}.targetIds`,
+      expectedPath: `mechanics.${getMutableFixture().mechanics[0].id}.entityIds`,
     },
     {
       name: "missing pickup-zone coverage",

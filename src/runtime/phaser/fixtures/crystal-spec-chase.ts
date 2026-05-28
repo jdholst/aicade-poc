@@ -175,14 +175,14 @@ export const crystalSpecChaseGameSpecFixtureInput = {
     {
       id: "mechanic_player_movement",
       type: "player_movement",
-      targetIds: ["entity_player"],
+      entityIds: ["entity_player"],
       objectiveIds: ["objective_collect_crystals"],
       config: {},
     },
     {
       id: "mechanic_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player", "entity_crystal"],
+      entityIds: ["entity_player", "entity_crystal"],
       sceneIds: ["scene_arena"],
       assetIds: ["asset_crystal"],
       objectiveIds: ["objective_collect_crystals"],
@@ -193,7 +193,7 @@ export const crystalSpecChaseGameSpecFixtureInput = {
     {
       id: "mechanic_chaser_enemy",
       type: "enemy_chase",
-      targetIds: ["entity_chaser", "entity_player"],
+      entityIds: ["entity_chaser", "entity_player"],
       objectiveIds: ["objective_collect_crystals"],
       config: {
         speed: 96,
@@ -202,7 +202,7 @@ export const crystalSpecChaseGameSpecFixtureInput = {
     {
       id: "mechanic_hazard_contact",
       type: "hazard_contact",
-      targetIds: ["entity_hazard", "entity_player"],
+      entityIds: ["entity_hazard", "entity_player"],
       objectiveIds: ["objective_collect_crystals"],
       config: {},
     },

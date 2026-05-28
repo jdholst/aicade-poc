@@ -143,7 +143,7 @@ function applySpecGenerationNarrowing(schema: JsonSchemaObject) {
   requireFields(mechanic, [
     "id",
     "type",
-    "targetIds",
+    "entityIds",
     "objectiveIds",
     "sceneIds",
     "regionIds",

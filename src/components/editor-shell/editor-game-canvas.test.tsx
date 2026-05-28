@@ -669,10 +669,10 @@ describe("EditorGameCanvas", () => {
       getTopDownPhaserTemplateState: () => ({
         status: "invalid",
         message:
-          'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+          'mechanics.mechanic_player_movement.entityIds: Expected target role "player".',
         issues: [
           {
-            path: "mechanics.mechanic_player_movement.targetIds",
+            path: "mechanics.mechanic_player_movement.entityIds",
             message: 'Expected target role "player".',
           },
         ],
@@ -695,7 +695,7 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByText("The runtime was not started.")).toBeVisible();
     expect(
       screen.getByText(
-        'mechanics.mechanic_player_movement.targetIds: Expected target role "player".'
+        'mechanics.mechanic_player_movement.entityIds: Expected target role "player".'
       )
     ).toBeVisible();
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();

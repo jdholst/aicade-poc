@@ -69,7 +69,7 @@ const topDownGameSpecFixtureInputs = {
       mechanic.type === "enemy_chase"
         ? {
             ...mechanic,
-            targetIds: ["entity_player"],
+            entityIds: ["entity_player"],
           }
         : mechanic
     ),
@@ -82,7 +82,7 @@ const topDownGameSpecFixtureInputs = {
       mechanic.type === "hazard_contact"
         ? {
             ...mechanic,
-            targetIds: ["entity_player"],
+            entityIds: ["entity_player"],
           }
         : mechanic
     ),
@@ -177,7 +177,7 @@ const topDownGameSpecFixtureInputs = {
       mechanic.type === "player_movement"
         ? {
             ...mechanic,
-            targetIds: ["entity_missing"],
+            entityIds: ["entity_missing"],
             sceneIds: ["scene_missing"],
             regionIds: ["region_missing"],
             assetIds: ["asset_missing"],

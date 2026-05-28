@@ -68,6 +68,8 @@ describe("Spec Generation schema drift guards", () => {
 
   it("documents intentional provider-schema narrowing while Zod remains authoritative", () => {
     const fixture = getFirstValidTopDownGameSpecFixture();
+    const mechanicProperties =
+      topDownGameSpecJsonSchema.properties.mechanics.items.properties;
 
     expect(validateTopDownGameSpec(fixture)).toEqual(fixture);
     expect(topDownGameSpecJsonSchema.required).toContain("originalPrompt");
@@ -80,6 +82,8 @@ describe("Spec Generation schema drift guards", () => {
       topDownGameSpecJsonSchema.properties.template.properties.config.properties
         .scenes.maxItems
     ).toBe(1);
+    expect(mechanicProperties.entityIds).toBeDefined();
+    expect(mechanicProperties.targetIds).toBeUndefined();
   });
 
   it("keeps the provider schema as a spec-only tool, not a source or Game Pack contract", () => {

@@ -253,7 +253,7 @@ describe("first-playable validation orchestration", () => {
           mechanic.id === "mechanic_player_movement"
             ? {
                 ...mechanic,
-                targetIds: ["entity_missing"],
+                entityIds: ["entity_missing"],
               }
             : mechanic
         ),
@@ -272,7 +272,7 @@ describe("first-playable validation orchestration", () => {
         issues: [
           {
             code: "unknown_entity_reference",
-            path: "gameSpec.mechanics.mechanic_player_movement.targetIds",
+            path: "gameSpec.mechanics.mechanic_player_movement.entityIds",
             message: 'Unknown entity ID "entity_missing".',
           },
         ],
