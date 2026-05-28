@@ -5,7 +5,11 @@ import { useCallback, useState } from "react";
 import { DEFAULT_OPENAI_MODEL } from "@/constants";
 import type { RuntimeIframeStatus } from "@/components/runtime-iframe-host";
 import { useStarterProjectGeneration } from "@/hooks/use-starter-project-generation";
-import { createInitialGameStatus } from "@/runtime/editor-runtime-mode";
+import {
+  createInitialGameStatus,
+  getEditorGenerationSource,
+  type EditorGenerationSource,
+} from "@/runtime/editor-runtime-mode";
 import type { RuntimeIssue } from "@/runtime/runtime-adapter";
 import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
@@ -59,6 +63,7 @@ export type EditorGameCanvasSession = {
   gameStatus: GeneratedGameStatus;
   isGamePaused: boolean;
   loadState: StarterProjectLoadState;
+  generationSource: EditorGenerationSource;
   runtimeWarnings: RuntimeWarningIssue[];
 };
 
@@ -98,8 +103,9 @@ export function useEditorSession({
   );
   const [gameResetNonce, setGameResetNonce] = useState(0);
   const [isGamePaused, setIsGamePaused] = useState(false);
+  const [generationSource] = useState(() => getEditorGenerationSource());
   const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>(() =>
-    createInitialGameStatus()
+    createInitialGameStatus(generationSource)
   );
   const [runtimeWarnings, setRuntimeWarnings] = useState<RuntimeWarningIssue[]>(
     []
@@ -109,14 +115,27 @@ export function useEditorSession({
     setRuntimeWarnings([]);
     setGameStatus({
       state: "loading",
-      message: "Waiting for generated module...",
+      message: "Building generated project...",
     });
     setIsGamePaused(false);
   }, []);
 
+  const handleGenerationFailed = useCallback(() => {
+    if (generationSource !== "phaser-ai") {
+      return;
+    }
+
+    setGameStatus({
+      state: "error",
+      message: "Generation could not produce a playable project.",
+    });
+  }, [generationSource]);
+
   const { generationStepIndex, loadState, startGenerationRequest } =
     useStarterProjectGeneration({
+      generationSource,
       generationStageCount: generationStages.length,
+      onGenerationFailed: handleGenerationFailed,
       onGenerationStarted: handleGenerationStarted,
     });
 
@@ -125,13 +144,16 @@ export function useEditorSession({
   const hasSubmittedPrompt = Boolean(submittedPrompt);
   const canSubmitPrompt = !isGenerating && Boolean(promptDraft.trim());
   const canStartGeneration =
+    generationSource !== "phaser-fixture" &&
     hasSubmittedPrompt &&
     !isGenerating &&
     (!needsOpenAiApiKey ||
       Boolean(openAiApiKey.trim() || openAiKeyword.trim()));
   const projectName =
     loadState.status === "success"
-      ? loadState.pack.project.name
+      ? loadState.source === "canvas-starter"
+        ? loadState.pack.project.name
+        : loadState.gamePack.title
       : "Starter Project";
 
   function submitPrompt() {
@@ -165,8 +187,8 @@ export function useEditorSession({
     setGameStatus({
       state: nextIsPaused ? "paused" : "ready",
       message: nextIsPaused
-        ? "Phaser runtime is paused in the sandbox."
-        : "Phaser runtime is running in the sandbox.",
+        ? "Runtime is paused in the sandbox."
+        : "Runtime is running in the sandbox.",
     });
   }
 
@@ -175,7 +197,7 @@ export function useEditorSession({
     setRuntimeWarnings([]);
     setGameStatus({
       state: "loading",
-      message: "Resetting Phaser runtime...",
+      message: "Resetting runtime...",
     });
     setGameResetNonce((value) => value + 1);
   }
@@ -195,11 +217,11 @@ export function useEditorSession({
         );
         setGameStatus((currentStatus) =>
           currentStatus.state === "loading" &&
-          currentStatus.message === "Booting Phaser runtime..."
+          currentStatus.message === "Booting runtime..."
             ? currentStatus
             : {
                 state: "loading",
-                message: "Booting Phaser runtime...",
+                message: "Booting runtime...",
               }
         );
         return;
@@ -208,7 +230,7 @@ export function useEditorSession({
       if (status.state === "ready") {
         setGameStatus({
           state: "ready",
-          message: "Phaser runtime is running in the sandbox.",
+          message: "Runtime is running in the sandbox.",
         });
         return;
       }
@@ -237,6 +259,7 @@ export function useEditorSession({
 
   const canvas: EditorGameCanvasSession = {
     currentGenerationStage,
+    generationSource,
     gameResetNonce,
     gameStatus,
     isGamePaused,

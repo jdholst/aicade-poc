@@ -102,8 +102,9 @@ function createCanvasSession(
     gameResetNonce: 0,
     gameStatus: {
       state: "loading",
-      message: "Ready to build starter game.",
+      message: "Ready to build project.",
     },
+    generationSource: "phaser-fixture",
     isGamePaused: false,
     loadState: {
       status: "idle",
@@ -132,7 +133,7 @@ describe("createEditorRuntimePanelViewModel", () => {
       canvas: createCanvasSession({
         gameStatus: {
           state: "ready",
-          message: "Phaser runtime is running in the sandbox.",
+          message: "Runtime is running in the sandbox.",
         },
       }),
       firstPlayableValidationAttempt: createFirstPlayableValidationAttempt(),
@@ -289,6 +290,7 @@ describe("createEditorRuntimePanelViewModel", () => {
         },
         loadState: {
           status: "success",
+          source: "canvas-starter",
           pack,
         },
       }),
@@ -305,7 +307,12 @@ describe("createEditorRuntimePanelViewModel", () => {
     });
 
     expect(idleViewModel.primarySurface).toEqual({
-      type: "canvas-initial",
+      description:
+        "Build from the prompt to create and mount the game runtime in an isolated sandbox.",
+      eyebrow: "First magic moment",
+      surfaceLabel: "Generated runtime",
+      title: "The generated game will boot here.",
+      type: "initial",
     });
     expect(successViewModel.primarySurface).toMatchObject({
       host: {
@@ -320,6 +327,27 @@ describe("createEditorRuntimePanelViewModel", () => {
     });
     expect(successViewModel.canPauseRuntime).toBe(true);
     expect(errorViewModel.canResetRuntime).toBe(false);
+  });
+
+  it("uses the same initial runtime surface for Phaser prompt generation", () => {
+    const viewModel = createEditorRuntimePanelViewModel({
+      canvas: createCanvasSession(),
+      runtimeTemplate: {
+        firstPlayableValidationSource: null,
+        type: "phaser-pending-generation",
+      },
+    });
+
+    expect(viewModel.primarySurface).toEqual({
+      description:
+        "Build from the prompt to create and mount the game runtime in an isolated sandbox.",
+      eyebrow: "First magic moment",
+      surfaceLabel: "Generated runtime",
+      title: "The generated game will boot here.",
+      type: "initial",
+    });
+    expect(viewModel.canPauseRuntime).toBe(false);
+    expect(viewModel.canResetRuntime).toBe(false);
   });
 
   it("masks runtime surfaces while generation is loading", () => {
@@ -382,7 +410,7 @@ describe("createEditorRuntimePanelViewModel", () => {
       canvas: createCanvasSession({
         gameStatus: {
           state: "ready",
-          message: "Phaser runtime is running in the sandbox.",
+          message: "Runtime is running in the sandbox.",
         },
       }),
       runtimeTemplate: validRuntimeTemplate,
@@ -391,7 +419,7 @@ describe("createEditorRuntimePanelViewModel", () => {
       canvas: createCanvasSession({
         gameStatus: {
           state: "paused",
-          message: "Phaser runtime is paused in the sandbox.",
+          message: "Runtime is paused in the sandbox.",
         },
       }),
       runtimeTemplate: validRuntimeTemplate,
@@ -434,7 +462,7 @@ describe("createEditorRuntimePanelViewModel", () => {
       canvas: createCanvasSession({
         gameStatus: {
           state: "ready",
-          message: "Phaser runtime is running in the sandbox.",
+          message: "Runtime is running in the sandbox.",
         },
         runtimeWarnings: [warning],
       }),

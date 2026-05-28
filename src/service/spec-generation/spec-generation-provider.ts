@@ -8,7 +8,10 @@ import {
   topDownGameSpecJsonSchema,
 } from "./spec-generation-schema";
 import { createTopDownSpecGenerationSystemPrompt } from "./spec-generation-guide";
-import type { SpecGenerationProvider } from "./spec-generation-service";
+import {
+  SpecGenerationProviderError,
+  type SpecGenerationProvider,
+} from "./spec-generation-service";
 
 type ResponsesFunctionCall = {
   type: "function_call";
@@ -24,7 +27,10 @@ type ResponseOutputItem = {
 
 type OpenAIResponsePayload = {
   error?: {
+    code?: string;
     message?: string;
+    param?: string;
+    type?: string;
   };
   output?: ResponseOutputItem[];
 };
@@ -96,13 +102,10 @@ export const requestTopDownGameSpecFromProvider: SpecGenerationProvider =
       clearTimeout(timeoutId);
     }
 
-    const payload = (await response.json()) as OpenAIResponsePayload;
+    const payload = await readOpenAIResponsePayload(response);
 
     if (!response.ok) {
-      throw new Error(
-        payload.error?.message ??
-          `OpenAI request failed with status ${response.status}.`
-      );
+      throw createOpenAIProviderError(response, payload);
     }
 
     const functionCall = payload.output?.find(
@@ -123,3 +126,30 @@ export const requestTopDownGameSpecFromProvider: SpecGenerationProvider =
       throw new Error("OpenAI returned invalid JSON for the top-down Game Spec.");
     }
   };
+
+async function readOpenAIResponsePayload(response: Response) {
+  try {
+    return (await response.json()) as OpenAIResponsePayload;
+  } catch {
+    return {} satisfies OpenAIResponsePayload;
+  }
+}
+
+function createOpenAIProviderError(
+  response: Response,
+  payload: OpenAIResponsePayload
+) {
+  const fallbackMessage = `OpenAI request failed with status ${response.status}.`;
+  const message = payload.error?.message ?? fallbackMessage;
+  const requestId = response.headers.get("x-request-id") ?? undefined;
+
+  return new SpecGenerationProviderError(message, {
+    provider: "openai",
+    message,
+    status: response.status,
+    ...(payload.error?.code ? { code: payload.error.code } : {}),
+    ...(payload.error?.param ? { param: payload.error.param } : {}),
+    ...(payload.error?.type ? { type: payload.error.type } : {}),
+    ...(requestId ? { requestId } : {}),
+  });
+}

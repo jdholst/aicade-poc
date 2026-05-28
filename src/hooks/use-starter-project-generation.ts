@@ -8,24 +8,43 @@ import {
 } from "@/service/starter-project/starter-project-client";
 import { GENERATION_TIMEOUT_MS } from "@/constants";
 import { type GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
+import {
+  SpecGenerationClientError,
+  requestTopDownSpecGeneration,
+  type SpecGenerationValidationFailure,
+  type TopDownSpecGenerationClientResult,
+} from "@/service/spec-generation";
+import type { EditorGenerationSource } from "@/runtime/editor-runtime-mode";
 
 export type StarterProjectLoadState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "success"; pack: GeneratedGamePack }
-  | { status: "error"; message: string };
+  | { status: "success"; pack: GeneratedGamePack; source: "canvas-starter" }
+  | ({
+      status: "success";
+      source: "phaser-spec";
+    } & TopDownSpecGenerationClientResult)
+  | {
+      status: "error";
+      message: string;
+      validationFailure?: SpecGenerationValidationFailure;
+    };
 
 type GenerationRequest = StarterProjectRequest & {
   id: number;
 };
 
 type UseStarterProjectGenerationOptions = {
+  generationSource: EditorGenerationSource;
   generationStageCount: number;
+  onGenerationFailed?: () => void;
   onGenerationStarted: () => void;
 };
 
 export function useStarterProjectGeneration({
+  generationSource,
   generationStageCount,
+  onGenerationFailed,
   onGenerationStarted,
 }: UseStarterProjectGenerationOptions) {
   const [loadState, setLoadState] = useState<StarterProjectLoadState>({
@@ -37,6 +56,10 @@ export function useStarterProjectGeneration({
 
   const startGenerationRequest = useCallback(
     (request: StarterProjectRequest) => {
+      if (generationSource === "phaser-fixture") {
+        return;
+      }
+
       onGenerationStarted();
       setGenerationStepIndex(0);
       setLoadState({ status: "loading" });
@@ -45,7 +68,7 @@ export function useStarterProjectGeneration({
         id: (currentRequest?.id ?? 0) + 1,
       }));
     },
-    [onGenerationStarted]
+    [generationSource, onGenerationStarted]
   );
 
   useEffect(() => {
@@ -68,18 +91,33 @@ export function useStarterProjectGeneration({
           controller.abort();
         }, GENERATION_TIMEOUT_MS);
 
-        const pack = await requestStarterProject(
-          activeGenerationRequest,
-          controller.signal
-        );
+        if (generationSource === "phaser-ai") {
+          const result = await requestTopDownSpecGeneration(
+            activeGenerationRequest,
+            controller.signal
+          );
 
-        setLoadState({
-          status: "success",
-          pack,
-        });
+          setLoadState({
+            status: "success",
+            source: "phaser-spec",
+            ...result,
+          });
+        } else {
+          const pack = await requestStarterProject(
+            activeGenerationRequest,
+            controller.signal
+          );
+
+          setLoadState({
+            status: "success",
+            source: "canvas-starter",
+            pack,
+          });
+        }
       } catch (error) {
         if (controller.signal.aborted) {
           if (didTimeOut) {
+            onGenerationFailed?.();
             setLoadState({
               status: "error",
               message:
@@ -94,10 +132,16 @@ export function useStarterProjectGeneration({
           error instanceof Error
             ? error.message
             : "Generated game creation failed.";
+        const validationFailure =
+          error instanceof SpecGenerationClientError
+            ? error.validationFailure
+            : undefined;
 
+        onGenerationFailed?.();
         setLoadState({
           status: "error",
           message,
+          ...(validationFailure ? { validationFailure } : {}),
         });
       } finally {
         if (timeoutId !== undefined) {
@@ -109,7 +153,7 @@ export function useStarterProjectGeneration({
     void loadStarterProject();
 
     return () => controller.abort();
-  }, [generationRequest]);
+  }, [generationRequest, generationSource, onGenerationFailed]);
 
   useEffect(() => {
     if (loadState.status !== "loading") {

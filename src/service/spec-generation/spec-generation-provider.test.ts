@@ -10,6 +10,7 @@ import {
   topDownGameSpecJsonSchema,
 } from "./spec-generation-schema";
 import { TOP_DOWN_SPEC_GENERATION_GUIDE } from "./spec-generation-guide";
+import { SpecGenerationProviderError } from "./spec-generation-service";
 
 describe("Spec Generation provider request", () => {
   afterEach(() => {
@@ -195,5 +196,48 @@ describe("Spec Generation provider request", () => {
         taskRoute: "spec_generation.primary",
       })
     ).rejects.toThrow("Model rejected the request.");
+  });
+
+  it("preserves structured OpenAI error details for route debugging", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            error: {
+              message: "Invalid schema for response_format.",
+              type: "invalid_request_error",
+              code: "invalid_json_schema",
+              param: "tools[0].parameters",
+            },
+          },
+          {
+            headers: {
+              "x-request-id": "req_debug_123",
+            },
+            status: 400,
+          }
+        )
+      )
+    );
+
+    await expect(
+      requestTopDownGameSpecFromProvider({
+        prompt: "Make a tiny top-down collection game.",
+        model: "gpt-5.4-mini",
+        providerCredential: "sk-test",
+        taskRoute: "spec_generation.primary",
+      })
+    ).rejects.toMatchObject({
+      details: {
+        code: "invalid_json_schema",
+        message: "Invalid schema for response_format.",
+        param: "tools[0].parameters",
+        provider: "openai",
+        requestId: "req_debug_123",
+        status: 400,
+        type: "invalid_request_error",
+      },
+    } satisfies Partial<SpecGenerationProviderError>);
   });
 });

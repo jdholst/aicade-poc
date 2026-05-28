@@ -4,6 +4,7 @@ import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
 import {
   createFirstPlayableValidationFailureSurface,
   createGameSpecValidationFailureSurface,
+  createSpecGenerationValidationFailureSurface,
   type ValidationFailureSurfaceViewModel,
 } from "./editor-validation-failure-surface";
 import {
@@ -26,13 +27,18 @@ export type EditorRuntimePrimarySurface =
       type: "loading";
     }
   | {
-      type: "canvas-initial";
+      description: string;
+      eyebrow: string;
+      surfaceLabel: string;
+      title: string;
+      type: "initial";
     }
   | {
       message: string;
       type: "generation-error";
     }
   | {
+      canRegenerate?: boolean;
       failure: ValidationFailureSurfaceViewModel;
       type: "phaser-validation-error";
     }
@@ -59,6 +65,18 @@ type CreateEditorRuntimePanelViewModelInput = {
   canvas: EditorGameCanvasSession;
   firstPlayableValidationAttempt?: FirstPlayableValidationAttempt | null;
   runtimeTemplate: EditorRuntimeTemplatePlan;
+};
+
+const initialRuntimeSurface: Extract<
+  EditorRuntimePrimarySurface,
+  { type: "initial" }
+> = {
+  description:
+    "Build from the prompt to create and mount the game runtime in an isolated sandbox.",
+  eyebrow: "First magic moment",
+  surfaceLabel: "Generated runtime",
+  title: "The generated game will boot here.",
+  type: "initial",
 };
 
 export function createEditorRuntimePanelViewModel({
@@ -108,6 +126,17 @@ function createEditorRuntimePrimarySurface({
   }
 
   if (loadState.status === "error") {
+    if (loadState.validationFailure) {
+      return {
+        canRegenerate: true,
+        failure: createSpecGenerationValidationFailureSurface({
+          message: loadState.message,
+          validationFailure: loadState.validationFailure,
+        }),
+        type: "phaser-validation-error",
+      };
+    }
+
     return {
       message: loadState.message,
       type: "generation-error",
@@ -115,7 +144,7 @@ function createEditorRuntimePrimarySurface({
   }
 
   if (runtimeTemplate.type === "canvas") {
-    if (loadState.status === "success") {
+    if (loadState.status === "success" && loadState.source === "canvas-starter") {
       return {
         host: createCanvasRuntimeHostViewModel({
           gameResetNonce,
@@ -126,7 +155,13 @@ function createEditorRuntimePrimarySurface({
     }
 
     return {
-      type: "canvas-initial",
+      ...initialRuntimeSurface,
+    };
+  }
+
+  if (runtimeTemplate.type === "phaser-pending-generation") {
+    return {
+      ...initialRuntimeSurface,
     };
   }
 

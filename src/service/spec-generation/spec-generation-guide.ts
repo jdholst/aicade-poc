@@ -18,6 +18,12 @@ export const TOP_DOWN_SPEC_GENERATION_GUIDE = [
   `Use only these mechanics: ${allowedMechanicList}. Include player_movement and pickup_collection, plus at most one early variation mechanic.`,
   "Use template placeholder assets only; do not generate asset packs, tilemaps, Phaser source, or GDD prose.",
   "Do not include unsupported fields, unsupported mechanics, unresolved references, or behavior outside the current mechanic registry.",
+  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by setting every objective's `primary` field to `false`. Do not break JSON shape or omit required fields.",
+  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by assigning at least one mechanic an `entityIds` reference that does not exist in the `entities` array. Do not break JSON shape or omit required fields.",
+  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by creating a validation goal whose target entity ID does not exist in the `entities` array. Do not break JSON shape or omit required fields.",
+  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by placing the player spawn outside the arena bounds. Do not break JSON shape or omit required fields.",
+  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by defining two objectives with `primary: true`. Do not break JSON shape or omit required fields.",
+  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by assigning a mechanic type to an entity role it does not support, such as applying player movement to a collectible or obstacle entity. Do not break JSON shape or omit required fields."
 ].join("\n");
 
 export function createTopDownSpecGenerationSystemPrompt({
@@ -50,7 +56,7 @@ Reference rules:
 - The player spawn zone must reference the player entity.
 - Mechanic entityIds must reference entities only: actors, participants, controlled objects, or objects directly affected by the behavior.
 - Mechanic assetIds must reference assets only: visual/content assets the behavior places, collects, displays, scores, or otherwise uses.
-- Pickup collection must reference a pickup asset that is placed in a pickup zone.
+- Pickup collection must reference a pickup asset that is placed in a pickup zone. The zone area should cover a big portion of the arena.
 - The spec must include originalPrompt exactly matching the creator prompt above.
 
 Return the TopDownGameSpec through the provided tool.

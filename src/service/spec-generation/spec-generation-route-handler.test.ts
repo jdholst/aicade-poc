@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
 
 import { createSpecGenerationPostHandler } from "./spec-generation-route-handler";
+import { SpecGenerationProviderError } from "./spec-generation-service";
 
 describe("Spec Generation API route contract", () => {
   it("returns a validated spec response from a stubbed provider", async () => {
@@ -222,6 +223,47 @@ describe("Spec Generation API route contract", () => {
       validationIssues: [],
       taskRoute: "spec_generation.primary",
       attemptCount: 1,
+    });
+  });
+
+  it("includes downstream OpenAI debug details on development 502 responses", async () => {
+    const post = createSpecGenerationPostHandler({
+      env: {},
+      includeDebugCandidate: true,
+      provider: async () => {
+        throw new SpecGenerationProviderError("OpenAI rejected the request.", {
+          code: "invalid_json_schema",
+          message: "OpenAI rejected the request.",
+          param: "tools[0].parameters",
+          provider: "openai",
+          requestId: "req_debug_123",
+          status: 400,
+          type: "invalid_request_error",
+        });
+      },
+    });
+
+    const response = await post(
+      jsonRequest({
+        enteredPrompt: "Make a tiny top-down collection game.",
+        openAiApiKey: "sk-test",
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(payload).toMatchObject({
+      ok: false,
+      stage: "model_generation",
+      debugProviderError: {
+        code: "invalid_json_schema",
+        message: "OpenAI rejected the request.",
+        param: "tools[0].parameters",
+        provider: "openai",
+        requestId: "req_debug_123",
+        status: 400,
+        type: "invalid_request_error",
+      },
     });
   });
 });

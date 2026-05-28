@@ -6,9 +6,13 @@ import type {
 } from "@/game-spec";
 import { parseTopDownGameSpec as parseSavedTopDownGameSpec } from "@/game-spec";
 import type {
+  EditorGenerationSource,
   EditorRuntimeMode,
 } from "@/runtime/editor-runtime-mode";
-import { getEditorRuntimeMode } from "@/runtime/editor-runtime-mode";
+import {
+  getEditorGenerationSource,
+  getEditorRuntimeMode,
+} from "@/runtime/editor-runtime-mode";
 import {
   createTopDownPhaserTemplate,
   getTopDownPhaserTemplateState,
@@ -44,6 +48,10 @@ export type EditorRuntimeTemplatePlan =
     }
   | {
       firstPlayableValidationSource: null;
+      type: "phaser-pending-generation";
+    }
+  | {
+      firstPlayableValidationSource: null;
       issues: GameSpecValidationIssue[];
       message: string;
       type: "phaser-invalid";
@@ -56,16 +64,21 @@ export type EditorRuntimeTemplatePlan =
     };
 
 type CreateEditorRuntimeTemplatePlanInput = {
+  generationSource?: EditorGenerationSource;
   phaserTemplateState?: TopDownPhaserTemplateState;
   restoredGamePack?: GamePack | null;
   runtimeMode?: EditorRuntimeMode;
 };
 
 export function createEditorRuntimeTemplatePlan({
+  generationSource,
   phaserTemplateState = getTopDownPhaserTemplateState(),
   restoredGamePack = null,
   runtimeMode = getEditorRuntimeMode(),
 }: CreateEditorRuntimeTemplatePlanInput = {}): EditorRuntimeTemplatePlan {
+  const resolvedGenerationSource =
+    generationSource ?? getEditorGenerationSource(runtimeMode);
+
   if (runtimeMode === "canvas2d") {
     return {
       firstPlayableValidationSource: null,
@@ -75,6 +88,13 @@ export function createEditorRuntimeTemplatePlan({
 
   if (restoredGamePack) {
     return createRestoredGamePackRuntimeTemplatePlan(restoredGamePack);
+  }
+
+  if (resolvedGenerationSource === "phaser-ai") {
+    return {
+      firstPlayableValidationSource: null,
+      type: "phaser-pending-generation",
+    };
   }
 
   if (phaserTemplateState.status === "invalid") {

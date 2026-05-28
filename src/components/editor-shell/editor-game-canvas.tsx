@@ -158,8 +158,15 @@ function renderRuntimePrimarySurface({
     return <LoadingRuntimeScreen stage={surface.stage} />;
   }
 
-  if (surface.type === "canvas-initial") {
-    return <InitialRuntimeScreen />;
+  if (surface.type === "initial") {
+    return (
+      <InitialRuntimeScreen
+        description={surface.description}
+        eyebrow={surface.eyebrow}
+        surfaceLabel={surface.surfaceLabel}
+        title={surface.title}
+      />
+    );
   }
 
   if (surface.type === "generation-error") {
@@ -172,7 +179,13 @@ function renderRuntimePrimarySurface({
   }
 
   if (surface.type === "phaser-validation-error") {
-    return <GameSpecValidationErrorScreen message={surface.failure.summary} />;
+    return (
+      <GameSpecValidationErrorScreen
+        debugReceipts={surface.failure.debugReceipts}
+        message={surface.failure.summary}
+        onRegenerate={surface.canRegenerate ? onRegenerate : undefined}
+      />
+    );
   }
 
   if (surface.type === "first-playable-validation-error") {

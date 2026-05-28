@@ -19,6 +19,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
 
   it("resolves a valid Phaser template with a first-playable validation source", () => {
     const plan = createEditorRuntimeTemplatePlan({
+      generationSource: "phaser-fixture",
       phaserTemplateState: {
         status: "valid",
         template: topDownPhaserTemplate,
@@ -45,6 +46,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
 
   it("resolves invalid Phaser templates without a validation source", () => {
     const plan = createEditorRuntimeTemplatePlan({
+      generationSource: "phaser-fixture",
       phaserTemplateState: {
         status: "invalid",
         issues: [
@@ -77,6 +79,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
     });
 
     const plan = createEditorRuntimeTemplatePlan({
+      generationSource: "phaser-ai",
       restoredGamePack,
       runtimeMode: "phaser",
     });
@@ -94,6 +97,18 @@ describe("createEditorRuntimeTemplatePlan", () => {
         title: topDownPhaserTemplate.title,
       },
       type: "phaser-valid",
+    });
+  });
+
+  it("does not mount a fixture while Phaser AI generation is still idle", () => {
+    expect(
+      createEditorRuntimeTemplatePlan({
+        generationSource: "phaser-ai",
+        runtimeMode: "phaser",
+      })
+    ).toEqual({
+      firstPlayableValidationSource: null,
+      type: "phaser-pending-generation",
     });
   });
 });

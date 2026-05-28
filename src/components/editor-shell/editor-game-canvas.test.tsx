@@ -93,8 +93,9 @@ function createCanvasSession(
     gameResetNonce: 0,
     gameStatus: {
       state: "loading",
-      message: "Ready to build starter game.",
+      message: "Ready to build project.",
     },
+    generationSource: "phaser-fixture",
     isGamePaused: false,
     loadState: {
       status: "idle",
@@ -124,7 +125,7 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.getByText("Phaser runtime")).toBeVisible();
     expect(
-      screen.queryByText("The generated game module will boot here.")
+      screen.queryByText("The generated game will boot here.")
     ).not.toBeInTheDocument();
   });
 
@@ -396,7 +397,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "loading",
-            message: "Booting Phaser runtime...",
+            message: "Booting runtime...",
           },
         })}
       />
@@ -416,13 +417,14 @@ describe("EditorGameCanvas", () => {
     );
 
     expect(
-      screen.getByText("The generated game module will boot here.")
+      screen.getByText("The generated game will boot here.")
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Build a starter game to mount the canvas runtime in an isolated iframe."
+        "Build from the prompt to create and mount the game runtime in an isolated sandbox."
       )
     ).toBeVisible();
+    expect(screen.getByText("Generated runtime")).toBeVisible();
     expect(screen.getByText("Ready")).toBeVisible();
     expect(screen.getByText("Runtime controls")).toBeVisible();
     expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
@@ -438,6 +440,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           loadState: {
             status: "success",
+            source: "canvas-starter",
             pack,
           },
         })}
@@ -460,7 +463,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "ready",
-            message: "Phaser runtime is running in the sandbox.",
+            message: "Runtime is running in the sandbox.",
           },
         })}
       />
@@ -523,7 +526,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "ready",
-            message: "Phaser runtime is running in the sandbox.",
+            message: "Runtime is running in the sandbox.",
           },
           runtimeWarnings: [
             {
@@ -575,7 +578,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "ready",
-            message: "Phaser runtime is running in the sandbox.",
+            message: "Runtime is running in the sandbox.",
           },
           runtimeWarnings: [
             {
@@ -663,6 +666,57 @@ describe("EditorGameCanvas", () => {
     expect(onRegenerate).toHaveBeenCalledTimes(1);
   });
 
+  it("shows Spec Generation validation details when generated output is rejected", () => {
+    const onRegenerate = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onRegenerate })}
+        canvas={createCanvasSession({
+          loadState: {
+            status: "error",
+            message: "I designed a game plan, but it needs a clearer pickup goal.",
+            validationFailure: {
+              attemptCount: 1,
+              issues: [
+                {
+                  path: "mechanics.mechanic_pickup_collection.assetIds",
+                  message: "Expected asset role \"pickup\".",
+                },
+              ],
+              stage: "mechanic_validation",
+              taskRoute: "spec_generation.primary",
+            },
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText("Game Spec validation failed")).toBeVisible();
+    expect(screen.getByText("The runtime was not started.")).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "I designed a game plan, but it needs a clearer pickup goal."
+      )[0]
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        'mechanics.mechanic_pickup_collection.assetIds: Expected asset role "pickup".'
+      )
+    ).toBeVisible();
+    expect(screen.getByText("mechanic_validation")).toBeVisible();
+    expect(screen.getByLabelText("Validation details")).toHaveClass(
+      "overflow-y-auto"
+    );
+    expect(screen.getByLabelText("Validation actions")).toHaveClass(
+      "shrink-0"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+
   it("shows Phaser Game Spec validation errors without crashing the editor", async () => {
     vi.resetModules();
     vi.doMock("@/runtime/phaser", () => ({
@@ -694,9 +748,9 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByText("Game Spec validation failed")).toBeVisible();
     expect(screen.getByText("The runtime was not started.")).toBeVisible();
     expect(
-      screen.getByText(
+      screen.getAllByText(
         'mechanics.mechanic_player_movement.entityIds: Expected target role "player".'
-      )
+      )[0]
     ).toBeVisible();
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });

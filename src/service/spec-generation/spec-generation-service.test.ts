@@ -4,6 +4,7 @@ import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-g
 
 import {
   generateTopDownGameSpec,
+  SpecGenerationProviderError,
   type SpecGenerationFailureStage,
 } from "./spec-generation-service";
 
@@ -183,6 +184,38 @@ describe("Spec Generation service contract", () => {
       validationIssues: [],
       taskRoute: "spec_generation.primary",
       attemptCount: 1,
+    });
+  });
+
+  it("adds provider debug details to model-generation failures when enabled", async () => {
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => {
+        throw new SpecGenerationProviderError("OpenAI rejected the request.", {
+          code: "invalid_json_schema",
+          message: "OpenAI rejected the request.",
+          provider: "openai",
+          requestId: "req_debug_123",
+          status: 400,
+          type: "invalid_request_error",
+        });
+      },
+      includeDebugCandidate: true,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      stage: "model_generation",
+      debugProviderError: {
+        code: "invalid_json_schema",
+        message: "OpenAI rejected the request.",
+        provider: "openai",
+        requestId: "req_debug_123",
+        status: 400,
+        type: "invalid_request_error",
+      },
     });
   });
 });

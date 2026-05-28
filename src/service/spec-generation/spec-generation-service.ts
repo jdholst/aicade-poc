@@ -22,6 +22,26 @@ export type SpecGenerationIssue = GameSpecValidationIssue & {
   code?: string;
 };
 
+export type SpecGenerationProviderErrorDetails = {
+  code?: string;
+  message: string;
+  param?: string;
+  provider: "openai";
+  requestId?: string;
+  status?: number;
+  type?: string;
+};
+
+export class SpecGenerationProviderError extends Error {
+  readonly details: SpecGenerationProviderErrorDetails;
+
+  constructor(message: string, details: SpecGenerationProviderErrorDetails) {
+    super(message);
+    this.name = "SpecGenerationProviderError";
+    this.details = details;
+  }
+}
+
 export type SpecGenerationSuccessResult = {
   ok: true;
   spec: TopDownGameSpec;
@@ -40,6 +60,7 @@ export type SpecGenerationFailureResult = {
   taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
   attemptCount: number;
   debugCandidate?: unknown;
+  debugProviderError?: SpecGenerationProviderErrorDetails;
 };
 
 export type SpecGenerationResult =
@@ -82,13 +103,17 @@ export async function generateTopDownGameSpec({
       providerCredential,
       taskRoute: SPEC_GENERATION_TASK_ROUTE,
     });
-  } catch {
+  } catch (error) {
     return createFailureResult({
       stage: "model_generation",
       userMessage:
         "I couldn't design a game plan from that prompt. Please try again.",
       validationIssues: [],
       attemptCount,
+      debugProviderError:
+        includeDebugCandidate && error instanceof SpecGenerationProviderError
+          ? error.details
+          : undefined,
     });
   }
 
@@ -120,12 +145,14 @@ function createFailureResult({
   validationIssues,
   attemptCount,
   debugCandidate,
+  debugProviderError,
 }: {
   stage: SpecGenerationFailureStage;
   userMessage: string;
   validationIssues: SpecGenerationIssue[];
   attemptCount: number;
   debugCandidate?: unknown;
+  debugProviderError?: SpecGenerationProviderErrorDetails;
 }): SpecGenerationFailureResult {
   return {
     ok: false,
@@ -135,6 +162,7 @@ function createFailureResult({
     taskRoute: SPEC_GENERATION_TASK_ROUTE,
     attemptCount,
     ...(debugCandidate === undefined ? {} : { debugCandidate }),
+    ...(debugProviderError === undefined ? {} : { debugProviderError }),
   };
 }
 

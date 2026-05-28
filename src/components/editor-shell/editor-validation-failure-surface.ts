@@ -3,6 +3,7 @@ import type {
   GameSpecValidationIssue,
   ValidationEvidence,
 } from "@/game-spec";
+import type { SpecGenerationValidationFailure } from "@/service/spec-generation/spec-generation-client";
 
 export type ValidationFailureReceiptViewModel = {
   checkId: string;
@@ -60,6 +61,38 @@ export function createGameSpecValidationFailureSurface({
             ? JSON.stringify({ issues }, null, 2)
             : null,
         issueMessages: issues.map((issue) => issue.message),
+        message,
+        stage: "spec-validation",
+        status: "failed",
+      },
+    ],
+    summary: message,
+  };
+}
+
+export function createSpecGenerationValidationFailureSurface({
+  message,
+  validationFailure,
+}: {
+  message: string;
+  validationFailure: SpecGenerationValidationFailure;
+}): ValidationFailureSurfaceViewModel {
+  return {
+    debugReceipts: [
+      {
+        checkId: validationFailure.stage,
+        evidenceJson: JSON.stringify(
+          {
+            attemptCount: validationFailure.attemptCount,
+            issues: validationFailure.issues,
+            taskRoute: validationFailure.taskRoute,
+          },
+          null,
+          2
+        ),
+        issueMessages: validationFailure.issues.map(
+          (issue) => `${issue.path}: ${issue.message}`
+        ),
         message,
         stage: "spec-validation",
         status: "failed",

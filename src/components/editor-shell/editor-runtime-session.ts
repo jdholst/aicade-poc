@@ -42,6 +42,10 @@ export function useEditorRuntimeSession({
   onGameStatusChange,
 }: UseEditorRuntimeSessionInput): EditorRuntimeSession {
   const { gameResetNonce, loadState } = canvas;
+  const generatedGamePack =
+    loadState.status === "success" && loadState.source === "phaser-spec"
+      ? loadState.gamePack
+      : null;
   const lastPersistedGamePackKeyRef = useRef<string | null>(null);
   const {
     loadStatus: gamePackPersistenceStatus,
@@ -53,9 +57,10 @@ export function useEditorRuntimeSession({
   const runtimeTemplate = useMemo(
     () =>
       createEditorRuntimeTemplatePlan({
-        restoredGamePack,
+        generationSource: canvas.generationSource,
+        restoredGamePack: generatedGamePack ?? restoredGamePack,
       }),
-    [restoredGamePack]
+    [canvas.generationSource, generatedGamePack, restoredGamePack]
   );
   const {
     firstPlayableGamePack,
