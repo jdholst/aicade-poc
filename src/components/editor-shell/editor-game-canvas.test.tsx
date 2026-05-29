@@ -656,7 +656,10 @@ describe("EditorGameCanvas", () => {
     expect(
       screen.getByText("The runtime could not be prepared.")
     ).toBeVisible();
-    expect(screen.getByText("Generated game creation failed.")).toBeVisible();
+    expect(
+      screen.getAllByText("Generated game creation failed.")[0]
+    ).toBeVisible();
+    expect(screen.getByText("generation_request")).toBeVisible();
     expect(screen.getByText("Runtime controls")).toBeVisible();
     expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reset game" })).toBeDisabled();
@@ -704,7 +707,7 @@ describe("EditorGameCanvas", () => {
         'mechanics.mechanic_pickup_collection.assetIds: Expected asset role "pickup".'
       )
     ).toBeVisible();
-    expect(screen.getByText("mechanic_validation")).toBeVisible();
+    expect(screen.getAllByText("mechanic_validation")[0]).toBeVisible();
     expect(screen.getByLabelText("Validation details")).toHaveClass(
       "overflow-y-auto"
     );

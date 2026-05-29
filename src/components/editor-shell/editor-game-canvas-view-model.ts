@@ -2,11 +2,11 @@ import type { FirstPlayableValidationAttempt } from "@/game-spec";
 import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
 
 import {
-  createFirstPlayableValidationFailureSurface,
-  createGameSpecValidationFailureSurface,
-  createSpecGenerationValidationFailureSurface,
-  type ValidationFailureSurfaceViewModel,
-} from "./editor-validation-failure-surface";
+  createFirstPlayableFailureReceiptSurface,
+  createGameSpecFailureReceiptSurface,
+  createGenerationFailureReceiptSurface,
+  type FailureReceiptSurfaceViewModel,
+} from "./editor-failure-receipt";
 import {
   createCanvasRuntimeHostViewModel,
   createPhaserRuntimeHostViewModel,
@@ -34,16 +34,16 @@ export type EditorRuntimePrimarySurface =
       type: "initial";
     }
   | {
-      message: string;
+      failure: FailureReceiptSurfaceViewModel;
       type: "generation-error";
     }
   | {
       canRegenerate?: boolean;
-      failure: ValidationFailureSurfaceViewModel;
+      failure: FailureReceiptSurfaceViewModel;
       type: "phaser-validation-error";
     }
   | {
-      failure: ValidationFailureSurfaceViewModel;
+      failure: FailureReceiptSurfaceViewModel;
       type: "first-playable-validation-error";
     }
   | {
@@ -116,7 +116,7 @@ function createEditorRuntimePrimarySurface({
 }: CreateEditorRuntimePanelViewModelInput): EditorRuntimePrimarySurface {
   const { currentGenerationStage, gameResetNonce, loadState } = canvas;
   const firstPlayableValidationFailure =
-    createFirstPlayableValidationFailureSurface(firstPlayableValidationAttempt);
+    createFirstPlayableFailureReceiptSurface(firstPlayableValidationAttempt);
 
   if (loadState.status === "loading") {
     return {
@@ -126,19 +126,21 @@ function createEditorRuntimePrimarySurface({
   }
 
   if (loadState.status === "error") {
+    const failure = createGenerationFailureReceiptSurface({
+      message: loadState.message,
+      validationFailure: loadState.validationFailure,
+    });
+
     if (loadState.validationFailure) {
       return {
         canRegenerate: true,
-        failure: createSpecGenerationValidationFailureSurface({
-          message: loadState.message,
-          validationFailure: loadState.validationFailure,
-        }),
+        failure,
         type: "phaser-validation-error",
       };
     }
 
     return {
-      message: loadState.message,
+      failure,
       type: "generation-error",
     };
   }
@@ -167,7 +169,7 @@ function createEditorRuntimePrimarySurface({
 
   if (runtimeTemplate.type === "phaser-invalid") {
     return {
-      failure: createGameSpecValidationFailureSurface({
+      failure: createGameSpecFailureReceiptSurface({
         issues: runtimeTemplate.issues,
         message: runtimeTemplate.message,
       }),

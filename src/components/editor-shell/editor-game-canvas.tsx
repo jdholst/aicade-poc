@@ -25,7 +25,6 @@ import {
   GameSpecValidationErrorScreen,
   InitialRuntimeScreen,
   LoadingRuntimeScreen,
-  RuntimeErrorScreen,
 } from "./editor-runtime-screens";
 import { RuntimeWarningPanel } from "./editor-runtime-warning-panel";
 
@@ -171,9 +170,13 @@ function renderRuntimePrimarySurface({
 
   if (surface.type === "generation-error") {
     return (
-      <RuntimeErrorScreen
-        message={surface.message}
+      <GameSpecValidationErrorScreen
+        debugReceipts={surface.failure.debugReceipts}
+        eyebrow="Generation stopped"
+        message={surface.failure.summary}
         onRegenerate={onRegenerate}
+        statusLabel="Generation stopped"
+        title="The runtime could not be prepared."
       />
     );
   }

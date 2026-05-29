@@ -322,7 +322,19 @@ describe("createEditorRuntimePanelViewModel", () => {
       type: "runtime-host",
     });
     expect(errorViewModel.primarySurface).toEqual({
-      message: "Generated game creation failed.",
+      failure: {
+        debugReceipts: [
+          {
+            checkId: "generation_request",
+            evidenceJson: null,
+            issueMessages: [],
+            message: "Generated game creation failed.",
+            stage: "model_generation",
+            status: "failed",
+          },
+        ],
+        summary: "Generated game creation failed.",
+      },
       type: "generation-error",
     });
     expect(successViewModel.canPauseRuntime).toBe(true);

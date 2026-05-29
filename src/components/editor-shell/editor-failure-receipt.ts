@@ -3,25 +3,61 @@ import type {
   GameSpecValidationIssue,
   ValidationEvidence,
 } from "@/game-spec";
-import type { SpecGenerationValidationFailure } from "@/service/spec-generation/spec-generation-client";
+import type {
+  SpecGenerationFailureStage,
+  SpecGenerationValidationFailure,
+} from "@/service/spec-generation";
 
-export type ValidationFailureReceiptViewModel = {
+export type FailureReceiptStage =
+  | ValidationEvidence["stage"]
+  | SpecGenerationFailureStage;
+
+export type FailureReceiptViewModel = {
   checkId: string;
   evidenceJson: string | null;
   issueMessages: string[];
   message: string;
-  stage: ValidationEvidence["stage"];
+  stage: FailureReceiptStage;
   status: ValidationEvidence["status"];
 };
 
-export type ValidationFailureSurfaceViewModel = {
-  debugReceipts: ValidationFailureReceiptViewModel[];
+export type FailureReceiptSurfaceViewModel = {
+  debugReceipts: FailureReceiptViewModel[];
   summary: string;
 };
 
-export function createFirstPlayableValidationFailureSurface(
+export function createGenerationFailureReceiptSurface({
+  message,
+  validationFailure,
+}: {
+  message: string;
+  validationFailure?: SpecGenerationValidationFailure;
+}): FailureReceiptSurfaceViewModel {
+  if (validationFailure) {
+    return createSpecGenerationValidationFailureReceiptSurface({
+      message,
+      validationFailure,
+    });
+  }
+
+  return {
+    debugReceipts: [
+      {
+        checkId: "generation_request",
+        evidenceJson: null,
+        issueMessages: [],
+        message,
+        stage: "model_generation",
+        status: "failed",
+      },
+    ],
+    summary: message,
+  };
+}
+
+export function createFirstPlayableFailureReceiptSurface(
   attempt: FirstPlayableValidationAttempt | null
-): ValidationFailureSurfaceViewModel | null {
+): FailureReceiptSurfaceViewModel | null {
   if (!attempt?.shouldBlockPlayable) {
     return null;
   }
@@ -31,7 +67,7 @@ export function createFirstPlayableValidationFailureSurface(
   );
   const debugReceipts = (
     failedReceipts.length > 0 ? failedReceipts : attempt.evidence
-  ).map(createValidationFailureReceiptViewModel);
+  ).map(createValidationEvidenceReceiptViewModel);
   const primaryReceipt = debugReceipts[0] ?? null;
   const primaryIssueMessage = primaryReceipt?.issueMessages[0];
 
@@ -45,21 +81,19 @@ export function createFirstPlayableValidationFailureSurface(
   };
 }
 
-export function createGameSpecValidationFailureSurface({
+export function createGameSpecFailureReceiptSurface({
   issues,
   message,
 }: {
   issues: GameSpecValidationIssue[];
   message: string;
-}): ValidationFailureSurfaceViewModel {
+}): FailureReceiptSurfaceViewModel {
   return {
     debugReceipts: [
       {
         checkId: "game_spec_validation",
         evidenceJson:
-          issues.length > 0
-            ? JSON.stringify({ issues }, null, 2)
-            : null,
+          issues.length > 0 ? JSON.stringify({ issues }, null, 2) : null,
         issueMessages: issues.map((issue) => issue.message),
         message,
         stage: "spec-validation",
@@ -70,13 +104,13 @@ export function createGameSpecValidationFailureSurface({
   };
 }
 
-export function createSpecGenerationValidationFailureSurface({
+function createSpecGenerationValidationFailureReceiptSurface({
   message,
   validationFailure,
 }: {
   message: string;
   validationFailure: SpecGenerationValidationFailure;
-}): ValidationFailureSurfaceViewModel {
+}): FailureReceiptSurfaceViewModel {
   return {
     debugReceipts: [
       {
@@ -94,7 +128,7 @@ export function createSpecGenerationValidationFailureSurface({
           (issue) => `${issue.path}: ${issue.message}`
         ),
         message,
-        stage: "spec-validation",
+        stage: validationFailure.stage,
         status: "failed",
       },
     ],
@@ -102,16 +136,15 @@ export function createSpecGenerationValidationFailureSurface({
   };
 }
 
-function createValidationFailureReceiptViewModel(
+function createValidationEvidenceReceiptViewModel(
   receipt: ValidationEvidence
-): ValidationFailureReceiptViewModel {
+): FailureReceiptViewModel {
   return {
     checkId: receipt.checkId,
     evidenceJson: receipt.evidence
       ? JSON.stringify(receipt.evidence, null, 2)
       : null,
-    issueMessages:
-      receipt.issues?.map((issue) => issue.message) ?? [],
+    issueMessages: receipt.issues?.map((issue) => issue.message) ?? [],
     message: receipt.message ?? "Validation receipt did not include a message.",
     stage: receipt.stage,
     status: receipt.status,

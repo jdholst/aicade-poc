@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { EditorGenerationStage } from "@/hooks/use-editor-session";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
-import type { ValidationFailureReceiptViewModel } from "./editor-validation-failure-surface";
+import type { FailureReceiptViewModel } from "./editor-failure-receipt";
 
 function RuntimeScreenShell({
   children,
@@ -142,16 +142,18 @@ export function GameSpecValidationErrorScreen({
   eyebrow = "Game Spec validation failed",
   message,
   onRegenerate,
+  statusLabel = "Validation stopped",
   title = "The runtime was not started.",
 }: {
-  debugReceipts?: ValidationFailureReceiptViewModel[];
+  debugReceipts?: FailureReceiptViewModel[];
   eyebrow?: string;
   message: string;
   onRegenerate?: () => void;
+  statusLabel?: string;
   title?: string;
 }) {
   return (
-    <RuntimeScreenShell statusLabel="Validation stopped">
+    <RuntimeScreenShell statusLabel={statusLabel}>
       <div className="flex max-h-full min-h-0 w-full max-w-2xl flex-col">
         <div className="shrink-0 space-y-4 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#f1b7a3]/30 bg-[#9d4b31]/10">
@@ -207,7 +209,7 @@ export function FirstPlayableValidationBlockedScreen({
   onReset,
   summary,
 }: {
-  debugReceipts: ValidationFailureReceiptViewModel[];
+  debugReceipts: FailureReceiptViewModel[];
   onRegenerate: () => void;
   onReset: () => void;
   summary: string;
@@ -270,7 +272,7 @@ export function FirstPlayableValidationBlockedScreen({
 function ValidationReceiptDetail({
   receipt,
 }: {
-  receipt: ValidationFailureReceiptViewModel;
+  receipt: FailureReceiptViewModel;
 }) {
   return (
     <section className="space-y-3 border border-white/10 bg-white/[0.03] p-4">
