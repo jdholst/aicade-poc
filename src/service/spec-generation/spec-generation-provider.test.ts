@@ -83,6 +83,12 @@ describe("Spec Generation provider request", () => {
     expect(requestBody.instructions).toContain("TopDownGameSpec");
     expect(requestBody.instructions).toContain("template_top_down");
     expect(requestBody.instructions).toContain("Do not generate Phaser source");
+    expect(requestBody.instructions).not.toContain(
+      "TEMPORARY VALIDATION FAILURE TEST"
+    );
+    expect(requestBody.instructions).not.toContain(
+      "intentionally make semantic validation fail"
+    );
     expect(JSON.stringify(requestBody.tools[0].parameters)).toContain(
       "template_top_down"
     );

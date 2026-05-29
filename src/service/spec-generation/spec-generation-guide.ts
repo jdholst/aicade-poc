@@ -18,12 +18,6 @@ export const TOP_DOWN_SPEC_GENERATION_GUIDE = [
   `Use only these mechanics: ${allowedMechanicList}. Include player_movement and pickup_collection, plus at most one early variation mechanic.`,
   "Use template placeholder assets only; do not generate asset packs, tilemaps, Phaser source, or GDD prose.",
   "Do not include unsupported fields, unsupported mechanics, unresolved references, or behavior outside the current mechanic registry.",
-  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by setting every objective's `primary` field to `false`. Do not break JSON shape or omit required fields.",
-  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by assigning at least one mechanic an `entityIds` reference that does not exist in the `entities` array. Do not break JSON shape or omit required fields.",
-  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by creating a validation goal whose target entity ID does not exist in the `entities` array. Do not break JSON shape or omit required fields.",
-  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by placing the player spawn outside the arena bounds. Do not break JSON shape or omit required fields.",
-  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by defining two objectives with `primary: true`. Do not break JSON shape or omit required fields.",
-  // "(TEMPORARY VALIDATION FAILURE TEST) Return a schema-valid TopDownGameSpec, but intentionally make semantic validation fail by assigning a mechanic type to an entity role it does not support, such as applying player movement to a collectible or obstacle entity. Do not break JSON shape or omit required fields."
 ].join("\n");
 
 export function createTopDownSpecGenerationSystemPrompt({

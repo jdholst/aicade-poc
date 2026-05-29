@@ -1,4 +1,10 @@
+import { DEFAULT_OPENAI_MODEL } from "@/constants";
 import { DEFAULT_SPEC_GENERATION_PROMPT } from "./spec-generation-guide";
+import {
+  createDebugSpecGenerationProvider,
+  DEBUG_SPEC_GENERATION_FAILURE_ENV,
+  parseDebugGenerationFailureMode,
+} from "./debug-generation-provider";
 import {
   generateTopDownGameSpec,
   SPEC_GENERATION_TASK_ROUTE,
@@ -31,6 +37,9 @@ export function createSpecGenerationPostHandler({
 }: CreateSpecGenerationPostHandlerInput) {
   return async function POST(request: Request) {
     const requestBody = await parseRequestBody(request);
+    const debugFailureMode = parseDebugGenerationFailureMode(
+      env[DEBUG_SPEC_GENERATION_FAILURE_ENV]
+    );
 
     if (!requestBody.ok) {
       return jsonNoStore(
@@ -41,6 +50,35 @@ export function createSpecGenerationPostHandler({
         }),
         400
       );
+    }
+
+    const prompt = normalizeUserPrompt(
+      requestBody.body.enteredPrompt ?? requestBody.body.prompt
+    );
+
+    if (debugFailureMode && env.NODE_ENV === "production") {
+      return jsonNoStore(
+        createPreflightFailure({
+          userMessage:
+            "Debug Spec Generation failures are disabled in production.",
+          stage: "configuration",
+        }),
+        400
+      );
+    }
+
+    if (debugFailureMode && env.NODE_ENV !== "production") {
+      const result = await generateTopDownGameSpec({
+        prompt,
+        model: DEFAULT_OPENAI_MODEL,
+        providerCredential: "debug-generation",
+        provider: createDebugSpecGenerationProvider({
+          mode: debugFailureMode,
+        }),
+        includeDebugCandidate,
+      });
+
+      return jsonNoStore(result, getResultStatus(result));
     }
 
     const openAiConfigResult = resolveOpenAiGenerationConfig(
@@ -62,9 +100,6 @@ export function createSpecGenerationPostHandler({
       );
     }
 
-    const prompt = normalizeUserPrompt(
-      requestBody.body.enteredPrompt ?? requestBody.body.prompt
-    );
     const result = await generateTopDownGameSpec({
       prompt,
       model: openAiConfigResult.config.model,

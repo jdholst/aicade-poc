@@ -1,7 +1,12 @@
 import type { GameSpecMechanicEntry } from "../game-spec-schema";
 import { addMechanicContractIssues } from "../mechanics/mechanic-contract-validation";
 import { getTopDownMechanicDefinition } from "../mechanics/mechanic-registry";
-import type { TopDownGameSpec } from "../top-down-spec-schema";
+import type {
+  TopDownArena,
+  TopDownGameSpec,
+  TopDownScene,
+  TopDownSpawnZone,
+} from "../top-down-spec-schema";
 
 import {
   addReferences,
@@ -224,6 +229,7 @@ function addSceneReferenceIssues(
         context.entityIds,
         "entity"
       );
+      addPlayerSpawnBoundsIssue(issues, scene, spawnZone, context);
     }
 
     for (const pickupZone of scene.layout.pickupZones) {
@@ -236,4 +242,44 @@ function addSceneReferenceIssues(
       );
     }
   }
+}
+
+function addPlayerSpawnBoundsIssue(
+  issues: GameSpecValidationIssue[],
+  scene: TopDownScene,
+  spawnZone: TopDownSpawnZone,
+  context: TopDownValidationContext
+) {
+  if (
+    !spawnZoneReferencesPlayer(spawnZone, context) ||
+    rectIsInsideArena(spawnZone, scene.arena)
+  ) {
+    return;
+  }
+
+  issues.push({
+    path: `scenes.${scene.id}.layout.spawnZones.${spawnZone.id}`,
+    message: "Player spawn zone must stay inside the arena bounds.",
+  });
+}
+
+function spawnZoneReferencesPlayer(
+  spawnZone: TopDownSpawnZone,
+  context: TopDownValidationContext
+) {
+  return (spawnZone.entityIds ?? []).some(
+    (entityId) => context.entitiesById.get(entityId)?.role === "player"
+  );
+}
+
+function rectIsInsideArena(
+  rect: Pick<TopDownSpawnZone, "height" | "width" | "x" | "y">,
+  arena: TopDownArena
+) {
+  return (
+    rect.x >= 0 &&
+    rect.y >= 0 &&
+    rect.x + rect.width <= arena.width &&
+    rect.y + rect.height <= arena.height
+  );
 }

@@ -267,6 +267,38 @@ describe("Top-down Game Spec pre-runtime validation", () => {
     );
   });
 
+  it("rejects a player spawn zone outside the arena bounds", () => {
+    const scene = validTopDownGameSpec.template.config.scenes[0];
+
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      template: {
+        ...validTopDownGameSpec.template,
+        config: {
+          scenes: [
+            {
+              ...scene,
+              layout: {
+                ...scene.layout,
+                spawnZones: [
+                  {
+                    ...scene.layout.spawnZones[0],
+                    x: scene.arena.width + 1,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(issues).toContainEqual({
+      path: "scenes.scene_arena.layout.spawnZones.spawn_player",
+      message: "Player spawn zone must stay inside the arena bounds.",
+    });
+  });
+
   it("rejects unsupported active mechanic types before runtime binding", () => {
     expect(() =>
       validateTopDownGameSpec({
