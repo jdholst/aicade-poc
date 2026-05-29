@@ -14,15 +14,36 @@ import {
   type EditorRuntimeTemplatePlan,
 } from "./editor-runtime-template-plan";
 
-export type EditorRuntimePanelViewModel = {
-  canPauseRuntime: boolean;
-  canResetRuntime: boolean;
-  primarySurface: EditorRuntimePrimarySurface;
-  secondarySurfaces: EditorRuntimeSecondarySurface[];
+export type RuntimePresentationPlan = {
+  controls: RuntimePresentationControls;
+  primarySurface: RuntimePrimarySurface;
+  secondarySurfaces: RuntimeSecondarySurface[];
 };
 
-export type EditorRuntimePrimarySurface =
+export type RuntimePresentationControls = {
+  canPauseRuntime: boolean;
+  canResetRuntime: boolean;
+};
+
+export type RuntimePresentationAction = {
+  label: string;
+};
+
+export type RuntimePresentationScreenCopy = {
+  eyebrow: string;
+  statusLabel: string;
+  title: string;
+};
+
+export type RuntimeLoadingScreenCopy = {
+  eyebrow: string;
+  progressLabel: string;
+  statusLabel: string;
+};
+
+export type RuntimePrimarySurface =
   | {
+      screen: RuntimeLoadingScreenCopy;
       stage: EditorGameCanvasSession["currentGenerationStage"];
       type: "loading";
     }
@@ -35,15 +56,21 @@ export type EditorRuntimePrimarySurface =
     }
   | {
       failure: FailureReceiptSurfaceViewModel;
+      regenerateAction: RuntimePresentationAction;
+      screen: RuntimePresentationScreenCopy;
       type: "generation-error";
     }
   | {
-      canRegenerate?: boolean;
       failure: FailureReceiptSurfaceViewModel;
+      regenerateAction?: RuntimePresentationAction;
+      screen: RuntimePresentationScreenCopy;
       type: "phaser-validation-error";
     }
   | {
       failure: FailureReceiptSurfaceViewModel;
+      regenerateAction: RuntimePresentationAction;
+      resetAction: RuntimePresentationAction;
+      screen: RuntimePresentationScreenCopy;
       type: "first-playable-validation-error";
     }
   | {
@@ -51,7 +78,7 @@ export type EditorRuntimePrimarySurface =
       type: "runtime-host";
     };
 
-export type EditorRuntimeSecondarySurface =
+export type RuntimeSecondarySurface =
   | {
       message: string;
       type: "runtime-error-banner";
@@ -61,30 +88,60 @@ export type EditorRuntimeSecondarySurface =
       warnings: EditorGameCanvasSession["runtimeWarnings"];
     };
 
-type CreateEditorRuntimePanelViewModelInput = {
+type CreateRuntimePresentationPlanInput = {
   canvas: EditorGameCanvasSession;
   firstPlayableValidationAttempt?: FirstPlayableValidationAttempt | null;
   runtimeTemplate: EditorRuntimeTemplatePlan;
 };
 
-const initialRuntimeSurface: Extract<
-  EditorRuntimePrimarySurface,
-  { type: "initial" }
-> = {
-  description:
-    "Build from the prompt to create and mount the game runtime in an isolated sandbox.",
-  eyebrow: "First magic moment",
-  surfaceLabel: "Generated runtime",
-  title: "The generated game will boot here.",
-  type: "initial",
+const initialRuntimeSurface: Extract<RuntimePrimarySurface, { type: "initial" }> =
+  {
+    description:
+      "Build from the prompt to create and mount the game runtime in an isolated sandbox.",
+    eyebrow: "First magic moment",
+    surfaceLabel: "Generated runtime",
+    title: "The generated game will boot here.",
+    type: "initial",
+  };
+
+const loadingScreen: RuntimeLoadingScreenCopy = {
+  eyebrow: "Generating your game",
+  progressLabel: "AI is building the project",
+  statusLabel: "Generating",
 };
 
-export function createEditorRuntimePanelViewModel({
+const generationErrorScreen: RuntimePresentationScreenCopy = {
+  eyebrow: "Generation stopped",
+  statusLabel: "Generation stopped",
+  title: "The runtime could not be prepared.",
+};
+
+const validationErrorScreen: RuntimePresentationScreenCopy = {
+  eyebrow: "Game Spec validation failed",
+  statusLabel: "Validation stopped",
+  title: "The runtime was not started.",
+};
+
+const firstPlayableBlockedScreen: RuntimePresentationScreenCopy = {
+  eyebrow: "Draft blocked",
+  statusLabel: "Blocked",
+  title: "This draft is not playable yet.",
+};
+
+const tryAgainAction: RuntimePresentationAction = {
+  label: "Try again",
+};
+
+const startOverFromPromptAction: RuntimePresentationAction = {
+  label: "Start over from prompt",
+};
+
+export function createRuntimePresentationPlan({
   canvas,
   firstPlayableValidationAttempt = null,
   runtimeTemplate,
-}: CreateEditorRuntimePanelViewModelInput): EditorRuntimePanelViewModel {
-  const primarySurface = createEditorRuntimePrimarySurface({
+}: CreateRuntimePresentationPlanInput): RuntimePresentationPlan {
+  const primarySurface = createRuntimePrimarySurface({
     canvas,
     firstPlayableValidationAttempt,
     runtimeTemplate,
@@ -92,34 +149,37 @@ export function createEditorRuntimePanelViewModel({
   const hasMountedRuntime = primarySurface.type === "runtime-host";
 
   return {
-    canPauseRuntime:
-      hasMountedRuntime &&
-      (canvas.gameStatus.state === "ready" ||
-        canvas.gameStatus.state === "paused"),
-    canResetRuntime:
-      hasMountedRuntime &&
-      (canvas.gameStatus.state === "ready" ||
-        canvas.gameStatus.state === "paused" ||
-        canvas.gameStatus.state === "error"),
+    controls: {
+      canPauseRuntime:
+        hasMountedRuntime &&
+        (canvas.gameStatus.state === "ready" ||
+          canvas.gameStatus.state === "paused"),
+      canResetRuntime:
+        hasMountedRuntime &&
+        (canvas.gameStatus.state === "ready" ||
+          canvas.gameStatus.state === "paused" ||
+          canvas.gameStatus.state === "error"),
+    },
     primarySurface,
-    secondarySurfaces: createEditorRuntimeSecondarySurfaces({
+    secondarySurfaces: createRuntimeSecondarySurfaces({
       canvas,
       primarySurface,
     }),
   };
 }
 
-function createEditorRuntimePrimarySurface({
+function createRuntimePrimarySurface({
   canvas,
   firstPlayableValidationAttempt = null,
   runtimeTemplate,
-}: CreateEditorRuntimePanelViewModelInput): EditorRuntimePrimarySurface {
+}: CreateRuntimePresentationPlanInput): RuntimePrimarySurface {
   const { currentGenerationStage, gameResetNonce, loadState } = canvas;
   const firstPlayableValidationFailure =
     createFirstPlayableFailureReceiptSurface(firstPlayableValidationAttempt);
 
   if (loadState.status === "loading") {
     return {
+      screen: loadingScreen,
       stage: currentGenerationStage,
       type: "loading",
     };
@@ -133,14 +193,17 @@ function createEditorRuntimePrimarySurface({
 
     if (loadState.validationFailure) {
       return {
-        canRegenerate: true,
         failure,
+        regenerateAction: tryAgainAction,
+        screen: validationErrorScreen,
         type: "phaser-validation-error",
       };
     }
 
     return {
       failure,
+      regenerateAction: tryAgainAction,
+      screen: generationErrorScreen,
       type: "generation-error",
     };
   }
@@ -173,6 +236,7 @@ function createEditorRuntimePrimarySurface({
         issues: runtimeTemplate.issues,
         message: runtimeTemplate.message,
       }),
+      screen: validationErrorScreen,
       type: "phaser-validation-error",
     };
   }
@@ -180,6 +244,9 @@ function createEditorRuntimePrimarySurface({
   if (firstPlayableValidationFailure) {
     return {
       failure: firstPlayableValidationFailure,
+      regenerateAction: startOverFromPromptAction,
+      resetAction: tryAgainAction,
+      screen: firstPlayableBlockedScreen,
       type: "first-playable-validation-error",
     };
   }
@@ -193,18 +260,18 @@ function createEditorRuntimePrimarySurface({
   };
 }
 
-function createEditorRuntimeSecondarySurfaces({
+function createRuntimeSecondarySurfaces({
   canvas,
   primarySurface,
 }: {
   canvas: EditorGameCanvasSession;
-  primarySurface: EditorRuntimePrimarySurface;
-}): EditorRuntimeSecondarySurface[] {
+  primarySurface: RuntimePrimarySurface;
+}): RuntimeSecondarySurface[] {
   if (primarySurface.type !== "runtime-host") {
     return [];
   }
 
-  const secondarySurfaces: EditorRuntimeSecondarySurface[] = [];
+  const secondarySurfaces: RuntimeSecondarySurface[] = [];
 
   if (canvas.gameStatus.state === "error") {
     secondarySurfaces.push({

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import type { EditorGenerationStage } from "@/hooks/use-editor-session";
-import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
 import type { FailureReceiptViewModel } from "./editor-failure-receipt";
 
@@ -61,19 +60,25 @@ export function InitialRuntimeScreen({
 }
 
 export function LoadingRuntimeScreen({
+  progressLabel = "AI is building the project",
   stage,
+  statusLabel = "Generating",
+  title = "Generating your game",
 }: {
+  progressLabel?: string;
   stage: EditorGenerationStage;
+  statusLabel?: string;
+  title?: string;
 }) {
   return (
-    <RuntimeScreenShell statusLabel="Generating">
+    <RuntimeScreenShell statusLabel={statusLabel}>
       <div className="w-full max-w-xl space-y-6 px-4 text-center">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/5">
           <div className="h-12 w-12 rounded-full border-2 border-white/10 border-t-[#f6c46b] border-r-[#0f7f68] animate-spin" />
         </div>
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
-            Generating your game
+            {title}
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
             {stage.title}
@@ -92,46 +97,10 @@ export function LoadingRuntimeScreen({
             />
           </div>
           <div className="mt-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
-            <span>AI is building the project</span>
+            <span>{progressLabel}</span>
             <span>{stage.progress}%</span>
           </div>
         </div>
-      </div>
-    </RuntimeScreenShell>
-  );
-}
-
-export function RuntimeErrorScreen({
-  message,
-  onRegenerate,
-}: {
-  message: Extract<StarterProjectLoadState, { status: "error" }>["message"];
-  onRegenerate: () => void;
-}) {
-  return (
-    <RuntimeScreenShell statusLabel="Error">
-      <div className="max-w-xl space-y-6 px-4 text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#9d4b31]/30 bg-[#9d4b31]/10">
-          <div className="h-12 w-12 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
-        </div>
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
-            Generation stopped
-          </div>
-          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            The runtime could not be prepared.
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-white/65">
-            {message}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          className="inline-flex items-center justify-center border border-[#f1b7a3]/30 bg-[#9d4b31] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b]"
-        >
-          Try again
-        </button>
       </div>
     </RuntimeScreenShell>
   );
@@ -142,6 +111,7 @@ export function GameSpecValidationErrorScreen({
   eyebrow = "Game Spec validation failed",
   message,
   onRegenerate,
+  regenerateLabel = "Try again",
   statusLabel = "Validation stopped",
   title = "The runtime was not started.",
 }: {
@@ -149,6 +119,7 @@ export function GameSpecValidationErrorScreen({
   eyebrow?: string;
   message: string;
   onRegenerate?: () => void;
+  regenerateLabel?: string;
   statusLabel?: string;
   title?: string;
 }) {
@@ -194,7 +165,7 @@ export function GameSpecValidationErrorScreen({
               onClick={onRegenerate}
               className="inline-flex items-center justify-center border border-[#f1b7a3]/30 bg-[#9d4b31] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b]"
             >
-              Try again
+              {regenerateLabel}
             </button>
           </div>
         ) : null}
@@ -205,27 +176,37 @@ export function GameSpecValidationErrorScreen({
 
 export function FirstPlayableValidationBlockedScreen({
   debugReceipts,
+  eyebrow = "Draft blocked",
   onRegenerate,
   onReset,
+  regenerateLabel = "Start over from prompt",
+  resetLabel = "Try again",
+  statusLabel = "Blocked",
   summary,
+  title = "This draft is not playable yet.",
 }: {
   debugReceipts: FailureReceiptViewModel[];
+  eyebrow?: string;
   onRegenerate: () => void;
   onReset: () => void;
+  regenerateLabel?: string;
+  resetLabel?: string;
+  statusLabel?: string;
   summary: string;
+  title?: string;
 }) {
   return (
-    <RuntimeScreenShell statusLabel="Blocked">
+    <RuntimeScreenShell statusLabel={statusLabel}>
       <div className="w-full max-w-2xl space-y-6 px-4">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#f1b7a3]/30 bg-[#9d4b31]/10">
           <div className="h-12 w-12 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
         </div>
         <div className="text-center">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
-            Draft blocked
+            {eyebrow}
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            This draft is not playable yet.
+            {title}
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-white/65">
             {summary}
@@ -237,14 +218,14 @@ export function FirstPlayableValidationBlockedScreen({
             onClick={onReset}
             className="inline-flex items-center justify-center border border-[#f6c46b]/35 bg-[#f6c46b] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#10171e] transition hover:bg-[#dba84d]"
           >
-            Try again
+            {resetLabel}
           </button>
           <button
             type="button"
             onClick={onRegenerate}
             className="inline-flex items-center justify-center border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-white/10"
           >
-            Start over from prompt
+            {regenerateLabel}
           </button>
         </div>
         <details className="border border-white/10 bg-black/20 p-4 text-sm text-white/70">
