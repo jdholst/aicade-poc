@@ -1,10 +1,9 @@
 import {
-  createInitialGamePack,
   validateTopDownGameSpec,
-  type GamePack,
   type TopDownGameSpec,
 } from "@/game-spec";
 import type { OpenAIModelId } from "@/utils/openai-utils";
+import type { RuntimeKind } from "@/runtime/runtime-adapter";
 import type { StarterProjectRequest } from "@/service/starter-project/starter-project-client";
 import type {
   SPEC_GENERATION_TASK_ROUTE,
@@ -13,12 +12,12 @@ import type {
 } from "./spec-generation-service";
 
 export type TopDownSpecGenerationClientResult = {
-  gamePack: GamePack;
   metadata: {
     taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
     model: OpenAIModelId;
     attemptCount: number;
   };
+  runtimeKind: Extract<RuntimeKind, "phaser">;
   spec: TopDownGameSpec;
 };
 
@@ -101,17 +100,8 @@ export async function requestTopDownSpecGeneration(
   };
 
   return {
-    gamePack: createInitialGamePack({
-      gameSpec: spec,
-      runtimeKind: "phaser",
-      metadata: {
-        generationSource: "spec-generation",
-        generationTaskRoute: metadata.taskRoute,
-        generationModel: metadata.model,
-        generationAttemptCount: metadata.attemptCount,
-      },
-    }),
     metadata,
+    runtimeKind: "phaser",
     spec,
   };
 }

@@ -89,6 +89,7 @@ function createCanvasSession(
   overrides: Partial<EditorGameCanvasSession> = {}
 ): EditorGameCanvasSession {
   return {
+    activeGeneratedSpec: null,
     currentGenerationStage,
     gameResetNonce: 0,
     gameStatus: {
@@ -343,6 +344,70 @@ describe("EditorGameCanvas", () => {
         ]),
       });
     });
+  });
+
+  it("does not persist active generated specs as durable Game Pack history", async () => {
+    const storage = new MemoryGamePackStorage();
+    const put = vi.spyOn(storage, "put");
+    const repository = createGamePackRepository(storage);
+    const generatedSpec = {
+      ...topDownPhaserTemplate.gameSpec,
+      title: "Generated Crystal Draft",
+    };
+    const activeGeneratedSpec = {
+      metadata: {
+        attemptCount: 1,
+        model: "gpt-5.4-mini" as const,
+        taskRoute: "spec_generation.primary" as const,
+      },
+      runtimeKind: "phaser" as const,
+      source: "phaser-spec" as const,
+      spec: generatedSpec,
+    };
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: generatedSpec,
+          },
+        })}
+        gamePackRepository={repository}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>(
+      "Generated Crystal Draft"
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "nonblank_render");
+      dispatchValidationEvidence(iframe, "player_visible");
+      dispatchValidationEvidence(iframe, "input_response");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Generated Crystal Draft")).toBeVisible();
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(put).not.toHaveBeenCalled();
+    await expect(repository.load("game_pack_crystal_spec_chase")).resolves.toBe(
+      null
+    );
   });
 
   it("remounts the Phaser runtime from a saved Game Pack after repository load", async () => {

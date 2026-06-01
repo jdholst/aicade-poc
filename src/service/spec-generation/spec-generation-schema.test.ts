@@ -66,6 +66,18 @@ describe("Spec Generation schema drift guards", () => {
     }
   });
 
+  it("tells generation to keep pickup and spawn zone IDs out of mechanic regionIds", () => {
+    expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(
+      "Mechanic regionIds must reference layout.regions IDs only"
+    );
+    expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(
+      "never use pickup zone or spawn zone IDs as regionIds"
+    );
+    expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(
+      "Use an empty regionIds array when a mechanic does not target a named layout region"
+    );
+  });
+
   it("documents intentional provider-schema narrowing while Zod remains authoritative", () => {
     const fixture = getFirstValidTopDownGameSpecFixture();
     const mechanicProperties =

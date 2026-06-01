@@ -164,6 +164,119 @@ describe("RuntimeIframeHost", () => {
     });
   });
 
+  it("catches ready events from runtimes that post while srcDoc is being attached", async () => {
+    const statuses: RuntimeIframeStatus[] = [];
+    const originalSetAttribute = HTMLIFrameElement.prototype.setAttribute;
+    const originalSrcdocDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLIFrameElement.prototype,
+      "srcdoc"
+    );
+
+    function dispatchImmediateReady(iframe: HTMLIFrameElement) {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "ready" },
+          source: iframe.contentWindow,
+        })
+      );
+    }
+
+    vi.spyOn(HTMLIFrameElement.prototype, "setAttribute").mockImplementation(
+      function setAttribute(name: string, value: string) {
+        originalSetAttribute.call(this, name, value);
+
+        if (name.toLowerCase() === "srcdoc") {
+          dispatchImmediateReady(this);
+        }
+      }
+    );
+    Object.defineProperty(HTMLIFrameElement.prototype, "srcdoc", {
+      configurable: true,
+      get() {
+        return this.getAttribute("srcdoc") ?? "";
+      },
+      set(value: string) {
+        originalSetAttribute.call(this, "srcdoc", value);
+        dispatchImmediateReady(this);
+      },
+    });
+
+    try {
+      render(
+        <RuntimeIframeHost
+          artifact={artifact}
+          runtimeAdapter={runtimeAdapter}
+          onStatusChange={(status) => {
+            statuses.push(status);
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(statuses).toContainEqual({ state: "ready" });
+      });
+    } finally {
+      if (originalSrcdocDescriptor) {
+        Object.defineProperty(
+          HTMLIFrameElement.prototype,
+          "srcdoc",
+          originalSrcdocDescriptor
+        );
+      } else {
+        delete (
+          HTMLIFrameElement.prototype as HTMLIFrameElement & {
+            srcdoc?: string;
+          }
+        ).srcdoc;
+      }
+    }
+  });
+
+  it("does not reboot the iframe when host callbacks change", async () => {
+    const statuses: RuntimeIframeStatus[] = [];
+    const originalSetAttribute = HTMLIFrameElement.prototype.setAttribute;
+    const setSrcDoc = vi.fn();
+
+    vi.spyOn(HTMLIFrameElement.prototype, "setAttribute").mockImplementation(
+      function setAttribute(name: string, value: string) {
+        originalSetAttribute.call(this, name, value);
+
+        if (name.toLowerCase() === "srcdoc") {
+          setSrcDoc(value);
+        }
+      }
+    );
+
+    const { rerender } = render(
+      <RuntimeIframeHost
+        artifact={artifact}
+        runtimeAdapter={runtimeAdapter}
+        onStatusChange={(status) => {
+          statuses.push(status);
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(setSrcDoc).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <RuntimeIframeHost
+        artifact={artifact}
+        runtimeAdapter={runtimeAdapter}
+        onStatusChange={(status) => {
+          statuses.push(status);
+        }}
+      />
+    );
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(setSrcDoc).toHaveBeenCalledTimes(1);
+    expect(statuses).toEqual([{ state: "loading" }]);
+  });
+
   it("keeps debug, unrecognized, and foreign-window messages from changing status", async () => {
     const statuses: RuntimeIframeStatus[] = [];
 

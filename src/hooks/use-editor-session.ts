@@ -58,6 +58,7 @@ export type EditorAIChatActions = {
 };
 
 export type EditorGameCanvasSession = {
+  activeGeneratedSpec: ActiveGeneratedSpecState | null;
   currentGenerationStage: EditorGenerationStage;
   gameResetNonce: number;
   gameStatus: GeneratedGameStatus;
@@ -68,6 +69,11 @@ export type EditorGameCanvasSession = {
 };
 
 export type RuntimeWarningIssue = Extract<RuntimeIssue, { recoverable: true }>;
+
+export type ActiveGeneratedSpecState = Pick<
+  Extract<StarterProjectLoadState, { status: "success"; source: "phaser-spec" }>,
+  "metadata" | "runtimeKind" | "source" | "spec"
+>;
 
 export type GeneratedGameStatus =
   | { state: "loading"; message: string }
@@ -153,8 +159,17 @@ export function useEditorSession({
     loadState.status === "success"
       ? loadState.source === "canvas-starter"
         ? loadState.pack.project.name
-        : loadState.gamePack.title
+        : loadState.spec.title
       : "Starter Project";
+  const activeGeneratedSpec =
+    loadState.status === "success" && loadState.source === "phaser-spec"
+      ? {
+          metadata: loadState.metadata,
+          runtimeKind: loadState.runtimeKind,
+          source: loadState.source,
+          spec: loadState.spec,
+        }
+      : null;
 
   function submitPrompt() {
     const normalizedPrompt = promptDraft.replace(/\s+/g, " ").trim();
@@ -258,6 +273,7 @@ export function useEditorSession({
   };
 
   const canvas: EditorGameCanvasSession = {
+    activeGeneratedSpec,
     currentGenerationStage,
     generationSource,
     gameResetNonce,

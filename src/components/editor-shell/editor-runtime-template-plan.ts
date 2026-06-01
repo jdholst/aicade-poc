@@ -9,6 +9,7 @@ import type {
   EditorGenerationSource,
   EditorRuntimeMode,
 } from "@/runtime/editor-runtime-mode";
+import type { ActiveGeneratedSpecState } from "@/hooks/use-editor-session";
 import {
   getEditorGenerationSource,
   getEditorRuntimeMode,
@@ -64,6 +65,7 @@ export type EditorRuntimeTemplatePlan =
     };
 
 type CreateEditorRuntimeTemplatePlanInput = {
+  activeGeneratedSpec?: ActiveGeneratedSpecState | null;
   generationSource?: EditorGenerationSource;
   phaserTemplateState?: TopDownPhaserTemplateState;
   restoredGamePack?: GamePack | null;
@@ -71,6 +73,7 @@ type CreateEditorRuntimeTemplatePlanInput = {
 };
 
 export function createEditorRuntimeTemplatePlan({
+  activeGeneratedSpec = null,
   generationSource,
   phaserTemplateState = getTopDownPhaserTemplateState(),
   restoredGamePack = null,
@@ -84,6 +87,10 @@ export function createEditorRuntimeTemplatePlan({
       firstPlayableValidationSource: null,
       type: "canvas",
     };
+  }
+
+  if (activeGeneratedSpec) {
+    return createActiveGeneratedSpecRuntimeTemplatePlan(activeGeneratedSpec);
   }
 
   if (restoredGamePack) {
@@ -114,6 +121,30 @@ export function createEditorRuntimeTemplatePlan({
     template: phaserTemplateState.template,
     type: "phaser-valid",
   };
+}
+
+function createActiveGeneratedSpecRuntimeTemplatePlan(
+  activeGeneratedSpec: ActiveGeneratedSpecState
+): EditorRuntimeTemplatePlan {
+  try {
+    const template = createTopDownPhaserTemplate(activeGeneratedSpec.spec);
+
+    return {
+      firstPlayableValidationSource: createFirstPlayableValidationSource(template),
+      sourceKey: [
+        template.id,
+        activeGeneratedSpec.metadata.taskRoute,
+        activeGeneratedSpec.metadata.model,
+        activeGeneratedSpec.metadata.attemptCount,
+      ].join("-"),
+      template,
+      type: "phaser-valid",
+    };
+  } catch {
+    return createInvalidRestoredGamePackPlan(
+      "Generated Game Spec cannot be mounted because it is not a valid top-down Phaser spec."
+    );
+  }
 }
 
 function createRestoredGamePackRuntimeTemplatePlan(

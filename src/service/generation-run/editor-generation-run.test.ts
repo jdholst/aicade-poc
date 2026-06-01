@@ -13,16 +13,12 @@ describe("startEditorGenerationRun", () => {
   it("routes Phaser AI generation through the Spec Generation adapter and normalizes the result", async () => {
     const spec = getFirstValidTopDownGameSpecFixture();
     const requestPhaserSpecGeneration = vi.fn().mockResolvedValue({
-      gamePack: {
-        id: "game_pack_test",
-        runtimeKind: "phaser",
-        title: "Test Phaser Pack",
-      },
       metadata: {
         attemptCount: 1,
         model: "gpt-5.4-mini",
         taskRoute: "spec_generation.primary",
       },
+      runtimeKind: "phaser",
       spec,
     });
     const requestCanvasStarterProject = vi.fn();
@@ -39,16 +35,12 @@ describe("startEditorGenerationRun", () => {
     await expect(run.done).resolves.toEqual({
       status: "success",
       source: "phaser-spec",
-      gamePack: {
-        id: "game_pack_test",
-        runtimeKind: "phaser",
-        title: "Test Phaser Pack",
-      },
       metadata: {
         attemptCount: 1,
         model: "gpt-5.4-mini",
         taskRoute: "spec_generation.primary",
       },
+      runtimeKind: "phaser",
       spec,
     });
     expect(requestPhaserSpecGeneration).toHaveBeenCalledWith(

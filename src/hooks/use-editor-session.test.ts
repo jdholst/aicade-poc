@@ -59,6 +59,7 @@ describe("useEditorSession", () => {
       message: "Phaser runtime is running in the sandbox.",
     });
     expect(result.current.session.canvas.generationSource).toBe("phaser-fixture");
+    expect(result.current.session.canvas.activeGeneratedSpec).toBeNull();
   });
 
   it("starts in the generated Canvas initial state when the runtime override is canvas2d", () => {
@@ -80,6 +81,7 @@ describe("useEditorSession", () => {
       state: "loading",
       message: "Ready to build project.",
     });
+    expect(result.current.session.canvas.activeGeneratedSpec).toBeNull();
   });
 
   it("keeps the runtime status callback stable across status updates", () => {
@@ -264,11 +266,12 @@ describe("useEditorSession", () => {
     });
   });
 
-  it("routes Phaser AI generation through the Spec Generation API", async () => {
+  it("stores successful Phaser Spec Generation as active generated spec state", async () => {
+    const generatedSpec = getFirstValidTopDownGameSpecFixture();
     const fetch = vi.fn().mockResolvedValue(
       jsonResponse({
         ok: true,
-        spec: getFirstValidTopDownGameSpecFixture(),
+        spec: generatedSpec,
         metadata: {
           taskRoute: "spec_generation.primary",
           model: "gpt-5.4-mini",
@@ -304,13 +307,103 @@ describe("useEditorSession", () => {
     await waitFor(() => {
       expect(result.current.session.canvas.loadState).toMatchObject({
         status: "success",
+        runtimeKind: "phaser",
         source: "phaser-spec",
-        gamePack: {
-          runtimeKind: "phaser",
-          gameSpec: getFirstValidTopDownGameSpecFixture(),
-        },
+        spec: generatedSpec,
       });
     });
+    expect(result.current.session.canvas.loadState).not.toHaveProperty(
+      "gamePack"
+    );
+    expect(result.current.session.canvas.activeGeneratedSpec).toEqual({
+      metadata: {
+        attemptCount: 1,
+        model: "gpt-5.4-mini",
+        taskRoute: "spec_generation.primary",
+      },
+      runtimeKind: "phaser",
+      source: "phaser-spec",
+      spec: generatedSpec,
+    });
+
+    act(() => {
+      result.current.actions.canvas.onReset();
+    });
+
+    expect(result.current.session.canvas.activeGeneratedSpec?.spec).toEqual(
+      generatedSpec
+    );
+    expect(result.current.session.canvas.gameResetNonce).toBe(1);
+  });
+
+  it("clears active generated spec state when regeneration fails", async () => {
+    const generatedSpec = getFirstValidTopDownGameSpecFixture();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ok: true,
+          spec: generatedSpec,
+          metadata: {
+            taskRoute: "spec_generation.primary",
+            model: "gpt-5.4-mini",
+            attemptCount: 1,
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            ok: false,
+            userMessage:
+              "I designed a game plan, but it needs a clearer pickup goal.",
+            stage: "mechanic_validation",
+            validationIssues: [
+              {
+                path: "mechanics.mechanic_pickup_collection.assetIds",
+                message: "Expected asset role \"pickup\".",
+              },
+            ],
+            taskRoute: "spec_generation.primary",
+            attemptCount: 1,
+          },
+          422
+        )
+      );
+    vi.stubGlobal("fetch", fetch);
+    const { result } = renderHook(() =>
+      useEditorSession({
+        enteredPrompt: "make a top-down coin chase",
+        enteredOpenAiApiKey: "sk-test",
+        enteredOpenAiKeyword: "",
+        enteredOpenAiModel: "gpt-5.4-mini",
+        generationStages,
+        needsOpenAiApiKey: true,
+        needsOpenAiModel: true,
+      })
+    );
+
+    act(() => {
+      result.current.actions.chat.onStartGeneration();
+    });
+
+    await waitFor(() => {
+      expect(result.current.session.canvas.activeGeneratedSpec?.spec).toEqual(
+        generatedSpec
+      );
+    });
+
+    act(() => {
+      result.current.actions.chat.onRegenerateGame();
+    });
+
+    await waitFor(() => {
+      expect(result.current.session.canvas.loadState).toMatchObject({
+        status: "error",
+        message: "I designed a game plan, but it needs a clearer pickup goal.",
+      });
+    });
+    expect(result.current.session.canvas.activeGeneratedSpec).toBeNull();
   });
 
   it("does not call generation in explicit Phaser fixture mode", () => {

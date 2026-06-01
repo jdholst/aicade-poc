@@ -3,7 +3,7 @@ import type {
   EditorAIChatActions,
   EditorAIChatSession,
 } from "@/hooks/use-editor-session";
-import type { GamePack, TopDownGameSpec } from "@/game-spec";
+import type { TopDownGameSpec } from "@/game-spec";
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 
 type EditorAIChatProps = {
@@ -55,14 +55,14 @@ function getSpecSummary(pack: GeneratedGamePack) {
   ];
 }
 
-function getTopDownSpecSummary(spec: TopDownGameSpec, gamePack: GamePack) {
+function getTopDownSpecSummary(spec: TopDownGameSpec) {
   return [
     "phaser runtime",
     `${spec.template.config.scenes.length} scene`,
     `${spec.entities.length} entities`,
     `${spec.assets.length} assets`,
     `${spec.mechanics.length} mechanics`,
-    gamePack.schemaVersion,
+    spec.schemaVersion,
   ];
 }
 
@@ -101,14 +101,14 @@ function createGeneratedProjectSummary(
     controls: loadState.spec.controls,
     detailPanels: [],
     overviewMetrics: [
-      loadState.gamePack.runtimeKind,
+      loadState.runtimeKind,
       loadState.spec.schemaVersion,
       loadState.spec.template.id,
       loadState.metadata.model,
     ],
     overviewSummary: loadState.spec.currentIntentSummary,
     statusMessage,
-    summaryItems: getTopDownSpecSummary(loadState.spec, loadState.gamePack),
+    summaryItems: getTopDownSpecSummary(loadState.spec),
     transcript: [
       {
         role: "user",

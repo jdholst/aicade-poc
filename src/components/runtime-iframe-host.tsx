@@ -57,6 +57,13 @@ function RuntimeIframeHostInner<TArtifact>(
   ref: ForwardedRef<RuntimeIframeHostHandle>
 ) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const latestHostOptionsRef = useRef({
+    focusOnReadyKey,
+    onStatusChange,
+    onValidationEvidence,
+    runFirstPlayableChecksOnReady,
+  });
+  const mountedSrcDocRef = useRef<string | null>(null);
   const mountDescriptor = useMemo(
     () => runtimeAdapter.createMountDescriptor(artifact),
     [artifact, runtimeAdapter]
@@ -73,10 +80,24 @@ function RuntimeIframeHostInner<TArtifact>(
   );
 
   useEffect(() => {
+    latestHostOptionsRef.current = {
+      focusOnReadyKey,
+      onStatusChange,
+      onValidationEvidence,
+      runFirstPlayableChecksOnReady,
+    };
+  }, [
+    focusOnReadyKey,
+    onStatusChange,
+    onValidationEvidence,
+    runFirstPlayableChecksOnReady,
+  ]);
+
+  useEffect(() => {
     let hasSettled = false;
     let clearScheduledFocus: (() => void) | undefined;
 
-    onStatusChange?.({
+    latestHostOptionsRef.current.onStatusChange?.({
       state: "loading",
     });
 
@@ -86,7 +107,7 @@ function RuntimeIframeHostInner<TArtifact>(
       }
 
       hasSettled = true;
-      onStatusChange?.({
+      latestHostOptionsRef.current.onStatusChange?.({
         state: "error",
         message:
           "The generated sandbox did not finish booting. Regenerate the game to request a fresh module.",
@@ -108,7 +129,9 @@ function RuntimeIframeHostInner<TArtifact>(
       }
 
       if (sandboxEvent.type === "game-validation-evidence") {
-        onValidationEvidence?.(sandboxEvent.evidence);
+        latestHostOptionsRef.current.onValidationEvidence?.(
+          sandboxEvent.evidence
+        );
         return;
       }
 
@@ -121,15 +144,15 @@ function RuntimeIframeHostInner<TArtifact>(
         hasSettled = true;
         window.clearTimeout(timeoutId);
 
-        onStatusChange?.(runtimeStatus);
+        latestHostOptionsRef.current.onStatusChange?.(runtimeStatus);
 
-        if (runFirstPlayableChecksOnReady) {
+        if (latestHostOptionsRef.current.runFirstPlayableChecksOnReady) {
           postRuntimeIframeCommand(iframeRef.current?.contentWindow, {
             type: "game-run-first-playable-checks",
           });
         }
 
-        if (focusOnReadyKey > 0) {
+        if (latestHostOptionsRef.current.focusOnReadyKey > 0) {
           clearScheduledFocus?.();
           clearScheduledFocus = scheduleRuntimeIframeFocus(iframeRef.current);
         }
@@ -138,17 +161,23 @@ function RuntimeIframeHostInner<TArtifact>(
       }
 
       if (runtimeStatus.state === "warning") {
-        onStatusChange?.(runtimeStatus);
+        latestHostOptionsRef.current.onStatusChange?.(runtimeStatus);
         return;
       }
 
       hasSettled = true;
       window.clearTimeout(timeoutId);
 
-      onStatusChange?.(runtimeStatus);
+      latestHostOptionsRef.current.onStatusChange?.(runtimeStatus);
     }
 
     window.addEventListener("message", handleMessage);
+
+    if (mountedSrcDocRef.current !== mountDescriptor.srcDoc) {
+      iframeRef.current?.setAttribute("srcdoc", mountDescriptor.srcDoc);
+      mountedSrcDocRef.current = mountDescriptor.srcDoc;
+    }
+
     return () => {
       hasSettled = true;
       clearScheduledFocus?.();
@@ -156,11 +185,7 @@ function RuntimeIframeHostInner<TArtifact>(
       window.removeEventListener("message", handleMessage);
     };
   }, [
-    artifact,
-    focusOnReadyKey,
-    onStatusChange,
-    onValidationEvidence,
-    runFirstPlayableChecksOnReady,
+    mountDescriptor.srcDoc,
     runtimeAdapter,
   ]);
 
@@ -181,7 +206,6 @@ function RuntimeIframeHostInner<TArtifact>(
         ref={iframeRef}
         title={mountDescriptor.title}
         sandbox={mountDescriptor.sandbox}
-        srcDoc={mountDescriptor.srcDoc}
         className="h-full min-h-[360px] w-full flex-1 border-0"
       />
     </div>

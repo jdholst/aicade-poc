@@ -6,7 +6,6 @@ import type {
   EditorAIChatSession,
 } from "@/hooks/use-editor-session";
 import type { OpenAIModelId } from "@/utils/openai-utils";
-import { createInitialGamePack } from "@/game-spec";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
 import type { GeneratedGamePack } from "@/service/starter-project";
 
@@ -180,15 +179,12 @@ describe("EditorAIChat", () => {
           loadState: {
             status: "success",
             source: "phaser-spec",
-            gamePack: createInitialGamePack({
-              gameSpec: topDownPhaserTemplate.gameSpec,
-              runtimeKind: "phaser",
-            }),
             metadata: {
               attemptCount: 1,
               model: "gpt-5.4-mini",
               taskRoute: "spec_generation.primary",
             },
+            runtimeKind: "phaser",
             spec: topDownPhaserTemplate.gameSpec,
           },
         })}
