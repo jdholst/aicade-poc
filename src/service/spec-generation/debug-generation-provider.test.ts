@@ -61,7 +61,7 @@ describe("Debug Spec Generation provider", () => {
         ok: false,
         stage,
         taskRoute: "spec_generation.primary",
-        attemptCount: 1,
+        attemptCount: 2,
         debugCandidate: expect.objectContaining({
           originalPrompt: prompt,
         }),

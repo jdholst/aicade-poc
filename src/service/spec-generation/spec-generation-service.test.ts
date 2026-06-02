@@ -30,6 +30,130 @@ describe("Spec Generation service contract", () => {
     });
   });
 
+  it("repairs one invalid candidate with exact validation issues", async () => {
+    const invalidCandidate = getMutableFixture();
+    invalidCandidate.mechanics[0].entityIds = ["entity_missing"];
+    const repairedCandidate = getMutableFixture();
+    const providerCalls: unknown[] = [];
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async (input) => {
+        providerCalls.push(input);
+
+        return providerCalls.length === 1 ? invalidCandidate : repairedCandidate;
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      spec: repairedCandidate,
+      metadata: {
+        taskRoute: "spec_generation.primary",
+        model: "gpt-5.4-mini",
+        attemptCount: 2,
+        repairStatus: "repaired",
+      },
+    });
+    expect(providerCalls).toEqual([
+      {
+        prompt: "Make a tiny top-down collection game.",
+        model: "gpt-5.4-mini",
+        providerCredential: "sk-test",
+        taskRoute: "spec_generation.primary",
+      },
+      {
+        prompt: "Make a tiny top-down collection game.",
+        model: "gpt-5.4-mini",
+        providerCredential: "sk-test",
+        taskRoute: "spec_generation.primary",
+        repairContext: {
+          failedAttempt: 1,
+          invalidCandidate,
+          stage: "semantic_validation",
+          validationIssues: [
+            {
+              path: "mechanics.mechanic_player_movement.entityIds",
+              message: 'Unknown entity ID "entity_missing".',
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("returns structured validation failure when the repair candidate is still invalid", async () => {
+    const invalidCandidate = getMutableFixture();
+    invalidCandidate.mechanics[0].entityIds = ["entity_missing"];
+    const invalidRepairCandidate = getMutableFixture();
+    invalidRepairCandidate.objectives.push({
+      id: "objective_escape",
+      label: "Escape",
+      description: "Reach the exit.",
+      primary: true,
+    });
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async (input) =>
+        input.repairContext ? invalidRepairCandidate : invalidCandidate,
+      includeDebugCandidate: true,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      stage: "semantic_validation",
+      userMessage:
+        "I designed a game plan, but it did not pass validation. Please try a simpler prompt.",
+      taskRoute: "spec_generation.primary",
+      attemptCount: 2,
+      debugCandidate: invalidRepairCandidate,
+    });
+    expect(result.validationIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "objectives",
+          message: "Expected exactly one primary objective.",
+        }),
+      ])
+    );
+  });
+
+  it("caps invalid-spec repair at one provider retry", async () => {
+    const invalidCandidate = getMutableFixture();
+    invalidCandidate.mechanics[0].entityIds = ["entity_missing"];
+    const providerCalls: unknown[] = [];
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async (input) => {
+        providerCalls.push(input);
+
+        return invalidCandidate;
+      },
+      includeDebugCandidate: true,
+    });
+
+    expect(providerCalls).toHaveLength(2);
+    expect(providerCalls[0]).not.toHaveProperty("repairContext");
+    expect(providerCalls[1]).toMatchObject({
+      repairContext: {
+        failedAttempt: 1,
+      },
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      attemptCount: 2,
+      debugCandidate: invalidCandidate,
+    });
+  });
+
   it.each([
     {
       name: "wrong template id",
@@ -105,6 +229,7 @@ describe("Spec Generation service contract", () => {
         providerCredential: "sk-test",
         provider: async () => candidate,
         includeDebugCandidate: true,
+        repairEnabled: false,
       });
 
       expect(result).toMatchObject({
@@ -154,6 +279,7 @@ describe("Spec Generation service contract", () => {
       providerCredential: "sk-test",
       provider: async () => candidate,
       includeDebugCandidate: true,
+      repairEnabled: false,
     });
 
     expect(result).toMatchObject({

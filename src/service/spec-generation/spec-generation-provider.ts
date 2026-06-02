@@ -36,7 +36,7 @@ type OpenAIResponsePayload = {
 };
 
 export const requestTopDownGameSpecFromProvider: SpecGenerationProvider =
-  async ({ prompt, model, providerCredential, taskRoute }) => {
+  async ({ prompt, model, providerCredential, repairContext, taskRoute }) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(
       () => controller.abort(),
@@ -74,6 +74,7 @@ export const requestTopDownGameSpecFromProvider: SpecGenerationProvider =
           ],
           instructions: createTopDownSpecGenerationSystemPrompt({
             prompt,
+            repairContext,
             taskRoute,
           }),
           input: [

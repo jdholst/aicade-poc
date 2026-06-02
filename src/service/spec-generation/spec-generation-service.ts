@@ -32,6 +32,8 @@ export type SpecGenerationProviderErrorDetails = {
   type?: string;
 };
 
+export type SpecGenerationRepairStatus = "repaired";
+
 export class SpecGenerationProviderError extends Error {
   readonly details: SpecGenerationProviderErrorDetails;
 
@@ -49,6 +51,7 @@ export type SpecGenerationSuccessResult = {
     taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
     model: OpenAIModelId;
     attemptCount: number;
+    repairStatus?: SpecGenerationRepairStatus;
   };
 };
 
@@ -72,6 +75,12 @@ export type SpecGenerationProviderInput = {
   model: OpenAIModelId;
   providerCredential: string;
   taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
+  repairContext?: {
+    failedAttempt: number;
+    invalidCandidate: unknown;
+    stage: SpecGenerationFailureStage;
+    validationIssues: SpecGenerationIssue[];
+  };
 };
 
 export type SpecGenerationProvider = (
@@ -84,6 +93,7 @@ export type GenerateTopDownGameSpecInput = {
   providerCredential: string;
   provider: SpecGenerationProvider;
   includeDebugCandidate?: boolean;
+  repairEnabled?: boolean;
 };
 
 export async function generateTopDownGameSpec({
@@ -92,6 +102,7 @@ export async function generateTopDownGameSpec({
   providerCredential,
   provider,
   includeDebugCandidate = false,
+  repairEnabled = true,
 }: GenerateTopDownGameSpecInput): Promise<SpecGenerationResult> {
   const attemptCount = 1;
   let candidate: unknown;
@@ -117,25 +128,106 @@ export async function generateTopDownGameSpec({
     });
   }
 
-  try {
+  const firstAttempt = validateCandidate(candidate);
+
+  if (firstAttempt.ok) {
     return {
       ok: true,
-      spec: validateTopDownGameSpec(candidate),
+      spec: firstAttempt.spec,
       metadata: {
         taskRoute: SPEC_GENERATION_TASK_ROUTE,
         model,
         attemptCount,
       },
     };
-  } catch (error) {
+  }
+
+  if (!repairEnabled) {
     return createFailureResult({
-      stage: getValidationFailureStage(error),
+      stage: firstAttempt.stage,
       userMessage:
         "I designed a game plan, but it did not pass validation. Please try a simpler prompt.",
-      validationIssues: getValidationIssues(error),
+      validationIssues: firstAttempt.validationIssues,
       attemptCount,
       debugCandidate: includeDebugCandidate ? candidate : undefined,
     });
+  }
+
+  const repairAttemptCount = attemptCount + 1;
+  let repairedCandidate: unknown;
+
+  try {
+    repairedCandidate = await provider({
+      prompt,
+      model,
+      providerCredential,
+      taskRoute: SPEC_GENERATION_TASK_ROUTE,
+      repairContext: {
+        failedAttempt: attemptCount,
+        invalidCandidate: candidate,
+        stage: firstAttempt.stage,
+        validationIssues: firstAttempt.validationIssues,
+      },
+    });
+  } catch (error) {
+    return createFailureResult({
+      stage: "model_generation",
+      userMessage:
+        "I couldn't design a game plan from that prompt. Please try again.",
+      validationIssues: [],
+      attemptCount: repairAttemptCount,
+      debugProviderError:
+        includeDebugCandidate && error instanceof SpecGenerationProviderError
+          ? error.details
+          : undefined,
+    });
+  }
+
+  const repairAttempt = validateCandidate(repairedCandidate);
+
+  if (repairAttempt.ok) {
+    return {
+      ok: true,
+      spec: repairAttempt.spec,
+      metadata: {
+        taskRoute: SPEC_GENERATION_TASK_ROUTE,
+        model,
+        attemptCount: repairAttemptCount,
+        repairStatus: "repaired",
+      },
+    };
+  }
+
+  return createFailureResult({
+    stage: repairAttempt.stage,
+    userMessage:
+      "I designed a game plan, but it did not pass validation. Please try a simpler prompt.",
+    validationIssues: repairAttempt.validationIssues,
+    attemptCount: repairAttemptCount,
+    debugCandidate: includeDebugCandidate ? repairedCandidate : undefined,
+  });
+}
+
+function validateCandidate(
+  candidate: unknown
+):
+  | { ok: true; spec: TopDownGameSpec }
+  | {
+      ok: false;
+      stage: SpecGenerationFailureStage;
+      validationIssues: SpecGenerationIssue[];
+    } {
+  try {
+    return {
+      ok: true,
+      spec: validateTopDownGameSpec(candidate),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      stage: getValidationFailureStage(error),
+      validationIssues: getValidationIssues(error),
+    };
   }
 }
 

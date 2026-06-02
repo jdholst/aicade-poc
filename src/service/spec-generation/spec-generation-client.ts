@@ -9,6 +9,7 @@ import type {
   SPEC_GENERATION_TASK_ROUTE,
   SpecGenerationFailureStage,
   SpecGenerationIssue,
+  SpecGenerationRepairStatus,
 } from "./spec-generation-service";
 
 export type TopDownSpecGenerationClientResult = {
@@ -16,6 +17,7 @@ export type TopDownSpecGenerationClientResult = {
     taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
     model: OpenAIModelId;
     attemptCount: number;
+    repairStatus?: SpecGenerationRepairStatus;
   };
   runtimeKind: Extract<RuntimeKind, "phaser">;
   spec: TopDownGameSpec;
@@ -49,6 +51,7 @@ type SpecGenerationPayload =
         taskRoute?: unknown;
         model?: unknown;
         attemptCount?: unknown;
+        repairStatus?: unknown;
       };
     }
   | {
@@ -93,10 +96,12 @@ export async function requestTopDownSpecGeneration(
   }
 
   const spec = validateTopDownGameSpec(payload.spec);
+  const repairStatus = getRepairStatus(payload.metadata?.repairStatus);
   const metadata = {
     taskRoute: "spec_generation.primary" as const,
     model: getMetadataString(payload.metadata?.model) as OpenAIModelId,
     attemptCount: getMetadataNumber(payload.metadata?.attemptCount),
+    ...(repairStatus ? { repairStatus } : {}),
   };
 
   return {
@@ -124,6 +129,10 @@ function getMetadataString(value: unknown) {
 
 function getMetadataNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 1;
+}
+
+function getRepairStatus(value: unknown): SpecGenerationRepairStatus | null {
+  return value === "repaired" ? value : null;
 }
 
 function getSpecGenerationValidationFailure(

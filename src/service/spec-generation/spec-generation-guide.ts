@@ -22,11 +22,24 @@ export const TOP_DOWN_SPEC_GENERATION_GUIDE = [
   "Do not include unsupported fields, unsupported mechanics, unresolved references, or behavior outside the current mechanic registry.",
 ].join("\n");
 
+type TopDownSpecGenerationRepairContext = {
+  failedAttempt: number;
+  invalidCandidate: unknown;
+  stage: string;
+  validationIssues: {
+    code?: string;
+    message: string;
+    path: string;
+  }[];
+};
+
 export function createTopDownSpecGenerationSystemPrompt({
   prompt,
+  repairContext,
   taskRoute,
 }: {
   prompt: string;
+  repairContext?: TopDownSpecGenerationRepairContext;
   taskRoute: string;
 }) {
   return `
@@ -57,6 +70,33 @@ Reference rules:
 - Pickup collection must reference a pickup asset that is placed in a pickup zone. The zone area should cover a big portion of the arena.
 - The spec must include originalPrompt exactly matching the creator prompt above.
 
+${repairContext ? createRepairInstructions(repairContext) : ""}
+
 Return the TopDownGameSpec through the provided tool.
+`.trim();
+}
+
+function createRepairInstructions({
+  failedAttempt,
+  invalidCandidate,
+  stage,
+  validationIssues,
+}: TopDownSpecGenerationRepairContext) {
+  return `
+Repair attempt ${failedAttempt + 1}
+- The previous candidate failed ${stage}.
+- Fix references and config while preserving the creator's game intent.
+- Prefer narrow corrections over reinventing the whole game.
+- The repaired output must still satisfy every schema, semantic reference, and mechanic rule above.
+
+Invalid candidate spec JSON:
+\`\`\`json
+${JSON.stringify(invalidCandidate, null, 2)}
+\`\`\`
+
+Exact validation errors JSON:
+\`\`\`json
+${JSON.stringify(validationIssues, null, 2)}
+\`\`\`
 `.trim();
 }

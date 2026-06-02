@@ -97,6 +97,60 @@ describe("Spec Generation provider request", () => {
     );
   });
 
+  it("includes the invalid candidate and exact validation issues in repair requests", async () => {
+    const fixture = getFirstValidTopDownGameSpecFixture();
+    const invalidCandidate = structuredClone(fixture);
+    invalidCandidate.mechanics[0].entityIds = ["entity_missing"];
+    const validationIssues = [
+      {
+        path: "mechanics.mechanic_player_movement.entityIds",
+        message: 'Unknown entity ID "entity_missing".',
+        code: "unknown_reference",
+      },
+    ];
+    const fetchSpy = vi.fn().mockResolvedValue(
+      Response.json({
+        output: [
+          {
+            type: "function_call",
+            name: "return_top_down_game_spec",
+            arguments: JSON.stringify(fixture),
+          },
+        ],
+      })
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await requestTopDownGameSpecFromProvider({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      taskRoute: "spec_generation.primary",
+      repairContext: {
+        failedAttempt: 1,
+        invalidCandidate,
+        stage: "semantic_validation",
+        validationIssues,
+      },
+    });
+
+    const requestBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+
+    expect(requestBody.instructions).toContain("Repair attempt 2");
+    expect(requestBody.instructions).toContain(
+      "Make a tiny top-down collection game."
+    );
+    expect(requestBody.instructions).toContain(
+      JSON.stringify(invalidCandidate, null, 2)
+    );
+    expect(requestBody.instructions).toContain(
+      JSON.stringify(validationIssues, null, 2)
+    );
+    expect(requestBody.instructions).toContain(
+      "Fix references and config while preserving the creator's game intent"
+    );
+  });
+
   it("keeps the guide and schema aligned with registered top-down mechanics", () => {
     const registeredMechanics = new Set(
       topDownMechanicRegistry.map((mechanic) => mechanic.type)

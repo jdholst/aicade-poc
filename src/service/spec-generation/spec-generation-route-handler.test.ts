@@ -84,6 +84,56 @@ describe("Spec Generation API route contract", () => {
     });
   });
 
+  it("returns a repaired spec response when one invalid candidate is corrected", async () => {
+    const invalidCandidate = getMutableFixture();
+    invalidCandidate.mechanics[0].entityIds = ["entity_missing"];
+    const repairedCandidate = getFirstValidTopDownGameSpecFixture();
+    const providerCalls: unknown[] = [];
+    const post = createSpecGenerationPostHandler({
+      env: {},
+      provider: async (input) => {
+        providerCalls.push(input);
+
+        return input.repairContext ? repairedCandidate : invalidCandidate;
+      },
+    });
+
+    const response = await post(
+      jsonRequest({
+        enteredPrompt: "Make a tiny top-down collection game.",
+        openAiApiKey: "sk-test",
+        openAiModel: "gpt-5.4-mini",
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      ok: true,
+      spec: repairedCandidate,
+      metadata: {
+        taskRoute: "spec_generation.primary",
+        model: "gpt-5.4-mini",
+        attemptCount: 2,
+        repairStatus: "repaired",
+      },
+    });
+    expect(providerCalls).toHaveLength(2);
+    expect(providerCalls[1]).toMatchObject({
+      repairContext: {
+        failedAttempt: 1,
+        invalidCandidate,
+        stage: "semantic_validation",
+        validationIssues: [
+          {
+            path: "mechanics.mechanic_player_movement.entityIds",
+            message: 'Unknown entity ID "entity_missing".',
+          },
+        ],
+      },
+    });
+  });
+
   it("returns structured validation failure without sending invalid specs to the editor", async () => {
     const invalidCandidate = getMutableFixture();
     invalidCandidate.template.config.scenes[0].layout.pickupZones = [];
@@ -107,7 +157,7 @@ describe("Spec Generation API route contract", () => {
       userMessage: expect.any(String),
       stage: "mechanic_validation",
       taskRoute: "spec_generation.primary",
-      attemptCount: 1,
+      attemptCount: 2,
       debugCandidate: invalidCandidate,
     });
     expect(payload.validationIssues).toEqual(
@@ -144,7 +194,7 @@ describe("Spec Generation API route contract", () => {
       ok: false,
       stage: "semantic_validation",
       taskRoute: "spec_generation.primary",
-      attemptCount: 1,
+      attemptCount: 2,
       debugCandidate: expect.objectContaining({
         originalPrompt: "Make a tiny top-down collection game.",
       }),
@@ -249,7 +299,7 @@ describe("Spec Generation API route contract", () => {
       ok: false,
       stage: "mechanic_validation",
       taskRoute: "spec_generation.primary",
-      attemptCount: 1,
+      attemptCount: 2,
     });
     expect(payload).not.toHaveProperty("debugCandidate");
   });
