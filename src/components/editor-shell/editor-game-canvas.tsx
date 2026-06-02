@@ -227,6 +227,7 @@ function renderRuntimePrimarySurface({
       isPaused={isPaused}
       onStatusChange={onStatusChange}
       onValidationEvidence={onValidationEvidence}
+      runFirstPlayableChecksOnReady={surface.runFirstPlayableChecksOnReady}
     />
   );
 }

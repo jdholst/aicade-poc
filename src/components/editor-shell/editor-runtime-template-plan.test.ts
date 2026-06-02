@@ -40,6 +40,9 @@ describe("createEditorRuntimeTemplatePlan", () => {
         source: "fixture",
         runtimeKind: "phaser",
       },
+      persistencePolicy: "persist-after-first-playable",
+      readyPolicy: "ready-on-runtime-ready",
+      runFirstPlayableChecksOnReady: true,
       template: topDownPhaserTemplate,
       type: "phaser-valid",
     });
@@ -62,6 +65,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
     });
 
     expect(plan).toEqual({
+      blockedPresentation: "game-spec-validation",
       firstPlayableValidationSource: null,
       issues: [
         {
@@ -94,6 +98,9 @@ describe("createEditorRuntimeTemplatePlan", () => {
         },
         source: "restored-game-pack",
       },
+      persistencePolicy: "reuse-restored-game-pack",
+      readyPolicy: "ready-on-runtime-ready",
+      runFirstPlayableChecksOnReady: true,
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
         title: topDownPhaserTemplate.title,
@@ -126,6 +133,9 @@ describe("createEditorRuntimeTemplatePlan", () => {
         },
         source: "generated-spec",
       },
+      persistencePolicy: "do-not-persist",
+      readyPolicy: "ready-after-first-playable",
+      runFirstPlayableChecksOnReady: true,
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
         title: topDownPhaserTemplate.title,

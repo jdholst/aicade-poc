@@ -72,13 +72,21 @@ export function useEditorRuntimeSession({
     gameResetNonce,
     loadStateStatus: loadState.status,
     onGameStatusChange,
+    readyPolicy:
+      runtimeTemplate.type === "phaser-valid"
+        ? runtimeTemplate.readyPolicy
+        : undefined,
     validationSource: runtimeTemplate.firstPlayableValidationSource,
   });
+  const persistencePolicy =
+    runtimeTemplate.type === "phaser-valid"
+      ? runtimeTemplate.persistencePolicy
+      : null;
 
   useEffect(() => {
     if (
       gamePackPersistenceStatus !== "loaded" ||
-      activeGeneratedSpec ||
+      persistencePolicy !== "persist-after-first-playable" ||
       firstPlayableValidationAttempt?.status !== "passed" ||
       !firstPlayableGamePack
     ) {
@@ -98,8 +106,8 @@ export function useEditorRuntimeSession({
   }, [
     firstPlayableGamePack,
     firstPlayableValidationAttempt?.status,
-    activeGeneratedSpec,
     gamePackPersistenceStatus,
+    persistencePolicy,
     persistValidatedGamePack,
   ]);
 

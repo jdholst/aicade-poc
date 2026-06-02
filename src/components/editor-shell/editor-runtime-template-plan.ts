@@ -1,26 +1,24 @@
 import type {
-  FirstPlayableRuntimeCandidate,
   GamePack,
-  GameSpec,
   GameSpecValidationIssue,
 } from "@/game-spec";
-import { parseTopDownGameSpec as parseSavedTopDownGameSpec } from "@/game-spec";
 import type {
   EditorGenerationSource,
   EditorRuntimeMode,
 } from "@/runtime/editor-runtime-mode";
 import type { ActiveGeneratedSpecState } from "@/hooks/use-editor-session";
+import { getEditorRuntimeMode } from "@/runtime/editor-runtime-mode";
 import {
-  getEditorGenerationSource,
-  getEditorRuntimeMode,
-} from "@/runtime/editor-runtime-mode";
-import {
-  createTopDownPhaserTemplate,
   getTopDownPhaserTemplateState,
   type HandAuthoredPhaserTemplate,
   type TopDownPhaserTemplateState,
 } from "@/runtime/phaser";
-import type { RuntimeKind } from "@/runtime/runtime-adapter";
+import {
+  createPlayableDraftSource,
+  type PlayableDraftPersistencePolicy,
+  type PlayableDraftReadyPolicy,
+  type PlayableDraftValidationSource,
+} from "@/runtime/playable-draft-source";
 import type { GeneratedGamePack } from "@/service/starter-project";
 
 export type EditorRuntimeHostViewModel =
@@ -35,13 +33,7 @@ export type EditorRuntimeHostViewModel =
       type: "canvas";
     };
 
-export type FirstPlayableValidationSource = {
-  gamePack?: GamePack;
-  gameSpec: GameSpec;
-  runtimeCandidate: FirstPlayableRuntimeCandidate;
-  source: "fixture" | "generated-spec" | "restored-game-pack";
-  runtimeKind: Extract<RuntimeKind, "phaser">;
-};
+export type FirstPlayableValidationSource = PlayableDraftValidationSource;
 
 export type EditorRuntimeTemplatePlan =
   | {
@@ -53,6 +45,7 @@ export type EditorRuntimeTemplatePlan =
       type: "phaser-pending-generation";
     }
   | {
+      blockedPresentation: "draft-blocked" | "game-spec-validation";
       firstPlayableValidationSource: null;
       issues: GameSpecValidationIssue[];
       message: string;
@@ -60,6 +53,9 @@ export type EditorRuntimeTemplatePlan =
     }
   | {
       firstPlayableValidationSource: FirstPlayableValidationSource;
+      persistencePolicy: PlayableDraftPersistencePolicy;
+      readyPolicy: PlayableDraftReadyPolicy;
+      runFirstPlayableChecksOnReady: true;
       sourceKey: string;
       template: HandAuthoredPhaserTemplate;
       type: "phaser-valid";
@@ -80,142 +76,49 @@ export function createEditorRuntimeTemplatePlan({
   restoredGamePack = null,
   runtimeMode = getEditorRuntimeMode(),
 }: CreateEditorRuntimeTemplatePlanInput = {}): EditorRuntimeTemplatePlan {
-  const resolvedGenerationSource =
-    generationSource ?? getEditorGenerationSource(runtimeMode);
+  const playableDraftSource = createPlayableDraftSource({
+    generatedSpecDraft: activeGeneratedSpec,
+    generationSource,
+    phaserTemplateState,
+    restoredGamePack,
+    runtimeMode,
+  });
 
-  if (runtimeMode === "canvas2d") {
+  if (playableDraftSource.type === "canvas") {
     return {
       firstPlayableValidationSource: null,
       type: "canvas",
     };
   }
 
-  if (activeGeneratedSpec) {
-    return createActiveGeneratedSpecRuntimeTemplatePlan(activeGeneratedSpec);
-  }
-
-  if (restoredGamePack) {
-    return createRestoredGamePackRuntimeTemplatePlan(restoredGamePack);
-  }
-
-  if (resolvedGenerationSource === "phaser-ai") {
+  if (playableDraftSource.type === "pending-generation") {
     return {
       firstPlayableValidationSource: null,
       type: "phaser-pending-generation",
     };
   }
 
-  if (phaserTemplateState.status === "invalid") {
+  if (playableDraftSource.type === "blocked") {
     return {
+      blockedPresentation: activeGeneratedSpec
+        ? "draft-blocked"
+        : "game-spec-validation",
       firstPlayableValidationSource: null,
-      issues: phaserTemplateState.issues,
-      message: phaserTemplateState.message,
+      issues: playableDraftSource.issues,
+      message: playableDraftSource.message,
       type: "phaser-invalid",
     };
   }
 
   return {
-    firstPlayableValidationSource: createFirstPlayableValidationSource(
-      phaserTemplateState.template,
-      "fixture"
-    ),
-    sourceKey: phaserTemplateState.template.id,
-    template: phaserTemplateState.template,
+    firstPlayableValidationSource: playableDraftSource.validationSource,
+    persistencePolicy: playableDraftSource.persistencePolicy,
+    readyPolicy: playableDraftSource.readyPolicy,
+    runFirstPlayableChecksOnReady:
+      playableDraftSource.runFirstPlayableChecksOnReady,
+    sourceKey: playableDraftSource.sourceKey,
+    template: playableDraftSource.template,
     type: "phaser-valid",
-  };
-}
-
-function createActiveGeneratedSpecRuntimeTemplatePlan(
-  activeGeneratedSpec: ActiveGeneratedSpecState
-): EditorRuntimeTemplatePlan {
-  try {
-    const template = createTopDownPhaserTemplate(activeGeneratedSpec.spec);
-
-    return {
-      firstPlayableValidationSource: createFirstPlayableValidationSource(
-        template,
-        "generated-spec"
-      ),
-      sourceKey: [
-        template.id,
-        activeGeneratedSpec.metadata.taskRoute,
-        activeGeneratedSpec.metadata.model,
-        activeGeneratedSpec.metadata.attemptCount,
-      ].join("-"),
-      template,
-      type: "phaser-valid",
-    };
-  } catch {
-    return createInvalidRestoredGamePackPlan(
-      "Generated Game Spec cannot be mounted because it is not a valid top-down Phaser spec."
-    );
-  }
-}
-
-function createRestoredGamePackRuntimeTemplatePlan(
-  gamePack: GamePack
-): EditorRuntimeTemplatePlan {
-  if (gamePack.runtimeKind !== "phaser") {
-    return createInvalidRestoredGamePackPlan(
-      `Saved Game Pack runtime "${gamePack.runtimeKind}" cannot be mounted by the Phaser editor.`
-    );
-  }
-
-  try {
-    const gameSpec = parseSavedTopDownGameSpec(gamePack.gameSpec);
-    const template = createTopDownPhaserTemplate(gameSpec);
-
-    return {
-      firstPlayableValidationSource: {
-        ...createFirstPlayableValidationSource(template, "restored-game-pack"),
-        gamePack,
-      },
-      sourceKey: [
-        template.id,
-        gamePack.updatedAt,
-        gamePack.builds.length,
-        gamePack.checkpoints.length,
-      ].join("-"),
-      template,
-      type: "phaser-valid",
-    };
-  } catch {
-    return createInvalidRestoredGamePackPlan(
-      "Saved Game Pack cannot be restored because its Game Spec is not a valid top-down Phaser spec."
-    );
-  }
-}
-
-function createInvalidRestoredGamePackPlan(
-  message: string
-): Extract<EditorRuntimeTemplatePlan, { type: "phaser-invalid" }> {
-  return {
-    firstPlayableValidationSource: null,
-    issues: [
-      {
-        path: "gamePack.gameSpec",
-        message,
-      },
-    ],
-    message,
-    type: "phaser-invalid",
-  };
-}
-
-function createFirstPlayableValidationSource(
-  template: HandAuthoredPhaserTemplate,
-  source: FirstPlayableValidationSource["source"]
-): FirstPlayableValidationSource {
-  return {
-    gameSpec: template.gameSpec,
-    runtimeCandidate: {
-      runtimeDependencyScriptPaths: template.runtimeDependencyScriptPaths,
-      runtimeKind: "phaser",
-      runtimeScriptPath: template.runtimeScriptPath,
-      templateId: template.gameSpec.template.id,
-    },
-    source,
-    runtimeKind: "phaser",
   };
 }
 

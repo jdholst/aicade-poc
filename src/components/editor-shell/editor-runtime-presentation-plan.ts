@@ -75,6 +75,7 @@ export type RuntimePrimarySurface =
     }
   | {
       host: EditorRuntimeHostViewModel;
+      runFirstPlayableChecksOnReady: boolean;
       type: "runtime-host";
     };
 
@@ -215,6 +216,7 @@ function createRuntimePrimarySurface({
           gameResetNonce,
           pack: loadState.pack,
         }),
+        runFirstPlayableChecksOnReady: false,
         type: "runtime-host",
       };
     }
@@ -231,11 +233,41 @@ function createRuntimePrimarySurface({
   }
 
   if (runtimeTemplate.type === "phaser-invalid") {
+    const failure = createGameSpecFailureReceiptSurface({
+      issues: runtimeTemplate.issues,
+      message: runtimeTemplate.message,
+    });
+
+    if (runtimeTemplate.blockedPresentation === "draft-blocked") {
+      return {
+        failure: {
+          debugReceipts: [
+            {
+              checkId: "game_spec_validation",
+              evidenceJson:
+                runtimeTemplate.issues.length > 0
+                  ? JSON.stringify({ issues: runtimeTemplate.issues }, null, 2)
+                  : null,
+              issueMessages: runtimeTemplate.issues.map(
+                (issue) => issue.message
+              ),
+              message:
+                "Game Spec validation failed before first-playable validation could mount the runtime.",
+              stage: "spec-validation",
+              status: "failed",
+            },
+          ],
+          summary: runtimeTemplate.message,
+        },
+        regenerateAction: startOverFromPromptAction,
+        resetAction: tryAgainAction,
+        screen: firstPlayableBlockedScreen,
+        type: "first-playable-validation-error",
+      };
+    }
+
     return {
-      failure: createGameSpecFailureReceiptSurface({
-        issues: runtimeTemplate.issues,
-        message: runtimeTemplate.message,
-      }),
+      failure,
       screen: validationErrorScreen,
       type: "phaser-validation-error",
     };
@@ -256,6 +288,7 @@ function createRuntimePrimarySurface({
       gameResetNonce,
       runtimeTemplate,
     }),
+    runFirstPlayableChecksOnReady: runtimeTemplate.runFirstPlayableChecksOnReady,
     type: "runtime-host",
   };
 }

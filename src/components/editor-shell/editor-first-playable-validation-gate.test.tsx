@@ -149,16 +149,14 @@ describe("useFirstPlayableValidationGate", () => {
     });
   });
 
-  it("holds generated drafts out of ready state until first-playable evidence passes", () => {
+  it("holds ready-after-first-playable drafts out of ready state until runtime evidence passes", () => {
     const onGameStatusChange = vi.fn();
     const { result } = renderHook(() =>
       useFirstPlayableValidationGate(
         createInput({
           onGameStatusChange,
-          validationSource: {
-            ...validationSource,
-            source: "generated-spec",
-          },
+          readyPolicy: "ready-after-first-playable",
+          validationSource,
         })
       )
     );

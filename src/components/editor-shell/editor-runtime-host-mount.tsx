@@ -18,6 +18,7 @@ type EditorRuntimeHostMountProps = {
   isPaused: boolean;
   onStatusChange: (status: RuntimeIframeStatus) => void;
   onValidationEvidence?: (evidence: RuntimeValidationEvidence) => void;
+  runFirstPlayableChecksOnReady: boolean;
 };
 
 export function EditorRuntimeHostMount({
@@ -27,6 +28,7 @@ export function EditorRuntimeHostMount({
   isPaused,
   onStatusChange,
   onValidationEvidence,
+  runFirstPlayableChecksOnReady,
 }: EditorRuntimeHostMountProps) {
   if (!host) {
     return null;
@@ -45,7 +47,7 @@ export function EditorRuntimeHostMount({
         frameDetail="Sandboxed iframe"
         onStatusChange={onStatusChange}
         onValidationEvidence={onValidationEvidence}
-        runFirstPlayableChecksOnReady={Boolean(onValidationEvidence)}
+        runFirstPlayableChecksOnReady={runFirstPlayableChecksOnReady}
       />
     );
   }
