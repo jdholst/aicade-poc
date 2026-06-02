@@ -39,6 +39,7 @@ export type FirstPlayableValidationSource = {
   gamePack?: GamePack;
   gameSpec: GameSpec;
   runtimeCandidate: FirstPlayableRuntimeCandidate;
+  source: "fixture" | "generated-spec" | "restored-game-pack";
   runtimeKind: Extract<RuntimeKind, "phaser">;
 };
 
@@ -115,7 +116,8 @@ export function createEditorRuntimeTemplatePlan({
 
   return {
     firstPlayableValidationSource: createFirstPlayableValidationSource(
-      phaserTemplateState.template
+      phaserTemplateState.template,
+      "fixture"
     ),
     sourceKey: phaserTemplateState.template.id,
     template: phaserTemplateState.template,
@@ -130,7 +132,10 @@ function createActiveGeneratedSpecRuntimeTemplatePlan(
     const template = createTopDownPhaserTemplate(activeGeneratedSpec.spec);
 
     return {
-      firstPlayableValidationSource: createFirstPlayableValidationSource(template),
+      firstPlayableValidationSource: createFirstPlayableValidationSource(
+        template,
+        "generated-spec"
+      ),
       sourceKey: [
         template.id,
         activeGeneratedSpec.metadata.taskRoute,
@@ -162,7 +167,7 @@ function createRestoredGamePackRuntimeTemplatePlan(
 
     return {
       firstPlayableValidationSource: {
-        ...createFirstPlayableValidationSource(template),
+        ...createFirstPlayableValidationSource(template, "restored-game-pack"),
         gamePack,
       },
       sourceKey: [
@@ -198,7 +203,8 @@ function createInvalidRestoredGamePackPlan(
 }
 
 function createFirstPlayableValidationSource(
-  template: HandAuthoredPhaserTemplate
+  template: HandAuthoredPhaserTemplate,
+  source: FirstPlayableValidationSource["source"]
 ): FirstPlayableValidationSource {
   return {
     gameSpec: template.gameSpec,
@@ -208,6 +214,7 @@ function createFirstPlayableValidationSource(
       runtimeScriptPath: template.runtimeScriptPath,
       templateId: template.gameSpec.template.id,
     },
+    source,
     runtimeKind: "phaser",
   };
 }

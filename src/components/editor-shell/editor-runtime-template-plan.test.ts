@@ -37,6 +37,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
           runtimeScriptPath: topDownPhaserTemplate.runtimeScriptPath,
           templateId: topDownPhaserTemplate.gameSpec.template.id,
         },
+        source: "fixture",
         runtimeKind: "phaser",
       },
       template: topDownPhaserTemplate,
@@ -91,6 +92,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
         runtimeCandidate: {
           templateId: topDownPhaserTemplate.gameSpec.template.id,
         },
+        source: "restored-game-pack",
       },
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
@@ -122,6 +124,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
         runtimeCandidate: {
           templateId: topDownPhaserTemplate.gameSpec.template.id,
         },
+        source: "generated-spec",
       },
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,

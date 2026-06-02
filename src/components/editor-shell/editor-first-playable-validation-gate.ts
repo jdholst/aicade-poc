@@ -23,6 +23,7 @@ type FirstPlayableValidationState = {
   gamePack: GamePack;
   key: string;
   resultWritten: boolean;
+  source: FirstPlayableValidationSource["source"];
 };
 
 type UseFirstPlayableValidationGateInput = {
@@ -108,6 +109,14 @@ export function useFirstPlayableValidationGate({
         return;
       }
 
+      if (
+        status.state === "ready" &&
+        currentValidationState.source === "generated-spec" &&
+        nextAttempt.status !== "passed"
+      ) {
+        return;
+      }
+
       onGameStatusChange(status);
     },
     [onGameStatusChange, validationSeed]
@@ -148,6 +157,14 @@ export function useFirstPlayableValidationGate({
             nextAttempt.failureMessage ??
             "First-playable validation failed.",
         });
+        return;
+      }
+
+      if (
+        currentValidationState.source === "generated-spec" &&
+        nextAttempt.status === "passed"
+      ) {
+        onGameStatusChange({ state: "ready" });
       }
     },
     [onGameStatusChange, validationSeed]
@@ -205,6 +222,7 @@ function createFirstPlayableValidationSeed({
       gamePack: activeGamePack,
       attempt,
       resultWritten: false,
+      source: validationSource.source,
     },
     attempt,
   });

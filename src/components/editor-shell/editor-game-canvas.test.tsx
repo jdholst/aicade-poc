@@ -14,6 +14,7 @@ import {
 } from "@/game-spec";
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import type {
+  ActiveGeneratedSpecState,
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
@@ -408,6 +409,142 @@ describe("EditorGameCanvas", () => {
     await expect(repository.load("game_pack_crystal_spec_chase")).resolves.toBe(
       null
     );
+  });
+
+  it("keeps active generated specs out of ready state until first-playable checks pass", async () => {
+    const actions = createActions();
+    const activeGeneratedSpec = createActiveGeneratedSpec({
+      title: "Generated Crystal Draft",
+    });
+
+    render(
+      <EditorGameCanvas
+        actions={actions}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: activeGeneratedSpec.spec,
+          },
+        })}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>(
+      "Generated Crystal Draft"
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+    });
+
+    expect(actions.onGameStatusChange).not.toHaveBeenCalledWith({
+      state: "ready",
+    });
+
+    act(() => {
+      dispatchValidationEvidence(iframe, "nonblank_render");
+      dispatchValidationEvidence(iframe, "player_visible");
+      dispatchValidationEvidence(iframe, "input_response");
+    });
+
+    await waitFor(() => {
+      expect(actions.onGameStatusChange).toHaveBeenLastCalledWith({
+        state: "ready",
+      });
+    });
+  });
+
+  it("blocks invalid active generated specs before mounting without fixture fallback", () => {
+    const activeGeneratedSpec = createActiveGeneratedSpec({
+      objectives: topDownPhaserTemplate.gameSpec.objectives.map((objective) => ({
+        ...objective,
+        primary: false,
+      })),
+      title: "Generated Invalid Draft",
+    });
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: activeGeneratedSpec.spec,
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText("Draft blocked")).toBeVisible();
+    expect(
+      screen.getAllByText("Expected exactly one primary objective.")
+    ).toHaveLength(2);
+    expect(
+      screen.queryByTitle("Generated Invalid Draft")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+  });
+
+  it("blocks active generated specs when runtime first-playable evidence fails", async () => {
+    const activeGeneratedSpec = createActiveGeneratedSpec({
+      title: "Generated Runtime Failure Draft",
+    });
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: activeGeneratedSpec.spec,
+          },
+        })}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>(
+      "Generated Runtime Failure Draft"
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "input_response", "failed");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Draft blocked")).toBeVisible();
+    });
+
+    expect(screen.getByText("This draft is not playable yet.")).toBeVisible();
+    expect(
+      screen.queryByTitle("Generated Runtime Failure Draft")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
   });
 
   it("remounts the Phaser runtime from a saved Game Pack after repository load", async () => {
@@ -841,6 +978,26 @@ function dispatchValidationEvidence(
       source: iframe.contentWindow,
     })
   );
+}
+
+function createActiveGeneratedSpec(
+  specOverrides: Partial<ActiveGeneratedSpecState["spec"]> = {}
+): ActiveGeneratedSpecState {
+  const spec = {
+    ...topDownPhaserTemplate.gameSpec,
+    ...specOverrides,
+  };
+
+  return {
+    metadata: {
+      attemptCount: 1,
+      model: "gpt-5.4-mini",
+      taskRoute: "spec_generation.primary",
+    },
+    runtimeKind: "phaser",
+    source: "phaser-spec",
+    spec,
+  };
 }
 
 class MemoryGamePackStorage implements GamePackStorageDriver {

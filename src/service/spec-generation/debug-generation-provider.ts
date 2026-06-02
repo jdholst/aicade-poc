@@ -5,6 +5,8 @@ import type { SpecGenerationProvider } from "./spec-generation-service";
 
 export const DEBUG_SPEC_GENERATION_FAILURE_ENV =
   "AICADE_DEBUG_SPEC_GENERATION_FAILURE";
+export const DEBUG_SPEC_GENERATION_SUCCESS_ENV =
+  "AICADE_DEBUG_SPEC_GENERATION_SUCCESS";
 
 export const debugGenerationFailureModes = [
   "missing_primary_objective",
@@ -79,6 +81,15 @@ export function createDebugSpecGenerationProvider({
     return candidate;
   };
 }
+
+export const debugSuccessfulSpecGenerationProvider: SpecGenerationProvider =
+  async ({ prompt }) => {
+    const candidate = structuredClone(getFirstValidTopDownGameSpecFixture());
+
+    candidate.originalPrompt = prompt;
+
+    return candidate;
+  };
 
 export function parseDebugGenerationFailureMode(
   value: unknown

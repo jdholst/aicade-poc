@@ -158,6 +158,41 @@ describe("Spec Generation API route contract", () => {
     );
   });
 
+  it("uses the local debug success adapter without an OpenAI key in development", async () => {
+    let providerCallCount = 0;
+    const post = createSpecGenerationPostHandler({
+      env: {
+        AICADE_DEBUG_SPEC_GENERATION_SUCCESS: "1",
+        NODE_ENV: "development",
+      },
+      includeDebugCandidate: true,
+      provider: async () => {
+        providerCallCount += 1;
+        return getFirstValidTopDownGameSpecFixture();
+      },
+    });
+
+    const response = await post(
+      jsonRequest({
+        enteredPrompt: "Make a tiny top-down collection game.",
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(providerCallCount).toBe(0);
+    expect(payload).toMatchObject({
+      ok: true,
+      metadata: {
+        taskRoute: "spec_generation.primary",
+        attemptCount: 1,
+      },
+      spec: {
+        originalPrompt: "Make a tiny top-down collection game.",
+      },
+    });
+  });
+
   it("rejects the local debug generation adapter in production", async () => {
     let providerCallCount = 0;
     const post = createSpecGenerationPostHandler({
@@ -184,8 +219,7 @@ describe("Spec Generation API route contract", () => {
     expect(providerCallCount).toBe(0);
     expect(payload).toEqual({
       ok: false,
-      userMessage:
-        "Debug Spec Generation failures are disabled in production.",
+      userMessage: "Debug Spec Generation is disabled in production.",
       stage: "configuration",
       validationIssues: [],
       taskRoute: "spec_generation.primary",

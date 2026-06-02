@@ -69,6 +69,7 @@ const validRuntimeTemplate: EditorRuntimeTemplatePlan = {
       runtimeScriptPath: topDownPhaserTemplate.runtimeScriptPath,
       templateId: topDownPhaserTemplate.gameSpec.template.id,
     },
+    source: "fixture",
     runtimeKind: "phaser",
   },
   sourceKey: topDownPhaserTemplate.id,
