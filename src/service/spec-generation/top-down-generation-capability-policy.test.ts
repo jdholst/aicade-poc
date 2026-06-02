@@ -8,11 +8,11 @@ import {
 
 import {
   TOP_DOWN_GENERATION_CAPABILITY_POLICY,
-  createTopDownGameSpecJsonSchema,
   createTopDownGenerationCapabilityPolicy,
   renderTopDownSpecGenerationCapabilityIntegrityRules,
   renderTopDownSpecGenerationGuide,
 } from "./top-down-generation-capability-policy";
+import { createTopDownGameSpecJsonSchema } from "./spec-generation-schema";
 
 describe("Top-Down Generation Capability Policy", () => {
   it("drives the guide and strict schema narrowing from one policy", () => {

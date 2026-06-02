@@ -22,6 +22,7 @@ export const allowedTopDownSpecGenerationMechanics = [
   ...TOP_DOWN_GENERATION_CAPABILITY_POLICY.allowedMechanics,
 ] as const;
 
+export const TOP_DOWN_GAME_SPEC_TOOL = "return_top_down_game_spec";
 
 export function createTopDownGameSpecJsonSchema(
   policy: TopDownGenerationCapabilityPolicy = TOP_DOWN_GENERATION_CAPABILITY_POLICY
@@ -39,5 +40,4 @@ export function createTopDownGameSpecJsonSchema(
 }
 
 export const topDownGameSpecJsonSchema = createTopDownGameSpecJsonSchema();
-
 
