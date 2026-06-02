@@ -33,6 +33,12 @@ export type SpecGenerationProviderErrorDetails = {
 };
 
 export type SpecGenerationRepairStatus = "repaired";
+export type SpecGenerationRepairAttemptSummary = {
+  attempt: number;
+  outcome: "failed_validation" | "repaired" | "repair_failed";
+  stage: SpecGenerationFailureStage;
+  issues: SpecGenerationIssue[];
+};
 
 export class SpecGenerationProviderError extends Error {
   readonly details: SpecGenerationProviderErrorDetails;
@@ -52,6 +58,7 @@ export type SpecGenerationSuccessResult = {
     model: OpenAIModelId;
     attemptCount: number;
     repairStatus?: SpecGenerationRepairStatus;
+    repairAttempts?: SpecGenerationRepairAttemptSummary[];
   };
 };
 
@@ -62,6 +69,7 @@ export type SpecGenerationFailureResult = {
   validationIssues: SpecGenerationIssue[];
   taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
   attemptCount: number;
+  repairAttempts?: SpecGenerationRepairAttemptSummary[];
   debugCandidate?: unknown;
   debugProviderError?: SpecGenerationProviderErrorDetails;
 };
@@ -142,6 +150,13 @@ export async function generateTopDownGameSpec({
     };
   }
 
+  const firstRepairAttemptSummary = createRepairAttemptSummary({
+    attempt: attemptCount,
+    outcome: "failed_validation",
+    stage: firstAttempt.stage,
+    issues: firstAttempt.validationIssues,
+  });
+
   if (!repairEnabled) {
     return createFailureResult({
       stage: firstAttempt.stage,
@@ -194,9 +209,20 @@ export async function generateTopDownGameSpec({
         model,
         attemptCount: repairAttemptCount,
         repairStatus: "repaired",
+        repairAttempts: [firstRepairAttemptSummary],
       },
     };
   }
+
+  const repairAttempts = [
+    firstRepairAttemptSummary,
+    createRepairAttemptSummary({
+      attempt: repairAttemptCount,
+      outcome: "repair_failed",
+      stage: repairAttempt.stage,
+      issues: repairAttempt.validationIssues,
+    }),
+  ];
 
   return createFailureResult({
     stage: repairAttempt.stage,
@@ -204,6 +230,7 @@ export async function generateTopDownGameSpec({
       "I designed a game plan, but it did not pass validation. Please try a simpler prompt.",
     validationIssues: repairAttempt.validationIssues,
     attemptCount: repairAttemptCount,
+    repairAttempts,
     debugCandidate: includeDebugCandidate ? repairedCandidate : undefined,
   });
 }
@@ -236,6 +263,7 @@ function createFailureResult({
   userMessage,
   validationIssues,
   attemptCount,
+  repairAttempts,
   debugCandidate,
   debugProviderError,
 }: {
@@ -243,6 +271,7 @@ function createFailureResult({
   userMessage: string;
   validationIssues: SpecGenerationIssue[];
   attemptCount: number;
+  repairAttempts?: SpecGenerationRepairAttemptSummary[];
   debugCandidate?: unknown;
   debugProviderError?: SpecGenerationProviderErrorDetails;
 }): SpecGenerationFailureResult {
@@ -253,8 +282,23 @@ function createFailureResult({
     validationIssues,
     taskRoute: SPEC_GENERATION_TASK_ROUTE,
     attemptCount,
+    ...(repairAttempts === undefined ? {} : { repairAttempts }),
     ...(debugCandidate === undefined ? {} : { debugCandidate }),
     ...(debugProviderError === undefined ? {} : { debugProviderError }),
+  };
+}
+
+function createRepairAttemptSummary({
+  attempt,
+  outcome,
+  stage,
+  issues,
+}: SpecGenerationRepairAttemptSummary): SpecGenerationRepairAttemptSummary {
+  return {
+    attempt,
+    outcome,
+    stage,
+    issues,
   };
 }
 

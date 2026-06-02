@@ -55,6 +55,19 @@ describe("Spec Generation service contract", () => {
         model: "gpt-5.4-mini",
         attemptCount: 2,
         repairStatus: "repaired",
+        repairAttempts: [
+          {
+            attempt: 1,
+            outcome: "failed_validation",
+            stage: "semantic_validation",
+            issues: [
+              {
+                path: "mechanics.mechanic_player_movement.entityIds",
+                message: 'Unknown entity ID "entity_missing".',
+              },
+            ],
+          },
+        ],
       },
     });
     expect(providerCalls).toEqual([
@@ -112,6 +125,30 @@ describe("Spec Generation service contract", () => {
       taskRoute: "spec_generation.primary",
       attemptCount: 2,
       debugCandidate: invalidRepairCandidate,
+      repairAttempts: [
+        {
+          attempt: 1,
+          outcome: "failed_validation",
+          stage: "semantic_validation",
+          issues: [
+            {
+              path: "mechanics.mechanic_player_movement.entityIds",
+              message: 'Unknown entity ID "entity_missing".',
+            },
+          ],
+        },
+        {
+          attempt: 2,
+          outcome: "repair_failed",
+          stage: "semantic_validation",
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              path: "objectives",
+              message: "Expected exactly one primary objective.",
+            }),
+          ]),
+        },
+      ],
     });
     expect(result.validationIssues).toEqual(
       expect.arrayContaining([
@@ -151,6 +188,16 @@ describe("Spec Generation service contract", () => {
       ok: false,
       attemptCount: 2,
       debugCandidate: invalidCandidate,
+      repairAttempts: [
+        expect.objectContaining({
+          attempt: 1,
+          outcome: "failed_validation",
+        }),
+        expect.objectContaining({
+          attempt: 2,
+          outcome: "repair_failed",
+        }),
+      ],
     });
   });
 

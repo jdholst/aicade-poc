@@ -336,6 +336,67 @@ describe("useEditorSession", () => {
     expect(result.current.session.canvas.gameResetNonce).toBe(1);
   });
 
+  it("preserves repaired Spec Generation metadata as active generated spec state", async () => {
+    const generatedSpec = getFirstValidTopDownGameSpecFixture();
+    const repairAttempts = [
+      {
+        attempt: 1,
+        outcome: "failed_validation" as const,
+        stage: "semantic_validation" as const,
+        issues: [
+          {
+            path: "mechanics.mechanic_player_movement.entityIds",
+            message: 'Unknown entity ID "entity_missing".',
+          },
+        ],
+      },
+    ];
+    const fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ok: true,
+        spec: generatedSpec,
+        metadata: {
+          taskRoute: "spec_generation.primary",
+          model: "gpt-5.4-mini",
+          attemptCount: 2,
+          repairStatus: "repaired",
+          repairAttempts,
+        },
+      })
+    );
+    vi.stubGlobal("fetch", fetch);
+    const { result } = renderHook(() =>
+      useEditorSession({
+        enteredPrompt: "make a top-down coin chase",
+        enteredOpenAiApiKey: "sk-test",
+        enteredOpenAiKeyword: "",
+        enteredOpenAiModel: "gpt-5.4-mini",
+        generationStages,
+        needsOpenAiApiKey: true,
+        needsOpenAiModel: true,
+      })
+    );
+
+    act(() => {
+      result.current.actions.chat.onStartGeneration();
+    });
+
+    await waitFor(() => {
+      expect(result.current.session.canvas.activeGeneratedSpec).toEqual({
+        metadata: {
+          attemptCount: 2,
+          model: "gpt-5.4-mini",
+          repairAttempts,
+          repairStatus: "repaired",
+          taskRoute: "spec_generation.primary",
+        },
+        runtimeKind: "phaser",
+        source: "phaser-spec",
+        spec: generatedSpec,
+      });
+    });
+  });
+
   it("clears active generated spec state when regeneration fails", async () => {
     const generatedSpec = getFirstValidTopDownGameSpecFixture();
     const fetch = vi
@@ -446,6 +507,31 @@ describe("useEditorSession", () => {
           ],
           taskRoute: "spec_generation.primary",
           attemptCount: 1,
+          repairAttempts: [
+            {
+              attempt: 1,
+              outcome: "failed_validation",
+              stage: "mechanic_validation",
+              issues: [
+                {
+                  path: "mechanics.mechanic_pickup_collection.assetIds",
+                  message: "Expected asset role \"pickup\".",
+                },
+              ],
+            },
+            {
+              attempt: 2,
+              outcome: "repair_failed",
+              stage: "mechanic_validation",
+              issues: [
+                {
+                  path: "mechanics.mechanic_pickup_collection.assetIds",
+                  message:
+                    "Expected a referenced pickup asset to be placed in a pickup zone.",
+                },
+              ],
+            },
+          ],
         },
         422
       )
@@ -477,6 +563,31 @@ describe("useEditorSession", () => {
             {
               path: "mechanics.mechanic_pickup_collection.assetIds",
               message: "Expected asset role \"pickup\".",
+            },
+          ],
+          repairAttempts: [
+            {
+              attempt: 1,
+              outcome: "failed_validation",
+              stage: "mechanic_validation",
+              issues: [
+                {
+                  path: "mechanics.mechanic_pickup_collection.assetIds",
+                  message: "Expected asset role \"pickup\".",
+                },
+              ],
+            },
+            {
+              attempt: 2,
+              outcome: "repair_failed",
+              stage: "mechanic_validation",
+              issues: [
+                {
+                  path: "mechanics.mechanic_pickup_collection.assetIds",
+                  message:
+                    "Expected a referenced pickup asset to be placed in a pickup zone.",
+                },
+              ],
             },
           ],
           stage: "mechanic_validation",

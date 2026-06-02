@@ -66,6 +66,29 @@ function getTopDownSpecSummary(spec: TopDownGameSpec) {
   ];
 }
 
+function createTopDownSpecGenerationTranscriptMessage(
+  metadata: Extract<
+    EditorAIChatSession["loadState"],
+    { status: "success"; source: "phaser-spec" }
+  >["metadata"]
+): GeneratedProjectTranscriptMessage {
+  const repairCount =
+    metadata.repairAttempts && metadata.repairAttempts.length > 0
+      ? Math.max(metadata.attemptCount - 1, metadata.repairAttempts.length)
+      : 0;
+  const repairSuffix =
+    repairCount > 0
+      ? ` after ${repairCount} automatic repair${
+          repairCount === 1 ? "" : "s"
+        }`
+      : "";
+
+  return {
+    role: "assistant",
+    text: `Generated a playable project plan from the prompt${repairSuffix}.`,
+  };
+}
+
 function createGeneratedProjectSummary(
   loadState: EditorAIChatSession["loadState"],
   submittedPrompt: string
@@ -114,10 +137,7 @@ function createGeneratedProjectSummary(
         role: "user",
         text: submittedPrompt,
       },
-      {
-        role: "assistant",
-        text: "Generated a playable project plan from the prompt.",
-      },
+      createTopDownSpecGenerationTranscriptMessage(loadState.metadata),
     ],
   };
 }

@@ -116,6 +116,19 @@ describe("Spec Generation API route contract", () => {
         model: "gpt-5.4-mini",
         attemptCount: 2,
         repairStatus: "repaired",
+        repairAttempts: [
+          {
+            attempt: 1,
+            outcome: "failed_validation",
+            stage: "semantic_validation",
+            issues: [
+              {
+                path: "mechanics.mechanic_player_movement.entityIds",
+                message: 'Unknown entity ID "entity_missing".',
+              },
+            ],
+          },
+        ],
       },
     });
     expect(providerCalls).toHaveLength(2);
@@ -158,6 +171,32 @@ describe("Spec Generation API route contract", () => {
       stage: "mechanic_validation",
       taskRoute: "spec_generation.primary",
       attemptCount: 2,
+      repairAttempts: [
+        {
+          attempt: 1,
+          outcome: "failed_validation",
+          stage: "mechanic_validation",
+          issues: [
+            {
+              path: "mechanics.mechanic_pickup_collection.assetIds",
+              message:
+                "Expected a referenced pickup asset to be placed in a pickup zone.",
+            },
+          ],
+        },
+        {
+          attempt: 2,
+          outcome: "repair_failed",
+          stage: "mechanic_validation",
+          issues: [
+            {
+              path: "mechanics.mechanic_pickup_collection.assetIds",
+              message:
+                "Expected a referenced pickup asset to be placed in a pickup zone.",
+            },
+          ],
+        },
+      ],
       debugCandidate: invalidCandidate,
     });
     expect(payload.validationIssues).toEqual(
@@ -300,6 +339,16 @@ describe("Spec Generation API route contract", () => {
       stage: "mechanic_validation",
       taskRoute: "spec_generation.primary",
       attemptCount: 2,
+      repairAttempts: [
+        expect.objectContaining({
+          attempt: 1,
+          outcome: "failed_validation",
+        }),
+        expect.objectContaining({
+          attempt: 2,
+          outcome: "repair_failed",
+        }),
+      ],
     });
     expect(payload).not.toHaveProperty("debugCandidate");
   });

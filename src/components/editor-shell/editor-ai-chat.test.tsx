@@ -201,5 +201,63 @@ describe("EditorAIChat", () => {
       screen.getByText(topDownPhaserTemplate.gameSpec.currentIntentSummary)
     ).toBeVisible();
     expect(screen.getByText("Controls")).toBeVisible();
+    expect(screen.queryByText(/automatic repair/i)).not.toBeInTheDocument();
+  });
+
+  it("shows one friendly repair note for repaired Phaser Spec Generation success", () => {
+    render(
+      <EditorAIChat
+        actions={createActions()}
+        chat={createChatSession({
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: {
+              attemptCount: 2,
+              model: "gpt-5.4-mini",
+              repairStatus: "repaired",
+              repairAttempts: [
+                {
+                  attempt: 1,
+                  outcome: "failed_validation",
+                  stage: "semantic_validation",
+                  issues: [
+                    {
+                      path: "mechanics.mechanic_player_movement.entityIds",
+                      message: 'Unknown entity ID "entity_missing".',
+                    },
+                    {
+                      path: "objectives",
+                      message: "Expected exactly one primary objective.",
+                    },
+                    {
+                      path: "regions.region_arena.bounds",
+                      message: "Expected region bounds inside the scene.",
+                    },
+                    {
+                      path: "assets.asset_pickup.role",
+                      message: 'Expected asset role "pickup".',
+                    },
+                  ],
+                },
+              ],
+              taskRoute: "spec_generation.primary",
+            },
+            runtimeKind: "phaser",
+            spec: topDownPhaserTemplate.gameSpec,
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        "Generated a playable project plan from the prompt after 1 automatic repair."
+      )
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Unknown entity ID "entity_missing"/)
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("AI")).toHaveLength(1);
   });
 });

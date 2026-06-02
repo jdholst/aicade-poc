@@ -119,14 +119,22 @@ function createSpecGenerationValidationFailureReceiptSurface({
           {
             attemptCount: validationFailure.attemptCount,
             issues: validationFailure.issues,
+            ...(validationFailure.repairAttempts
+              ? { repairAttempts: validationFailure.repairAttempts }
+              : {}),
             taskRoute: validationFailure.taskRoute,
           },
           null,
           2
         ),
-        issueMessages: validationFailure.issues.map(
-          (issue) => `${issue.path}: ${issue.message}`
-        ),
+        issueMessages: [
+          ...createRepairAttemptIssueMessages(
+            validationFailure.repairAttempts
+          ),
+          ...validationFailure.issues.map(
+            (issue) => `${issue.path}: ${issue.message}`
+          ),
+        ],
         message,
         stage: validationFailure.stage,
         status: "failed",
@@ -134,6 +142,26 @@ function createSpecGenerationValidationFailureReceiptSurface({
     ],
     summary: message,
   };
+}
+
+function createRepairAttemptIssueMessages(
+  repairAttempts: SpecGenerationValidationFailure["repairAttempts"]
+) {
+  if (!repairAttempts || repairAttempts.length === 0) {
+    return [];
+  }
+
+  return [
+    "Automatic repair was attempted once and stopped.",
+    ...repairAttempts.flatMap((repairAttempt) =>
+      repairAttempt.issues
+        .slice(0, 3)
+        .map(
+          (issue) =>
+            `Attempt ${repairAttempt.attempt} ${repairAttempt.outcome}: ${issue.path}: ${issue.message}`
+        )
+    ),
+  ];
 }
 
 function createValidationEvidenceReceiptViewModel(

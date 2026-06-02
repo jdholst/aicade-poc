@@ -9,6 +9,7 @@ import type {
   SPEC_GENERATION_TASK_ROUTE,
   SpecGenerationFailureStage,
   SpecGenerationIssue,
+  SpecGenerationRepairAttemptSummary,
   SpecGenerationRepairStatus,
 } from "./spec-generation-service";
 
@@ -17,6 +18,7 @@ export type TopDownSpecGenerationClientResult = {
     taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
     model: OpenAIModelId;
     attemptCount: number;
+    repairAttempts?: SpecGenerationRepairAttemptSummary[];
     repairStatus?: SpecGenerationRepairStatus;
   };
   runtimeKind: Extract<RuntimeKind, "phaser">;
@@ -26,6 +28,7 @@ export type TopDownSpecGenerationClientResult = {
 export type SpecGenerationValidationFailure = {
   attemptCount: number;
   issues: SpecGenerationIssue[];
+  repairAttempts?: SpecGenerationRepairAttemptSummary[];
   stage: SpecGenerationFailureStage;
   taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
 };
@@ -51,12 +54,14 @@ type SpecGenerationPayload =
         taskRoute?: unknown;
         model?: unknown;
         attemptCount?: unknown;
+        repairAttempts?: unknown;
         repairStatus?: unknown;
       };
     }
   | {
       ok: false;
       attemptCount?: unknown;
+      repairAttempts?: unknown;
       stage?: unknown;
       taskRoute?: unknown;
       userMessage?: unknown;
@@ -97,10 +102,12 @@ export async function requestTopDownSpecGeneration(
 
   const spec = validateTopDownGameSpec(payload.spec);
   const repairStatus = getRepairStatus(payload.metadata?.repairStatus);
+  const repairAttempts = getRepairAttempts(payload.metadata?.repairAttempts);
   const metadata = {
     taskRoute: "spec_generation.primary" as const,
     model: getMetadataString(payload.metadata?.model) as OpenAIModelId,
     attemptCount: getMetadataNumber(payload.metadata?.attemptCount),
+    ...(repairAttempts.length > 0 ? { repairAttempts } : {}),
     ...(repairStatus ? { repairStatus } : {}),
   };
 
@@ -143,6 +150,7 @@ function getSpecGenerationValidationFailure(
   }
 
   const issues = getValidationIssues(payload.validationIssues);
+  const repairAttempts = getRepairAttempts(payload.repairAttempts);
 
   if (issues.length === 0) {
     return undefined;
@@ -151,9 +159,50 @@ function getSpecGenerationValidationFailure(
   return {
     attemptCount: getMetadataNumber(payload.attemptCount),
     issues,
+    ...(repairAttempts.length > 0 ? { repairAttempts } : {}),
     stage: getValidationStage(payload.stage),
     taskRoute: "spec_generation.primary",
   };
+}
+
+function getRepairAttempts(
+  value: unknown
+): SpecGenerationRepairAttemptSummary[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((repairAttempt) => {
+    if (!repairAttempt || typeof repairAttempt !== "object") {
+      return [];
+    }
+
+    const attempt =
+      "attempt" in repairAttempt ? repairAttempt.attempt : undefined;
+    const outcome =
+      "outcome" in repairAttempt ? repairAttempt.outcome : undefined;
+    const stage = "stage" in repairAttempt ? repairAttempt.stage : undefined;
+    const issues =
+      "issues" in repairAttempt ? repairAttempt.issues : undefined;
+
+    if (
+      typeof attempt !== "number" ||
+      !Number.isFinite(attempt) ||
+      !isRepairAttemptOutcome(outcome) ||
+      !isValidationStage(stage)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        attempt,
+        outcome,
+        stage,
+        issues: getValidationIssues(issues),
+      },
+    ];
+  });
 }
 
 function getValidationIssues(value: unknown): SpecGenerationIssue[] {
@@ -185,13 +234,32 @@ function getValidationIssues(value: unknown): SpecGenerationIssue[] {
 }
 
 function getValidationStage(value: unknown): SpecGenerationFailureStage {
-  if (
-    value === "schema_validation" ||
-    value === "semantic_validation" ||
-    value === "mechanic_validation"
-  ) {
+  if (isValidationStage(value)) {
     return value;
   }
 
   return "schema_validation";
+}
+
+function isValidationStage(
+  value: unknown
+): value is Extract<
+  SpecGenerationFailureStage,
+  "schema_validation" | "semantic_validation" | "mechanic_validation"
+> {
+  return (
+    value === "schema_validation" ||
+    value === "semantic_validation" ||
+    value === "mechanic_validation"
+  );
+}
+
+function isRepairAttemptOutcome(
+  value: unknown
+): value is SpecGenerationRepairAttemptSummary["outcome"] {
+  return (
+    value === "failed_validation" ||
+    value === "repaired" ||
+    value === "repair_failed"
+  );
 }
