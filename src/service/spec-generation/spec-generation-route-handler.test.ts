@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
 
 import { createSpecGenerationPostHandler } from "./spec-generation-route-handler";
-import { SpecGenerationProviderError } from "./spec-generation-service";
+import { SpecGenerationProviderError } from "./spec-generation-outcome";
 
 describe("Spec Generation API route contract", () => {
   it("returns a validated spec response from a stubbed provider", async () => {

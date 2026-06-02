@@ -1,82 +1,19 @@
-import { ZodError } from "zod";
-
 import {
-  GameSpecValidationError,
   validateTopDownGameSpec,
-  type GameSpecValidationIssue,
   type TopDownGameSpec,
 } from "@/game-spec";
 import type { OpenAIModelId } from "@/utils/openai-utils";
-
-export const SPEC_GENERATION_TASK_ROUTE = "spec_generation.primary";
-
-export type SpecGenerationFailureStage =
-  | "bad_request"
-  | "configuration"
-  | "model_generation"
-  | "schema_validation"
-  | "semantic_validation"
-  | "mechanic_validation";
-
-export type SpecGenerationIssue = GameSpecValidationIssue & {
-  code?: string;
-};
-
-export type SpecGenerationProviderErrorDetails = {
-  code?: string;
-  message: string;
-  param?: string;
-  provider: "openai";
-  requestId?: string;
-  status?: number;
-  type?: string;
-};
-
-export type SpecGenerationRepairStatus = "repaired";
-export type SpecGenerationRepairAttemptSummary = {
-  attempt: number;
-  outcome: "failed_validation" | "repaired" | "repair_failed";
-  stage: SpecGenerationFailureStage;
-  issues: SpecGenerationIssue[];
-};
-
-export class SpecGenerationProviderError extends Error {
-  readonly details: SpecGenerationProviderErrorDetails;
-
-  constructor(message: string, details: SpecGenerationProviderErrorDetails) {
-    super(message);
-    this.name = "SpecGenerationProviderError";
-    this.details = details;
-  }
-}
-
-export type SpecGenerationSuccessResult = {
-  ok: true;
-  spec: TopDownGameSpec;
-  metadata: {
-    taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
-    model: OpenAIModelId;
-    attemptCount: number;
-    repairStatus?: SpecGenerationRepairStatus;
-    repairAttempts?: SpecGenerationRepairAttemptSummary[];
-  };
-};
-
-export type SpecGenerationFailureResult = {
-  ok: false;
-  userMessage: string;
-  stage: SpecGenerationFailureStage;
-  validationIssues: SpecGenerationIssue[];
-  taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
-  attemptCount: number;
-  repairAttempts?: SpecGenerationRepairAttemptSummary[];
-  debugCandidate?: unknown;
-  debugProviderError?: SpecGenerationProviderErrorDetails;
-};
-
-export type SpecGenerationResult =
-  | SpecGenerationSuccessResult
-  | SpecGenerationFailureResult;
+import {
+  createSpecGenerationFailureResult,
+  createSpecGenerationRepairAttemptSummary,
+  createSpecGenerationSuccessResult,
+  createSpecGenerationValidationAttemptFailure,
+  SPEC_GENERATION_TASK_ROUTE,
+  SpecGenerationProviderError,
+  type SpecGenerationFailureStage,
+  type SpecGenerationIssue,
+  type SpecGenerationResult,
+} from "./spec-generation-outcome";
 
 export type SpecGenerationProviderInput = {
   prompt: string;
@@ -123,7 +60,7 @@ export async function generateTopDownGameSpec({
       taskRoute: SPEC_GENERATION_TASK_ROUTE,
     });
   } catch (error) {
-    return createFailureResult({
+    return createSpecGenerationFailureResult({
       stage: "model_generation",
       userMessage:
         "I couldn't design a game plan from that prompt. Please try again.",
@@ -139,18 +76,14 @@ export async function generateTopDownGameSpec({
   const firstAttempt = validateCandidate(candidate);
 
   if (firstAttempt.ok) {
-    return {
-      ok: true,
+    return createSpecGenerationSuccessResult({
       spec: firstAttempt.spec,
-      metadata: {
-        taskRoute: SPEC_GENERATION_TASK_ROUTE,
-        model,
-        attemptCount,
-      },
-    };
+      model,
+      attemptCount,
+    });
   }
 
-  const firstRepairAttemptSummary = createRepairAttemptSummary({
+  const firstRepairAttemptSummary = createSpecGenerationRepairAttemptSummary({
     attempt: attemptCount,
     outcome: "failed_validation",
     stage: firstAttempt.stage,
@@ -158,7 +91,7 @@ export async function generateTopDownGameSpec({
   });
 
   if (!repairEnabled) {
-    return createFailureResult({
+    return createSpecGenerationFailureResult({
       stage: firstAttempt.stage,
       userMessage:
         "I designed a game plan, but it did not pass validation. Please try a simpler prompt.",
@@ -185,7 +118,7 @@ export async function generateTopDownGameSpec({
       },
     });
   } catch (error) {
-    return createFailureResult({
+    return createSpecGenerationFailureResult({
       stage: "model_generation",
       userMessage:
         "I couldn't design a game plan from that prompt. Please try again.",
@@ -201,22 +134,18 @@ export async function generateTopDownGameSpec({
   const repairAttempt = validateCandidate(repairedCandidate);
 
   if (repairAttempt.ok) {
-    return {
-      ok: true,
+    return createSpecGenerationSuccessResult({
       spec: repairAttempt.spec,
-      metadata: {
-        taskRoute: SPEC_GENERATION_TASK_ROUTE,
-        model,
-        attemptCount: repairAttemptCount,
-        repairStatus: "repaired",
-        repairAttempts: [firstRepairAttemptSummary],
-      },
-    };
+      model,
+      attemptCount: repairAttemptCount,
+      repairStatus: "repaired",
+      repairAttempts: [firstRepairAttemptSummary],
+    });
   }
 
   const repairAttempts = [
     firstRepairAttemptSummary,
-    createRepairAttemptSummary({
+    createSpecGenerationRepairAttemptSummary({
       attempt: repairAttemptCount,
       outcome: "repair_failed",
       stage: repairAttempt.stage,
@@ -224,7 +153,7 @@ export async function generateTopDownGameSpec({
     }),
   ];
 
-  return createFailureResult({
+  return createSpecGenerationFailureResult({
     stage: repairAttempt.stage,
     userMessage:
       "I designed a game plan, but it did not pass validation. Please try a simpler prompt.",
@@ -252,95 +181,7 @@ function validateCandidate(
   } catch (error) {
     return {
       ok: false,
-      stage: getValidationFailureStage(error),
-      validationIssues: getValidationIssues(error),
+      ...createSpecGenerationValidationAttemptFailure(error),
     };
   }
-}
-
-function createFailureResult({
-  stage,
-  userMessage,
-  validationIssues,
-  attemptCount,
-  repairAttempts,
-  debugCandidate,
-  debugProviderError,
-}: {
-  stage: SpecGenerationFailureStage;
-  userMessage: string;
-  validationIssues: SpecGenerationIssue[];
-  attemptCount: number;
-  repairAttempts?: SpecGenerationRepairAttemptSummary[];
-  debugCandidate?: unknown;
-  debugProviderError?: SpecGenerationProviderErrorDetails;
-}): SpecGenerationFailureResult {
-  return {
-    ok: false,
-    userMessage,
-    stage,
-    validationIssues,
-    taskRoute: SPEC_GENERATION_TASK_ROUTE,
-    attemptCount,
-    ...(repairAttempts === undefined ? {} : { repairAttempts }),
-    ...(debugCandidate === undefined ? {} : { debugCandidate }),
-    ...(debugProviderError === undefined ? {} : { debugProviderError }),
-  };
-}
-
-function createRepairAttemptSummary({
-  attempt,
-  outcome,
-  stage,
-  issues,
-}: SpecGenerationRepairAttemptSummary): SpecGenerationRepairAttemptSummary {
-  return {
-    attempt,
-    outcome,
-    stage,
-    issues,
-  };
-}
-
-function getValidationFailureStage(error: unknown): SpecGenerationFailureStage {
-  if (error instanceof ZodError) {
-    return "schema_validation";
-  }
-
-  if (error instanceof GameSpecValidationError) {
-    return error.issues.some((issue) => isMechanicIssue(issue))
-      ? "mechanic_validation"
-      : "semantic_validation";
-  }
-
-  return "schema_validation";
-}
-
-function getValidationIssues(error: unknown): SpecGenerationIssue[] {
-  if (error instanceof ZodError) {
-    return error.issues.map((issue) => ({
-      path: issue.path.length > 0 ? issue.path.join(".") : "root",
-      message: issue.message,
-      code: issue.code,
-    }));
-  }
-
-  if (error instanceof GameSpecValidationError) {
-    return error.issues;
-  }
-
-  return [
-    {
-      path: "root",
-      message: error instanceof Error ? error.message : "Invalid Game Spec.",
-    },
-  ];
-}
-
-function isMechanicIssue(issue: GameSpecValidationIssue) {
-  return (
-    issue.path.startsWith("mechanics.") &&
-    (issue.message.startsWith("Unsupported mechanic type") ||
-      issue.message.startsWith("Expected "))
-  );
 }

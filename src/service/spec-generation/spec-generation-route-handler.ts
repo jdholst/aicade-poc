@@ -8,11 +8,12 @@ import {
   parseDebugGenerationFailureMode,
 } from "./debug-generation-provider";
 import {
+  createSpecGenerationPreflightFailure,
+  getSpecGenerationResultStatus,
+} from "./spec-generation-outcome";
+import {
   generateTopDownGameSpec,
-  SPEC_GENERATION_TASK_ROUTE,
-  type SpecGenerationFailureResult,
   type SpecGenerationProvider,
-  type SpecGenerationResult,
 } from "./spec-generation-service";
 import { resolveOpenAiGenerationConfig } from "@/service/starter-project/openai-generation-config";
 
@@ -46,7 +47,7 @@ export function createSpecGenerationPostHandler({
 
     if (!requestBody.ok) {
       return jsonNoStore(
-        createPreflightFailure({
+        createSpecGenerationPreflightFailure({
           userMessage:
             "I couldn't read that generation request. Please try again.",
           stage: "bad_request",
@@ -61,7 +62,7 @@ export function createSpecGenerationPostHandler({
 
     if ((debugFailureMode || useDebugSuccess) && env.NODE_ENV === "production") {
       return jsonNoStore(
-        createPreflightFailure({
+        createSpecGenerationPreflightFailure({
           userMessage:
             "Debug Spec Generation is disabled in production.",
           stage: "configuration",
@@ -79,7 +80,7 @@ export function createSpecGenerationPostHandler({
         includeDebugCandidate,
       });
 
-      return jsonNoStore(result, getResultStatus(result));
+      return jsonNoStore(result, getSpecGenerationResultStatus(result));
     }
 
     if (debugFailureMode && env.NODE_ENV !== "production") {
@@ -93,7 +94,7 @@ export function createSpecGenerationPostHandler({
         includeDebugCandidate,
       });
 
-      return jsonNoStore(result, getResultStatus(result));
+      return jsonNoStore(result, getSpecGenerationResultStatus(result));
     }
 
     const openAiConfigResult = resolveOpenAiGenerationConfig(
@@ -107,7 +108,7 @@ export function createSpecGenerationPostHandler({
 
     if (!openAiConfigResult.ok) {
       return jsonNoStore(
-        createPreflightFailure({
+        createSpecGenerationPreflightFailure({
           userMessage: openAiConfigResult.error,
           stage: "configuration",
         }),
@@ -123,7 +124,7 @@ export function createSpecGenerationPostHandler({
       includeDebugCandidate,
     });
 
-    return jsonNoStore(result, getResultStatus(result));
+    return jsonNoStore(result, getSpecGenerationResultStatus(result));
   };
 }
 
@@ -160,35 +161,6 @@ function normalizeUserPrompt(prompt: unknown) {
   }
 
   return normalized.slice(0, 320);
-}
-
-function createPreflightFailure({
-  userMessage,
-  stage,
-}: Pick<
-  SpecGenerationFailureResult,
-  "userMessage" | "stage"
->): SpecGenerationFailureResult {
-  return {
-    ok: false,
-    userMessage,
-    stage,
-    validationIssues: [],
-    taskRoute: SPEC_GENERATION_TASK_ROUTE,
-    attemptCount: 0,
-  };
-}
-
-function getResultStatus(result: SpecGenerationResult) {
-  if (result.ok) {
-    return 200;
-  }
-
-  if (result.stage === "model_generation") {
-    return 502;
-  }
-
-  return 422;
 }
 
 function jsonNoStore(payload: unknown, status: number) {

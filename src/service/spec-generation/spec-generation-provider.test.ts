@@ -10,7 +10,7 @@ import {
   topDownGameSpecJsonSchema,
 } from "./spec-generation-schema";
 import { TOP_DOWN_SPEC_GENERATION_GUIDE } from "./spec-generation-guide";
-import { SpecGenerationProviderError } from "./spec-generation-service";
+import { SpecGenerationProviderError } from "./spec-generation-outcome";
 
 describe("Spec Generation provider request", () => {
   afterEach(() => {

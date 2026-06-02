@@ -4,9 +4,11 @@ import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-g
 
 import {
   generateTopDownGameSpec,
+} from "./spec-generation-service";
+import {
   SpecGenerationProviderError,
   type SpecGenerationFailureStage,
-} from "./spec-generation-service";
+} from "./spec-generation-outcome";
 
 describe("Spec Generation service contract", () => {
   it("returns a validated top-down Game Spec with provider-neutral metadata", async () => {

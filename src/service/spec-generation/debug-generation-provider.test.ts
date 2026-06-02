@@ -6,8 +6,8 @@ import {
 } from "./debug-generation-provider";
 import {
   generateTopDownGameSpec,
-  type SpecGenerationFailureStage,
 } from "./spec-generation-service";
+import type { SpecGenerationFailureStage } from "./spec-generation-outcome";
 
 describe("Debug Spec Generation provider", () => {
   it.each([

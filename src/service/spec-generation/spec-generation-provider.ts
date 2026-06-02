@@ -9,9 +9,9 @@ import {
 } from "./spec-generation-schema";
 import { createTopDownSpecGenerationSystemPrompt } from "./spec-generation-guide";
 import {
-  SpecGenerationProviderError,
   type SpecGenerationProvider,
 } from "./spec-generation-service";
+import { SpecGenerationProviderError } from "./spec-generation-outcome";
 
 type ResponsesFunctionCall = {
   type: "function_call";
