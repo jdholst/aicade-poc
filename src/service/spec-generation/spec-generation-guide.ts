@@ -1,26 +1,14 @@
 import {
-  GAME_SPEC_SCHEMA_VERSION,
-  TOP_DOWN_TEMPLATE_ID,
-  topDownSpecGenerationMechanicTypes,
-} from "@/game-spec";
+  TOP_DOWN_GENERATION_CAPABILITY_POLICY,
+  renderTopDownSpecGenerationCapabilityIntegrityRules,
+  renderTopDownSpecGenerationGuide,
+} from "./top-down-generation-capability-policy";
 
 export const DEFAULT_SPEC_GENERATION_PROMPT =
   "Make a tiny top-down collection game where a courier gathers lost stars in a small arena while avoiding one slow shadow.";
 
-const allowedMechanicList = topDownSpecGenerationMechanicTypes.join(", ");
-
-export const TOP_DOWN_SPEC_GENERATION_GUIDE = [
-  "Return only a complete TopDownGameSpec for the Phaser top-down runtime.",
-  `Use schemaVersion ${GAME_SPEC_SCHEMA_VERSION} and template.id ${TOP_DOWN_TEMPLATE_ID}.`,
-  "Use exactly one scene and exactly one primary objective.",
-  "Use stable IDs for every entity, asset, objective, validation goal, scene, zone, and mechanic.",
-  "Use layout primitives only: arena, walls, rectangular/circular obstacles, spawn zones, pickup zones, and optional regions.",
-  "Mechanic regionIds must reference layout.regions IDs only; never use pickup zone or spawn zone IDs as regionIds.",
-  "Use an empty regionIds array when a mechanic does not target a named layout region.",
-  `Use only these mechanics: ${allowedMechanicList}. Include player_movement and pickup_collection, plus at most one early variation mechanic.`,
-  "Use template placeholder assets only; do not generate asset packs, tilemaps, Phaser source, or GDD prose.",
-  "Do not include unsupported fields, unsupported mechanics, unresolved references, or behavior outside the current mechanic registry.",
-].join("\n");
+export const TOP_DOWN_SPEC_GENERATION_GUIDE =
+  renderTopDownSpecGenerationGuide(TOP_DOWN_GENERATION_CAPABILITY_POLICY);
 
 type TopDownSpecGenerationRepairContext = {
   failedAttempt: number;
@@ -52,12 +40,9 @@ Creator prompt:
 
 ${TOP_DOWN_SPEC_GENERATION_GUIDE}
 
-Capability-integrity rules:
-- Do not generate Phaser source, JavaScript, TypeScript, React, HTML, CSS, a Game Pack, asset packs, tilemap JSON, or a GDD.
-- Do not invent mechanics outside: ${allowedMechanicList}.
-- Do not include custom mechanic manifests or runtime extension code.
-- Do not include unsupported fields or unresolved stable ID references.
-- Do not describe behavior that cannot be represented by the returned TopDownGameSpec.
+${renderTopDownSpecGenerationCapabilityIntegrityRules(
+  TOP_DOWN_GENERATION_CAPABILITY_POLICY
+)}
 
 Reference rules:
 - Every entity, asset, objective, validation goal, scene, zone, and mechanic ID must be stable and reusable.

@@ -18,6 +18,7 @@ import {
   createTopDownGameSpecJsonSchema,
   topDownGameSpecJsonSchema,
 } from "./spec-generation-schema";
+import { TOP_DOWN_GENERATION_CAPABILITY_POLICY } from "./top-down-generation-capability-policy";
 
 describe("Spec Generation schema drift guards", () => {
   it("derives the provider schema from the authoritative top-down Zod schema", () => {
@@ -47,7 +48,7 @@ describe("Spec Generation schema drift guards", () => {
       STABLE_ID_PATTERN_SOURCE
     );
     expect(topDownGameSpecJsonSchema.properties.template.properties.id.enum).toEqual(
-      [TOP_DOWN_TEMPLATE_ID]
+      [TOP_DOWN_GENERATION_CAPABILITY_POLICY.templateId]
     );
     expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(GAME_SPEC_SCHEMA_VERSION);
     expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(TOP_DOWN_TEMPLATE_ID);
@@ -55,10 +56,13 @@ describe("Spec Generation schema drift guards", () => {
 
   it("derives allowed generation mechanics from the top-down registry", () => {
     expect(allowedTopDownSpecGenerationMechanics).toEqual(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.allowedMechanics
+    );
+    expect(TOP_DOWN_GENERATION_CAPABILITY_POLICY.allowedMechanics).toEqual(
       topDownSpecGenerationMechanicTypes
     );
 
-    for (const mechanicType of topDownSpecGenerationMechanicTypes) {
+    for (const mechanicType of TOP_DOWN_GENERATION_CAPABILITY_POLICY.allowedMechanics) {
       expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(mechanicType);
       expect(
         JSON.stringify(topDownGameSpecJsonSchema.properties.mechanics)
@@ -86,14 +90,44 @@ describe("Spec Generation schema drift guards", () => {
     expect(validateTopDownGameSpec(fixture)).toEqual(fixture);
     expect(topDownGameSpecJsonSchema.required).toContain("originalPrompt");
     expect(
+      topDownGameSpecJsonSchema.properties.entities.items.properties.role.enum
+    ).toEqual(TOP_DOWN_GENERATION_CAPABILITY_POLICY.entityRoles);
+    expect(
+      topDownGameSpecJsonSchema.properties.assets.items.properties.role.enum
+    ).toEqual(TOP_DOWN_GENERATION_CAPABILITY_POLICY.assetRoles);
+    expect(
       topDownGameSpecJsonSchema.properties.assets.items.properties.source.enum
     ).toEqual(["template"]);
-    expect(topDownGameSpecJsonSchema.properties.mechanics.minItems).toBe(2);
-    expect(topDownGameSpecJsonSchema.properties.mechanics.maxItems).toBe(3);
+    expect(topDownGameSpecJsonSchema.properties.entities.maxItems).toBe(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.maxEntities
+    );
+    expect(topDownGameSpecJsonSchema.properties.assets.maxItems).toBe(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.maxAssets
+    );
+    expect(topDownGameSpecJsonSchema.properties.objectives.maxItems).toBe(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.maxObjectives
+    );
+    expect(topDownGameSpecJsonSchema.properties.validationGoals.maxItems).toBe(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.maxValidationGoals
+    );
+    expect(topDownGameSpecJsonSchema.properties.mechanics.minItems).toBe(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.minMechanics
+    );
+    expect(topDownGameSpecJsonSchema.properties.mechanics.maxItems).toBe(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.maxMechanics
+    );
     expect(
       topDownGameSpecJsonSchema.properties.template.properties.config.properties
         .scenes.maxItems
     ).toBe(1);
+    expect(mechanicProperties.type.enum).toEqual(
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY.allowedMechanics
+    );
+    expect(mechanicProperties.config).toMatchObject({
+      additionalProperties: false,
+      properties: {},
+      required: [],
+    });
     expect(mechanicProperties.entityIds).toBeDefined();
     expect(mechanicProperties.targetIds).toBeUndefined();
   });
