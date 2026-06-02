@@ -1,6 +1,6 @@
 # AI-Cade POC Implementation Plan
 
-Draft status: implementation roadmap with Phase 3/4 and Phase 5/6 closeout remarks. This document turns the Sparkline Architecture page into a build sequence for the AI-Cade POC. The POC is a proving ground for Sparkline's game generation and creation technology, not the full Sparkline community product.
+Draft status: implementation roadmap with Phase 3/4, Phase 5/6, and Milestone 7 implementation notes. This document turns the Sparkline Architecture page into a build sequence for the AI-Cade POC. The POC is a proving ground for Sparkline's game generation and creation technology, not the full Sparkline community product.
 
 ## Purpose
 
@@ -101,7 +101,7 @@ A successful first-playable validation should automatically create the initial c
 
 Restoring an older `Version Checkpoint` should create a new checkpoint that copies the older state forward instead of mutating the project back in place or deleting later history. The history timeline should be append-only: restore is an action, not a rewind. This preserves rollback, auditability, remix lineage, and future publish/export references.
 
-Phase 5B should show friendly failure states with stored validation evidence and clear next actions, but should not include automated repair attempts yet. Automated repair belongs after prompt-to-spec generation and telemetry are active, because meaningful repair depends on model output, validation errors, and run tracking. Phase 5/6 should preserve enough evidence for later repair work without pulling that behavior forward.
+Phase 5B should show friendly failure states with stored validation evidence and clear next actions, but should not include automated repair attempts yet. Automated repair belongs after prompt-to-spec generation can provide model output and validation errors; full repair telemetry can arrive later. Phase 5/6 should preserve enough evidence for later repair work without pulling that behavior forward.
 
 Phase 6A included arrays for `checkpoints`, `builds`, `validationEvidence`, reserved `generationRuns`, and internal `failedAttempts` from the start, but each record stayed thin. `GenerationRun` fields were reserved in the schema only during Phase 5/6; full run creation, cost tracking, telemetry views, failure analytics, and comparison behavior belong to Phase 8. The Phase 5/6 point was to prove the relationships early: checkpoints reference builds, builds reference validation evidence, failed attempts stay out of normal creator history, and future telemetry has a stable landing place without forcing a schema reshuffle.
 
@@ -205,7 +205,7 @@ Recommended Phase 7 starting posture:
 
 - Treat Phase 7 as prompt-to-Game-Spec generation, not as another validation architecture phase.
 - Reuse Phase 5/6 validation as the acceptance bar for generated specs.
-- Feed exact validation errors back into bounded repair attempts, but record those attempts as generation/repair telemetry rather than hidden retries.
+- Feed exact validation errors back into bounded repair attempts, expose compact attempt summaries immediately, and later record those attempts as generation/repair telemetry rather than hidden durable history.
 - Keep generation output spec-only for the trusted top-down template until the structured generation loop is reliable.
 - Promote only the Phase 5/6 domain seams that stayed stable: Game Pack schema concepts, lineage helpers, validation evidence records, runtime adapter protocol, and the repository boundary.
 
@@ -427,22 +427,44 @@ Deliverables:
 - Validate AI output on the API/server path with schema, semantic reference, and mechanic validation before returning it to the editor.
 - Return a validated spec plus generation metadata, or a structured failure with creator-friendly copy and developer/repair validation details.
 - Keep generated specs ephemeral in the first implementation; do not require durable IndexedDB persistence, Version Checkpoints, durable Validation Evidence, or full GenerationRun telemetry.
-- Build deterministic validation and friendly rejection before adding AI-assisted repair.
-- Add one bounded AI-assisted repair attempt as a later Milestone 7 task after real validation failures are available.
+- Build deterministic validation and friendly rejection before AI-assisted repair, then allow one bounded repair attempt using the invalid candidate spec plus exact validation errors.
+- Keep repair-attempt visibility compact and pre-telemetry: repaired successes may show that automatic repair happened, repaired failures may show repair-attempt details, but normal UI must not expose raw invalid candidate specs.
 - Distinguish Phaser fixture/test mode from Phaser AI generation mode. Hardcoded fixtures are explicit runtime-test inputs, not fallback content for failed AI generation.
 - Use plain creator-facing status copy such as designing the game, checking the game plan, building the playable draft, and testing that it loads.
 - Adapt the editor runtime plan so a successful generated spec can become the active runtime source and pass through the existing Phaser template and first-playable validation path.
 - Keep OpenGame's broader GDD, asset-pack, tilemap, Template Skill, and Debug Skill evolution patterns as later references, not first-spine Phase 7 scope.
+
+Milestone 7 status after the first spine tasks:
+
+- The first server boundary is implemented as the task-oriented `/api/spec-generation` route and `spec_generation.primary` task route, separate from the legacy `/api/starter-project` path.
+- The provider request now sends a strict OpenAI-compatible tool schema derived from the authoritative top-down Zod schema, then narrowed for the first Phaser generation slice. The normalizer requires all object properties, removes unsupported strict-schema keywords such as `propertyNames` and `default`, and keeps provider schema drift guarded by tests.
+- The first live generation returned a mostly well-shaped `TopDownGameSpec` candidate and failed only at mechanic validation, proving that invalid model output now reaches the intended structured validation boundary instead of failing at tool/schema setup.
+- Mechanic entity references were renamed from `targetIds` to `entityIds` as a strict contract break. The provider schema, validator paths, fixtures, runtime lookup, and generation guide now use `mechanics[].entityIds`.
+- The generation guide now explicitly separates mechanic `entityIds` from `assetIds`, including the first built-in mechanic rules for `player_movement`, `pickup_collection`, `enemy_chase`, and `hazard_contact`.
+- The debug provider can simulate deterministic success and failure modes in development, with operator-facing usage documented in `docs/debug-spec-generation-provider.md`.
+- Successful Phaser Spec Generation responses are stored as active ephemeral generated-spec editor state, not as persisted Game Packs.
+- Generated specs mount through the trusted Phaser template and carry a `generated-spec` first-playable validation source. Runtime-ready alone is not enough; generated drafts stay blocked until first-playable evidence passes.
+- Manual first-playable QA now has reliable breakpoint recipes for forcing each browser evidence failure: `nonblank_render`, `player_visible`, and `input_response`. Prompt-only requests such as "make the player invisible" are not reliable validation triggers because the trusted Phaser template owns player rendering and the runtime check currently measures player body plus viewport presence, not visual opacity.
+- Restored Game Packs were rechecked against the Phaser runtime plan. A persisted pack with a creator-facing checkpoint loads from IndexedDB, parses its saved top-down Game Spec, creates a Phaser template, and mounts with `source: "restored-game-pack"` before falling back to the fixture path.
+- Active generated specs now live in editor session state with their `runtimeKind`, generation metadata, and validated spec, so reset can remount the same generated draft without falling back to a fixture or losing the chat/editor summary.
+- The Spec Generation Guide now distinguishes `mechanics[].entityIds`, `mechanics[].assetIds`, and `mechanics[].regionIds` more sharply. In particular, `regionIds` may reference only `scene.layout.regions` IDs; pickup zone and spawn zone IDs must stay in their own layout fields, with `regionIds: []` when no named region applies.
+- The shared iframe host now treats runtime boot as a runtime-document event, not a React callback-change event. It installs the `message` listener before attaching iframe `srcdoc` so fast Phaser `game-ready` events are not missed, and it only reattaches `srcdoc` when the actual runtime document changes.
+- The bounded AI repair loop now makes at most one repair provider retry after the first candidate fails schema, semantic, or mechanic validation. It preserves `attemptCount`, marks repaired successes with `repairStatus: "repaired"`, and carries compact `repairAttempts` summaries for UI/debug receipt use.
+- Repaired success copy in the generated project log is intentionally creator-friendly and does not show validation issue details. It uses one AI chat bubble: `Generated a playable project plan from the prompt after {num} automatic repair(s).`
+- Repaired failure receipts can show that automatic repair was attempted once and stopped, plus compact path/message summaries, while normal UI still avoids raw invalid candidate JSON.
+- Provider request failures before any candidate exists remain distinct from validation failures and keep the existing model-generation copy: `I couldn't design a game plan from that prompt. Please try again.`
 
 Acceptance criteria:
 
 - In Phaser AI generation mode, the main homepage prompt calls the new Spec Generation path instead of the Canvas starter-project endpoint.
 - A successful prompt returns a server-validated top-down Game Spec and mounts it through the trusted Phaser template.
 - First-playable validation proves the generated draft boots, renders nonblank output, shows the player, responds to input, and has a basic objective before the editor treats it as playable.
+- Restored saved Game Packs still remount through the Phaser runtime plan and re-run first-playable validation as restored state.
 - A deterministic invalid-output test stub is rejected with structured validation issues and a friendly error, with no silent fallback to a hardcoded fixture.
 - The first invalid-output suite covers OpenGame-inspired high-frequency failure classes translated into AI-Cade terms: wrong template id, invalid stable IDs, unsupported mechanic types, missing entity/asset/objective references, missing pickup-zone coverage, and missing or duplicate primary objectives.
+- The generated runtime status must leave "Booting runtime..." when the iframe emits `game-ready`, and parent editor re-renders must not repeatedly reload the iframe canvas or emit duplicate boot/loading statuses.
 - The hardcoded top-down fixture remains available only through explicit fixture/test mode.
-- AI-assisted repair is not part of the first server slice, but the structured failure shape is ready to feed a later one-attempt repair loop.
+- AI-assisted repair is bounded to one retry and must preserve honest failure when the repaired candidate still fails validation.
 
 Proves:
 
@@ -451,16 +473,17 @@ Proves:
 
 Likely promotable to v1:
 
-- Prompt-to-spec schema.
+- Derived prompt-to-spec provider schema aligned with the authoritative validation schema.
 - Server-side validation boundary for AI output.
-- Structured validation issue payload for later repair.
+- Structured validation issue payload for bounded repair and later telemetry.
 - Model Router task alias pattern.
 - Fixture/test versus AI-generation source-mode distinction.
 
 Likely follow-up after the first Milestone 7 spine:
 
 - Persist successful generated playable drafts as Game Packs, Playable Builds, Validation Evidence, and Version Checkpoints.
-- Add one bounded AI repair attempt using the invalid candidate spec plus exact validation errors.
+- Add a dev-only first-playable evidence failure switch so manual QA can force `nonblank_render`, `player_visible`, and `input_response` failures without depending on browser breakpoints or prompt steering.
+- Improve creator-facing validation-failure copy beyond the current repair receipt so mechanic/schema failures do not tell the user to "try a simpler prompt" when the prompt was reasonable.
 - Migrate Canvas mode toward the same Spec Generation architecture and deprecate the legacy starter-project endpoint.
 - Revisit OpenGame's Template Skill and Debug Skill concepts only after real GenerationRun receipts, successful specs, failed attempts, and validation evidence exist to mine.
 
@@ -474,19 +497,28 @@ OpenGame research findings to apply during Milestone 7:
 - Use placeholder/template asset records only. OpenGame's asset-pack and tilemap tools reinforce strict key/reference contracts, but their file-generation workflow belongs after the spec-only path works.
 - Keep Template Skill style learning loops out of Phase 7. Later phases can inspect repeated successful Game Specs, validation evidence, failed attempts, and GenerationRun receipts for mechanic/template promotion candidates.
 
-Implementation questions to resolve during Milestone 7:
+Resolved implementation decisions from current Milestone 7 work:
 
 - The Phaser Spec Generation path uses the task-oriented route `/api/spec-generation`.
-- What exact success and failure response types should the route return?
-- The first model tool/schema contract is hand-authored as JSON Schema in `src/service/spec-generation/spec-generation-schema.ts` so it can stay inside OpenAI's strict Structured Outputs subset while explicitly narrowing the Phase 7 top-down contract.
-- Which generation metadata fields belong in the pre-telemetry response before Milestone 8?
-- What should the fixture-vs-AI source env flag be named, and what values should it accept?
+- Success returns a validated top-down spec plus lightweight generation metadata; failure returns a small stage vocabulary, validation issues, attempt count, and developer/repair details without falling back to a fixture.
+- The first model tool/schema contract lives in `src/service/spec-generation/spec-generation-schema.ts`, but it is now derived from the authoritative top-down Zod schema instead of being fully hand-authored. The provider-specific layer is a narrowing/normalization pass, not a separate source of truth.
+- Pre-telemetry metadata stays thin until Milestone 8: task route, attempt count, optional `repairStatus`, and compact `repairAttempts` summaries for the current UI/debug receipts.
+- Phaser mode is the default runtime path; `NEXT_PUBLIC_AICADE_EDITOR_RUNTIME=canvas2d` keeps Canvas mode on the legacy starter-project route.
+- Dev-only debug generation uses `AICADE_DEBUG_SPEC_GENERATION_SUCCESS` and `AICADE_DEBUG_SPEC_GENERATION_FAILURE`, while production fails closed if those flags are set.
+- Deterministic normalization is allowed only for provider schema compatibility before generation. Candidate specs returned by the model are validated, then at most one explicit repair attempt is made; unrepaired failures still fail honestly.
+- The compact Spec Generation Guide stays aligned with the Zod schema and Mechanic Registry by importing shared constants and registered mechanic types, then documenting the few intentional first-slice narrowings.
+- Mechanic reference fields should stay semantically narrow: `entityIds` for entities, `assetIds` for assets, and `regionIds` for `layout.regions` only. Collection placement should be expressed through pickup asset references plus pickup-zone layout coverage, not by putting pickup zone IDs in `regionIds`.
+- Active generated specs are intentionally ephemeral editor state until Game Pack persistence is wired into the generated-draft path. They should not be silently converted into persisted packs before first-playable validation and the later persistence task are explicit.
+- Restored Game Pack mounting currently works for saved Phaser packs created by the validated fixture/restored path. Generated Phaser specs validate and mount in the active session, but they do not yet become durable restored packs on reload.
+- First-playable failure simulation should target runtime evidence directly. The spec prompt may include validation-error suggestions for operators, but the trusted template does not currently expose spec-level player visibility controls that can guarantee a `player_visible` failure.
+- Iframe `srcdoc` attachment is now an idempotent runtime-document mount step. The runtime host may update callback refs during React re-renders, but callback-only changes must not reboot the iframe or reset the runtime status.
+- The first golden prompt for smoke testing remains: "Make a simple top-down arcade game where the player moves around a small arena, collects coins, avoids one chasing enemy, and wins after collecting all coins."
+
+Remaining implementation questions for later Milestone 7 tasks:
+
 - Should generated specs be recoverable through URL or session state before durable persistence exists?
 - How much homepage copy should change when the app is in Phaser AI generation mode?
-- What deterministic normalization is allowed before validation, if any?
-- How should the compact Spec Generation Guide stay in sync with the Zod schema and top-down Mechanic Registry?
-- Which invalid stub cases should define the failure test suite beyond the first OpenGame-inspired set?
-- What first golden prompt should be used for the completion demo? Current candidate: "Make a tiny top-down collection game where a courier gathers lost stars in a small arena while avoiding one slow shadow."
+- Which additional invalid stub cases should be added after the current debug-provider failure modes?
 
 ### Milestone 8: GenerationRun Telemetry
 
@@ -599,20 +631,26 @@ These should not block the first milestones, but they need decisions before or d
 - Which later POC phase, if any, introduces an OpenGame-inspired template/mechanic promotion loop over completed projects and validation evidence.
 - Production database, auth, object storage/CDN, queue/worker, observability, search, and moderation stack.
 
-## Next Immediate Implementation Slice
+## Current Immediate Implementation Slice
 
-When moving into Plan Mode for coding after Phase 5/6, start with Milestone 7:
+Milestone 7 is now underway:
 
 > Generate compact top-down Game Spec/config data through a new Phaser Spec Generation path, validate AI output on the server, mount the validated spec through the trusted Phaser template, and prove first-playable behavior in the editor without allowing invalid output or hardcoded fixtures to mask generation failure.
 
-This is the right next slice because the trusted runtime, schema, validation evidence, checkpoint, and local persistence path now exist. Milestone 7 should spend model tokens only after the deterministic path can prove whether generated specs are playable.
+This is the right current slice because the trusted runtime, schema, validation evidence, checkpoint, and local persistence path now exist. Milestone 7 should spend model tokens only after the deterministic path can prove whether generated specs are playable.
 
-Recommended implementation sequence:
+Current implementation sequence:
 
-1. Start server-first with TDD: lock down the Spec Generation service and API route contract for success and structured failure, including the compact top-down Spec Generation Guide.
-2. Add deterministic validation and friendly rejection before AI-assisted repair, using invalid-output stubs for wrong template id, bad stable IDs, unsupported mechanics, missing references, pickup-zone coverage gaps, and primary-objective mistakes.
-3. Route the main homepage prompt flow to the Spec Generation API in Phaser AI generation mode while keeping fixture mode explicit.
-4. Store the validated generated spec as active ephemeral editor state.
-5. Build and mount the Phaser template from the generated spec, then run first-playable validation before treating the draft as playable.
-6. Add the one-attempt AI repair loop as a later Milestone 7 task once real validation failures shape the repair prompt.
-7. Keep OpenGame Template Skill, Debug Skill, asset-pack, and tilemap-generation ideas deferred unless they become explicit later-phase work.
+1. Completed: start server-first with TDD by locking down the Spec Generation service/API route contract, structured success/failure responses, strict provider schema, compact guide, and server validation.
+2. Completed: make mechanic entity references explicit with `mechanics[].entityIds` and remove the ambiguous `targetIds` contract.
+3. Completed: add development-only debug success/failure providers and document manual QA usage.
+4. Completed: route the main homepage prompt flow to the Spec Generation API in Phaser AI generation mode while keeping Canvas mode on the legacy starter-project route.
+5. Completed: store the validated generated spec as active ephemeral editor state.
+6. Completed: build and mount the Phaser template from the generated spec, then gate generated drafts on first-playable validation before treating them as playable.
+7. Completed: clarify generation-guide reference rules after real validation failures, especially the distinction between entity, asset, region, pickup-zone, and spawn-zone IDs.
+8. Completed: harden the shared iframe runtime host so generated Phaser drafts do not get stuck on "Booting runtime..." and do not reboot on callback-only editor re-renders.
+9. Completed: confirm restored saved Phaser Game Packs still load through the Phaser runtime plan and stay distinct from active ephemeral generated specs.
+10. Completed: document reliable manual first-playable evidence failure simulation and note that prompt steering alone is not enough to force runtime evidence failures.
+11. Completed: add one bounded AI repair attempt for invalid generated specs and surface compact repair-attempt visibility in success chat/failure receipts without exposing raw invalid candidate specs in normal UI.
+12. Later: persist successful generated playable drafts as durable Game Packs after first-playable validation passes.
+13. Keep OpenGame Template Skill, Debug Skill, asset-pack, and tilemap-generation ideas deferred unless they become explicit later-phase work.
