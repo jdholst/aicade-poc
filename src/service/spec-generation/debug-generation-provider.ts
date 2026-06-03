@@ -1,5 +1,7 @@
 import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
 import type { TopDownGameSpec } from "@/game-spec";
+import { DEFAULT_OPENAI_MODEL } from "@/constants";
+import type { OpenAIModelId } from "@/utils/openai-utils";
 
 import type { SpecGenerationProvider } from "./spec-generation-service";
 
@@ -19,6 +21,32 @@ export const debugGenerationFailureModes = [
 
 export type DebugGenerationFailureMode =
   (typeof debugGenerationFailureModes)[number];
+
+type DebugSpecGenerationEnvironment = Record<string, string | undefined>;
+
+export type DebugSpecGenerationAdapter =
+  | {
+      type: "inactive";
+    }
+  | {
+      type: "blocked";
+      userMessage: string;
+    }
+  | {
+      type: "active";
+      mode: "success";
+      model: OpenAIModelId;
+      providerCredential: "debug-generation";
+      provider: SpecGenerationProvider;
+    }
+  | {
+      type: "active";
+      failureMode: DebugGenerationFailureMode;
+      mode: "failure";
+      model: OpenAIModelId;
+      providerCredential: "debug-generation";
+      provider: SpecGenerationProvider;
+    };
 
 type DebugGenerationFailureMutator = (candidate: TopDownGameSpec) => void;
 
@@ -90,6 +118,49 @@ export const debugSuccessfulSpecGenerationProvider: SpecGenerationProvider =
 
     return candidate;
   };
+
+export function resolveDebugSpecGenerationAdapter(
+  env: DebugSpecGenerationEnvironment
+): DebugSpecGenerationAdapter {
+  const useDebugSuccess = env[DEBUG_SPEC_GENERATION_SUCCESS_ENV] === "1";
+  const debugFailureMode = parseDebugGenerationFailureMode(
+    env[DEBUG_SPEC_GENERATION_FAILURE_ENV]
+  );
+
+  if ((useDebugSuccess || debugFailureMode) && env.NODE_ENV === "production") {
+    return {
+      type: "blocked",
+      userMessage: "Debug Spec Generation is disabled in production.",
+    };
+  }
+
+  if (useDebugSuccess) {
+    return {
+      type: "active",
+      mode: "success",
+      model: DEFAULT_OPENAI_MODEL,
+      providerCredential: "debug-generation",
+      provider: debugSuccessfulSpecGenerationProvider,
+    };
+  }
+
+  if (debugFailureMode) {
+    return {
+      type: "active",
+      failureMode: debugFailureMode,
+      mode: "failure",
+      model: DEFAULT_OPENAI_MODEL,
+      providerCredential: "debug-generation",
+      provider: createDebugSpecGenerationProvider({
+        mode: debugFailureMode,
+      }),
+    };
+  }
+
+  return {
+    type: "inactive",
+  };
+}
 
 export function parseDebugGenerationFailureMode(
   value: unknown

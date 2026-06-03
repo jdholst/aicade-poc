@@ -1,12 +1,5 @@
-import { DEFAULT_OPENAI_MODEL } from "@/constants";
 import { DEFAULT_SPEC_GENERATION_PROMPT } from "./spec-generation-guide";
-import {
-  createDebugSpecGenerationProvider,
-  DEBUG_SPEC_GENERATION_FAILURE_ENV,
-  DEBUG_SPEC_GENERATION_SUCCESS_ENV,
-  debugSuccessfulSpecGenerationProvider,
-  parseDebugGenerationFailureMode,
-} from "./debug-generation-provider";
+import { resolveDebugSpecGenerationAdapter } from "./debug-generation-provider";
 import {
   createSpecGenerationPreflightFailure,
   getSpecGenerationResultStatus,
@@ -40,10 +33,6 @@ export function createSpecGenerationPostHandler({
 }: CreateSpecGenerationPostHandlerInput) {
   return async function POST(request: Request) {
     const requestBody = await parseRequestBody(request);
-    const useDebugSuccess = env[DEBUG_SPEC_GENERATION_SUCCESS_ENV] === "1";
-    const debugFailureMode = parseDebugGenerationFailureMode(
-      env[DEBUG_SPEC_GENERATION_FAILURE_ENV]
-    );
 
     if (!requestBody.ok) {
       return jsonNoStore(
@@ -59,38 +48,24 @@ export function createSpecGenerationPostHandler({
     const prompt = normalizeUserPrompt(
       requestBody.body.enteredPrompt ?? requestBody.body.prompt
     );
+    const debugAdapter = resolveDebugSpecGenerationAdapter(env);
 
-    if ((debugFailureMode || useDebugSuccess) && env.NODE_ENV === "production") {
+    if (debugAdapter.type === "blocked") {
       return jsonNoStore(
         createSpecGenerationPreflightFailure({
-          userMessage:
-            "Debug Spec Generation is disabled in production.",
+          userMessage: debugAdapter.userMessage,
           stage: "configuration",
         }),
         400
       );
     }
 
-    if (useDebugSuccess && env.NODE_ENV !== "production") {
+    if (debugAdapter.type === "active") {
       const result = await generateTopDownGameSpec({
         prompt,
-        model: DEFAULT_OPENAI_MODEL,
-        providerCredential: "debug-generation",
-        provider: debugSuccessfulSpecGenerationProvider,
-        includeDebugCandidate,
-      });
-
-      return jsonNoStore(result, getSpecGenerationResultStatus(result));
-    }
-
-    if (debugFailureMode && env.NODE_ENV !== "production") {
-      const result = await generateTopDownGameSpec({
-        prompt,
-        model: DEFAULT_OPENAI_MODEL,
-        providerCredential: "debug-generation",
-        provider: createDebugSpecGenerationProvider({
-          mode: debugFailureMode,
-        }),
+        model: debugAdapter.model,
+        providerCredential: debugAdapter.providerCredential,
+        provider: debugAdapter.provider,
         includeDebugCandidate,
       });
 
