@@ -316,6 +316,77 @@ describe("Spec Generation API route contract", () => {
     });
   });
 
+  it("rejects the local debug success adapter in production", async () => {
+    let providerCallCount = 0;
+    const post = createSpecGenerationPostHandler({
+      env: {
+        AICADE_DEBUG_SPEC_GENERATION_SUCCESS: "1",
+        NODE_ENV: "production",
+      },
+      includeDebugCandidate: false,
+      provider: async () => {
+        providerCallCount += 1;
+        return getFirstValidTopDownGameSpecFixture();
+      },
+    });
+
+    const response = await post(
+      jsonRequest({
+        enteredPrompt: "Make a tiny top-down collection game.",
+        openAiApiKey: "sk-test",
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(providerCallCount).toBe(0);
+    expect(payload).toEqual({
+      ok: false,
+      userMessage: "Debug Spec Generation is disabled in production.",
+      stage: "configuration",
+      validationIssues: [],
+      taskRoute: "spec_generation.primary",
+      attemptCount: 0,
+    });
+  });
+
+  it("ignores unknown debug failure modes and uses normal credentials", async () => {
+    const fixture = getFirstValidTopDownGameSpecFixture();
+    const providerCalls: unknown[] = [];
+    const post = createSpecGenerationPostHandler({
+      env: {
+        AICADE_DEBUG_SPEC_GENERATION_FAILURE: "unknown_failure",
+        NODE_ENV: "development",
+      },
+      provider: async (input) => {
+        providerCalls.push(input);
+        return fixture;
+      },
+    });
+
+    const response = await post(
+      jsonRequest({
+        enteredPrompt: "Make a tiny top-down collection game.",
+        openAiApiKey: "sk-test",
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(providerCalls).toEqual([
+      expect.objectContaining({
+        providerCredential: "sk-test",
+      }),
+    ]);
+    expect(payload).toMatchObject({
+      ok: true,
+      metadata: {
+        taskRoute: "spec_generation.primary",
+        attemptCount: 1,
+      },
+    });
+  });
+
   it("omits debug candidate output when debug details are disabled", async () => {
     const invalidCandidate = getMutableFixture();
     invalidCandidate.mechanics[0].type = "teleport_player";
