@@ -15,6 +15,7 @@ import type {
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
+import type { PlayableDraftReadyPolicy } from "@/runtime/playable-draft-source";
 
 import type { FirstPlayableValidationSource } from "./editor-runtime-template-plan";
 
@@ -22,13 +23,16 @@ type FirstPlayableValidationState = {
   attempt: FirstPlayableValidationAttempt;
   gamePack: GamePack;
   key: string;
+  readyPolicy: PlayableDraftReadyPolicy;
   resultWritten: boolean;
+  source: FirstPlayableValidationSource["source"];
 };
 
 type UseFirstPlayableValidationGateInput = {
   gameResetNonce: EditorGameCanvasSession["gameResetNonce"];
   loadStateStatus: EditorGameCanvasSession["loadState"]["status"];
   onGameStatusChange: EditorGameCanvasActions["onGameStatusChange"];
+  readyPolicy?: PlayableDraftReadyPolicy;
   validationSource: FirstPlayableValidationSource | null;
 };
 
@@ -45,6 +49,7 @@ export function useFirstPlayableValidationGate({
   gameResetNonce,
   loadStateStatus,
   onGameStatusChange,
+  readyPolicy = "ready-on-runtime-ready",
   validationSource,
 }: UseFirstPlayableValidationGateInput): FirstPlayableValidationGate {
   const validationSeed = useMemo(
@@ -52,9 +57,10 @@ export function useFirstPlayableValidationGate({
       createFirstPlayableValidationSeed({
         gameResetNonce,
         loadStateStatus,
+        readyPolicy,
         validationSource,
       }),
-    [gameResetNonce, loadStateStatus, validationSource]
+    [gameResetNonce, loadStateStatus, readyPolicy, validationSource]
   );
   const [runtimeValidationState, setRuntimeValidationState] =
     useState<FirstPlayableValidationState | null>(validationSeed);
@@ -108,6 +114,14 @@ export function useFirstPlayableValidationGate({
         return;
       }
 
+      if (
+        status.state === "ready" &&
+        currentValidationState.readyPolicy === "ready-after-first-playable" &&
+        nextAttempt.status !== "passed"
+      ) {
+        return;
+      }
+
       onGameStatusChange(status);
     },
     [onGameStatusChange, validationSeed]
@@ -148,6 +162,14 @@ export function useFirstPlayableValidationGate({
             nextAttempt.failureMessage ??
             "First-playable validation failed.",
         });
+        return;
+      }
+
+      if (
+        currentValidationState.readyPolicy === "ready-after-first-playable" &&
+        nextAttempt.status === "passed"
+      ) {
+        onGameStatusChange({ state: "ready" });
       }
     },
     [onGameStatusChange, validationSeed]
@@ -164,10 +186,12 @@ export function useFirstPlayableValidationGate({
 function createFirstPlayableValidationSeed({
   gameResetNonce,
   loadStateStatus,
+  readyPolicy,
   validationSource,
 }: {
   gameResetNonce: EditorGameCanvasSession["gameResetNonce"];
   loadStateStatus: EditorGameCanvasSession["loadState"]["status"];
+  readyPolicy: PlayableDraftReadyPolicy;
   validationSource: FirstPlayableValidationSource | null;
 }): FirstPlayableValidationState | null {
   if (
@@ -204,7 +228,9 @@ function createFirstPlayableValidationSeed({
       key,
       gamePack: activeGamePack,
       attempt,
+      readyPolicy,
       resultWritten: false,
+      source: validationSource.source,
     },
     attempt,
   });

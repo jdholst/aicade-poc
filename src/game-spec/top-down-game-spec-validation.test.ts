@@ -106,14 +106,14 @@ const validTopDownGameSpec = {
     {
       id: "mechanic_player_movement",
       type: "player_movement",
-      targetIds: ["entity_player"],
+      entityIds: ["entity_player"],
       objectiveIds: ["objective_collect_crystal"],
       config: {},
     },
     {
       id: "mechanic_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player", "entity_crystal"],
+      entityIds: ["entity_player", "entity_crystal"],
       sceneIds: ["scene_arena"],
       assetIds: ["asset_crystal"],
       objectiveIds: ["objective_collect_crystal"],
@@ -185,7 +185,7 @@ describe("Top-down Game Spec pre-runtime validation", () => {
       mechanics: [
         {
           ...validTopDownGameSpec.mechanics[0],
-          targetIds: ["entity_missing"],
+          entityIds: ["entity_missing"],
           sceneIds: ["scene_missing"],
           regionIds: ["region_missing"],
           assetIds: ["asset_missing"],
@@ -228,7 +228,7 @@ describe("Top-down Game Spec pre-runtime validation", () => {
           message: 'Unknown objective ID "objective_missing".',
         },
         {
-          path: "mechanics.mechanic_player_movement.targetIds",
+          path: "mechanics.mechanic_player_movement.entityIds",
           message: 'Unknown entity ID "entity_missing".',
         },
         {
@@ -267,6 +267,38 @@ describe("Top-down Game Spec pre-runtime validation", () => {
     );
   });
 
+  it("rejects a player spawn zone outside the arena bounds", () => {
+    const scene = validTopDownGameSpec.template.config.scenes[0];
+
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      template: {
+        ...validTopDownGameSpec.template,
+        config: {
+          scenes: [
+            {
+              ...scene,
+              layout: {
+                ...scene.layout,
+                spawnZones: [
+                  {
+                    ...scene.layout.spawnZones[0],
+                    x: scene.arena.width + 1,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(issues).toContainEqual({
+      path: "scenes.scene_arena.layout.spawnZones.spawn_player",
+      message: "Player spawn zone must stay inside the arena bounds.",
+    });
+  });
+
   it("rejects unsupported active mechanic types before runtime binding", () => {
     expect(() =>
       validateTopDownGameSpec({
@@ -289,13 +321,13 @@ describe("Top-down Game Spec pre-runtime validation", () => {
       mechanics: [
         {
           ...validTopDownGameSpec.mechanics[0],
-          targetIds: ["entity_crystal"],
+          entityIds: ["entity_crystal"],
         },
       ],
     });
 
     expect(issues).toContainEqual({
-      path: "mechanics.mechanic_player_movement.targetIds",
+      path: "mechanics.mechanic_player_movement.entityIds",
       message: 'Expected target role "player".',
     });
   });

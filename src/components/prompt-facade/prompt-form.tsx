@@ -56,6 +56,7 @@ export function PromptForm({
         <textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
+          onInput={(event) => setPrompt(event.currentTarget.value)}
           className="min-h-56 w-full resize-none border border-[var(--line)] bg-white/90 px-5 py-4 text-lg leading-8 text-[var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]"
           placeholder={promptSuggestion}
         />
@@ -75,9 +76,8 @@ export function PromptForm({
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-xl text-sm leading-7 text-[var(--muted)]">
-          Your prompt is sent to the generation route. If you leave this
-          blank, the editor falls back to a simple jumping platformer
-          prompt so the flow still works.
+          Your prompt starts the editor chat. If you leave this blank, the
+          editor will ask for the prompt before generation.
         </p>
         <button
           type="submit"

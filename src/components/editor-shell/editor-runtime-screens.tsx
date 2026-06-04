@@ -1,47 +1,57 @@
 import type { ReactNode } from "react";
 
 import type { EditorGenerationStage } from "@/hooks/use-editor-session";
-import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
 
-import type { ValidationFailureReceiptViewModel } from "./editor-validation-failure-surface";
+import type { FailureReceiptViewModel } from "./editor-failure-receipt";
 
 function RuntimeScreenShell({
   children,
+  surfaceLabel = "Generated runtime",
   statusLabel,
 }: {
   children: ReactNode;
+  surfaceLabel?: string;
   statusLabel: string;
 }) {
   return (
     <div className="flex h-full min-h-[440px] flex-col border border-[var(--line-strong)] bg-[linear-gradient(180deg,_#18242f_0%,_#10171e_100%)] p-6 text-white">
       <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-white/55">
-        <span>Generated canvas</span>
+        <span>{surfaceLabel}</span>
         <span>{statusLabel}</span>
       </div>
-      <div className="mt-6 flex flex-1 items-center justify-center border border-dashed border-white/15 bg-[radial-gradient(circle_at_top,_rgba(255,197,92,0.14),_transparent_34%),linear-gradient(135deg,_rgba(15,127,104,0.12),_transparent_42%)]">
+      <div className="mt-6 flex min-h-0 flex-1 items-center justify-center border border-dashed border-white/15 bg-[radial-gradient(circle_at_top,_rgba(255,197,92,0.14),_transparent_34%),linear-gradient(135deg,_rgba(15,127,104,0.12),_transparent_42%)] p-4">
         {children}
       </div>
     </div>
   );
 }
 
-export function InitialRuntimeScreen() {
+export function InitialRuntimeScreen({
+  description,
+  eyebrow,
+  surfaceLabel,
+  title,
+}: {
+  description: string;
+  eyebrow: string;
+  surfaceLabel: string;
+  title: string;
+}) {
   return (
-    <RuntimeScreenShell statusLabel="Ready">
+    <RuntimeScreenShell surfaceLabel={surfaceLabel} statusLabel="Ready">
       <div className="max-w-lg space-y-6 px-4 text-center">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/5">
           <div className="h-12 w-12 rounded-full border border-white/15 bg-[radial-gradient(circle_at_center,_rgba(246,196,107,0.28),_transparent_62%)]" />
         </div>
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
-            First magic moment
+            {eyebrow}
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            The generated game module will boot here.
+            {title}
           </h2>
           <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-white/65">
-            Build a starter game to mount the canvas runtime in an isolated
-            iframe.
+            {description}
           </p>
         </div>
       </div>
@@ -50,19 +60,25 @@ export function InitialRuntimeScreen() {
 }
 
 export function LoadingRuntimeScreen({
+  progressLabel = "AI is building the project",
   stage,
+  statusLabel = "Generating",
+  title = "Generating your game",
 }: {
+  progressLabel?: string;
   stage: EditorGenerationStage;
+  statusLabel?: string;
+  title?: string;
 }) {
   return (
-    <RuntimeScreenShell statusLabel="Generating">
+    <RuntimeScreenShell statusLabel={statusLabel}>
       <div className="w-full max-w-xl space-y-6 px-4 text-center">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/5">
           <div className="h-12 w-12 rounded-full border-2 border-white/10 border-t-[#f6c46b] border-r-[#0f7f68] animate-spin" />
         </div>
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
-            Generating your game
+            {title}
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
             {stage.title}
@@ -81,7 +97,7 @@ export function LoadingRuntimeScreen({
             />
           </div>
           <div className="mt-3 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
-            <span>AI is building the starter</span>
+            <span>{progressLabel}</span>
             <span>{stage.progress}%</span>
           </div>
         </div>
@@ -90,68 +106,69 @@ export function LoadingRuntimeScreen({
   );
 }
 
-export function RuntimeErrorScreen({
-  message,
-  onRegenerate,
-}: {
-  message: Extract<StarterProjectLoadState, { status: "error" }>["message"];
-  onRegenerate: () => void;
-}) {
-  return (
-    <RuntimeScreenShell statusLabel="Error">
-      <div className="max-w-xl space-y-6 px-4 text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#9d4b31]/30 bg-[#9d4b31]/10">
-          <div className="h-12 w-12 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
-        </div>
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
-            Generation stopped
-          </div>
-          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            The runtime could not be prepared.
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-white/65">
-            {message}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          className="inline-flex items-center justify-center border border-[#f1b7a3]/30 bg-[#9d4b31] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b]"
-        >
-          Try again
-        </button>
-      </div>
-    </RuntimeScreenShell>
-  );
-}
-
 export function GameSpecValidationErrorScreen({
+  debugReceipts = [],
   eyebrow = "Game Spec validation failed",
   message,
+  onRegenerate,
+  regenerateLabel = "Try again",
+  statusLabel = "Validation stopped",
   title = "The runtime was not started.",
 }: {
+  debugReceipts?: FailureReceiptViewModel[];
   eyebrow?: string;
   message: string;
+  onRegenerate?: () => void;
+  regenerateLabel?: string;
+  statusLabel?: string;
   title?: string;
 }) {
   return (
-    <RuntimeScreenShell statusLabel="Validation stopped">
-      <div className="max-w-2xl space-y-6 px-4 text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#f1b7a3]/30 bg-[#9d4b31]/10">
-          <div className="h-12 w-12 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
-        </div>
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
-            {eyebrow}
+    <RuntimeScreenShell statusLabel={statusLabel}>
+      <div className="flex max-h-full min-h-0 w-full max-w-2xl flex-col">
+        <div className="shrink-0 space-y-4 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#f1b7a3]/30 bg-[#9d4b31]/10">
+            <div className="h-10 w-10 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
           </div>
-          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            {title}
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-white/65">
-            {message}
-          </p>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
+              {eyebrow}
+            </div>
+            <h2 className="mt-2 text-2xl font-semibold text-balance">
+              {title}
+            </h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-white/65">
+              {message}
+            </p>
+          </div>
         </div>
+        {debugReceipts.length > 0 ? (
+          <div
+            aria-label="Validation details"
+            className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-2"
+          >
+            {debugReceipts.map((receipt) => (
+              <ValidationReceiptDetail
+                key={`${receipt.stage}-${receipt.checkId}`}
+                receipt={receipt}
+              />
+            ))}
+          </div>
+        ) : null}
+        {onRegenerate ? (
+          <div
+            aria-label="Validation actions"
+            className="flex shrink-0 justify-center pt-4"
+          >
+            <button
+              type="button"
+              onClick={onRegenerate}
+              className="inline-flex items-center justify-center border border-[#f1b7a3]/30 bg-[#9d4b31] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b]"
+            >
+              {regenerateLabel}
+            </button>
+          </div>
+        ) : null}
       </div>
     </RuntimeScreenShell>
   );
@@ -159,27 +176,37 @@ export function GameSpecValidationErrorScreen({
 
 export function FirstPlayableValidationBlockedScreen({
   debugReceipts,
+  eyebrow = "Draft blocked",
   onRegenerate,
   onReset,
+  regenerateLabel = "Start over from prompt",
+  resetLabel = "Try again",
+  statusLabel = "Blocked",
   summary,
+  title = "This draft is not playable yet.",
 }: {
-  debugReceipts: ValidationFailureReceiptViewModel[];
+  debugReceipts: FailureReceiptViewModel[];
+  eyebrow?: string;
   onRegenerate: () => void;
   onReset: () => void;
+  regenerateLabel?: string;
+  resetLabel?: string;
+  statusLabel?: string;
   summary: string;
+  title?: string;
 }) {
   return (
-    <RuntimeScreenShell statusLabel="Blocked">
+    <RuntimeScreenShell statusLabel={statusLabel}>
       <div className="w-full max-w-2xl space-y-6 px-4">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#f1b7a3]/30 bg-[#9d4b31]/10">
           <div className="h-12 w-12 rounded-full border-2 border-[#9d4b31]/35 border-t-[#f6c46b]" />
         </div>
         <div className="text-center">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f1b7a3]">
-            Draft blocked
+            {eyebrow}
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-balance">
-            This draft is not playable yet.
+            {title}
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-white/65">
             {summary}
@@ -191,14 +218,14 @@ export function FirstPlayableValidationBlockedScreen({
             onClick={onReset}
             className="inline-flex items-center justify-center border border-[#f6c46b]/35 bg-[#f6c46b] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#10171e] transition hover:bg-[#dba84d]"
           >
-            Try again
+            {resetLabel}
           </button>
           <button
             type="button"
             onClick={onRegenerate}
             className="inline-flex items-center justify-center border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-white/10"
           >
-            Start over from prompt
+            {regenerateLabel}
           </button>
         </div>
         <details className="border border-white/10 bg-black/20 p-4 text-sm text-white/70">
@@ -226,7 +253,7 @@ export function FirstPlayableValidationBlockedScreen({
 function ValidationReceiptDetail({
   receipt,
 }: {
-  receipt: ValidationFailureReceiptViewModel;
+  receipt: FailureReceiptViewModel;
 }) {
   return (
     <section className="space-y-3 border border-white/10 bg-white/[0.03] p-4">

@@ -5,7 +5,11 @@ import { useCallback, useState } from "react";
 import { DEFAULT_OPENAI_MODEL } from "@/constants";
 import type { RuntimeIframeStatus } from "@/components/runtime-iframe-host";
 import { useStarterProjectGeneration } from "@/hooks/use-starter-project-generation";
-import { createInitialGameStatus } from "@/runtime/editor-runtime-mode";
+import {
+  createInitialGameStatus,
+  getEditorGenerationSource,
+  type EditorGenerationSource,
+} from "@/runtime/editor-runtime-mode";
 import type { RuntimeIssue } from "@/runtime/runtime-adapter";
 import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 import type { StarterProjectLoadState } from "@/hooks/use-starter-project-generation";
@@ -27,11 +31,13 @@ type UseEditorSessionOptions = {
 };
 
 export type EditorAIChatSession = {
+  canRegeneratePrompt: boolean;
   canStartGeneration: boolean;
   canSubmitPrompt: boolean;
   generationStages: EditorGenerationStage[];
   generationStepIndex: number;
   hasSubmittedPrompt: boolean;
+  isEditingPrompt: boolean;
   isGenerating: boolean;
   loadState: StarterProjectLoadState;
   needsOpenAiApiKey: boolean;
@@ -48,21 +54,30 @@ export type EditorAIChatActions = {
   onOpenAiKeywordChange: (value: string) => void;
   onOpenAiModelChange: (value: OpenAIModelId) => void;
   onPromptDraftChange: (value: string) => void;
+  onPromptEdit: () => void;
+  onPromptRegenerate: () => void;
   onPromptSubmit: () => void;
   onRegenerateGame: () => void;
   onStartGeneration: () => void;
 };
 
 export type EditorGameCanvasSession = {
+  activeGeneratedSpec: ActiveGeneratedSpecState | null;
   currentGenerationStage: EditorGenerationStage;
   gameResetNonce: number;
   gameStatus: GeneratedGameStatus;
   isGamePaused: boolean;
   loadState: StarterProjectLoadState;
+  generationSource: EditorGenerationSource;
   runtimeWarnings: RuntimeWarningIssue[];
 };
 
 export type RuntimeWarningIssue = Extract<RuntimeIssue, { recoverable: true }>;
+
+export type ActiveGeneratedSpecState = Pick<
+  Extract<StarterProjectLoadState, { status: "success"; source: "phaser-spec" }>,
+  "metadata" | "runtimeKind" | "source" | "spec"
+>;
 
 export type GeneratedGameStatus =
   | { state: "loading"; message: string }
@@ -89,6 +104,7 @@ export function useEditorSession({
   const initialPrompt = enteredPrompt.trim();
   const [promptDraft, setPromptDraft] = useState(initialPrompt);
   const [submittedPrompt, setSubmittedPrompt] = useState(initialPrompt);
+  const [isEditingPrompt, setIsEditingPrompt] = useState(!initialPrompt);
   const [openAiApiKey, setOpenAiApiKey] = useState(enteredOpenAiApiKey);
   const [openAiKeyword, setOpenAiKeyword] = useState(enteredOpenAiKeyword);
   const [openAiModel, setOpenAiModel] = useState<OpenAIModelId>(
@@ -98,8 +114,9 @@ export function useEditorSession({
   );
   const [gameResetNonce, setGameResetNonce] = useState(0);
   const [isGamePaused, setIsGamePaused] = useState(false);
+  const [generationSource] = useState(() => getEditorGenerationSource());
   const [gameStatus, setGameStatus] = useState<GeneratedGameStatus>(() =>
-    createInitialGameStatus()
+    createInitialGameStatus(generationSource)
   );
   const [runtimeWarnings, setRuntimeWarnings] = useState<RuntimeWarningIssue[]>(
     []
@@ -109,14 +126,27 @@ export function useEditorSession({
     setRuntimeWarnings([]);
     setGameStatus({
       state: "loading",
-      message: "Waiting for generated module...",
+      message: "Building generated project...",
     });
     setIsGamePaused(false);
   }, []);
 
+  const handleGenerationFailed = useCallback(() => {
+    if (generationSource !== "phaser-ai") {
+      return;
+    }
+
+    setGameStatus({
+      state: "error",
+      message: "Generation could not produce a playable project.",
+    });
+  }, [generationSource]);
+
   const { generationStepIndex, loadState, startGenerationRequest } =
     useStarterProjectGeneration({
+      generationSource,
       generationStageCount: generationStages.length,
+      onGenerationFailed: handleGenerationFailed,
       onGenerationStarted: handleGenerationStarted,
     });
 
@@ -124,15 +154,34 @@ export function useEditorSession({
   const isGenerating = loadState.status === "loading";
   const hasSubmittedPrompt = Boolean(submittedPrompt);
   const canSubmitPrompt = !isGenerating && Boolean(promptDraft.trim());
-  const canStartGeneration =
-    hasSubmittedPrompt &&
+  const hasOpenAiConfig =
+    !needsOpenAiApiKey || Boolean(openAiApiKey.trim() || openAiKeyword.trim());
+  const canRegeneratePrompt =
+    generationSource !== "phaser-fixture" &&
     !isGenerating &&
-    (!needsOpenAiApiKey ||
-      Boolean(openAiApiKey.trim() || openAiKeyword.trim()));
+    Boolean(promptDraft.trim()) &&
+    hasOpenAiConfig;
+  const canStartGeneration =
+    generationSource !== "phaser-fixture" &&
+    hasSubmittedPrompt &&
+    !isEditingPrompt &&
+    !isGenerating &&
+    hasOpenAiConfig;
   const projectName =
     loadState.status === "success"
-      ? loadState.pack.project.name
+      ? loadState.source === "canvas-starter"
+        ? loadState.pack.project.name
+        : loadState.spec.title
       : "Starter Project";
+  const activeGeneratedSpec =
+    loadState.status === "success" && loadState.source === "phaser-spec"
+      ? {
+          metadata: loadState.metadata,
+          runtimeKind: loadState.runtimeKind,
+          source: loadState.source,
+          spec: loadState.spec,
+        }
+      : null;
 
   function submitPrompt() {
     const normalizedPrompt = promptDraft.replace(/\s+/g, " ").trim();
@@ -142,6 +191,16 @@ export function useEditorSession({
     }
 
     setSubmittedPrompt(normalizedPrompt);
+    setIsEditingPrompt(false);
+  }
+
+  function editPrompt() {
+    if (isGenerating || !submittedPrompt) {
+      return;
+    }
+
+    setPromptDraft(submittedPrompt);
+    setIsEditingPrompt(true);
   }
 
   function startGeneration() {
@@ -158,6 +217,29 @@ export function useEditorSession({
     });
   }
 
+  function regenerateFromPromptDraft() {
+    const normalizedPrompt = promptDraft.replace(/\s+/g, " ").trim();
+
+    if (
+      generationSource === "phaser-fixture" ||
+      !normalizedPrompt ||
+      isGenerating ||
+      !hasOpenAiConfig
+    ) {
+      return;
+    }
+
+    setSubmittedPrompt(normalizedPrompt);
+    setIsEditingPrompt(false);
+    setGameResetNonce(0);
+    startGenerationRequest({
+      prompt: normalizedPrompt,
+      openAiApiKey: needsOpenAiApiKey ? openAiApiKey.trim() : undefined,
+      openAiKeyword: needsOpenAiApiKey ? openAiKeyword.trim() : undefined,
+      openAiModel: needsOpenAiModel ? openAiModel : undefined,
+    });
+  }
+
   function toggleGamePaused() {
     const nextIsPaused = !isGamePaused;
 
@@ -165,8 +247,8 @@ export function useEditorSession({
     setGameStatus({
       state: nextIsPaused ? "paused" : "ready",
       message: nextIsPaused
-        ? "Phaser runtime is paused in the sandbox."
-        : "Phaser runtime is running in the sandbox.",
+        ? "Runtime is paused in the sandbox."
+        : "Runtime is running in the sandbox.",
     });
   }
 
@@ -175,7 +257,7 @@ export function useEditorSession({
     setRuntimeWarnings([]);
     setGameStatus({
       state: "loading",
-      message: "Resetting Phaser runtime...",
+      message: "Resetting runtime...",
     });
     setGameResetNonce((value) => value + 1);
   }
@@ -195,11 +277,11 @@ export function useEditorSession({
         );
         setGameStatus((currentStatus) =>
           currentStatus.state === "loading" &&
-          currentStatus.message === "Booting Phaser runtime..."
+          currentStatus.message === "Booting runtime..."
             ? currentStatus
             : {
                 state: "loading",
-                message: "Booting Phaser runtime...",
+                message: "Booting runtime...",
               }
         );
         return;
@@ -208,7 +290,7 @@ export function useEditorSession({
       if (status.state === "ready") {
         setGameStatus({
           state: "ready",
-          message: "Phaser runtime is running in the sandbox.",
+          message: "Runtime is running in the sandbox.",
         });
         return;
       }
@@ -219,11 +301,13 @@ export function useEditorSession({
   );
 
   const chat: EditorAIChatSession = {
+    canRegeneratePrompt,
     canStartGeneration,
     canSubmitPrompt,
     generationStages,
     generationStepIndex,
     hasSubmittedPrompt,
+    isEditingPrompt,
     isGenerating,
     loadState,
     needsOpenAiApiKey,
@@ -236,7 +320,9 @@ export function useEditorSession({
   };
 
   const canvas: EditorGameCanvasSession = {
+    activeGeneratedSpec,
     currentGenerationStage,
+    generationSource,
     gameResetNonce,
     gameStatus,
     isGamePaused,
@@ -262,6 +348,8 @@ export function useEditorSession({
         onOpenAiKeywordChange: setOpenAiKeyword,
         onOpenAiModelChange: setOpenAiModel,
         onPromptDraftChange: setPromptDraft,
+        onPromptEdit: editPrompt,
+        onPromptRegenerate: regenerateFromPromptDraft,
         onPromptSubmit: submitPrompt,
         onRegenerateGame: startGeneration,
         onStartGeneration: startGeneration,

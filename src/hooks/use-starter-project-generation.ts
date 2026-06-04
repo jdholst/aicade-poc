@@ -2,30 +2,44 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import type { EditorGenerationSource } from "@/runtime/editor-runtime-mode";
 import {
-  requestStarterProject,
-  type StarterProjectRequest,
-} from "@/service/starter-project/starter-project-client";
-import { GENERATION_TIMEOUT_MS } from "@/constants";
-import { type GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
+  startEditorGenerationRun,
+  type EditorGenerationRunCompletion,
+} from "@/service/generation-run";
+import type { StarterProjectRequest } from "@/service/starter-project/starter-project-client";
+
+type StarterProjectGenerationSuccess = Extract<
+  EditorGenerationRunCompletion,
+  { status: "success" }
+>;
+
+type StarterProjectGenerationError = Pick<
+  Extract<EditorGenerationRunCompletion, { status: "error" }>,
+  "message" | "status" | "validationFailure"
+>;
 
 export type StarterProjectLoadState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "success"; pack: GeneratedGamePack }
-  | { status: "error"; message: string };
+  | StarterProjectGenerationSuccess
+  | StarterProjectGenerationError;
 
 type GenerationRequest = StarterProjectRequest & {
   id: number;
 };
 
 type UseStarterProjectGenerationOptions = {
+  generationSource: EditorGenerationSource;
   generationStageCount: number;
+  onGenerationFailed?: () => void;
   onGenerationStarted: () => void;
 };
 
 export function useStarterProjectGeneration({
+  generationSource,
   generationStageCount,
+  onGenerationFailed,
   onGenerationStarted,
 }: UseStarterProjectGenerationOptions) {
   const [loadState, setLoadState] = useState<StarterProjectLoadState>({
@@ -37,6 +51,10 @@ export function useStarterProjectGeneration({
 
   const startGenerationRequest = useCallback(
     (request: StarterProjectRequest) => {
+      if (generationSource === "phaser-fixture") {
+        return;
+      }
+
       onGenerationStarted();
       setGenerationStepIndex(0);
       setLoadState({ status: "loading" });
@@ -45,7 +63,7 @@ export function useStarterProjectGeneration({
         id: (currentRequest?.id ?? 0) + 1,
       }));
     },
-    [onGenerationStarted]
+    [generationSource, onGenerationStarted]
   );
 
   useEffect(() => {
@@ -53,63 +71,33 @@ export function useStarterProjectGeneration({
       return;
     }
 
-    const activeGenerationRequest = generationRequest;
-    const controller = new AbortController();
-    let didTimeOut = false;
-    let timeoutId: number | undefined;
+    const run = startEditorGenerationRun({
+      generationSource,
+      request: generationRequest,
+    });
 
-    async function loadStarterProject() {
-      setGenerationStepIndex(0);
-      setLoadState({ status: "loading" });
+    void run.done.then((completion) => {
+      if (completion.status === "cancelled") {
+        return;
+      }
 
-      try {
-        timeoutId = window.setTimeout(() => {
-          didTimeOut = true;
-          controller.abort();
-        }, GENERATION_TIMEOUT_MS);
-
-        const pack = await requestStarterProject(
-          activeGenerationRequest,
-          controller.signal
-        );
-
-        setLoadState({
-          status: "success",
-          pack,
-        });
-      } catch (error) {
-        if (controller.signal.aborted) {
-          if (didTimeOut) {
-            setLoadState({
-              status: "error",
-              message:
-                "Generation took longer than two minutes. Please retry; the model may have stalled while creating or validating the game module.",
-            });
-          }
-
-          return;
-        }
-
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Generated game creation failed.";
-
+      if (completion.status === "error") {
+        onGenerationFailed?.();
         setLoadState({
           status: "error",
-          message,
+          message: completion.message,
+          ...(completion.validationFailure
+            ? { validationFailure: completion.validationFailure }
+            : {}),
         });
-      } finally {
-        if (timeoutId !== undefined) {
-          window.clearTimeout(timeoutId);
-        }
+        return;
       }
-    }
 
-    void loadStarterProject();
+      setLoadState(completion);
+    });
 
-    return () => controller.abort();
-  }, [generationRequest]);
+    return () => run.abort();
+  }, [generationRequest, generationSource, onGenerationFailed]);
 
   useEffect(() => {
     if (loadState.status !== "loading") {

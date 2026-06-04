@@ -126,7 +126,7 @@ describe("top-down Phaser template", () => {
         mechanic.type === "player_movement"
           ? {
               ...mechanic,
-              targetIds: [],
+              entityIds: [],
             }
           : mechanic
       ),
@@ -135,10 +135,10 @@ describe("top-down Phaser template", () => {
     expect(invalidFixtureState).toMatchObject({
       status: "invalid",
       message:
-        'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+        'mechanics.mechanic_player_movement.entityIds: Expected target role "player".',
       issues: [
         {
-          path: "mechanics.mechanic_player_movement.targetIds",
+          path: "mechanics.mechanic_player_movement.entityIds",
           message: 'Expected target role "player".',
         },
       ],
@@ -147,7 +147,7 @@ describe("top-down Phaser template", () => {
       .toMatchObject({
         status: "invalid",
         message:
-          'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+          'mechanics.mechanic_player_movement.entityIds: Expected target role "player".',
       });
   });
 
@@ -381,7 +381,7 @@ describe("top-down Phaser template", () => {
     const duplicateMechanic = {
       ...baseMechanic,
       id: "mechanic_player_movement_second",
-      targetIds: ["entity_player_second"],
+      entityIds: ["entity_player_second"],
       config: {
         ...baseMechanic.config,
         speed: 320,
@@ -401,7 +401,7 @@ describe("top-down Phaser template", () => {
     const installedMechanics: Array<{
       config: unknown;
       id: unknown;
-      targetIds: unknown;
+      entityIds: unknown;
     }> = [];
     const { context } = createRuntimeHarness(templateWithDuplicateMechanic);
 
@@ -420,13 +420,13 @@ describe("top-down Phaser template", () => {
           mechanic?: {
             config?: unknown;
             id?: unknown;
-            targetIds?: unknown;
+            entityIds?: unknown;
           };
         }) {
           installedMechanics.push({
             config: installerContext.mechanic?.config,
             id: installerContext.mechanic?.id,
-            targetIds: installerContext.mechanic?.targetIds,
+            entityIds: installerContext.mechanic?.entityIds,
           });
 
           return {};
@@ -440,12 +440,12 @@ describe("top-down Phaser template", () => {
       {
         config: baseMechanic.config,
         id: "mechanic_player_movement",
-        targetIds: ["entity_player"],
+        entityIds: ["entity_player"],
       },
       {
         config: duplicateMechanic.config,
         id: "mechanic_player_movement_second",
-        targetIds: ["entity_player_second"],
+        entityIds: ["entity_player_second"],
       },
     ]);
   });

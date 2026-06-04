@@ -12,10 +12,10 @@ import type {
 } from "@/hooks/use-editor-session";
 
 import {
-  createEditorRuntimePanelViewModel,
-  type EditorRuntimePrimarySurface,
-  type EditorRuntimeSecondarySurface,
-} from "./editor-game-canvas-view-model";
+  createRuntimePresentationPlan,
+  type RuntimePrimarySurface,
+  type RuntimeSecondarySurface,
+} from "./editor-runtime-presentation-plan";
 import { RuntimeControls } from "./editor-runtime-controls";
 import { RuntimeErrorBanner } from "./editor-runtime-error-banner";
 import { EditorRuntimeHostMount } from "./editor-runtime-host-mount";
@@ -25,7 +25,6 @@ import {
   GameSpecValidationErrorScreen,
   InitialRuntimeScreen,
   LoadingRuntimeScreen,
-  RuntimeErrorScreen,
 } from "./editor-runtime-screens";
 import { RuntimeWarningPanel } from "./editor-runtime-warning-panel";
 
@@ -55,14 +54,14 @@ export function EditorGameCanvas({
     onGameStatusChange,
   });
 
-  const runtimePanel = createEditorRuntimePanelViewModel({
+  const runtimePresentation = createRuntimePresentationPlan({
     canvas,
     firstPlayableValidationAttempt,
     runtimeTemplate,
   });
 
   const toggleGamePaused = () => {
-    if (!runtimePanel.canPauseRuntime) {
+    if (!runtimePresentation.controls.canPauseRuntime) {
       return;
     }
 
@@ -74,7 +73,7 @@ export function EditorGameCanvas({
   };
 
   const handleResetGame = () => {
-    if (!runtimePanel.canResetRuntime) {
+    if (!runtimePresentation.controls.canResetRuntime) {
       return;
     }
 
@@ -84,13 +83,13 @@ export function EditorGameCanvas({
   return (
     <section className="flex min-h-0 flex-col gap-4">
       <RuntimeControls
-        canPauseRuntime={runtimePanel.canPauseRuntime}
-        canResetRuntime={runtimePanel.canResetRuntime}
+        canPauseRuntime={runtimePresentation.controls.canPauseRuntime}
+        canResetRuntime={runtimePresentation.controls.canResetRuntime}
         isGamePaused={isGamePaused}
         onReset={handleResetGame}
         onTogglePaused={toggleGamePaused}
       />
-      {runtimePanel.secondarySurfaces.map((surface) =>
+      {runtimePresentation.secondarySurfaces.map((surface) =>
         renderRuntimeSecondarySurface({
           onRegenerate,
           surface,
@@ -104,7 +103,7 @@ export function EditorGameCanvas({
         onReset,
         onStatusChange: handleRuntimeStatusChange,
         onValidationEvidence: handleRuntimeValidationEvidence,
-        surface: runtimePanel.primarySurface,
+        surface: runtimePresentation.primarySurface,
       })}
     </section>
   );
@@ -115,7 +114,7 @@ function renderRuntimeSecondarySurface({
   surface,
 }: {
   onRegenerate: () => void;
-  surface: EditorRuntimeSecondarySurface;
+  surface: RuntimeSecondarySurface;
 }) {
   if (surface.type === "runtime-error-banner") {
     return (
@@ -152,36 +151,70 @@ function renderRuntimePrimarySurface({
   onReset: () => void;
   onStatusChange: (status: RuntimeIframeStatus) => void;
   onValidationEvidence: (evidence: RuntimeValidationEvidence) => void;
-  surface: EditorRuntimePrimarySurface;
+  surface: RuntimePrimarySurface;
 }) {
   if (surface.type === "loading") {
-    return <LoadingRuntimeScreen stage={surface.stage} />;
+    return (
+      <LoadingRuntimeScreen
+        progressLabel={surface.screen.progressLabel}
+        stage={surface.stage}
+        statusLabel={surface.screen.statusLabel}
+        title={surface.screen.eyebrow}
+      />
+    );
   }
 
-  if (surface.type === "canvas-initial") {
-    return <InitialRuntimeScreen />;
+  if (surface.type === "initial") {
+    return (
+      <InitialRuntimeScreen
+        description={surface.description}
+        eyebrow={surface.eyebrow}
+        surfaceLabel={surface.surfaceLabel}
+        title={surface.title}
+      />
+    );
   }
 
   if (surface.type === "generation-error") {
     return (
-      <RuntimeErrorScreen
-        message={surface.message}
+      <GameSpecValidationErrorScreen
+        debugReceipts={surface.failure.debugReceipts}
+        eyebrow={surface.screen.eyebrow}
+        regenerateLabel={surface.regenerateAction.label}
+        message={surface.failure.summary}
         onRegenerate={onRegenerate}
+        statusLabel={surface.screen.statusLabel}
+        title={surface.screen.title}
       />
     );
   }
 
   if (surface.type === "phaser-validation-error") {
-    return <GameSpecValidationErrorScreen message={surface.failure.summary} />;
+    return (
+      <GameSpecValidationErrorScreen
+        debugReceipts={surface.failure.debugReceipts}
+        eyebrow={surface.screen.eyebrow}
+        message={surface.failure.summary}
+        onRegenerate={surface.regenerateAction ? onRegenerate : undefined}
+        regenerateLabel={surface.regenerateAction?.label}
+        statusLabel={surface.screen.statusLabel}
+        title={surface.screen.title}
+      />
+    );
   }
 
   if (surface.type === "first-playable-validation-error") {
     return (
       <FirstPlayableValidationBlockedScreen
         debugReceipts={surface.failure.debugReceipts}
+        eyebrow={surface.screen.eyebrow}
         onRegenerate={onRegenerate}
         onReset={onReset}
+        regenerateLabel={surface.regenerateAction.label}
+        resetLabel={surface.resetAction.label}
+        statusLabel={surface.screen.statusLabel}
         summary={surface.failure.summary}
+        title={surface.screen.title}
       />
     );
   }
@@ -194,6 +227,7 @@ function renderRuntimePrimarySurface({
       isPaused={isPaused}
       onStatusChange={onStatusChange}
       onValidationEvidence={onValidationEvidence}
+      runFirstPlayableChecksOnReady={surface.runFirstPlayableChecksOnReady}
     />
   );
 }

@@ -14,6 +14,7 @@ import {
 } from "@/game-spec";
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import type {
+  ActiveGeneratedSpecState,
   EditorGameCanvasActions,
   EditorGameCanvasSession,
 } from "@/hooks/use-editor-session";
@@ -89,12 +90,14 @@ function createCanvasSession(
   overrides: Partial<EditorGameCanvasSession> = {}
 ): EditorGameCanvasSession {
   return {
+    activeGeneratedSpec: null,
     currentGenerationStage,
     gameResetNonce: 0,
     gameStatus: {
       state: "loading",
-      message: "Ready to build starter game.",
+      message: "Ready to build project.",
     },
+    generationSource: "phaser-fixture",
     isGamePaused: false,
     loadState: {
       status: "idle",
@@ -124,7 +127,7 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByTitle("Prism Relay Gauntlet")).toBeVisible();
     expect(screen.getByText("Phaser runtime")).toBeVisible();
     expect(
-      screen.queryByText("The generated game module will boot here.")
+      screen.queryByText("The generated game will boot here.")
     ).not.toBeInTheDocument();
   });
 
@@ -344,6 +347,206 @@ describe("EditorGameCanvas", () => {
     });
   });
 
+  it("does not persist active generated specs as durable Game Pack history", async () => {
+    const storage = new MemoryGamePackStorage();
+    const put = vi.spyOn(storage, "put");
+    const repository = createGamePackRepository(storage);
+    const generatedSpec = {
+      ...topDownPhaserTemplate.gameSpec,
+      title: "Generated Crystal Draft",
+    };
+    const activeGeneratedSpec = {
+      metadata: {
+        attemptCount: 1,
+        model: "gpt-5.4-mini" as const,
+        taskRoute: "spec_generation.primary" as const,
+      },
+      runtimeKind: "phaser" as const,
+      source: "phaser-spec" as const,
+      spec: generatedSpec,
+    };
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: generatedSpec,
+          },
+        })}
+        gamePackRepository={repository}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>(
+      "Generated Crystal Draft"
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "nonblank_render");
+      dispatchValidationEvidence(iframe, "player_visible");
+      dispatchValidationEvidence(iframe, "input_response");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Generated Crystal Draft")).toBeVisible();
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(put).not.toHaveBeenCalled();
+    await expect(repository.load("game_pack_crystal_spec_chase")).resolves.toBe(
+      null
+    );
+  });
+
+  it("keeps active generated specs out of ready state until first-playable checks pass", async () => {
+    const actions = createActions();
+    const activeGeneratedSpec = createActiveGeneratedSpec({
+      title: "Generated Crystal Draft",
+    });
+
+    render(
+      <EditorGameCanvas
+        actions={actions}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: activeGeneratedSpec.spec,
+          },
+        })}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>(
+      "Generated Crystal Draft"
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+    });
+
+    expect(actions.onGameStatusChange).not.toHaveBeenCalledWith({
+      state: "ready",
+    });
+
+    act(() => {
+      dispatchValidationEvidence(iframe, "nonblank_render");
+      dispatchValidationEvidence(iframe, "player_visible");
+      dispatchValidationEvidence(iframe, "input_response");
+    });
+
+    await waitFor(() => {
+      expect(actions.onGameStatusChange).toHaveBeenLastCalledWith({
+        state: "ready",
+      });
+    });
+  });
+
+  it("blocks invalid active generated specs before mounting without fixture fallback", () => {
+    const activeGeneratedSpec = createActiveGeneratedSpec({
+      objectives: topDownPhaserTemplate.gameSpec.objectives.map((objective) => ({
+        ...objective,
+        primary: false,
+      })),
+      title: "Generated Invalid Draft",
+    });
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: activeGeneratedSpec.spec,
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText("Draft blocked")).toBeVisible();
+    expect(
+      screen.getAllByText("Expected exactly one primary objective.")
+    ).toHaveLength(2);
+    expect(
+      screen.queryByTitle("Generated Invalid Draft")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+  });
+
+  it("blocks active generated specs when runtime first-playable evidence fails", async () => {
+    const activeGeneratedSpec = createActiveGeneratedSpec({
+      title: "Generated Runtime Failure Draft",
+    });
+
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          activeGeneratedSpec,
+          generationSource: "phaser-ai",
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: activeGeneratedSpec.metadata,
+            runtimeKind: activeGeneratedSpec.runtimeKind,
+            spec: activeGeneratedSpec.spec,
+          },
+        })}
+      />
+    );
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>(
+      "Generated Runtime Failure Draft"
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "game-ready" },
+          source: iframe.contentWindow,
+        })
+      );
+      dispatchValidationEvidence(iframe, "input_response", "failed");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Draft blocked")).toBeVisible();
+    });
+
+    expect(screen.getByText("This draft is not playable yet.")).toBeVisible();
+    expect(
+      screen.queryByTitle("Generated Runtime Failure Draft")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Crystal Spec Chase")).not.toBeInTheDocument();
+  });
+
   it("remounts the Phaser runtime from a saved Game Pack after repository load", async () => {
     const repository = createGamePackRepository(new MemoryGamePackStorage());
     const restoredGameSpec = {
@@ -396,7 +599,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "loading",
-            message: "Booting Phaser runtime...",
+            message: "Booting runtime...",
           },
         })}
       />
@@ -416,13 +619,14 @@ describe("EditorGameCanvas", () => {
     );
 
     expect(
-      screen.getByText("The generated game module will boot here.")
+      screen.getByText("The generated game will boot here.")
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Build a starter game to mount the canvas runtime in an isolated iframe."
+        "Build from the prompt to create and mount the game runtime in an isolated sandbox."
       )
     ).toBeVisible();
+    expect(screen.getByText("Generated runtime")).toBeVisible();
     expect(screen.getByText("Ready")).toBeVisible();
     expect(screen.getByText("Runtime controls")).toBeVisible();
     expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
@@ -438,6 +642,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           loadState: {
             status: "success",
+            source: "canvas-starter",
             pack,
           },
         })}
@@ -460,7 +665,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "ready",
-            message: "Phaser runtime is running in the sandbox.",
+            message: "Runtime is running in the sandbox.",
           },
         })}
       />
@@ -523,7 +728,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "ready",
-            message: "Phaser runtime is running in the sandbox.",
+            message: "Runtime is running in the sandbox.",
           },
           runtimeWarnings: [
             {
@@ -575,7 +780,7 @@ describe("EditorGameCanvas", () => {
         canvas={createCanvasSession({
           gameStatus: {
             state: "ready",
-            message: "Phaser runtime is running in the sandbox.",
+            message: "Runtime is running in the sandbox.",
           },
           runtimeWarnings: [
             {
@@ -653,10 +858,64 @@ describe("EditorGameCanvas", () => {
     expect(
       screen.getByText("The runtime could not be prepared.")
     ).toBeVisible();
-    expect(screen.getByText("Generated game creation failed.")).toBeVisible();
+    expect(
+      screen.getAllByText("Generated game creation failed.")[0]
+    ).toBeVisible();
+    expect(screen.getByText("generation_request")).toBeVisible();
     expect(screen.getByText("Runtime controls")).toBeVisible();
     expect(screen.getByRole("button", { name: "Pause game" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reset game" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(onRegenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Spec Generation validation details when generated output is rejected", () => {
+    const onRegenerate = vi.fn();
+
+    render(
+      <EditorGameCanvas
+        actions={createActions({ onRegenerate })}
+        canvas={createCanvasSession({
+          loadState: {
+            status: "error",
+            message: "I designed a game plan, but it needs a clearer pickup goal.",
+            validationFailure: {
+              attemptCount: 1,
+              issues: [
+                {
+                  path: "mechanics.mechanic_pickup_collection.assetIds",
+                  message: "Expected asset role \"pickup\".",
+                },
+              ],
+              stage: "mechanic_validation",
+              taskRoute: "spec_generation.primary",
+            },
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText("Game Spec validation failed")).toBeVisible();
+    expect(screen.getByText("The runtime was not started.")).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "I designed a game plan, but it needs a clearer pickup goal."
+      )[0]
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        'mechanics.mechanic_pickup_collection.assetIds: Expected asset role "pickup".'
+      )
+    ).toBeVisible();
+    expect(screen.getAllByText("mechanic_validation")[0]).toBeVisible();
+    expect(screen.getByLabelText("Validation details")).toHaveClass(
+      "overflow-y-auto"
+    );
+    expect(screen.getByLabelText("Validation actions")).toHaveClass(
+      "shrink-0"
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -669,10 +928,10 @@ describe("EditorGameCanvas", () => {
       getTopDownPhaserTemplateState: () => ({
         status: "invalid",
         message:
-          'mechanics.mechanic_player_movement.targetIds: Expected target role "player".',
+          'mechanics.mechanic_player_movement.entityIds: Expected target role "player".',
         issues: [
           {
-            path: "mechanics.mechanic_player_movement.targetIds",
+            path: "mechanics.mechanic_player_movement.entityIds",
             message: 'Expected target role "player".',
           },
         ],
@@ -694,9 +953,9 @@ describe("EditorGameCanvas", () => {
     expect(screen.getByText("Game Spec validation failed")).toBeVisible();
     expect(screen.getByText("The runtime was not started.")).toBeVisible();
     expect(
-      screen.getByText(
-        'mechanics.mechanic_player_movement.targetIds: Expected target role "player".'
-      )
+      screen.getAllByText(
+        'mechanics.mechanic_player_movement.entityIds: Expected target role "player".'
+      )[0]
     ).toBeVisible();
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });
@@ -719,6 +978,26 @@ function dispatchValidationEvidence(
       source: iframe.contentWindow,
     })
   );
+}
+
+function createActiveGeneratedSpec(
+  specOverrides: Partial<ActiveGeneratedSpecState["spec"]> = {}
+): ActiveGeneratedSpecState {
+  const spec = {
+    ...topDownPhaserTemplate.gameSpec,
+    ...specOverrides,
+  };
+
+  return {
+    metadata: {
+      attemptCount: 1,
+      model: "gpt-5.4-mini",
+      taskRoute: "spec_generation.primary",
+    },
+    runtimeKind: "phaser",
+    source: "phaser-spec",
+    spec,
+  };
 }
 
 class MemoryGamePackStorage implements GamePackStorageDriver {

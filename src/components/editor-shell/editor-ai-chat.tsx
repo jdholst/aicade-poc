@@ -3,11 +3,44 @@ import type {
   EditorAIChatActions,
   EditorAIChatSession,
 } from "@/hooks/use-editor-session";
+import type { TopDownGameSpec } from "@/game-spec";
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 
 type EditorAIChatProps = {
   actions: EditorAIChatActions;
   chat: EditorAIChatSession;
+};
+
+type GeneratedProjectTranscriptMessage = {
+  role: "assistant" | "user";
+  text: string;
+};
+
+type GeneratedProjectDetailItem = {
+  label: string;
+  value: string;
+};
+
+type GeneratedProjectDetailPanel = {
+  items: GeneratedProjectDetailItem[];
+  title: string;
+};
+
+type GeneratedProjectControl = {
+  action: string;
+  keys: string[];
+  label: string;
+};
+
+type GeneratedProjectSummary = {
+  capabilities: string[];
+  controls: GeneratedProjectControl[];
+  detailPanels: GeneratedProjectDetailPanel[];
+  overviewMetrics: string[];
+  overviewSummary: string;
+  statusMessage: string;
+  summaryItems: string[];
+  transcript: GeneratedProjectTranscriptMessage[];
 };
 
 function getSpecSummary(pack: GeneratedGamePack) {
@@ -22,11 +55,102 @@ function getSpecSummary(pack: GeneratedGamePack) {
   ];
 }
 
+function getTopDownSpecSummary(spec: TopDownGameSpec) {
+  return [
+    "phaser runtime",
+    `${spec.template.config.scenes.length} scene`,
+    `${spec.entities.length} entities`,
+    `${spec.assets.length} assets`,
+    `${spec.mechanics.length} mechanics`,
+    spec.schemaVersion,
+  ];
+}
+
+function createTopDownSpecGenerationTranscriptMessage(
+  metadata: Extract<
+    EditorAIChatSession["loadState"],
+    { status: "success"; source: "phaser-spec" }
+  >["metadata"]
+): GeneratedProjectTranscriptMessage {
+  const repairCount =
+    metadata.repairAttempts && metadata.repairAttempts.length > 0
+      ? Math.max(metadata.attemptCount - 1, metadata.repairAttempts.length)
+      : 0;
+  const repairSuffix =
+    repairCount > 0
+      ? ` after ${repairCount} automatic repair${
+          repairCount === 1 ? "" : "s"
+        }`
+      : "";
+
+  return {
+    role: "assistant",
+    text: `Generated a playable project plan from the prompt${repairSuffix}.`,
+  };
+}
+
+function createGeneratedProjectSummary(
+  loadState: EditorAIChatSession["loadState"],
+  submittedPrompt: string
+): GeneratedProjectSummary | null {
+  if (loadState.status !== "success") {
+    return null;
+  }
+
+  const statusMessage =
+    "The generated project was validated and mounted in the sandbox.";
+
+  if (loadState.source === "canvas-starter") {
+    return {
+      capabilities: loadState.pack.manifest.capabilities,
+      controls: loadState.pack.manifest.controls,
+      detailPanels: loadState.pack.editorMetadata.panels,
+      overviewMetrics: [
+        loadState.pack.manifest.runtime,
+        loadState.pack.manifest.editableSpecVersion,
+        loadState.pack.manifest.genre,
+        loadState.pack.manifest.viewport.scaling,
+        `${loadState.pack.manifest.controls.length} controls`,
+      ],
+      overviewSummary: loadState.pack.project.summary,
+      statusMessage,
+      summaryItems: getSpecSummary(loadState.pack),
+      transcript: loadState.pack.chatTranscript,
+    };
+  }
+
+  return {
+    capabilities: [],
+    controls: loadState.spec.controls,
+    detailPanels: [],
+    overviewMetrics: [
+      loadState.runtimeKind,
+      loadState.spec.schemaVersion,
+      loadState.spec.template.id,
+      loadState.metadata.model,
+    ],
+    overviewSummary: loadState.spec.currentIntentSummary,
+    statusMessage,
+    summaryItems: getTopDownSpecSummary(loadState.spec),
+    transcript: [
+      {
+        role: "user",
+        text: submittedPrompt,
+      },
+      createTopDownSpecGenerationTranscriptMessage(loadState.metadata),
+    ],
+  };
+}
+
 export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
   const {
+    canRegeneratePrompt,
     canStartGeneration,
+    canSubmitPrompt,
     generationStages,
     generationStepIndex,
+    hasSubmittedPrompt,
+    isEditingPrompt,
     isGenerating,
     loadState,
     needsOpenAiApiKey,
@@ -34,15 +158,40 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
     openAiApiKey,
     openAiKeyword,
     openAiModel,
+    promptDraft,
     submittedPrompt,
   } = chat;
   const {
     onOpenAiApiKeyChange,
     onOpenAiKeywordChange,
     onOpenAiModelChange,
+    onPromptDraftChange,
+    onPromptEdit,
+    onPromptRegenerate,
+    onPromptSubmit,
     onRegenerateGame,
     onStartGeneration,
   } = actions;
+  const generatedProjectSummary = createGeneratedProjectSummary(
+    loadState,
+    submittedPrompt
+  );
+  const isPromptEditingForRegeneration =
+    isEditingPrompt && loadState.status === "error";
+  const isPromptFormVisible =
+    (loadState.status === "idle" &&
+      (!hasSubmittedPrompt || isEditingPrompt)) ||
+    isPromptEditingForRegeneration;
+  const canEditSubmittedPrompt =
+    hasSubmittedPrompt &&
+    !isEditingPrompt &&
+    (loadState.status === "idle" || loadState.status === "error");
+  const promptEditButtonLabel =
+    loadState.status === "idle" ? "Edit Prompt" : "Change Prompt";
+  const promptSubmitButtonLabel =
+    loadState.status === "idle" ? "Send prompt" : "Regenerate";
+  const canSubmitVisiblePrompt =
+    loadState.status === "idle" ? canSubmitPrompt : canRegeneratePrompt;
 
   return (
     <aside className="flex min-h-0 flex-col border border-[var(--line-strong)] bg-[rgba(255,249,242,0.78)] backdrop-blur">
@@ -75,8 +224,8 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
           </div>
         </div>
         <p className="mt-3 max-w-xl text-sm leading-7 text-[var(--muted)]">
-          This run uses your submitted prompt to generate the canvas runtime
-          code, the editable JSON spec, controls, and editor metadata below.
+          This run uses your submitted prompt to generate the playable project,
+          controls, and editor metadata below.
         </p>
       </div>
 
@@ -86,7 +235,55 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
               Prompt
             </div>
-            <p className="mt-2 text-sm leading-7">{submittedPrompt}</p>
+            {isPromptFormVisible ? (
+              <form
+                className="mt-3 space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (loadState.status === "idle") {
+                    onPromptSubmit();
+                    return;
+                  }
+
+                  onPromptRegenerate();
+                }}
+              >
+                <label className="block">
+                  <span className="sr-only">Game prompt</span>
+                  <textarea
+                    value={promptDraft}
+                    onChange={(event) => {
+                      onPromptDraftChange(event.target.value);
+                    }}
+                    onInput={(event) => {
+                      onPromptDraftChange(event.currentTarget.value);
+                    }}
+                    className="min-h-32 w-full resize-none border border-white/16 bg-white/8 px-3 py-3 text-sm leading-7 text-white placeholder:text-white/42 outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.28)]"
+                    placeholder="Describe the starter game you want to build."
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={!canSubmitVisiblePrompt}
+                  className="inline-flex items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44"
+                >
+                  {promptSubmitButtonLabel}
+                </button>
+              </form>
+            ) : (
+              <>
+                <p className="mt-2 text-sm leading-7">{submittedPrompt}</p>
+                {canEditSubmittedPrompt ? (
+                  <button
+                    type="button"
+                    onClick={onPromptEdit}
+                    className="mt-3 inline-flex items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)]"
+                  >
+                    {promptEditButtonLabel}
+                  </button>
+                ) : null}
+              </>
+            )}
           </article>
         ) : null}
 
@@ -97,8 +294,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
             </div>
             <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
               I have your prompt ready. Start generation when you want the
-              starter game code, editable spec, controls, and editor metadata
-              created.
+              playable project, controls, and editor metadata created.
             </p>
             <OpenAiConfigForm
               needsOpenAiApiKey={needsOpenAiApiKey}
@@ -117,7 +313,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
               onClick={onStartGeneration}
               className="mt-4 inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
             >
-              Build the starter game
+              Build the project
             </button>
           </article>
         ) : null}
@@ -125,8 +321,8 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
         {loadState.status === "loading" ? (
           <>
             <div className="border border-[var(--line)] bg-white/76 px-4 py-3 text-sm text-[var(--muted)]">
-              Building the starter game. The live generation indicator is on the
-              canvas while this log tracks each phase.
+              Building the project. The live generation indicator is on the
+              runtime surface while this log tracks each phase.
             </div>
             {generationStages.map((stage, index) => {
               const isComplete = index < generationStepIndex;
@@ -201,14 +397,13 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
           </div>
         ) : null}
 
-        {loadState.status === "success" ? (
+        {generatedProjectSummary ? (
           <>
             <div className="border border-[var(--line)] bg-white/76 px-4 py-3 text-sm text-[var(--muted)]">
-              Generated TypeScript was validated, transpiled on the server, and
-              mounted in a sandboxed iframe.
+              {generatedProjectSummary.statusMessage}
             </div>
 
-            {loadState.pack.chatTranscript.map((message, index) => (
+            {generatedProjectSummary.transcript.map((message, index) => (
               <article
                 key={`${message.role}-${index}-${message.text}`}
                 className={`max-w-[92%] border px-4 py-3 ${
@@ -226,38 +421,74 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                 >
                   {message.role === "user" ? "Prompt" : "AI"}
                 </div>
-                <p className="mt-2 text-sm leading-7">{message.text}</p>
+                {message.role === "user" && isEditingPrompt ? (
+                  <form
+                    className="mt-3 space-y-3"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      onPromptRegenerate();
+                    }}
+                  >
+                    <label className="block">
+                      <span className="sr-only">Game prompt</span>
+                      <textarea
+                        value={promptDraft}
+                        onChange={(event) => {
+                          onPromptDraftChange(event.target.value);
+                        }}
+                        onInput={(event) => {
+                          onPromptDraftChange(event.currentTarget.value);
+                        }}
+                        className="min-h-32 w-full resize-none border border-white/16 bg-white/8 px-3 py-3 text-sm leading-7 text-white placeholder:text-white/42 outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.28)]"
+                        placeholder="Describe the starter game you want to build."
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={!canRegeneratePrompt}
+                      className="inline-flex items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44"
+                    >
+                      Regenerate
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <p className="mt-2 text-sm leading-7">{message.text}</p>
+                    {message.role === "user" ? (
+                      <button
+                        type="button"
+                        onClick={onPromptEdit}
+                        className="mt-3 inline-flex items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)]"
+                      >
+                        Change Prompt
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </article>
             ))}
 
             <section className="border border-[var(--line)] bg-[rgba(240,247,243,0.9)] p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                Manifest
+                Generated project
               </div>
               <p className="mt-3 text-sm leading-7 text-[var(--ink)]">
-                {loadState.pack.project.summary}
+                {generatedProjectSummary.overviewSummary}
               </p>
               <div className="mt-4 grid gap-3 text-xs uppercase tracking-[0.18em] text-[var(--muted)] sm:grid-cols-2">
-                <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
-                  {loadState.pack.manifest.runtime}
-                </div>
-                <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
-                  {loadState.pack.manifest.editableSpecVersion}
-                </div>
-                <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
-                  {loadState.pack.manifest.genre}
-                </div>
-                <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
-                  {loadState.pack.manifest.viewport.scaling}
-                </div>
-                <div className="border border-[var(--line)] bg-white/70 px-3 py-3">
-                  {loadState.pack.manifest.controls.length} controls
-                </div>
+                {generatedProjectSummary.overviewMetrics.map((metric) => (
+                  <div
+                    key={metric}
+                    className="border border-[var(--line)] bg-white/70 px-3 py-3"
+                  >
+                    {metric}
+                  </div>
+                ))}
               </div>
             </section>
 
             <section className="grid gap-3 sm:grid-cols-2">
-              {getSpecSummary(loadState.pack).map((item) => (
+              {generatedProjectSummary.summaryItems.map((item) => (
                 <div
                   key={item}
                   className="border border-[var(--line)] bg-white/74 px-3 py-3 text-xs uppercase tracking-[0.16em] text-[var(--muted)]"
@@ -272,7 +503,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                 Controls
               </div>
               <div className="mt-3 space-y-2">
-                {loadState.pack.manifest.controls.map((control) => (
+                {generatedProjectSummary.controls.map((control) => (
                   <div
                     key={control.action}
                     className="flex items-start justify-between gap-4 text-sm"
@@ -288,49 +519,55 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
               </div>
             </section>
 
-            <section className="space-y-3">
-              {loadState.pack.editorMetadata.panels.map((panel) => (
-                <div
-                  key={panel.title}
-                  className="border border-[var(--line)] bg-white/78 p-4"
-                >
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                    {panel.title}
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {panel.items.map((item) => (
-                      <div
-                        key={`${panel.title}-${item.label}`}
-                        className="flex items-start justify-between gap-4 text-sm"
-                      >
-                        <span className="text-[var(--muted)]">
-                          {item.label}
-                        </span>
-                        <span className="max-w-[58%] text-right font-medium text-[var(--ink)]">
-                          {item.value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </section>
-
-            <section className="border border-[var(--line)] bg-[rgba(17,24,31,0.92)] p-4 text-white">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/50">
-                Capabilities
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {loadState.pack.manifest.capabilities.map((capability) => (
-                  <span
-                    key={capability}
-                    className="border border-white/12 bg-white/8 px-2.5 py-1 text-xs text-white/78"
+            {generatedProjectSummary.detailPanels.length > 0 ? (
+              <section className="space-y-3">
+                {generatedProjectSummary.detailPanels.map((panel) => (
+                  <div
+                    key={panel.title}
+                    className="border border-[var(--line)] bg-white/78 p-4"
                   >
-                    {capability}
-                  </span>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                      {panel.title}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {panel.items.map((item) => (
+                        <div
+                          key={`${panel.title}-${item.label}`}
+                          className="flex items-start justify-between gap-4 text-sm"
+                        >
+                          <span className="text-[var(--muted)]">
+                            {item.label}
+                          </span>
+                          <span className="max-w-[58%] text-right font-medium text-[var(--ink)]">
+                            {item.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ))}
-              </div>
-            </section>
+              </section>
+            ) : null}
+
+            {generatedProjectSummary.capabilities.length > 0 ? (
+              <section className="border border-[var(--line)] bg-[rgba(17,24,31,0.92)] p-4 text-white">
+                <div
+                  className="text-xs font-semibold uppercase tracking-[0.18em] text-white/50"
+                >
+                  Capabilities
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {generatedProjectSummary.capabilities.map((capability) => (
+                    <span
+                      key={capability}
+                      className="border border-white/12 bg-white/8 px-2.5 py-1 text-xs text-white/78"
+                    >
+                      {capability}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </>
         ) : null}
       </div>

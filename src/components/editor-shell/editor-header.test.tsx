@@ -8,7 +8,7 @@ import { EditorHeader } from "./editor-header";
 
 const waitingStatus: GeneratedGameStatus = {
   state: "loading",
-  message: "Waiting for generated module...",
+  message: "Building generated project...",
 };
 
 describe("EditorHeader", () => {
@@ -21,7 +21,7 @@ describe("EditorHeader", () => {
       />
     );
 
-    expect(screen.getByText("Waiting for generated module...")).toBeVisible();
+    expect(screen.getByText("Building generated project...")).toBeVisible();
   });
 
   it("shows generation errors instead of stale runtime waiting status", () => {
@@ -42,7 +42,7 @@ describe("EditorHeader", () => {
       screen.getByText("An error has occurred.")
     ).toBeVisible();
     expect(
-      screen.queryByText("Waiting for generated module...")
+      screen.queryByText("Building generated project...")
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText('No OpenAI API key is configured for keyword "Red".')

@@ -19,6 +19,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
 
   it("resolves a valid Phaser template with a first-playable validation source", () => {
     const plan = createEditorRuntimeTemplatePlan({
+      generationSource: "phaser-fixture",
       phaserTemplateState: {
         status: "valid",
         template: topDownPhaserTemplate,
@@ -36,8 +37,12 @@ describe("createEditorRuntimeTemplatePlan", () => {
           runtimeScriptPath: topDownPhaserTemplate.runtimeScriptPath,
           templateId: topDownPhaserTemplate.gameSpec.template.id,
         },
+        source: "fixture",
         runtimeKind: "phaser",
       },
+      persistencePolicy: "persist-after-first-playable",
+      readyPolicy: "ready-on-runtime-ready",
+      runFirstPlayableChecksOnReady: true,
       template: topDownPhaserTemplate,
       type: "phaser-valid",
     });
@@ -45,6 +50,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
 
   it("resolves invalid Phaser templates without a validation source", () => {
     const plan = createEditorRuntimeTemplatePlan({
+      generationSource: "phaser-fixture",
       phaserTemplateState: {
         status: "invalid",
         issues: [
@@ -59,6 +65,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
     });
 
     expect(plan).toEqual({
+      blockedPresentation: "game-spec-validation",
       firstPlayableValidationSource: null,
       issues: [
         {
@@ -77,6 +84,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
     });
 
     const plan = createEditorRuntimeTemplatePlan({
+      generationSource: "phaser-ai",
       restoredGamePack,
       runtimeMode: "phaser",
     });
@@ -88,12 +96,64 @@ describe("createEditorRuntimeTemplatePlan", () => {
         runtimeCandidate: {
           templateId: topDownPhaserTemplate.gameSpec.template.id,
         },
+        source: "restored-game-pack",
       },
+      persistencePolicy: "reuse-restored-game-pack",
+      readyPolicy: "ready-on-runtime-ready",
+      runFirstPlayableChecksOnReady: true,
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
         title: topDownPhaserTemplate.title,
       },
       type: "phaser-valid",
+    });
+  });
+
+  it("resolves an active generated spec without durable Game Pack state", () => {
+    const plan = createEditorRuntimeTemplatePlan({
+      activeGeneratedSpec: {
+        metadata: {
+          attemptCount: 1,
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+        },
+        runtimeKind: "phaser",
+        source: "phaser-spec",
+        spec: topDownPhaserTemplate.gameSpec,
+      },
+      generationSource: "phaser-ai",
+      runtimeMode: "phaser",
+    });
+
+    expect(plan).toMatchObject({
+      firstPlayableValidationSource: {
+        gameSpec: topDownPhaserTemplate.gameSpec,
+        runtimeCandidate: {
+          templateId: topDownPhaserTemplate.gameSpec.template.id,
+        },
+        source: "generated-spec",
+      },
+      persistencePolicy: "do-not-persist",
+      readyPolicy: "ready-after-first-playable",
+      runFirstPlayableChecksOnReady: true,
+      template: {
+        gameSpec: topDownPhaserTemplate.gameSpec,
+        title: topDownPhaserTemplate.title,
+      },
+      type: "phaser-valid",
+    });
+    expect(plan.firstPlayableValidationSource).not.toHaveProperty("gamePack");
+  });
+
+  it("does not mount a fixture while Phaser AI generation is still idle", () => {
+    expect(
+      createEditorRuntimeTemplatePlan({
+        generationSource: "phaser-ai",
+        runtimeMode: "phaser",
+      })
+    ).toEqual({
+      firstPlayableValidationSource: null,
+      type: "phaser-pending-generation",
     });
   });
 });

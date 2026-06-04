@@ -60,6 +60,9 @@ export function OpenAiConfigForm({
               type="password"
               value={openAiApiKey}
               onChange={(event) => onOpenAiApiKeyChange(event.target.value)}
+              onInput={(event) =>
+                onOpenAiApiKeyChange(event.currentTarget.value)
+              }
               autoComplete="off"
               spellCheck={false}
               className={`mt-2 w-full border border-[var(--line)] ${inputClasses} font-mono text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]`}
@@ -81,6 +84,9 @@ export function OpenAiConfigForm({
               type="text"
               value={openAiKeyword}
               onChange={(event) => onOpenAiKeywordChange(event.target.value)}
+              onInput={(event) =>
+                onOpenAiKeywordChange(event.currentTarget.value)
+              }
               autoComplete="off"
               spellCheck={false}
               className={`mt-2 w-full border border-[var(--line)] ${inputClasses} text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.18)]`}

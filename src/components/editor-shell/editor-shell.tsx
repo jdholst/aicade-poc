@@ -21,18 +21,18 @@ const generationStages = [
     progress: 14,
   },
   {
-    title: "Designing the starter game",
-    detail: "Asking AI for the manifest, playable rules, and editable spec.",
+    title: "Designing the project",
+    detail: "Asking AI for the playable rules, controls, and editable spec.",
     progress: 26,
   },
   {
-    title: "Writing canvas runtime code",
-    detail: "Generating the TypeScript module that will own the game loop.",
+    title: "Preparing the runtime",
+    detail: "Creating the runtime plan that will own the game loop.",
     progress: 38,
   },
   {
-    title: "Checking generated code",
-    detail: "Validating the pack and transpiling the module on the server.",
+    title: "Checking the project",
+    detail: "Validating the generated project before it reaches the sandbox.",
     progress: 56,
   },
   {

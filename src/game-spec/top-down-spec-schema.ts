@@ -6,6 +6,8 @@ import {
   stableIdSchema,
 } from "./game-spec-schema";
 
+export const TOP_DOWN_TEMPLATE_ID = "template_top_down";
+
 const finiteNumberSchema = z.number().finite();
 const positiveNumberSchema = finiteNumberSchema.positive();
 const coordinateSchema = finiteNumberSchema;
@@ -119,7 +121,7 @@ export const topDownSpecSchema = z
 export const topDownGameSpecSchema = gameSpecSchema.extend({
   template: z
     .object({
-      id: z.literal("template_top_down"),
+      id: z.literal(TOP_DOWN_TEMPLATE_ID),
       version: z.string().min(1).max(40),
       config: topDownSpecSchema,
     })

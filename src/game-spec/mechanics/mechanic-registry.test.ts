@@ -130,7 +130,7 @@ const registryBackedTopDownSpec: TopDownGameSpec = {
     {
       id: "mechanic_player_movement",
       type: "player_movement",
-      targetIds: ["entity_player"],
+      entityIds: ["entity_player"],
       sceneIds: ["scene_arena"],
       objectiveIds: ["objective_collect_crystal"],
       config: {},
@@ -138,7 +138,7 @@ const registryBackedTopDownSpec: TopDownGameSpec = {
     {
       id: "mechanic_chaser_enemy",
       type: "enemy_chase",
-      targetIds: ["entity_chaser", "entity_player"],
+      entityIds: ["entity_chaser", "entity_player"],
       sceneIds: ["scene_arena"],
       regionIds: ["region_safe_start"],
       objectiveIds: ["objective_collect_crystal"],
@@ -149,7 +149,7 @@ const registryBackedTopDownSpec: TopDownGameSpec = {
     {
       id: "mechanic_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player", "entity_crystal"],
+      entityIds: ["entity_player", "entity_crystal"],
       sceneIds: ["scene_arena"],
       regionIds: ["region_safe_start"],
       assetIds: ["asset_crystal"],

@@ -202,7 +202,7 @@ export const prismRelayGauntletGameSpecFixtureInput = {
     {
       id: "mechanic_relay_movement",
       type: "player_movement",
-      targetIds: ["entity_player"],
+      entityIds: ["entity_player"],
       objectiveIds: ["objective_collect_relay_prisms"],
       config: {
         speed: 280,
@@ -211,7 +211,7 @@ export const prismRelayGauntletGameSpecFixtureInput = {
     {
       id: "mechanic_relay_pickup_collection",
       type: "pickup_collection",
-      targetIds: ["entity_player", "entity_relay_prism"],
+      entityIds: ["entity_player", "entity_relay_prism"],
       sceneIds: ["scene_relay_gauntlet"],
       assetIds: ["asset_relay_prism"],
       objectiveIds: ["objective_collect_relay_prisms"],
@@ -222,7 +222,7 @@ export const prismRelayGauntletGameSpecFixtureInput = {
     {
       id: "mechanic_reset_gate_contact",
       type: "hazard_contact",
-      targetIds: ["entity_reset_gate", "entity_player"],
+      entityIds: ["entity_reset_gate", "entity_player"],
       objectiveIds: ["objective_collect_relay_prisms"],
       config: {},
     },

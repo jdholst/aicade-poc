@@ -18,6 +18,7 @@ const validationSource: FirstPlayableValidationSource = {
     runtimeScriptPath: topDownPhaserTemplate.runtimeScriptPath,
     templateId: topDownPhaserTemplate.gameSpec.template.id,
   },
+  source: "fixture",
   runtimeKind: "phaser",
 };
 function createInput(overrides: Partial<GateInput> = {}): GateInput {
@@ -146,6 +147,50 @@ describe("useFirstPlayableValidationGate", () => {
       checkpoints: [],
       failedAttempts: [],
     });
+  });
+
+  it("holds ready-after-first-playable drafts out of ready state until runtime evidence passes", () => {
+    const onGameStatusChange = vi.fn();
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          onGameStatusChange,
+          readyPolicy: "ready-after-first-playable",
+          validationSource,
+        })
+      )
+    );
+
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+    });
+
+    expect(onGameStatusChange).not.toHaveBeenCalledWith({ state: "ready" });
+    expect(result.current.firstPlayableValidationAttempt).toMatchObject({
+      shouldBlockPlayable: false,
+      status: "running",
+    });
+
+    act(() => {
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+
+    expect(result.current.firstPlayableValidationAttempt).toMatchObject({
+      shouldBlockPlayable: false,
+      status: "passed",
+    });
+    expect(onGameStatusChange).toHaveBeenLastCalledWith({ state: "ready" });
   });
 
   it("passes after nonblank, player, and input runtime evidence all pass", () => {
@@ -310,6 +355,7 @@ describe("useFirstPlayableValidationGate", () => {
             runtimeCandidate: {
               ...validationSource.runtimeCandidate,
             },
+            source: "fixture",
             runtimeKind: "phaser",
           },
         })

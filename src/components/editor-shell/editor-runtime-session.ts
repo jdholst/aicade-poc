@@ -42,6 +42,10 @@ export function useEditorRuntimeSession({
   onGameStatusChange,
 }: UseEditorRuntimeSessionInput): EditorRuntimeSession {
   const { gameResetNonce, loadState } = canvas;
+  const activeGeneratedSpec =
+    loadState.status === "success" && loadState.source === "phaser-spec"
+      ? canvas.activeGeneratedSpec
+      : null;
   const lastPersistedGamePackKeyRef = useRef<string | null>(null);
   const {
     loadStatus: gamePackPersistenceStatus,
@@ -53,9 +57,11 @@ export function useEditorRuntimeSession({
   const runtimeTemplate = useMemo(
     () =>
       createEditorRuntimeTemplatePlan({
+        activeGeneratedSpec,
+        generationSource: canvas.generationSource,
         restoredGamePack,
       }),
-    [restoredGamePack]
+    [activeGeneratedSpec, canvas.generationSource, restoredGamePack]
   );
   const {
     firstPlayableGamePack,
@@ -66,12 +72,21 @@ export function useEditorRuntimeSession({
     gameResetNonce,
     loadStateStatus: loadState.status,
     onGameStatusChange,
+    readyPolicy:
+      runtimeTemplate.type === "phaser-valid"
+        ? runtimeTemplate.readyPolicy
+        : undefined,
     validationSource: runtimeTemplate.firstPlayableValidationSource,
   });
+  const persistencePolicy =
+    runtimeTemplate.type === "phaser-valid"
+      ? runtimeTemplate.persistencePolicy
+      : null;
 
   useEffect(() => {
     if (
       gamePackPersistenceStatus !== "loaded" ||
+      persistencePolicy !== "persist-after-first-playable" ||
       firstPlayableValidationAttempt?.status !== "passed" ||
       !firstPlayableGamePack
     ) {
@@ -92,6 +107,7 @@ export function useEditorRuntimeSession({
     firstPlayableGamePack,
     firstPlayableValidationAttempt?.status,
     gamePackPersistenceStatus,
+    persistencePolicy,
     persistValidatedGamePack,
   ]);
 

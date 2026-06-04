@@ -41,7 +41,7 @@ Current built-in top-down mechanics:
 
 Game Spec activates mechanics through top-level `mechanics` entries. The mechanic entry's `type` must match a scoped registry entry. The remaining fields wire that behavior to stable IDs:
 
-- `targetIds`: entity targets used by the mechanic.
+- `entityIds`: entities used or acted on by the mechanic.
 - `assetIds`: assets used by the mechanic.
 - `objectiveIds`: objectives the mechanic reads or mutates.
 - `sceneIds` and `regionIds`: template-local scene or region references where needed.
@@ -137,7 +137,7 @@ The current registry is strong enough for the Phase 3/4 POC closeout, but not fi
 
 - config schemas are available as a field but not broadly populated;
 - validation requirements cover the current built-ins only;
-- `targetIds` still means entity IDs by convention;
+- mechanic `entityIds` is explicit, but per-mechanic config contracts are still broad;
 - dependency metadata is script-path based and Phaser/top-down specific;
 - dynamic generated manifest ingestion is future work;
 - the validator should keep moving toward layered ownership instead of becoming one giant rule file.

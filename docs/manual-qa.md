@@ -99,6 +99,18 @@ KEYWORD_INTERNAL_TEST=sk-...
 
 Then use `internal test` in the keyword field. The app normalizes that to `KEYWORD_INTERNAL_TEST`.
 
+## Debug Spec Generation Failures
+
+Use the debug Spec Generation provider when you need to simulate known
+generation validation failures without calling OpenAI:
+
+```bash
+AICADE_DEBUG_SPEC_GENERATION_FAILURE=missing_entity_reference npm run dev:local
+```
+
+See [Debug Spec Generation Provider](./debug-spec-generation-provider.md) for
+the full mode list and API/UI examples.
+
 ## Browser Check
 
 Manual path:
