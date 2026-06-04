@@ -5,10 +5,12 @@ import {
   TOP_DOWN_TEMPLATE_ID,
   topDownSpecGenerationMechanicTypes,
 } from "@/game-spec";
+import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
 
 import {
   TOP_DOWN_GENERATION_CAPABILITY_POLICY,
   createTopDownGenerationCapabilityPolicy,
+  getTopDownGenerationPolicyFailure,
   renderTopDownSpecGenerationCapabilityIntegrityRules,
   renderTopDownSpecGenerationGuide,
 } from "./top-down-generation-capability-policy";
@@ -94,6 +96,26 @@ describe("Top-Down Generation Capability Policy", () => {
       properties: {},
       required: [],
       type: "object",
+    });
+  });
+
+  it("reports generation-policy failure details for missing required mechanics", () => {
+    const policy = createTopDownGenerationCapabilityPolicy();
+    const spec = structuredClone(getFirstValidTopDownGameSpecFixture());
+    spec.mechanics = spec.mechanics.filter(
+      (mechanic) => mechanic.type !== "pickup_collection"
+    );
+    spec.entities = spec.entities.filter((entity) => entity.role !== "pickup");
+
+    expect(getTopDownGenerationPolicyFailure(spec, policy)).toEqual({
+      stage: "mechanic_validation",
+      validationIssues: [
+        {
+          path: "mechanics",
+          code: "missing_required_generation_mechanic",
+          message: 'Missing required generation mechanic "pickup_collection".',
+        },
+      ],
     });
   });
 });

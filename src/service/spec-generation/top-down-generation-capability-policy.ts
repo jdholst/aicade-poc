@@ -5,9 +5,14 @@ import {
 } from "@/game-spec/game-spec-schema";
 import {
   TOP_DOWN_TEMPLATE_ID,
+  type TopDownGameSpec,
 } from "@/game-spec/top-down-spec-schema";
 import { topDownSpecGenerationMechanicTypes } from "@/game-spec/mechanics/mechanic-registry";
 import { JsonSchemaObject } from "./spec-generation-schema";
+import type {
+  SpecGenerationFailureStage,
+  SpecGenerationIssue,
+} from "./spec-generation-outcome";
 
 export type TopDownGenerationCapabilityPolicy = {
   templateId: typeof TOP_DOWN_TEMPLATE_ID;
@@ -84,6 +89,14 @@ export function createTopDownGenerationCapabilityPolicy(): TopDownGenerationCapa
 export const TOP_DOWN_GENERATION_CAPABILITY_POLICY =
   createTopDownGenerationCapabilityPolicy();
 
+export type TopDownGenerationPolicyFailure = {
+  stage: Extract<
+    SpecGenerationFailureStage,
+    "schema_validation" | "semantic_validation" | "mechanic_validation"
+  >;
+  validationIssues: SpecGenerationIssue[];
+};
+
 export function renderTopDownSpecGenerationGuide(
   policy: TopDownGenerationCapabilityPolicy
 ) {
@@ -114,6 +127,40 @@ export function renderTopDownSpecGenerationCapabilityIntegrityRules(
     "- Do not include unsupported fields or unresolved stable ID references.",
     "- Do not describe behavior that cannot be represented by the returned TopDownGameSpec.",
   ].join("\n");
+}
+
+export function getTopDownGenerationPolicyFailure(
+  spec: TopDownGameSpec,
+  policy: TopDownGenerationCapabilityPolicy
+): TopDownGenerationPolicyFailure | undefined {
+  const requiredMechanicIssues = getTopDownRequiredGenerationMechanicIssues(
+    spec,
+    policy
+  );
+
+  if (requiredMechanicIssues.length > 0) {
+    return {
+      stage: "mechanic_validation",
+      validationIssues: requiredMechanicIssues,
+    };
+  }
+
+  return undefined;
+}
+
+function getTopDownRequiredGenerationMechanicIssues(
+  spec: TopDownGameSpec,
+  policy: TopDownGenerationCapabilityPolicy
+): SpecGenerationIssue[] {
+  const mechanicTypes = new Set(spec.mechanics.map((mechanic) => mechanic.type));
+
+  return policy.requiredMechanics
+    .filter((mechanicType) => !mechanicTypes.has(mechanicType))
+    .map((mechanicType) => ({
+      path: "mechanics",
+      code: "missing_required_generation_mechanic",
+      message: `Missing required generation mechanic "${mechanicType}".`,
+    }));
 }
 
 function applyTopDownSpecGenerationSchemaNarrowing(

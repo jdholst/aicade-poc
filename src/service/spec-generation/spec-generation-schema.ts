@@ -40,4 +40,3 @@ export function createTopDownGameSpecJsonSchema(
 }
 
 export const topDownGameSpecJsonSchema = createTopDownGameSpecJsonSchema();
-

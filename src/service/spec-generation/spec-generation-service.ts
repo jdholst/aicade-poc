@@ -4,6 +4,10 @@ import {
 } from "@/game-spec";
 import type { OpenAIModelId } from "@/utils/openai-utils";
 import {
+  TOP_DOWN_GENERATION_CAPABILITY_POLICY,
+  getTopDownGenerationPolicyFailure,
+} from "./top-down-generation-capability-policy";
+import {
   createSpecGenerationFailureResult,
   createSpecGenerationRepairAttemptSummary,
   createSpecGenerationSuccessResult,
@@ -174,9 +178,22 @@ function validateCandidate(
       validationIssues: SpecGenerationIssue[];
     } {
   try {
+    const spec = validateTopDownGameSpec(candidate);
+    const generationPolicyFailure = getTopDownGenerationPolicyFailure(
+      spec,
+      TOP_DOWN_GENERATION_CAPABILITY_POLICY
+    );
+
+    if (generationPolicyFailure) {
+      return {
+        ok: false,
+        ...generationPolicyFailure,
+      };
+    }
+
     return {
       ok: true,
-      spec: validateTopDownGameSpec(candidate),
+      spec,
     };
   } catch (error) {
     return {

@@ -9,7 +9,7 @@ export const DEFAULT_SPEC_GENERATION_PROMPT =
 
 export const TOP_DOWN_SPEC_GENERATION_GUIDE =
   renderTopDownSpecGenerationGuide(TOP_DOWN_GENERATION_CAPABILITY_POLICY);
-  
+
 type TopDownSpecGenerationRepairContext = {
   failedAttempt: number;
   invalidCandidate: unknown;

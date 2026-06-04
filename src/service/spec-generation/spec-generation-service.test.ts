@@ -99,6 +99,93 @@ describe("Spec Generation service contract", () => {
     ]);
   });
 
+  it("rejects generated specs missing the required pickup_collection mechanic", async () => {
+    const candidate = getMutableFixture();
+    removeRequiredGenerationMechanic(candidate, "pickup_collection");
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => candidate,
+      includeDebugCandidate: true,
+      repairEnabled: false,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      stage: "mechanic_validation",
+      taskRoute: "spec_generation.primary",
+      attemptCount: 1,
+      debugCandidate: candidate,
+      validationIssues: [
+        {
+          path: "mechanics",
+          code: "missing_required_generation_mechanic",
+          message: 'Missing required generation mechanic "pickup_collection".',
+        },
+      ],
+    });
+  });
+
+  it("repairs generated specs missing a required generation mechanic", async () => {
+    const invalidCandidate = getMutableFixture();
+    removeRequiredGenerationMechanic(invalidCandidate, "pickup_collection");
+    const repairedCandidate = getMutableFixture();
+    const providerCalls: unknown[] = [];
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async (input) => {
+        providerCalls.push(input);
+
+        return input.repairContext ? repairedCandidate : invalidCandidate;
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      spec: repairedCandidate,
+      metadata: {
+        taskRoute: "spec_generation.primary",
+        model: "gpt-5.4-mini",
+        attemptCount: 2,
+        repairStatus: "repaired",
+        repairAttempts: [
+          {
+            attempt: 1,
+            outcome: "failed_validation",
+            stage: "mechanic_validation",
+            issues: [
+              {
+                path: "mechanics",
+                code: "missing_required_generation_mechanic",
+                message:
+                  'Missing required generation mechanic "pickup_collection".',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(providerCalls[1]).toMatchObject({
+      repairContext: {
+        failedAttempt: 1,
+        invalidCandidate,
+        stage: "mechanic_validation",
+        validationIssues: [
+          {
+            path: "mechanics",
+            code: "missing_required_generation_mechanic",
+            message: 'Missing required generation mechanic "pickup_collection".',
+          },
+        ],
+      },
+    });
+  });
+
   it("returns structured validation failure when the repair candidate is still invalid", async () => {
     const invalidCandidate = getMutableFixture();
     invalidCandidate.mechanics[0].entityIds = ["entity_missing"];
@@ -300,6 +387,35 @@ describe("Spec Generation service contract", () => {
     }
   );
 
+  it("rejects generated specs missing the required player_movement mechanic", async () => {
+    const candidate = getMutableFixture();
+    removeRequiredGenerationMechanic(candidate, "player_movement");
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => candidate,
+      includeDebugCandidate: true,
+      repairEnabled: false,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      stage: "mechanic_validation",
+      taskRoute: "spec_generation.primary",
+      attemptCount: 1,
+      debugCandidate: candidate,
+      validationIssues: [
+        {
+          path: "mechanics",
+          code: "missing_required_generation_mechanic",
+          message: 'Missing required generation mechanic "player_movement".',
+        },
+      ],
+    });
+  });
+
   it.each([
     {
       name: "source-code shaped output",
@@ -397,4 +513,32 @@ describe("Spec Generation service contract", () => {
 
 function getMutableFixture() {
   return structuredClone(getFirstValidTopDownGameSpecFixture());
+}
+
+function removeRequiredGenerationMechanic(
+  candidate: ReturnType<typeof getMutableFixture>,
+  mechanicType: string
+) {
+  candidate.mechanics = candidate.mechanics.filter(
+    (mechanic) => mechanic.type !== mechanicType
+  );
+
+  if (mechanicType !== "pickup_collection") {
+    return;
+  }
+
+  const remainingMechanicEntityIds = new Set(
+    candidate.mechanics.flatMap((mechanic) => mechanic.entityIds ?? [])
+  );
+  const spawnZoneEntityIds = new Set(
+    candidate.template.config.scenes.flatMap((scene) =>
+      scene.layout.spawnZones.flatMap((spawnZone) => spawnZone.entityIds)
+    )
+  );
+  candidate.entities = candidate.entities.filter(
+    (entity) =>
+      entity.role !== "pickup" ||
+      remainingMechanicEntityIds.has(entity.id) ||
+      spawnZoneEntityIds.has(entity.id)
+  );
 }
