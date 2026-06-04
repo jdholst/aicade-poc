@@ -68,11 +68,13 @@ function createChatSession(
   overrides: Partial<EditorAIChatSession> = {}
 ): EditorAIChatSession {
   return {
+    canRegeneratePrompt: true,
     canStartGeneration: true,
     canSubmitPrompt: true,
     generationStages,
     generationStepIndex: 0,
     hasSubmittedPrompt: true,
+    isEditingPrompt: false,
     isGenerating: false,
     loadState: {
       status: "idle",
@@ -96,6 +98,8 @@ function createActions(
     onOpenAiKeywordChange: vi.fn(),
     onOpenAiModelChange: vi.fn(),
     onPromptDraftChange: vi.fn(),
+    onPromptEdit: vi.fn(),
+    onPromptRegenerate: vi.fn(),
     onPromptSubmit: vi.fn(),
     onRegenerateGame: vi.fn(),
     onStartGeneration: vi.fn(),
@@ -104,6 +108,119 @@ function createActions(
 }
 
 describe("EditorAIChat", () => {
+  it("shows the AI config bubble while asking for the first prompt", () => {
+    const onPromptDraftChange = vi.fn();
+    const onPromptSubmit = vi.fn();
+
+    render(
+      <EditorAIChat
+        actions={createActions({
+          onPromptDraftChange,
+          onPromptSubmit,
+        })}
+        chat={createChatSession({
+          canStartGeneration: false,
+          canSubmitPrompt: true,
+          hasSubmittedPrompt: false,
+          isEditingPrompt: true,
+          promptDraft: "make a maze game",
+          submittedPrompt: "",
+        })}
+      />
+    );
+
+    expect(screen.getByLabelText("Game prompt")).toBeVisible();
+    expect(screen.getByLabelText("OpenAI API key")).toBeVisible();
+    expect(screen.getByLabelText("Key word")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Build the project" }))
+      .toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Game prompt"), {
+      target: { value: "make a platformer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send prompt" }));
+
+    expect(onPromptDraftChange).toHaveBeenCalledWith("make a platformer");
+    expect(onPromptSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the AI config bubble after a prompt is submitted", () => {
+    render(
+      <EditorAIChat
+        actions={createActions()}
+        chat={createChatSession({
+          hasSubmittedPrompt: true,
+          submittedPrompt: "make a maze game",
+        })}
+      />
+    );
+
+    expect(screen.getByText("make a maze game")).toBeVisible();
+    expect(screen.getByText("I have your prompt ready.", { exact: false }))
+      .toBeVisible();
+    expect(screen.getByRole("button", { name: "Build the project" }))
+      .toBeVisible();
+  });
+
+  it("lets a submitted prompt reopen for editing before generation starts", () => {
+    const onPromptEdit = vi.fn();
+    const onPromptDraftChange = vi.fn();
+    const onPromptSubmit = vi.fn();
+    const { rerender } = render(
+      <EditorAIChat
+        actions={createActions({
+          onPromptDraftChange,
+          onPromptEdit,
+          onPromptSubmit,
+        })}
+        chat={createChatSession({
+          hasSubmittedPrompt: true,
+          isEditingPrompt: false,
+          promptDraft: "make a maze game",
+          submittedPrompt: "make a maze game",
+        })}
+      />
+    );
+
+    expect(screen.getByText("make a maze game")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Prompt" }));
+
+    expect(onPromptEdit).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <EditorAIChat
+        actions={createActions({
+          onPromptDraftChange,
+          onPromptEdit,
+          onPromptSubmit,
+        })}
+        chat={createChatSession({
+          canStartGeneration: false,
+          hasSubmittedPrompt: true,
+          isEditingPrompt: true,
+          promptDraft: "make a maze game",
+          submittedPrompt: "make a maze game",
+        })}
+      />
+    );
+
+    expect(screen.getByLabelText("Game prompt")).toHaveValue(
+      "make a maze game"
+    );
+    expect(screen.getByLabelText("OpenAI API key")).toBeVisible();
+    expect(screen.getByLabelText("Key word")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Build the project" }))
+      .toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Game prompt"), {
+      target: { value: "make a stealth maze" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send prompt" }));
+
+    expect(onPromptDraftChange).toHaveBeenCalledWith("make a stealth maze");
+    expect(onPromptSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("shows editable OpenAI config when generation errors", () => {
     const onOpenAiApiKeyChange = vi.fn();
     const onOpenAiKeywordChange = vi.fn();
@@ -128,6 +245,8 @@ describe("EditorAIChat", () => {
     );
 
     expect(screen.getByText("Generation error")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Change Prompt" }))
+      .toBeVisible();
 
     fireEvent.change(screen.getByLabelText("OpenAI API key"), {
       target: { value: "sk-test" },
@@ -144,6 +263,50 @@ describe("EditorAIChat", () => {
     expect(onOpenAiKeywordChange).toHaveBeenCalledWith("Panda");
     expect(onOpenAiModelChange).toHaveBeenCalledWith("gpt-5.5");
     expect(onRegenerateGame).toHaveBeenCalledTimes(1);
+  });
+
+  it("regenerates from the edited prompt after a generation error", () => {
+    const onPromptDraftChange = vi.fn();
+    const onPromptRegenerate = vi.fn();
+
+    render(
+      <EditorAIChat
+        actions={createActions({
+          onPromptDraftChange,
+          onPromptRegenerate,
+        })}
+        chat={createChatSession({
+          canRegeneratePrompt: true,
+          isEditingPrompt: true,
+          loadState: {
+            status: "error",
+            message: 'No OpenAI API key is configured for keyword "Panda".',
+          },
+          promptDraft: "make a better maze game",
+          submittedPrompt: "make a maze game",
+        })}
+      />
+    );
+
+    expect(screen.getByLabelText("Game prompt")).toHaveValue(
+      "make a better maze game"
+    );
+    expect(screen.getByText("Generation error")).toBeVisible();
+    expect(screen.getByLabelText("OpenAI API key")).toBeVisible();
+    expect(screen.getByLabelText("Key word")).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Game prompt"), {
+      target: { value: "make a maze game with fewer enemies" },
+    });
+    const regenerateButtons = screen.getAllByRole("button", {
+      name: "Regenerate",
+    });
+    fireEvent.click(regenerateButtons[1]);
+
+    expect(onPromptDraftChange).toHaveBeenCalledWith(
+      "make a maze game with fewer enemies"
+    );
+    expect(onPromptRegenerate).toHaveBeenCalledTimes(1);
   });
 
   it("uses the same generated project summary for Canvas and Phaser successes", () => {
@@ -202,6 +365,89 @@ describe("EditorAIChat", () => {
     ).toBeVisible();
     expect(screen.getByText("Controls")).toBeVisible();
     expect(screen.queryByText(/automatic repair/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a change prompt action after a game has been built", () => {
+    const onPromptEdit = vi.fn();
+
+    render(
+      <EditorAIChat
+        actions={createActions({ onPromptEdit })}
+        chat={createChatSession({
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: {
+              attemptCount: 1,
+              model: "gpt-5.4-mini",
+              taskRoute: "spec_generation.primary",
+            },
+            runtimeKind: "phaser",
+            spec: topDownPhaserTemplate.gameSpec,
+          },
+          submittedPrompt: "make a maze game",
+        })}
+      />
+    );
+
+    expect(screen.getByText("make a maze game")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Change Prompt" }));
+
+    expect(onPromptEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it("regenerates from the edited post-build prompt without hiding generated details", () => {
+    const onPromptDraftChange = vi.fn();
+    const onPromptRegenerate = vi.fn();
+
+    render(
+      <EditorAIChat
+        actions={createActions({
+          onPromptDraftChange,
+          onPromptRegenerate,
+        })}
+        chat={createChatSession({
+          canStartGeneration: true,
+          hasSubmittedPrompt: true,
+          isEditingPrompt: true,
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            metadata: {
+              attemptCount: 1,
+              model: "gpt-5.4-mini",
+              taskRoute: "spec_generation.primary",
+            },
+            runtimeKind: "phaser",
+            spec: topDownPhaserTemplate.gameSpec,
+          },
+          promptDraft: "make a maze game with stealth",
+          submittedPrompt: "make a maze game",
+        })}
+      />
+    );
+
+    expect(screen.getByLabelText("Game prompt")).toHaveValue(
+      "make a maze game with stealth"
+    );
+    expect(screen.getByText("Generated project")).toBeVisible();
+    expect(screen.getByText("Controls")).toBeVisible();
+    expect(
+      screen.getByText(topDownPhaserTemplate.gameSpec.currentIntentSummary)
+    ).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Game prompt"), {
+      target: { value: "make a maze game with patrol guards" },
+    });
+    const regenerateButtons = screen.getAllByRole("button", {
+      name: "Regenerate",
+    });
+    fireEvent.click(regenerateButtons[1]);
+
+    expect(onPromptDraftChange).toHaveBeenCalledWith(
+      "make a maze game with patrol guards"
+    );
+    expect(onPromptRegenerate).toHaveBeenCalledTimes(1);
   });
 
   it("shows one friendly repair note for repaired Phaser Spec Generation success", () => {

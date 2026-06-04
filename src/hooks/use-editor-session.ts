@@ -31,11 +31,13 @@ type UseEditorSessionOptions = {
 };
 
 export type EditorAIChatSession = {
+  canRegeneratePrompt: boolean;
   canStartGeneration: boolean;
   canSubmitPrompt: boolean;
   generationStages: EditorGenerationStage[];
   generationStepIndex: number;
   hasSubmittedPrompt: boolean;
+  isEditingPrompt: boolean;
   isGenerating: boolean;
   loadState: StarterProjectLoadState;
   needsOpenAiApiKey: boolean;
@@ -52,6 +54,8 @@ export type EditorAIChatActions = {
   onOpenAiKeywordChange: (value: string) => void;
   onOpenAiModelChange: (value: OpenAIModelId) => void;
   onPromptDraftChange: (value: string) => void;
+  onPromptEdit: () => void;
+  onPromptRegenerate: () => void;
   onPromptSubmit: () => void;
   onRegenerateGame: () => void;
   onStartGeneration: () => void;
@@ -100,6 +104,7 @@ export function useEditorSession({
   const initialPrompt = enteredPrompt.trim();
   const [promptDraft, setPromptDraft] = useState(initialPrompt);
   const [submittedPrompt, setSubmittedPrompt] = useState(initialPrompt);
+  const [isEditingPrompt, setIsEditingPrompt] = useState(!initialPrompt);
   const [openAiApiKey, setOpenAiApiKey] = useState(enteredOpenAiApiKey);
   const [openAiKeyword, setOpenAiKeyword] = useState(enteredOpenAiKeyword);
   const [openAiModel, setOpenAiModel] = useState<OpenAIModelId>(
@@ -149,12 +154,19 @@ export function useEditorSession({
   const isGenerating = loadState.status === "loading";
   const hasSubmittedPrompt = Boolean(submittedPrompt);
   const canSubmitPrompt = !isGenerating && Boolean(promptDraft.trim());
+  const hasOpenAiConfig =
+    !needsOpenAiApiKey || Boolean(openAiApiKey.trim() || openAiKeyword.trim());
+  const canRegeneratePrompt =
+    generationSource !== "phaser-fixture" &&
+    !isGenerating &&
+    Boolean(promptDraft.trim()) &&
+    hasOpenAiConfig;
   const canStartGeneration =
     generationSource !== "phaser-fixture" &&
     hasSubmittedPrompt &&
+    !isEditingPrompt &&
     !isGenerating &&
-    (!needsOpenAiApiKey ||
-      Boolean(openAiApiKey.trim() || openAiKeyword.trim()));
+    hasOpenAiConfig;
   const projectName =
     loadState.status === "success"
       ? loadState.source === "canvas-starter"
@@ -179,6 +191,16 @@ export function useEditorSession({
     }
 
     setSubmittedPrompt(normalizedPrompt);
+    setIsEditingPrompt(false);
+  }
+
+  function editPrompt() {
+    if (isGenerating || !submittedPrompt) {
+      return;
+    }
+
+    setPromptDraft(submittedPrompt);
+    setIsEditingPrompt(true);
   }
 
   function startGeneration() {
@@ -189,6 +211,29 @@ export function useEditorSession({
     setGameResetNonce(0);
     startGenerationRequest({
       prompt: submittedPrompt,
+      openAiApiKey: needsOpenAiApiKey ? openAiApiKey.trim() : undefined,
+      openAiKeyword: needsOpenAiApiKey ? openAiKeyword.trim() : undefined,
+      openAiModel: needsOpenAiModel ? openAiModel : undefined,
+    });
+  }
+
+  function regenerateFromPromptDraft() {
+    const normalizedPrompt = promptDraft.replace(/\s+/g, " ").trim();
+
+    if (
+      generationSource === "phaser-fixture" ||
+      !normalizedPrompt ||
+      isGenerating ||
+      !hasOpenAiConfig
+    ) {
+      return;
+    }
+
+    setSubmittedPrompt(normalizedPrompt);
+    setIsEditingPrompt(false);
+    setGameResetNonce(0);
+    startGenerationRequest({
+      prompt: normalizedPrompt,
       openAiApiKey: needsOpenAiApiKey ? openAiApiKey.trim() : undefined,
       openAiKeyword: needsOpenAiApiKey ? openAiKeyword.trim() : undefined,
       openAiModel: needsOpenAiModel ? openAiModel : undefined,
@@ -256,11 +301,13 @@ export function useEditorSession({
   );
 
   const chat: EditorAIChatSession = {
+    canRegeneratePrompt,
     canStartGeneration,
     canSubmitPrompt,
     generationStages,
     generationStepIndex,
     hasSubmittedPrompt,
+    isEditingPrompt,
     isGenerating,
     loadState,
     needsOpenAiApiKey,
@@ -301,6 +348,8 @@ export function useEditorSession({
         onOpenAiKeywordChange: setOpenAiKeyword,
         onOpenAiModelChange: setOpenAiModel,
         onPromptDraftChange: setPromptDraft,
+        onPromptEdit: editPrompt,
+        onPromptRegenerate: regenerateFromPromptDraft,
         onPromptSubmit: submitPrompt,
         onRegenerateGame: startGeneration,
         onStartGeneration: startGeneration,

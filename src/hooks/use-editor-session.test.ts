@@ -62,6 +62,100 @@ describe("useEditorSession", () => {
     expect(result.current.session.canvas.activeGeneratedSpec).toBeNull();
   });
 
+  it("asks for a prompt before generation when the editor opened without a query prompt", () => {
+    const { result } = renderHook(() =>
+      useEditorSession({
+        enteredPrompt: "",
+        enteredOpenAiApiKey: "",
+        enteredOpenAiKeyword: "",
+        enteredOpenAiModel: "",
+        generationStages,
+        needsOpenAiApiKey: false,
+        needsOpenAiModel: false,
+      })
+    );
+
+    expect(result.current.session.chat.hasSubmittedPrompt).toBe(false);
+    expect(result.current.session.chat.submittedPrompt).toBe("");
+    expect(result.current.session.chat.canStartGeneration).toBe(false);
+
+    act(() => {
+      result.current.actions.chat.onPromptDraftChange("  build a moon maze  ");
+    });
+
+    expect(result.current.session.chat.canSubmitPrompt).toBe(true);
+
+    act(() => {
+      result.current.actions.chat.onPromptSubmit();
+    });
+
+    expect(result.current.session.chat.hasSubmittedPrompt).toBe(true);
+    expect(result.current.session.chat.submittedPrompt).toBe(
+      "build a moon maze"
+    );
+    expect(result.current.session.chat.canStartGeneration).toBe(true);
+  });
+
+  it("treats a query prompt as already submitted", () => {
+    const { result } = renderHook(() =>
+      useEditorSession({
+        enteredPrompt: "a tiny arena survival game",
+        enteredOpenAiApiKey: "",
+        enteredOpenAiKeyword: "",
+        enteredOpenAiModel: "",
+        generationStages,
+        needsOpenAiApiKey: false,
+        needsOpenAiModel: false,
+      })
+    );
+
+    expect(result.current.session.chat.hasSubmittedPrompt).toBe(true);
+    expect(result.current.session.chat.promptDraft).toBe(
+      "a tiny arena survival game"
+    );
+    expect(result.current.session.chat.submittedPrompt).toBe(
+      "a tiny arena survival game"
+    );
+    expect(result.current.session.chat.canStartGeneration).toBe(true);
+  });
+
+  it("lets a submitted prompt reopen for editing before generation starts", () => {
+    const { result } = renderHook(() =>
+      useEditorSession({
+        enteredPrompt: "a tiny arena survival game",
+        enteredOpenAiApiKey: "",
+        enteredOpenAiKeyword: "",
+        enteredOpenAiModel: "",
+        generationStages,
+        needsOpenAiApiKey: false,
+        needsOpenAiModel: false,
+      })
+    );
+
+    act(() => {
+      result.current.actions.chat.onPromptEdit();
+    });
+
+    expect(result.current.session.chat.isEditingPrompt).toBe(true);
+    expect(result.current.session.chat.hasSubmittedPrompt).toBe(true);
+    expect(result.current.session.chat.canStartGeneration).toBe(false);
+
+    act(() => {
+      result.current.actions.chat.onPromptDraftChange(
+        "  a tiny arena puzzle game  "
+      );
+    });
+    act(() => {
+      result.current.actions.chat.onPromptSubmit();
+    });
+
+    expect(result.current.session.chat.isEditingPrompt).toBe(false);
+    expect(result.current.session.chat.submittedPrompt).toBe(
+      "a tiny arena puzzle game"
+    );
+    expect(result.current.session.chat.canStartGeneration).toBe(true);
+  });
+
   it("starts in the generated Canvas initial state when the runtime override is canvas2d", () => {
     vi.stubEnv("NEXT_PUBLIC_AICADE_EDITOR_RUNTIME", "canvas2d");
 
@@ -334,6 +428,71 @@ describe("useEditorSession", () => {
       generatedSpec
     );
     expect(result.current.session.canvas.gameResetNonce).toBe(1);
+  });
+
+  it("regenerates from an edited prompt after a successful generation", async () => {
+    const generatedSpec = getFirstValidTopDownGameSpecFixture();
+    const fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ok: true,
+        spec: generatedSpec,
+        metadata: {
+          taskRoute: "spec_generation.primary",
+          model: "gpt-5.4-mini",
+          attemptCount: 1,
+        },
+      })
+    );
+    vi.stubGlobal("fetch", fetch);
+    const { result } = renderHook(() =>
+      useEditorSession({
+        enteredPrompt: "make a top-down coin chase",
+        enteredOpenAiApiKey: "sk-test",
+        enteredOpenAiKeyword: "",
+        enteredOpenAiModel: "gpt-5.4-mini",
+        generationStages,
+        needsOpenAiApiKey: true,
+        needsOpenAiModel: true,
+      })
+    );
+
+    act(() => {
+      result.current.actions.chat.onStartGeneration();
+    });
+
+    await waitFor(() => {
+      expect(result.current.session.canvas.loadState.status).toBe("success");
+    });
+
+    act(() => {
+      result.current.actions.chat.onPromptEdit();
+    });
+
+    expect(result.current.session.chat.isEditingPrompt).toBe(true);
+
+    act(() => {
+      result.current.actions.chat.onPromptDraftChange(
+        "  make a top-down stealth chase  "
+      );
+    });
+    act(() => {
+      result.current.actions.chat.onPromptRegenerate();
+    });
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    const secondRequestBody = JSON.parse(
+      String(fetch.mock.calls[1]?.[1]?.body)
+    );
+    expect(secondRequestBody.enteredPrompt).toBe(
+      "make a top-down stealth chase"
+    );
+    expect(result.current.session.chat.submittedPrompt).toBe(
+      "make a top-down stealth chase"
+    );
+    expect(result.current.session.chat.isEditingPrompt).toBe(false);
   });
 
   it("preserves repaired Spec Generation metadata as active generated spec state", async () => {

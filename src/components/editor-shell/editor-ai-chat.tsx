@@ -144,9 +144,13 @@ function createGeneratedProjectSummary(
 
 export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
   const {
+    canRegeneratePrompt,
     canStartGeneration,
+    canSubmitPrompt,
     generationStages,
     generationStepIndex,
+    hasSubmittedPrompt,
+    isEditingPrompt,
     isGenerating,
     loadState,
     needsOpenAiApiKey,
@@ -154,12 +158,17 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
     openAiApiKey,
     openAiKeyword,
     openAiModel,
+    promptDraft,
     submittedPrompt,
   } = chat;
   const {
     onOpenAiApiKeyChange,
     onOpenAiKeywordChange,
     onOpenAiModelChange,
+    onPromptDraftChange,
+    onPromptEdit,
+    onPromptRegenerate,
+    onPromptSubmit,
     onRegenerateGame,
     onStartGeneration,
   } = actions;
@@ -167,6 +176,22 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
     loadState,
     submittedPrompt
   );
+  const isPromptEditingForRegeneration =
+    isEditingPrompt && loadState.status === "error";
+  const isPromptFormVisible =
+    (loadState.status === "idle" &&
+      (!hasSubmittedPrompt || isEditingPrompt)) ||
+    isPromptEditingForRegeneration;
+  const canEditSubmittedPrompt =
+    hasSubmittedPrompt &&
+    !isEditingPrompt &&
+    (loadState.status === "idle" || loadState.status === "error");
+  const promptEditButtonLabel =
+    loadState.status === "idle" ? "Edit Prompt" : "Change Prompt";
+  const promptSubmitButtonLabel =
+    loadState.status === "idle" ? "Send prompt" : "Regenerate";
+  const canSubmitVisiblePrompt =
+    loadState.status === "idle" ? canSubmitPrompt : canRegeneratePrompt;
 
   return (
     <aside className="flex min-h-0 flex-col border border-[var(--line-strong)] bg-[rgba(255,249,242,0.78)] backdrop-blur">
@@ -210,7 +235,55 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
               Prompt
             </div>
-            <p className="mt-2 text-sm leading-7">{submittedPrompt}</p>
+            {isPromptFormVisible ? (
+              <form
+                className="mt-3 space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (loadState.status === "idle") {
+                    onPromptSubmit();
+                    return;
+                  }
+
+                  onPromptRegenerate();
+                }}
+              >
+                <label className="block">
+                  <span className="sr-only">Game prompt</span>
+                  <textarea
+                    value={promptDraft}
+                    onChange={(event) => {
+                      onPromptDraftChange(event.target.value);
+                    }}
+                    onInput={(event) => {
+                      onPromptDraftChange(event.currentTarget.value);
+                    }}
+                    className="min-h-32 w-full resize-none border border-white/16 bg-white/8 px-3 py-3 text-sm leading-7 text-white placeholder:text-white/42 outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.28)]"
+                    placeholder="Describe the starter game you want to build."
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={!canSubmitVisiblePrompt}
+                  className="inline-flex items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44"
+                >
+                  {promptSubmitButtonLabel}
+                </button>
+              </form>
+            ) : (
+              <>
+                <p className="mt-2 text-sm leading-7">{submittedPrompt}</p>
+                {canEditSubmittedPrompt ? (
+                  <button
+                    type="button"
+                    onClick={onPromptEdit}
+                    className="mt-3 inline-flex items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)]"
+                  >
+                    {promptEditButtonLabel}
+                  </button>
+                ) : null}
+              </>
+            )}
           </article>
         ) : null}
 
@@ -348,7 +421,50 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                 >
                   {message.role === "user" ? "Prompt" : "AI"}
                 </div>
-                <p className="mt-2 text-sm leading-7">{message.text}</p>
+                {message.role === "user" && isEditingPrompt ? (
+                  <form
+                    className="mt-3 space-y-3"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      onPromptRegenerate();
+                    }}
+                  >
+                    <label className="block">
+                      <span className="sr-only">Game prompt</span>
+                      <textarea
+                        value={promptDraft}
+                        onChange={(event) => {
+                          onPromptDraftChange(event.target.value);
+                        }}
+                        onInput={(event) => {
+                          onPromptDraftChange(event.currentTarget.value);
+                        }}
+                        className="min-h-32 w-full resize-none border border-white/16 bg-white/8 px-3 py-3 text-sm leading-7 text-white placeholder:text-white/42 outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[rgba(14,124,102,0.28)]"
+                        placeholder="Describe the starter game you want to build."
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={!canRegeneratePrompt}
+                      className="inline-flex items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44"
+                    >
+                      Regenerate
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <p className="mt-2 text-sm leading-7">{message.text}</p>
+                    {message.role === "user" ? (
+                      <button
+                        type="button"
+                        onClick={onPromptEdit}
+                        className="mt-3 inline-flex items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)]"
+                      >
+                        Change Prompt
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </article>
             ))}
 
