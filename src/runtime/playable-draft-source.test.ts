@@ -63,12 +63,9 @@ describe("createPlayableDraftSource", () => {
       readyPolicy: "ready-after-first-playable",
       runFirstPlayableChecksOnReady: true,
       source: "generated-spec",
-      sourceKey: [
-        `${generatedSpec.id}-phaser-template`,
-        "spec_generation.primary",
-        "gpt-5.4-mini",
-        2,
-      ].join("-"),
+      sourceKey: expect.stringMatching(
+        /^game_crystal_spec_chase-phaser-template-spec-[a-z0-9]+-spec_generation\.primary-gpt-5\.4-mini-2$/
+      ),
       template: {
         gameSpec: generatedSpec,
         title: "Generated Crystal Draft",
@@ -80,6 +77,59 @@ describe("createPlayableDraftSource", () => {
       },
     });
     expect(source).not.toHaveProperty("validationSource.gamePack");
+  });
+
+  it("uses generated spec content in the draft key", () => {
+    const sharedMetadata = {
+      attemptCount: 1,
+      model: "gpt-5.4-mini" as const,
+      taskRoute: "spec_generation.primary",
+    };
+    const firstSource = createPlayableDraftSource({
+      generatedSpecDraft: {
+        metadata: sharedMetadata,
+        runtimeKind: "phaser",
+        spec: {
+          ...topDownPhaserTemplate.gameSpec,
+          title: "Generated Crystal Draft",
+        },
+      },
+      generationSource: "phaser-ai",
+      runtimeMode: "phaser",
+    });
+    const regeneratedSource = createPlayableDraftSource({
+      generatedSpecDraft: {
+        metadata: sharedMetadata,
+        runtimeKind: "phaser",
+        spec: {
+          ...topDownPhaserTemplate.gameSpec,
+          title: "Regenerated Crystal Draft",
+        },
+      },
+      generationSource: "phaser-ai",
+      runtimeMode: "phaser",
+    });
+
+    expect(firstSource).toMatchObject({
+      source: "generated-spec",
+      sourceKey: expect.stringMatching(
+        /^game_crystal_spec_chase-phaser-template-spec-[a-z0-9]+-spec_generation\.primary-gpt-5\.4-mini-1$/
+      ),
+      type: "phaser",
+    });
+    expect(regeneratedSource).toMatchObject({
+      source: "generated-spec",
+      sourceKey: expect.stringMatching(
+        /^game_crystal_spec_chase-phaser-template-spec-[a-z0-9]+-spec_generation\.primary-gpt-5\.4-mini-1$/
+      ),
+      type: "phaser",
+    });
+    expect(firstSource).toHaveProperty("sourceKey");
+    expect(regeneratedSource).toHaveProperty("sourceKey");
+    if (firstSource.type !== "phaser" || regeneratedSource.type !== "phaser") {
+      throw new Error("Expected generated specs to resolve to Phaser drafts.");
+    }
+    expect(firstSource.sourceKey).not.toBe(regeneratedSource.sourceKey);
   });
 
   it("resolves a restored Game Pack draft with its existing lineage", () => {

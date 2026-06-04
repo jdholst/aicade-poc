@@ -147,6 +147,7 @@ function createGeneratedSpecDraftSource(
       source: "generated-spec",
       sourceKey: [
         template.id,
+        createGeneratedSpecContentKey(gameSpec),
         generatedSpecDraft.metadata.taskRoute,
         generatedSpecDraft.metadata.model,
         generatedSpecDraft.metadata.attemptCount,
@@ -163,6 +164,41 @@ function createGeneratedSpecDraftSource(
       "Generated Game Spec cannot be mounted because it is not a valid top-down Phaser spec."
     );
   }
+}
+
+function createGeneratedSpecContentKey(gameSpec: GameSpec): string {
+  return `spec-${createStableContentHash(gameSpec)}`;
+}
+
+function createStableContentHash(value: unknown): string {
+  const stableJson = stringifyStableValue(value);
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < stableJson.length; index += 1) {
+    hash ^= stableJson.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(36);
+}
+
+function stringifyStableValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stringifyStableValue(item)).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) =>
+        `${JSON.stringify(key)}:${stringifyStableValue(
+          (value as Record<string, unknown>)[key]
+        )}`
+      )
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value) ?? "undefined";
 }
 
 function createRestoredGamePackDraftSource(
