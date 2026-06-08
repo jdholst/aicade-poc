@@ -33,6 +33,18 @@ export {
 } from "./game-pack/game-pack-schema";
 
 export {
+  createGenerationRunRepository,
+  createIndexedDbGenerationRunRepository,
+  GenerationRunRepositoryError,
+  type GenerationRunRepository,
+  type GenerationRunRepositoryErrorCode,
+  type GenerationRunRepositoryOperation,
+  type GenerationRunStorageDriver,
+  type IndexedDbGenerationRunRepositoryOptions,
+  type StoredGenerationRunRecord,
+} from "./generation-run/generation-run-repository";
+
+export {
   generationRunAttemptReceiptSchema,
   generationRunAttemptValidationSchema,
   generationRunCandidateSummarySchema,
