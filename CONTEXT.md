@@ -196,6 +196,34 @@ Generation telemetry should inform POC graduation readiness, but it should not b
 
 The POC should define a lightweight measurement strategy centered around a GenerationRun record. Each generation, edit, or repair attempt should leave a small internal receipt containing prompt or request, model/provider/task route, template and mechanics used, timestamps and duration, schema validation result, build result, validation result, repair attempts, failure class, approximate cost, and created checkpoint/build IDs when successful.
 
+A GenerationRun should represent one AI-backed creator-intent operation, such as generating from a prompt, editing an existing game, or repairing a failed draft. Nested attempt receipts should capture the initial provider call and any bounded repair calls, so Sparkline can compare user/request-level outcomes over time without losing per-call cost, duration, validation, and failure evidence.
+
+Purely local rebuilds, restores, and validation retries should not create top-level GenerationRun records unless they are part of an AI-backed generation, edit, or repair operation. Those local activities should be recorded as Playable Builds, Validation Evidence, checkpoints, or related outcome records, then linked from a GenerationRun when an AI-backed operation caused them.
+
+GenerationRun records should be created for all AI-backed operations, not only successful playable drafts. Schema failures, mechanic-validation failures, provider errors, timeouts, repaired successes, and repaired failures all carry useful evidence about whether Sparkline's generation architecture is improving. Phase 8 telemetry can use a failed candidate and exact validation errors for a bounded repair attempt within the same operation, but it should not automatically feed unrelated prior failures into future generation runs. Cross-run learning should stay human-reviewed until repeated patterns are trustworthy enough to promote into better prompts, schemas, validators, mechanics, or template capabilities.
+
+Failed pre-project AI operations should be persisted in a separate internal telemetry store rather than forcing a failed Game Pack into existence. Game Pack persistence should remain reserved for successful playable drafts and later project-backed operations; when a run does create or modify a durable project, Sparkline can link the GenerationRun to the relevant Game Pack, Playable Build, Validation Evidence, or Version Checkpoint records.
+
+The Phase 8 internal telemetry store should be local IndexedDB-first, matching the POC's lightweight Game Pack persistence approach. This keeps pre-project failures inspectable without committing to a production analytics backend, while preserving the option to move GenerationRun storage behind a server-side telemetry or event store in Sparkline v1.
+
+GenerationRun telemetry should store raw prompt text and successful validated specs, but invalid model outputs should default to compact structured summaries such as failure class, stage, validation issue paths/messages, referenced mechanics, and candidate metadata. Raw invalid candidate JSON should be reserved for explicit development/debug metadata rather than becoming the normal durable telemetry shape. After the main Phase 8 work lands, add a polish backlog task for an environment-flagged debug mode that can opt into storing raw invalid candidate payloads for local investigation.
+
+GenerationRun telemetry should separate technical failure stage from comparable failure class. The stage should identify the implementation boundary where work failed, such as model generation, schema validation, mechanic validation, artifact build, runtime boot, browser check, or repair. The failure class should be the stable comparison bucket used for trend review, such as provider request failure, invalid model output, unsupported prompt intent, repair exhausted, build failure, first-playable failure, timeout, or cancellation.
+
+A GenerationRun should require a failure class for failed, cancelled, timed-out, or repaired-but-still-failed outcomes, but successful runs should leave failure class absent rather than storing a placeholder such as none.
+
+A repaired success should be represented as one successful GenerationRun with repair status and nested attempt receipts, not as a failed run followed by a separate successful run. The nested receipts should preserve the first failed candidate summary, validation issues used for repair, repair attempt metadata, extra duration and cost, and final successful outcome.
+
+The first Phase 8 GenerationRun review surface should be a developer-facing JSON export or log rather than a polished in-app analytics dashboard. The POC should make recent receipts inspectable, filterable enough to compare failure classes, and easy to copy for debugging before investing in analytics UI.
+
+GenerationRun cost tracking should be best effort. Sparkline should store provider usage metadata and pricing inputs when available, compute an approximate cost when safe, and label the estimate source or quality. Missing usage or pricing data should leave cost absent or unknown rather than failing the run or blocking telemetry.
+
+Phase 8 should instrument the current Phaser Spec Generation path first, because it already has structured metadata, validation failures, bounded repair, and first-playable outcomes. The GenerationRun model should leave room for future generate, edit, and repair operation types across runtimes/templates, but the first implementation slice should not retrofit legacy Canvas starter-project telemetry or not-yet-built edit flows.
+
+GenerationRun should have an early-created correlation ID that flows through server generation, client validation, playable builds, checkpoints, and telemetry records. In the POC, the editor can mint this ID client-side because telemetry is local IndexedDB-first. In Sparkline v1, the backend should likely create the canonical GenerationRun record and ID when an AI-backed operation begins, while the client may still send an idempotency or temporary correlation key.
+
+A GenerationRun receipt should be created when the AI-backed operation starts, updated as model generation, server validation, mounting, build, and first-playable validation progress, and finalized only after the full operation reaches a terminal status. Partial running receipts are useful if the browser closes or the operation fails midway, while completed receipts should end as succeeded, failed, cancelled, or timed out.
+
 OpenGame's `result.json` test receipt is a useful reference for Phase 8 GenerationRun telemetry. Sparkline should adapt the idea of a compact per-attempt receipt, but tie it into Game Pack relationships, Validation Evidence, Playable Builds, Version Checkpoints, and eventual cost/model tracking rather than copying OpenGame's CLI output shape directly.
 
 ## Collaboration Scope

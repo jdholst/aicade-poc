@@ -524,18 +524,51 @@ Remaining implementation questions for later Milestone 7 tasks:
 
 Goal: record enough evidence to understand whether the generation architecture is improving.
 
+Resolved Phase 8 decisions from the planning grill:
+
+- A `GenerationRun` represents one AI-backed creator-intent operation, such as generating from a prompt, editing an existing game, or repairing a failed draft. It is not one record per provider call.
+- Nested attempt receipts capture the initial provider call and any bounded repair calls, including per-call duration, cost inputs, validation issues, and failure evidence.
+- Purely local rebuilds, restores, and validation retries do not create top-level `GenerationRun` records unless they are part of an AI-backed operation. They remain `Playable Build`, `Validation Evidence`, checkpoint, or related outcome records that can be linked from a run.
+- All AI-backed operations should leave receipts, including schema failures, mechanic-validation failures, provider errors, timeouts, cancelled runs, repaired successes, and repaired failures.
+- Failed pre-project AI operations should persist in a separate internal telemetry store rather than forcing failed `Game Pack` records into existence.
+- `Game Pack` persistence remains reserved for successful playable drafts and later project-backed operations; when a run creates or modifies a durable project, link it to the relevant `Game Pack`, `Playable Build`, `Validation Evidence`, or `Version Checkpoint` records.
+- The first telemetry store should be local IndexedDB-first, behind a repository boundary, matching the POC's lightweight persistence approach.
+- Store raw prompt text and successful validated specs, but default invalid model outputs to compact structured issue/candidate summaries rather than durable raw invalid JSON.
+- Use a two-layer failure vocabulary: technical `stage` for where the operation failed, and comparable `failureClass` for trend review.
+- Require `failureClass` for failed, cancelled, timed-out, or repaired-but-still-failed runs. Successful runs leave `failureClass` absent.
+- Represent a repaired success as one successful `GenerationRun` with repair status and nested attempt receipts, not as a failed run followed by a separate successful run.
+- The first review surface should be a developer-facing JSON export or log, not a polished analytics dashboard.
+- Cost tracking should be best effort: store usage metadata and pricing inputs when available, compute approximate cost when safe, and allow cost to be absent when unavailable.
+- The first implementation should instrument the current Phaser Spec Generation path before retrofitting legacy Canvas starter-project telemetry or future edit flows.
+- Create a correlation ID when the AI-backed operation starts and pass it through server generation, client validation, playable builds, checkpoints, and telemetry. Client-side ID creation is acceptable for the POC; v1 should likely mint the canonical run ID server-side.
+- Create the receipt when the operation starts, update it as generation, validation, mounting, build, and first-playable validation progress, and finalize it only after the operation reaches a terminal status.
+
 Deliverables:
 
-- Add GenerationRun records for generation, edit, and repair attempts.
-- Track prompt/request, model/provider/task route, template/mechanics used, timestamps/duration, schema validation, build result, validation result, repair attempts, failure class, approximate cost, and created checkpoint/build IDs.
-- Add a simple internal view, log, or export path for reviewing runs.
+- Expand the placeholder `GenerationRun` schema into a receipt model for AI-backed creator-intent operations, with nested attempt receipts for provider calls and bounded repair.
+- Add a local IndexedDB-backed telemetry repository that can persist pre-project failed runs separately from `Game Pack` project history.
+- Track prompt/request, model/provider/task route, template/mechanics used, timestamps/duration, schema validation, build result, validation result, repair attempts, failure stage, failure class, approximate cost, and created checkpoint/build IDs.
+- Propagate a run correlation ID through Phaser Spec Generation, client mounting, first-playable validation, and any created build/checkpoint/evidence records.
+- Store raw prompt text and successful validated specs, but default invalid model outputs to compact structured issue/candidate summaries rather than durable raw invalid JSON.
+- Add a simple developer-facing JSON export or log for reviewing runs before investing in a polished analytics dashboard.
 - Use OpenGame's `result.json` receipt pattern as a reference for compact per-attempt receipts, adapted to Sparkline's Game Pack, Validation Evidence, Playable Build, and Version Checkpoint relationships.
+
+Likely implementation sequence:
+
+1. Define the `GenerationRun` receipt schema, attempt receipt shape, status lifecycle, failure-stage/failure-class taxonomy, cost estimate shape, and relationship fields.
+2. Add a local telemetry repository/export path that can save running, partial, completed, and pre-project runs independently of `Game Pack` persistence.
+3. Instrument the Phaser Spec Generation flow from prompt submission through server result/failure, bounded repair metadata, runtime mounting, and first-playable validation.
+4. Link successful runs to created Game Pack, Playable Build, Validation Evidence, and Version Checkpoint records once generated drafts become durable project state.
+5. Add a simple developer-facing JSON review/export surface for recent runs and failure-class inspection.
 
 Acceptance criteria:
 
 - Each generation attempt leaves a usable receipt.
+- Pre-project failures persist as telemetry without creating failed Game Packs.
+- Repaired successes appear as one successful run with nested failed-and-repair attempt evidence.
 - Failure classes can be compared over time.
 - Approximate model cost is visible where possible.
+- Missing cost data does not fail or block telemetry.
 - Telemetry informs readiness without acting as a hard gate.
 
 Proves:
@@ -547,6 +580,10 @@ Likely promotable to v1:
 - GenerationRun model.
 - Failure class taxonomy seed.
 - Cost/duration tracking approach.
+
+Follow-up polish:
+
+- Add an environment-flagged debug mode for local investigation that can opt into storing raw invalid candidate payloads after the main Phase 8 telemetry path is working.
 
 Later-phase reference:
 

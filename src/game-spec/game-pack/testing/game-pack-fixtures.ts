@@ -1,7 +1,15 @@
 import { getDefaultTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
 
 import type { StableId } from "../../game-spec-schema";
-import { parseGamePack, type GamePack, type ValidationEvidence } from "../game-pack-schema";
+import {
+  generationRunSchema,
+  type GenerationRun,
+} from "../../generation-run/generation-run-schema";
+import {
+  parseGamePack,
+  type GamePack,
+  type ValidationEvidence,
+} from "../game-pack-schema";
 import { restoreGamePackCheckpoint } from "../game-pack-lineage";
 
 export const GAME_PACK_FIXTURE_CREATED_AT = "2026-05-23T12:00:00.000Z";
@@ -86,13 +94,188 @@ export function createValidatedGamePackFixture(
         validationEvidenceIds: validationEvidence.map((item) => item.id),
       },
     ],
-    generationRuns: [
+    generationRuns: [],
+    ...overrides,
+  });
+}
+
+export function createSuccessfulGenerationRunFixture(
+  gamePack: GamePack,
+  overrides: Partial<GenerationRun> = {}
+): GenerationRun {
+  return generationRunSchema.parse({
+    id: "generation_run_initial_prompt",
+    operationType: "generate",
+    status: "succeeded",
+    repairStatus: "not-needed",
+    createdAt: GAME_PACK_FIXTURE_CREATED_AT,
+    startedAt: GAME_PACK_FIXTURE_CREATED_AT,
+    completedAt: GAME_PACK_FIXTURE_UPDATED_AT,
+    durationMs: 5000,
+    request: {
+      summary: "Generate a top-down collector from the creator prompt.",
+      promptText: "Make a top-down collector about crystals.",
+    },
+    runtimeKind: gamePack.runtimeKind,
+    templateId: gamePack.templateId,
+    mechanicIds: ["collect_items"],
+    attempts: [
       {
-        id: "generation_run_reserved",
-        createdAt: GAME_PACK_FIXTURE_CREATED_AT,
-        status: "reserved",
+        id: "generation_attempt_initial",
+        attemptNumber: 1,
+        kind: "initial",
+        status: "succeeded",
+        provider: "test_provider",
+        model: "test_model",
+        taskRoute: "phaser_spec_generation",
+        requestSummary: "Create a validated top-down Game Spec.",
+        startedAt: GAME_PACK_FIXTURE_CREATED_AT,
+        completedAt: GAME_PACK_FIXTURE_UPDATED_AT,
+        durationMs: 5000,
+        usage: {
+          inputTokens: 1200,
+          outputTokens: 800,
+        },
+        cost: {
+          amountUsd: 0.0042,
+          currency: "USD",
+          source: "provider_usage",
+          quality: "estimated",
+        },
+        validation: {
+          stage: "mechanic-validation",
+          status: "passed",
+          issues: [],
+        },
+        candidate: {
+          kind: "validated_spec",
+          gameSpecId: gamePack.gameSpec.id,
+          summary: "Validated Game Spec accepted by server checks.",
+        },
       },
     ],
+    relationships: {
+      gamePackId: gamePack.id,
+      gameSpecId: gamePack.gameSpec.id,
+      buildIds: gamePack.builds.map((build) => build.id),
+      checkpointIds: gamePack.checkpoints.map((checkpoint) => checkpoint.id),
+      validationEvidenceIds: gamePack.validationEvidence.map(
+        (evidence) => evidence.id
+      ),
+    },
+    ...overrides,
+  });
+}
+
+export function createFailedGenerationRunFixture(
+  gamePack: GamePack,
+  overrides: Partial<GenerationRun> = {}
+): GenerationRun {
+  const initialAttempt =
+    createSuccessfulGenerationRunFixture(gamePack).attempts[0];
+
+  return generationRunSchema.parse({
+    id: "generation_run_failed_schema_validation",
+    operationType: "generate",
+    status: "failed",
+    repairStatus: "not-needed",
+    stage: "schema-validation",
+    failureClass: "invalid-model-output",
+    createdAt: GAME_PACK_FIXTURE_CREATED_AT,
+    startedAt: GAME_PACK_FIXTURE_CREATED_AT,
+    completedAt: GAME_PACK_FIXTURE_UPDATED_AT,
+    durationMs: 5000,
+    request: {
+      summary: "Generate a top-down collector from the creator prompt.",
+      promptText: "Make a top-down collector about crystals.",
+    },
+    runtimeKind: gamePack.runtimeKind,
+    templateId: gamePack.templateId,
+    mechanicIds: ["collect_items"],
+    attempts: [
+      {
+        ...initialAttempt,
+        id: "generation_attempt_initial_invalid",
+        status: "failed",
+        validation: {
+          stage: "schema-validation",
+          status: "failed",
+          issues: [
+            {
+              path: "objectives",
+              message: "Expected exactly one primary objective.",
+            },
+          ],
+        },
+        candidate: {
+          kind: "invalid_candidate",
+          summary: "Candidate had invalid objective cardinality.",
+          issueCount: 1,
+          referencedMechanicIds: ["collect_items"],
+        },
+      },
+    ],
+    relationships: {
+      gamePackId: gamePack.id,
+      gameSpecId: gamePack.gameSpec.id,
+      validationEvidenceIds: gamePack.validationEvidence.map(
+        (evidence) => evidence.id
+      ),
+      failedAttemptIds: gamePack.failedAttempts.map((attempt) => attempt.id),
+    },
+    ...overrides,
+  });
+}
+
+export function createRepairedGenerationRunFixture(
+  gamePack: GamePack,
+  overrides: Partial<GenerationRun> = {}
+): GenerationRun {
+  const failedAttempt = createFailedGenerationRunFixture(gamePack).attempts[0];
+  const successfulAttempt =
+    createSuccessfulGenerationRunFixture(gamePack).attempts[0];
+
+  return generationRunSchema.parse({
+    id: "generation_run_repaired_success",
+    operationType: "generate",
+    status: "succeeded",
+    repairStatus: "repaired",
+    createdAt: GAME_PACK_FIXTURE_CREATED_AT,
+    startedAt: GAME_PACK_FIXTURE_CREATED_AT,
+    completedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
+    durationMs: 10000,
+    request: {
+      summary: "Generate and repair a top-down collector from the prompt.",
+      promptText: "Make a top-down collector about crystals.",
+    },
+    runtimeKind: gamePack.runtimeKind,
+    templateId: gamePack.templateId,
+    mechanicIds: ["collect_items"],
+    attempts: [
+      failedAttempt,
+      {
+        ...successfulAttempt,
+        id: "generation_attempt_repair",
+        attemptNumber: 2,
+        kind: "repair",
+        requestSummary: "Repair the invalid objective cardinality.",
+        repair: {
+          sourceAttemptId: failedAttempt.id,
+          reason: "Schema validation failed on objective cardinality.",
+          validationIssueCount: 1,
+        },
+      },
+    ],
+    relationships: {
+      gamePackId: gamePack.id,
+      gameSpecId: gamePack.gameSpec.id,
+      buildIds: gamePack.builds.map((build) => build.id),
+      checkpointIds: gamePack.checkpoints.map((checkpoint) => checkpoint.id),
+      validationEvidenceIds: gamePack.validationEvidence.map(
+        (evidence) => evidence.id
+      ),
+      failedAttemptIds: gamePack.failedAttempts.map((attempt) => attempt.id),
+    },
     ...overrides,
   });
 }
