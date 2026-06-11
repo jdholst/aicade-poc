@@ -3,6 +3,7 @@ import type {
   GamePack,
   GameSpec,
   GameSpecValidationIssue,
+  GenerationRun,
 } from "@/game-spec";
 import {
   GameSpecValidationError,
@@ -35,6 +36,7 @@ export type PlayableDraftPersistencePolicy =
 
 export type PlayableDraftValidationSource = {
   gamePack?: GamePack;
+  generationRunId?: GenerationRun["id"];
   gameSpec: GameSpec;
   runtimeCandidate: FirstPlayableRuntimeCandidate;
   source: "fixture" | "generated-spec" | "restored-game-pack";
@@ -42,6 +44,7 @@ export type PlayableDraftValidationSource = {
 };
 
 export type GeneratedPlayableDraftSpec = {
+  generationRunId?: GenerationRun["id"];
   metadata: {
     taskRoute: string;
     model: OpenAIModelId;
@@ -153,7 +156,12 @@ function createGeneratedSpecDraftSource(
         generatedSpecDraft.metadata.attemptCount,
       ].join("-"),
       template,
-      validationSource: createValidationSource(template, "generated-spec"),
+      validationSource: {
+        ...createValidationSource(template, "generated-spec"),
+        ...(generatedSpecDraft.generationRunId
+          ? { generationRunId: generatedSpecDraft.generationRunId }
+          : {}),
+      },
       readyPolicy: "ready-after-first-playable",
       persistencePolicy: "do-not-persist",
       runFirstPlayableChecksOnReady: true,

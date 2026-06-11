@@ -1,8 +1,9 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
+import { createGenerationRunTestRepository } from "@/service/generation-run/testing/generation-run-test-harness";
 
 import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
 import type { FirstPlayableValidationSource } from "./editor-runtime-template-plan";
@@ -251,6 +252,109 @@ describe("useFirstPlayableValidationGate", () => {
     });
   });
 
+  it("finalizes a generated Phaser GenerationRun after first-playable validation passes", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+
+    await repository.create({
+      id: "generation_run_first_playable_success",
+      operationType: "generate",
+      status: "running",
+      createdAt: "2026-06-10T12:00:00.000Z",
+      startedAt: "2026-06-10T12:00:00.000Z",
+      request: {
+        summary: "make a top-down crystal chase",
+        promptText: "make a top-down crystal chase",
+      },
+      runtimeKind: "phaser",
+      templateId: topDownPhaserTemplate.gameSpec.template.id,
+      mechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
+        (mechanic) => mechanic.id
+      ),
+      attempts: [
+        {
+          id: "generation_run_first_playable_success_attempt_1",
+          attemptNumber: 1,
+          kind: "initial",
+          status: "succeeded",
+          provider: "openai",
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+          requestSummary: "make a top-down crystal chase",
+          startedAt: "2026-06-10T12:00:00.000Z",
+          completedAt: "2026-06-10T12:00:03.000Z",
+          durationMs: 3000,
+          validation: {
+            stage: "semantic-validation",
+            status: "passed",
+          },
+          candidate: {
+            kind: "validated_spec",
+            gameSpecId: topDownPhaserTemplate.gameSpec.id,
+            summary: `Validated Phaser Game Spec "${topDownPhaserTemplate.gameSpec.title}".`,
+            referencedMechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
+              (mechanic) => mechanic.id
+            ),
+          },
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          generationRunRepository: repository,
+          validationSource: {
+            ...validationSource,
+            generationRunId: "generation_run_first_playable_success",
+            source: "generated-spec",
+          },
+        })
+      )
+    );
+
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+
+    await waitFor(async () => {
+      await expect(
+        repository.fetch("generation_run_first_playable_success")
+      ).resolves.toMatchObject({
+        status: "succeeded",
+        repairStatus: "not-needed",
+        relationships: {
+          gamePackId: expect.stringMatching(/^game_pack_/),
+          gameSpecId: topDownPhaserTemplate.gameSpec.id,
+          buildIds: ["build_initial_playable"],
+          checkpointIds: ["checkpoint_initial_playable"],
+          validationEvidenceIds: expect.arrayContaining([
+            "evidence_basic_objective_presence",
+            "evidence_player_entity_presence",
+            "evidence_first_playable_reference_consistency",
+            "evidence_runtime_template_entrypoint",
+            "evidence_render_placeholder_asset_refs",
+            "evidence_runtime_boot",
+            "evidence_nonblank_render",
+            "evidence_player_visible",
+            "evidence_input_response",
+          ]),
+        },
+      });
+    });
+  });
+
   it("blocks editor state when runtime validation evidence fails", () => {
     const onGameStatusChange = vi.fn();
     const { result } = renderHook(() =>
@@ -296,6 +400,63 @@ describe("useFirstPlayableValidationGate", () => {
           buildId: "build_failed_first_playable",
         }),
       ],
+    });
+  });
+
+  it("finalizes a generated Phaser GenerationRun when first-playable validation fails", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+
+    await repository.create(
+      createRunningSpecGenerationRun("generation_run_first_playable_failure")
+    );
+
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          generationRunRepository: repository,
+          validationSource: {
+            ...validationSource,
+            generationRunId: "generation_run_first_playable_failure",
+            source: "generated-spec",
+          },
+        })
+      )
+    );
+
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "failed",
+        message: "Runtime did not respond to movement input.",
+        issues: [
+          {
+            code: "input_probe_no_velocity",
+            path: "runtime.input",
+            message: "Runtime did not respond to movement input.",
+          },
+        ],
+      });
+    });
+
+    await waitFor(async () => {
+      await expect(
+        repository.fetch("generation_run_first_playable_failure")
+      ).resolves.toMatchObject({
+        failureClass: "first-playable-failure",
+        stage: "browser-check",
+        status: "failed",
+        relationships: {
+          buildIds: ["build_failed_first_playable"],
+          checkpointIds: [],
+          failedAttemptIds: ["failed_attempt_first_playable_runtime"],
+          gameSpecId: topDownPhaserTemplate.gameSpec.id,
+          validationEvidenceIds: expect.arrayContaining([
+            "evidence_runtime_boot",
+            "evidence_input_response",
+          ]),
+        },
+      });
     });
   });
 
@@ -378,6 +539,65 @@ describe("useFirstPlayableValidationGate", () => {
     });
   });
 
+  it("finalizes a generated Phaser GenerationRun when first-playable validation fails before runtime boot", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+    const gameSpec = {
+      ...topDownPhaserTemplate.gameSpec,
+      objectives: topDownPhaserTemplate.gameSpec.objectives.map(
+        (objective) => ({
+          ...objective,
+          primary: false,
+        })
+      ),
+    };
+
+    await repository.create(
+      createRunningSpecGenerationRun("generation_run_pre_runtime_failure")
+    );
+
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          generationRunRepository: repository,
+          validationSource: {
+            gameSpec,
+            generationRunId: "generation_run_pre_runtime_failure",
+            runtimeCandidate: {
+              ...validationSource.runtimeCandidate,
+            },
+            source: "generated-spec",
+            runtimeKind: "phaser",
+          },
+        })
+      )
+    );
+
+    expect(result.current.firstPlayableValidationAttempt).toMatchObject({
+      failureMessage: "Expected exactly one primary objective.",
+      shouldBlockPlayable: true,
+      status: "failed",
+    });
+
+    await waitFor(async () => {
+      await expect(
+        repository.fetch("generation_run_pre_runtime_failure")
+      ).resolves.toMatchObject({
+        failureClass: "first-playable-failure",
+        stage: "artifact-build",
+        status: "failed",
+        relationships: {
+          buildIds: [],
+          checkpointIds: [],
+          failedAttemptIds: ["failed_attempt_first_playable_pre_runtime"],
+          gameSpecId: topDownPhaserTemplate.gameSpec.id,
+          validationEvidenceIds: expect.arrayContaining([
+            "evidence_basic_objective_presence",
+          ]),
+        },
+      });
+    });
+  });
+
   it("starts a new attempt when the runtime reset key changes", () => {
     const initialInput = createInput();
     const { rerender, result } = renderHook(
@@ -409,3 +629,49 @@ describe("useFirstPlayableValidationGate", () => {
     });
   });
 });
+
+function createRunningSpecGenerationRun(id: string) {
+  return {
+    id,
+    operationType: "generate" as const,
+    status: "running" as const,
+    createdAt: "2026-06-10T12:00:00.000Z",
+    startedAt: "2026-06-10T12:00:00.000Z",
+    request: {
+      summary: "make a top-down crystal chase",
+      promptText: "make a top-down crystal chase",
+    },
+    runtimeKind: "phaser" as const,
+    templateId: topDownPhaserTemplate.gameSpec.template.id,
+    mechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
+      (mechanic) => mechanic.id
+    ),
+    attempts: [
+      {
+        id: `${id}_attempt_1`,
+        attemptNumber: 1,
+        kind: "initial" as const,
+        status: "succeeded" as const,
+        provider: "openai",
+        model: "gpt-5.4-mini",
+        taskRoute: "spec_generation.primary",
+        requestSummary: "make a top-down crystal chase",
+        startedAt: "2026-06-10T12:00:00.000Z",
+        completedAt: "2026-06-10T12:00:03.000Z",
+        durationMs: 3000,
+        validation: {
+          stage: "semantic-validation" as const,
+          status: "passed" as const,
+        },
+        candidate: {
+          kind: "validated_spec" as const,
+          gameSpecId: topDownPhaserTemplate.gameSpec.id,
+          summary: `Validated Phaser Game Spec "${topDownPhaserTemplate.gameSpec.title}".`,
+          referencedMechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
+            (mechanic) => mechanic.id
+          ),
+        },
+      },
+    ],
+  };
+}

@@ -1,8 +1,10 @@
 import { DEFAULT_SPEC_GENERATION_PROMPT } from "./spec-generation-guide";
+import { STABLE_ID_PATTERN } from "@/game-spec";
 import { resolveDebugSpecGenerationAdapter } from "./debug-generation-provider";
 import {
   createSpecGenerationPreflightFailure,
   getSpecGenerationResultStatus,
+  type SpecGenerationResult,
 } from "./spec-generation-outcome";
 import {
   generateTopDownGameSpec,
@@ -18,6 +20,7 @@ type SpecGenerationRequestBody = {
   openAiApiKey?: unknown;
   openAiKeyword?: unknown;
   openAiModel?: unknown;
+  generationRunId?: unknown;
 };
 
 export type CreateSpecGenerationPostHandlerInput = {
@@ -48,6 +51,9 @@ export function createSpecGenerationPostHandler({
     const prompt = normalizeUserPrompt(
       requestBody.body.enteredPrompt ?? requestBody.body.prompt
     );
+    const generationRunId = normalizeGenerationRunId(
+      requestBody.body.generationRunId
+    );
     const debugAdapter = resolveDebugSpecGenerationAdapter(env);
 
     if (debugAdapter.type === "blocked") {
@@ -61,13 +67,16 @@ export function createSpecGenerationPostHandler({
     }
 
     if (debugAdapter.type === "active") {
-      const result = await generateTopDownGameSpec({
-        prompt,
-        model: debugAdapter.model,
-        providerCredential: debugAdapter.providerCredential,
-        provider: debugAdapter.provider,
-        includeDebugCandidate,
-      });
+      const result = withGenerationRunCorrelation(
+        await generateTopDownGameSpec({
+          prompt,
+          model: debugAdapter.model,
+          providerCredential: debugAdapter.providerCredential,
+          provider: debugAdapter.provider,
+          includeDebugCandidate,
+        }),
+        generationRunId
+      );
 
       return jsonNoStore(result, getSpecGenerationResultStatus(result));
     }
@@ -83,21 +92,27 @@ export function createSpecGenerationPostHandler({
 
     if (!openAiConfigResult.ok) {
       return jsonNoStore(
-        createSpecGenerationPreflightFailure({
-          userMessage: openAiConfigResult.error,
-          stage: "configuration",
-        }),
+        withGenerationRunCorrelation(
+          createSpecGenerationPreflightFailure({
+            userMessage: openAiConfigResult.error,
+            stage: "configuration",
+          }),
+          generationRunId
+        ),
         openAiConfigResult.status
       );
     }
 
-    const result = await generateTopDownGameSpec({
-      prompt,
-      model: openAiConfigResult.config.model,
-      providerCredential: openAiConfigResult.config.apiKey,
-      provider,
-      includeDebugCandidate,
-    });
+    const result = withGenerationRunCorrelation(
+      await generateTopDownGameSpec({
+        prompt,
+        model: openAiConfigResult.config.model,
+        providerCredential: openAiConfigResult.config.apiKey,
+        provider,
+        includeDebugCandidate,
+      }),
+      generationRunId
+    );
 
     return jsonNoStore(result, getSpecGenerationResultStatus(result));
   };
@@ -136,6 +151,36 @@ function normalizeUserPrompt(prompt: unknown) {
   }
 
   return normalized.slice(0, 320);
+}
+
+function normalizeGenerationRunId(value: unknown) {
+  return typeof value === "string" && STABLE_ID_PATTERN.test(value)
+    ? value
+    : undefined;
+}
+
+function withGenerationRunCorrelation(
+  result: SpecGenerationResult,
+  generationRunId: string | undefined
+): SpecGenerationResult {
+  if (!generationRunId) {
+    return result;
+  }
+
+  if (result.ok) {
+    return {
+      ...result,
+      metadata: {
+        ...result.metadata,
+        generationRunId,
+      },
+    };
+  }
+
+  return {
+    ...result,
+    generationRunId,
+  };
 }
 
 function jsonNoStore(payload: unknown, status: number) {

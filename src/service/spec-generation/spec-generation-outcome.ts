@@ -45,6 +45,7 @@ export type SpecGenerationSuccessMetadata = {
   taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
   model: OpenAIModelId;
   attemptCount: number;
+  generationRunId?: string;
   repairStatus?: SpecGenerationRepairStatus;
   repairAttempts?: SpecGenerationRepairAttemptSummary[];
 };
@@ -62,6 +63,7 @@ export type SpecGenerationFailureResult = {
   validationIssues: SpecGenerationIssue[];
   taskRoute: typeof SPEC_GENERATION_TASK_ROUTE;
   attemptCount: number;
+  generationRunId?: string;
   repairAttempts?: SpecGenerationRepairAttemptSummary[];
   debugCandidate?: unknown;
   debugProviderError?: SpecGenerationProviderErrorDetails;
@@ -73,6 +75,7 @@ export type SpecGenerationResult =
 
 export type SpecGenerationValidationFailure = {
   attemptCount: number;
+  generationRunId?: string;
   issues: SpecGenerationIssue[];
   repairAttempts?: SpecGenerationRepairAttemptSummary[];
   stage: SpecGenerationFailureStage;
@@ -222,11 +225,13 @@ export function getSpecGenerationSuccessMetadata(
   const repairAttempts = getSpecGenerationRepairAttempts(
     metadata.repairAttempts
   );
+  const generationRunId = getMetadataString(metadata.generationRunId);
 
   return {
     taskRoute: SPEC_GENERATION_TASK_ROUTE,
     model: getMetadataModel(metadata.model),
     attemptCount: getMetadataNumber(metadata.attemptCount),
+    ...(generationRunId ? { generationRunId } : {}),
     ...(repairAttempts.length > 0 ? { repairAttempts } : {}),
     ...(repairStatus ? { repairStatus } : {}),
   };
@@ -243,6 +248,7 @@ export function getSpecGenerationValidationFailure(
   const repairAttempts = getSpecGenerationRepairAttempts(
     payload.repairAttempts
   );
+  const generationRunId = getMetadataString(payload.generationRunId);
 
   if (issues.length === 0) {
     return undefined;
@@ -250,6 +256,7 @@ export function getSpecGenerationValidationFailure(
 
   return {
     attemptCount: getMetadataNumber(payload.attemptCount),
+    ...(generationRunId ? { generationRunId } : {}),
     issues,
     ...(repairAttempts.length > 0 ? { repairAttempts } : {}),
     stage: getValidationStage(payload.stage),
@@ -374,6 +381,10 @@ function getMetadataModel(value: unknown): OpenAIModelId {
 
 function getMetadataNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 1;
+}
+
+function getMetadataString(value: unknown) {
+  return typeof value === "string" && value ? value : null;
 }
 
 function isMechanicIssue(issue: GameSpecValidationIssue) {

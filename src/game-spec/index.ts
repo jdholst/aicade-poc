@@ -114,6 +114,14 @@ export {
 } from "./game-pack/first-playable-validation";
 
 export {
+  finalizeGenerationRunFromFirstPlayable,
+  writeFirstPlayableTerminalResult,
+  type FirstPlayableTerminalValidationState,
+  type WriteFirstPlayableTerminalResultInput,
+  type WriteFirstPlayableTerminalResultOutput,
+} from "./game-pack/first-playable-terminal-result";
+
+export {
   createMechanicRuntimeBridge,
   getMechanicDefinitionForScope,
   getMechanicDefinitionsForScope,
