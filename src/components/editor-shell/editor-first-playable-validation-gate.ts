@@ -14,6 +14,7 @@ import {
   type GenerationRun,
   type GenerationRunRepository,
 } from "@/game-spec";
+import type { JsonValue } from "@/game-spec/game-spec-schema";
 import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
   EditorGameCanvasActions,
@@ -253,6 +254,7 @@ function createFirstPlayableValidationSeed({
 
   const gamePack = createInitialGamePack({
     gameSpec: validationSource.gameSpec,
+    metadata: createGamePackMetadataFromValidationSource(validationSource),
     runtimeKind: validationSource.runtimeKind,
   });
   const restoredGamePack = validationSource.gamePack;
@@ -288,6 +290,32 @@ function createFirstPlayableValidationSeed({
     attempt,
     generationRunRepository: null,
   }).state;
+}
+
+function createGamePackMetadataFromValidationSource(
+  validationSource: FirstPlayableValidationSource
+): Record<string, JsonValue> | undefined {
+  if (validationSource.source !== "generated-spec") {
+    return undefined;
+  }
+
+  const generatedSpec: Record<string, JsonValue> = {
+    source: "phaser-spec",
+    ...(validationSource.generationRunId
+      ? { generationRunId: validationSource.generationRunId }
+      : {}),
+    ...(validationSource.generatedSpecMetadata
+      ? {
+          attemptCount: validationSource.generatedSpecMetadata.attemptCount,
+          model: validationSource.generatedSpecMetadata.model,
+          taskRoute: validationSource.generatedSpecMetadata.taskRoute,
+        }
+      : {}),
+  };
+
+  return {
+    generatedSpec,
+  };
 }
 
 function getBrowserGenerationRunRepository():

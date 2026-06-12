@@ -426,7 +426,7 @@ Deliverables:
 - Start with `player_movement` and `pickup_collection`, plus at most one early variation mechanic such as `enemy_chase` or `hazard_contact`.
 - Validate AI output on the API/server path with schema, semantic reference, and mechanic validation before returning it to the editor.
 - Return a validated spec plus generation metadata, or a structured failure with creator-friendly copy and developer/repair validation details.
-- Keep generated specs ephemeral in the first implementation; do not require durable IndexedDB persistence, Version Checkpoints, durable Validation Evidence, or full GenerationRun telemetry.
+- Keep generated specs ephemeral before first-playable validation passes; durable IndexedDB persistence, Version Checkpoints, and durable Validation Evidence are allowed only after the generated draft passes the first-playable bar. Full GenerationRun telemetry remains Milestone 8 scope.
 - Build deterministic validation and friendly rejection before AI-assisted repair, then allow one bounded repair attempt using the invalid candidate spec plus exact validation errors.
 - Keep repair-attempt visibility compact and pre-telemetry: repaired successes may show that automatic repair happened, repaired failures may show repair-attempt details, but normal UI must not expose raw invalid candidate specs.
 - Distinguish Phaser fixture/test mode from Phaser AI generation mode. Hardcoded fixtures are explicit runtime-test inputs, not fallback content for failed AI generation.
@@ -442,8 +442,9 @@ Milestone 7 status after the first spine tasks:
 - Mechanic entity references were renamed from `targetIds` to `entityIds` as a strict contract break. The provider schema, validator paths, fixtures, runtime lookup, and generation guide now use `mechanics[].entityIds`.
 - The generation guide now explicitly separates mechanic `entityIds` from `assetIds`, including the first built-in mechanic rules for `player_movement`, `pickup_collection`, `enemy_chase`, and `hazard_contact`.
 - The debug provider can simulate deterministic success and failure modes in development, with operator-facing usage documented in `docs/debug-spec-generation-provider.md`.
-- Successful Phaser Spec Generation responses are stored as active ephemeral generated-spec editor state, not as persisted Game Packs.
+- Successful Phaser Spec Generation responses first enter active generated-spec editor state, then persist as durable Game Packs only after first-playable validation passes.
 - Generated specs mount through the trusted Phaser template and carry a `generated-spec` first-playable validation source. Runtime-ready alone is not enough; generated drafts stay blocked until first-playable evidence passes.
+- Generated specs that pass first-playable validation now save through the existing local Game Pack repository with a creator-facing initial checkpoint, validation evidence, playable build, and compact generated-spec metadata. Failed generated specs and failed first-playable attempts do not create creator-facing checkpoints.
 - Manual first-playable QA now has reliable breakpoint recipes for forcing each browser evidence failure: `nonblank_render`, `player_visible`, and `input_response`. Prompt-only requests such as "make the player invisible" are not reliable validation triggers because the trusted Phaser template owns player rendering and the runtime check currently measures player body plus viewport presence, not visual opacity.
 - Restored Game Packs were rechecked against the Phaser runtime plan. A persisted pack with a creator-facing checkpoint loads from IndexedDB, parses its saved top-down Game Spec, creates a Phaser template, and mounts with `source: "restored-game-pack"` before falling back to the fixture path.
 - Active generated specs now live in editor session state with their `runtimeKind`, generation metadata, and validated spec, so reset can remount the same generated draft without falling back to a fixture or losing the chat/editor summary.
@@ -481,7 +482,6 @@ Likely promotable to v1:
 
 Likely follow-up after the first Milestone 7 spine:
 
-- Persist successful generated playable drafts as Game Packs, Playable Builds, Validation Evidence, and Version Checkpoints.
 - Add a dev-only first-playable evidence failure switch so manual QA can force `nonblank_render`, `player_visible`, and `input_response` failures without depending on browser breakpoints or prompt steering.
 - Improve creator-facing validation-failure copy beyond the current repair receipt so mechanic/schema failures do not tell the user to "try a simpler prompt" when the prompt was reasonable.
 - Migrate Canvas mode toward the same Spec Generation architecture and deprecate the legacy starter-project endpoint.
@@ -508,15 +508,15 @@ Resolved implementation decisions from current Milestone 7 work:
 - Deterministic normalization is allowed only for provider schema compatibility before generation. Candidate specs returned by the model are validated, then at most one explicit repair attempt is made; unrepaired failures still fail honestly.
 - The compact Spec Generation Guide stays aligned with the Zod schema and Mechanic Registry by importing shared constants and registered mechanic types, then documenting the few intentional first-slice narrowings.
 - Mechanic reference fields should stay semantically narrow: `entityIds` for entities, `assetIds` for assets, and `regionIds` for `layout.regions` only. Collection placement should be expressed through pickup asset references plus pickup-zone layout coverage, not by putting pickup zone IDs in `regionIds`.
-- Active generated specs are intentionally ephemeral editor state until Game Pack persistence is wired into the generated-draft path. They should not be silently converted into persisted packs before first-playable validation and the later persistence task are explicit.
-- Restored Game Pack mounting currently works for saved Phaser packs created by the validated fixture/restored path. Generated Phaser specs validate and mount in the active session, but they do not yet become durable restored packs on reload.
+- Active generated specs are ephemeral until first-playable validation passes. After a pass, the resulting Game Pack is saved locally with compact generated-spec metadata and can restore on reload through `source: "restored-game-pack"`.
+- Restored Game Pack mounting works for saved Phaser packs created by the validated fixture/restored path and by generated Phaser specs that passed first-playable validation.
 - First-playable failure simulation should target runtime evidence directly. The spec prompt may include validation-error suggestions for operators, but the trusted template does not currently expose spec-level player visibility controls that can guarantee a `player_visible` failure.
 - Iframe `srcdoc` attachment is now an idempotent runtime-document mount step. The runtime host may update callback refs during React re-renders, but callback-only changes must not reboot the iframe or reset the runtime status.
 - The first golden prompt for smoke testing remains: "Make a simple top-down arcade game where the player moves around a small arena, collects coins, avoids one chasing enemy, and wins after collecting all coins."
 
 Remaining implementation questions for later Milestone 7 tasks:
 
-- Should generated specs be recoverable through URL or session state before durable persistence exists?
+- Should generated specs be recoverable through URL or session state before first-playable validation has created durable local persistence?
 - How much homepage copy should change when the app is in Phaser AI generation mode?
 - Which additional invalid stub cases should be added after the current debug-provider failure modes?
 
@@ -689,5 +689,5 @@ Current implementation sequence:
 9. Completed: confirm restored saved Phaser Game Packs still load through the Phaser runtime plan and stay distinct from active ephemeral generated specs.
 10. Completed: document reliable manual first-playable evidence failure simulation and note that prompt steering alone is not enough to force runtime evidence failures.
 11. Completed: add one bounded AI repair attempt for invalid generated specs and surface compact repair-attempt visibility in success chat/failure receipts without exposing raw invalid candidate specs in normal UI.
-12. Later: persist successful generated playable drafts as durable Game Packs after first-playable validation passes.
+12. Completed: persist successful generated playable drafts as durable Game Packs after first-playable validation passes, while keeping failed drafts out of creator-facing checkpoint history.
 13. Keep OpenGame Template Skill, Debug Skill, asset-pack, and tilemap-generation ideas deferred unless they become explicit later-phase work.
