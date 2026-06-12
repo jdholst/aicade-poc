@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { EditorHeader } from "@/components/editor-shell/editor-header";
 import { EditorAIChat } from "@/components/editor-shell/editor-ai-chat";
 import { EditorGameCanvas } from "@/components/editor-shell/editor-game-canvas";
 import { useEditorSession } from "@/hooks/use-editor-session";
+import { installGenerationRunDeveloperJsonExport } from "@/service/generation-run";
 
 type EditorShellProps = {
   enteredPrompt: string;
@@ -60,6 +63,12 @@ export function EditorShell({
     needsOpenAiApiKey,
     needsOpenAiModel,
   });
+
+  useEffect(() => {
+    const installation = installGenerationRunDeveloperJsonExport();
+
+    return () => installation.uninstall();
+  }, []);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#f5efe3_0%,_#ede3d2_36%,_#e0e9e1_100%)] px-4 py-4 text-[var(--ink)] sm:px-6 lg:px-8">

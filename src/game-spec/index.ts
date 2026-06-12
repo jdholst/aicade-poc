@@ -45,6 +45,23 @@ export {
 } from "./generation-run/generation-run-repository";
 
 export {
+  createGenerationRunJsonExport,
+  createGenerationRunJsonExportText,
+  createGenerationRunRepositoryJsonExport,
+  createGenerationRunRepositoryJsonExportText,
+  GENERATION_RUN_JSON_EXPORT_SCHEMA_VERSION,
+  type GenerationRunJsonExport,
+  type GenerationRunJsonExportAttempt,
+  type GenerationRunJsonExportCandidate,
+  type GenerationRunJsonExportCost,
+  type GenerationRunJsonExportFilters,
+  type GenerationRunJsonExportOptions,
+  type GenerationRunJsonExportProviderModel,
+  type GenerationRunJsonExportRun,
+  type GenerationRunJsonExportValidation,
+} from "./generation-run/generation-run-json-export";
+
+export {
   generationRunAttemptReceiptSchema,
   generationRunAttemptValidationSchema,
   generationRunCandidateSummarySchema,
