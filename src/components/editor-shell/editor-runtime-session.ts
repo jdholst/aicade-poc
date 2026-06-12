@@ -5,8 +5,11 @@ import { useEffect, useMemo, useRef } from "react";
 import type { RuntimeIframeStatus } from "@/components/runtime-iframe-host";
 import {
   createGamePackPersistenceKey,
+  createIndexedDbGenerationRunRepository,
+  finalizeGenerationRunFromFirstPlayable,
   type FirstPlayableValidationAttempt,
   type GamePackRepository,
+  type GenerationRunRepository,
 } from "@/game-spec";
 import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
@@ -24,6 +27,7 @@ import {
 export type UseEditorRuntimeSessionInput = {
   canvas: EditorGameCanvasSession;
   gamePackRepository?: GamePackRepository;
+  generationRunRepository?: Pick<GenerationRunRepository, "update"> | null;
   onGameStatusChange: EditorGameCanvasActions["onGameStatusChange"];
 };
 
@@ -39,6 +43,7 @@ export type EditorRuntimeSession = {
 export function useEditorRuntimeSession({
   canvas,
   gamePackRepository,
+  generationRunRepository,
   onGameStatusChange,
 }: UseEditorRuntimeSessionInput): EditorRuntimeSession {
   const { gameResetNonce, loadState } = canvas;
@@ -47,6 +52,10 @@ export function useEditorRuntimeSession({
       ? canvas.activeGeneratedSpec
       : null;
   const lastPersistedGamePackKeyRef = useRef<string | null>(null);
+  const resolvedGenerationRunRepository = useMemo(
+    () => generationRunRepository ?? getBrowserGenerationRunRepository(),
+    [generationRunRepository]
+  );
   const {
     loadStatus: gamePackPersistenceStatus,
     persistValidatedGamePack,
@@ -64,11 +73,13 @@ export function useEditorRuntimeSession({
     [activeGeneratedSpec, canvas.generationSource, restoredGamePack]
   );
   const {
+    firstPlayableGenerationRunId,
     firstPlayableGamePack,
     firstPlayableValidationAttempt,
     handleRuntimeStatusChange,
     handleRuntimeValidationEvidence,
   } = useFirstPlayableValidationGate({
+    generationRunRepository: resolvedGenerationRunRepository,
     gameResetNonce,
     loadStateStatus: loadState.status,
     onGameStatusChange,
@@ -93,6 +104,7 @@ export function useEditorRuntimeSession({
       return;
     }
 
+    const passedAttempt = firstPlayableValidationAttempt;
     const gamePackKey = createGamePackPersistenceKey(firstPlayableGamePack);
 
     if (lastPersistedGamePackKeyRef.current === gamePackKey) {
@@ -100,15 +112,35 @@ export function useEditorRuntimeSession({
     }
 
     lastPersistedGamePackKeyRef.current = gamePackKey;
-    void persistValidatedGamePack(firstPlayableGamePack).catch(() => {
-      lastPersistedGamePackKeyRef.current = null;
-    });
+    void persistValidatedGamePack(firstPlayableGamePack)
+      .then((savedGamePack) => {
+        if (
+          !savedGamePack ||
+          !firstPlayableGenerationRunId ||
+          !resolvedGenerationRunRepository
+        ) {
+          return;
+        }
+
+        return finalizeGenerationRunFromFirstPlayable({
+          attempt: passedAttempt,
+          completedAt: savedGamePack.updatedAt,
+          gamePack: savedGamePack,
+          generationRunId: firstPlayableGenerationRunId,
+          repository: resolvedGenerationRunRepository,
+        });
+      })
+      .catch(() => {
+        lastPersistedGamePackKeyRef.current = null;
+      });
   }, [
+    firstPlayableGenerationRunId,
     firstPlayableGamePack,
-    firstPlayableValidationAttempt?.status,
+    firstPlayableValidationAttempt,
     gamePackPersistenceStatus,
     persistencePolicy,
     persistValidatedGamePack,
+    resolvedGenerationRunRepository,
   ]);
 
   return {
@@ -117,4 +149,14 @@ export function useEditorRuntimeSession({
     handleRuntimeValidationEvidence,
     runtimeTemplate,
   };
+}
+
+function getBrowserGenerationRunRepository():
+  | Pick<GenerationRunRepository, "update">
+  | null {
+  if (typeof globalThis.indexedDB === "undefined") {
+    return null;
+  }
+
+  return createIndexedDbGenerationRunRepository();
 }

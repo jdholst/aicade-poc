@@ -252,7 +252,7 @@ describe("useFirstPlayableValidationGate", () => {
     });
   });
 
-  it("finalizes a generated Phaser GenerationRun after first-playable validation passes", async () => {
+  it("keeps a generated Phaser GenerationRun running after first-playable validation passes before durable persistence", async () => {
     const repository = createGenerationRunTestRepository().repository;
 
     await repository.create({
@@ -328,31 +328,21 @@ describe("useFirstPlayableValidationGate", () => {
       });
     });
 
-    await waitFor(async () => {
-      await expect(
-        repository.fetch("generation_run_first_playable_success")
-      ).resolves.toMatchObject({
-        status: "succeeded",
-        repairStatus: "not-needed",
-        relationships: {
-          gamePackId: expect.stringMatching(/^game_pack_/),
-          gameSpecId: topDownPhaserTemplate.gameSpec.id,
-          buildIds: ["build_initial_playable"],
-          checkpointIds: ["checkpoint_initial_playable"],
-          validationEvidenceIds: expect.arrayContaining([
-            "evidence_basic_objective_presence",
-            "evidence_player_entity_presence",
-            "evidence_first_playable_reference_consistency",
-            "evidence_runtime_template_entrypoint",
-            "evidence_render_placeholder_asset_refs",
-            "evidence_runtime_boot",
-            "evidence_nonblank_render",
-            "evidence_player_visible",
-            "evidence_input_response",
-          ]),
-        },
-      });
+    await act(async () => {
+      await Promise.resolve();
     });
+
+    const generationRun = await repository.fetch(
+      "generation_run_first_playable_success"
+    );
+
+    expect(result.current.firstPlayableGenerationRunId).toBe(
+      "generation_run_first_playable_success"
+    );
+    expect(generationRun).toMatchObject({
+      status: "running",
+    });
+    expect(generationRun?.relationships).toBeUndefined();
   });
 
   it("blocks editor state when runtime validation evidence fails", () => {
@@ -446,18 +436,13 @@ describe("useFirstPlayableValidationGate", () => {
         failureClass: "first-playable-failure",
         stage: "browser-check",
         status: "failed",
-        relationships: {
-          buildIds: ["build_failed_first_playable"],
-          checkpointIds: [],
-          failedAttemptIds: ["failed_attempt_first_playable_runtime"],
-          gameSpecId: topDownPhaserTemplate.gameSpec.id,
-          validationEvidenceIds: expect.arrayContaining([
-            "evidence_runtime_boot",
-            "evidence_input_response",
-          ]),
-        },
       });
     });
+    const generationRun = await repository.fetch(
+      "generation_run_first_playable_failure"
+    );
+
+    expect(generationRun?.relationships).toBeUndefined();
   });
 
   it("records fatal runtime errors as blocking editor errors", () => {
@@ -585,17 +570,13 @@ describe("useFirstPlayableValidationGate", () => {
         failureClass: "first-playable-failure",
         stage: "artifact-build",
         status: "failed",
-        relationships: {
-          buildIds: [],
-          checkpointIds: [],
-          failedAttemptIds: ["failed_attempt_first_playable_pre_runtime"],
-          gameSpecId: topDownPhaserTemplate.gameSpec.id,
-          validationEvidenceIds: expect.arrayContaining([
-            "evidence_basic_objective_presence",
-          ]),
-        },
       });
     });
+    const generationRun = await repository.fetch(
+      "generation_run_pre_runtime_failure"
+    );
+
+    expect(generationRun?.relationships).toBeUndefined();
   });
 
   it("starts a new attempt when the runtime reset key changes", () => {

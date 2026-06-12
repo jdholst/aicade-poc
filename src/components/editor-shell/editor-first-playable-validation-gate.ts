@@ -44,6 +44,7 @@ type UseFirstPlayableValidationGateInput = {
 };
 
 export type FirstPlayableValidationGate = {
+  firstPlayableGenerationRunId: GenerationRun["id"] | null;
   firstPlayableGamePack: GamePack | null;
   firstPlayableValidationAttempt: FirstPlayableValidationAttempt | null;
   handleRuntimeStatusChange: (status: RuntimeIframeStatus) => void;
@@ -93,7 +94,7 @@ export function useFirstPlayableValidationGate({
       !activeValidationState ||
       !activeValidationState.generationRunId ||
       !activeValidationState.resultWritten ||
-      activeValidationState.attempt.status === "running" ||
+      activeValidationState.attempt.status !== "failed" ||
       !resolvedGenerationRunRepository
     ) {
       return;
@@ -227,6 +228,8 @@ export function useFirstPlayableValidationGate({
   );
 
   return {
+    firstPlayableGenerationRunId:
+      activeValidationState?.generationRunId ?? null,
     firstPlayableGamePack: activeValidationState?.gamePack ?? null,
     firstPlayableValidationAttempt: activeValidationState?.attempt ?? null,
     handleRuntimeStatusChange,

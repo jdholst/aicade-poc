@@ -55,7 +55,9 @@ export function writeFirstPlayableTerminalResult<
     completedAt,
   });
   const generationRunFinalization =
-    currentValidationState.generationRunId && generationRunRepository
+    attempt.status === "failed" &&
+    currentValidationState.generationRunId &&
+    generationRunRepository
       ? finalizeGenerationRunFromFirstPlayable({
           attempt,
           completedAt,
@@ -94,13 +96,14 @@ export async function finalizeGenerationRunFromFirstPlayable({
       return generationRun;
     }
 
-    const relationships = createGenerationRunRelationships(gamePack);
     const durationMs = Math.max(
       0,
       Date.parse(completedAt) - Date.parse(generationRun.startedAt)
     );
 
     if (attempt.status === "passed") {
+      const relationships = createGenerationRunRelationships(gamePack);
+
       return {
         ...generationRun,
         status: "succeeded",
@@ -113,14 +116,16 @@ export async function finalizeGenerationRunFromFirstPlayable({
       };
     }
 
+    const telemetryOnlyRun = { ...generationRun };
+    delete telemetryOnlyRun.relationships;
+
     return {
-      ...generationRun,
+      ...telemetryOnlyRun,
       status: "failed",
       completedAt,
       durationMs,
       stage: getFirstPlayableFailureStage(attempt),
       failureClass: "first-playable-failure",
-      relationships,
     };
   });
 }

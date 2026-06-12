@@ -18,7 +18,7 @@ import { createGenerationRunTestRepository } from "@/service/generation-run/test
 import { writeFirstPlayableTerminalResult } from "./first-playable-terminal-result";
 
 describe("writeFirstPlayableTerminalResult", () => {
-  it("writes passed first-playable results and succeeds the GenerationRun", async () => {
+  it("writes passed first-playable results without succeeding the GenerationRun before durable persistence", async () => {
     const repository = createGenerationRunTestRepository().repository;
     const gamePack = createGamePack();
     const attempt = createPassedAttempt(gamePack);
@@ -57,28 +57,16 @@ describe("writeFirstPlayableTerminalResult", () => {
         failedAttempts: [],
       },
     });
+    expect(result.generationRunFinalization).toBeUndefined();
 
-    await result.generationRunFinalization;
+    const generationRun = await repository.fetch(
+      "generation_run_terminal_success"
+    );
 
-    await expect(
-      repository.fetch("generation_run_terminal_success")
-    ).resolves.toMatchObject({
-      status: "succeeded",
-      repairStatus: "not-needed",
-      relationships: {
-        gamePackId: gamePack.id,
-        gameSpecId: gamePack.gameSpec.id,
-        buildIds: ["build_initial_playable"],
-        checkpointIds: ["checkpoint_initial_playable"],
-        failedAttemptIds: [],
-        validationEvidenceIds: expect.arrayContaining([
-          "evidence_runtime_boot",
-          "evidence_nonblank_render",
-          "evidence_player_visible",
-          "evidence_input_response",
-        ]),
-      },
+    expect(generationRun).toMatchObject({
+      status: "running",
     });
+    expect(generationRun?.relationships).toBeUndefined();
   });
 
   it("writes failed runtime results and fails the GenerationRun at browser-check", async () => {
@@ -87,7 +75,15 @@ describe("writeFirstPlayableTerminalResult", () => {
     const attempt = createFailedRuntimeAttempt(gamePack);
 
     await repository.create(
-      createRunningGenerationRun(gamePack, "generation_run_terminal_failure")
+      {
+        ...createRunningGenerationRun(
+          gamePack,
+          "generation_run_terminal_failure"
+        ),
+        relationships: {
+          gamePackId: gamePack.id,
+        },
+      }
     );
 
     const result = writeFirstPlayableTerminalResult({
@@ -125,18 +121,12 @@ describe("writeFirstPlayableTerminalResult", () => {
       failureClass: "first-playable-failure",
       stage: "browser-check",
       status: "failed",
-      relationships: {
-        buildIds: ["build_failed_first_playable"],
-        checkpointIds: [],
-        failedAttemptIds: ["failed_attempt_first_playable_runtime"],
-        gamePackId: gamePack.id,
-        gameSpecId: gamePack.gameSpec.id,
-        validationEvidenceIds: expect.arrayContaining([
-          "evidence_runtime_boot",
-          "evidence_input_response",
-        ]),
-      },
     });
+    const generationRun = await repository.fetch(
+      "generation_run_terminal_failure"
+    );
+
+    expect(generationRun?.relationships).toBeUndefined();
   });
 
   it("writes pre-runtime failures and fails the GenerationRun at artifact-build", async () => {
@@ -192,17 +182,12 @@ describe("writeFirstPlayableTerminalResult", () => {
       failureClass: "first-playable-failure",
       stage: "artifact-build",
       status: "failed",
-      relationships: {
-        buildIds: [],
-        checkpointIds: [],
-        failedAttemptIds: ["failed_attempt_first_playable_pre_runtime"],
-        gamePackId: gamePack.id,
-        gameSpecId: gamePack.gameSpec.id,
-        validationEvidenceIds: expect.arrayContaining([
-          "evidence_basic_objective_presence",
-        ]),
-      },
     });
+    const generationRun = await repository.fetch(
+      "generation_run_terminal_pre_runtime"
+    );
+
+    expect(generationRun?.relationships).toBeUndefined();
   });
 });
 
