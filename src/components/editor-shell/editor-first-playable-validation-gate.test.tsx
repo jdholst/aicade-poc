@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
-import { createGenerationRunTestRepository } from "@/service/generation-run/testing/generation-run-test-harness";
+import {
+  createGenerationRunTestRepository,
+  createRunningPhaserSpecGenerationRun,
+} from "@/service/generation-run/testing/generation-run-test-harness";
 
 import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
 import type { FirstPlayableValidationSource } from "./editor-runtime-template-plan";
@@ -255,49 +258,11 @@ describe("useFirstPlayableValidationGate", () => {
   it("keeps a generated Phaser GenerationRun running after first-playable validation passes before durable persistence", async () => {
     const repository = createGenerationRunTestRepository().repository;
 
-    await repository.create({
-      id: "generation_run_first_playable_success",
-      operationType: "generate",
-      status: "running",
-      createdAt: "2026-06-10T12:00:00.000Z",
-      startedAt: "2026-06-10T12:00:00.000Z",
-      request: {
-        summary: "make a top-down crystal chase",
-        promptText: "make a top-down crystal chase",
-      },
-      runtimeKind: "phaser",
-      templateId: topDownPhaserTemplate.gameSpec.template.id,
-      mechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
-        (mechanic) => mechanic.id
-      ),
-      attempts: [
-        {
-          id: "generation_run_first_playable_success_attempt_1",
-          attemptNumber: 1,
-          kind: "initial",
-          status: "succeeded",
-          provider: "openai",
-          model: "gpt-5.4-mini",
-          taskRoute: "spec_generation.primary",
-          requestSummary: "make a top-down crystal chase",
-          startedAt: "2026-06-10T12:00:00.000Z",
-          completedAt: "2026-06-10T12:00:03.000Z",
-          durationMs: 3000,
-          validation: {
-            stage: "semantic-validation",
-            status: "passed",
-          },
-          candidate: {
-            kind: "validated_spec",
-            gameSpecId: topDownPhaserTemplate.gameSpec.id,
-            summary: `Validated Phaser Game Spec "${topDownPhaserTemplate.gameSpec.title}".`,
-            referencedMechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
-              (mechanic) => mechanic.id
-            ),
-          },
-        },
-      ],
-    });
+    await repository.create(
+      createRunningPhaserSpecGenerationRun({
+        id: "generation_run_first_playable_success",
+      })
+    );
 
     const { result } = renderHook(() =>
       useFirstPlayableValidationGate(
@@ -397,7 +362,9 @@ describe("useFirstPlayableValidationGate", () => {
     const repository = createGenerationRunTestRepository().repository;
 
     await repository.create(
-      createRunningSpecGenerationRun("generation_run_first_playable_failure")
+      createRunningPhaserSpecGenerationRun({
+        id: "generation_run_first_playable_failure",
+      })
     );
 
     const { result } = renderHook(() =>
@@ -537,7 +504,9 @@ describe("useFirstPlayableValidationGate", () => {
     };
 
     await repository.create(
-      createRunningSpecGenerationRun("generation_run_pre_runtime_failure")
+      createRunningPhaserSpecGenerationRun({
+        id: "generation_run_pre_runtime_failure",
+      })
     );
 
     const { result } = renderHook(() =>
@@ -610,49 +579,3 @@ describe("useFirstPlayableValidationGate", () => {
     });
   });
 });
-
-function createRunningSpecGenerationRun(id: string) {
-  return {
-    id,
-    operationType: "generate" as const,
-    status: "running" as const,
-    createdAt: "2026-06-10T12:00:00.000Z",
-    startedAt: "2026-06-10T12:00:00.000Z",
-    request: {
-      summary: "make a top-down crystal chase",
-      promptText: "make a top-down crystal chase",
-    },
-    runtimeKind: "phaser" as const,
-    templateId: topDownPhaserTemplate.gameSpec.template.id,
-    mechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
-      (mechanic) => mechanic.id
-    ),
-    attempts: [
-      {
-        id: `${id}_attempt_1`,
-        attemptNumber: 1,
-        kind: "initial" as const,
-        status: "succeeded" as const,
-        provider: "openai",
-        model: "gpt-5.4-mini",
-        taskRoute: "spec_generation.primary",
-        requestSummary: "make a top-down crystal chase",
-        startedAt: "2026-06-10T12:00:00.000Z",
-        completedAt: "2026-06-10T12:00:03.000Z",
-        durationMs: 3000,
-        validation: {
-          stage: "semantic-validation" as const,
-          status: "passed" as const,
-        },
-        candidate: {
-          kind: "validated_spec" as const,
-          gameSpecId: topDownPhaserTemplate.gameSpec.id,
-          summary: `Validated Phaser Game Spec "${topDownPhaserTemplate.gameSpec.title}".`,
-          referencedMechanicIds: topDownPhaserTemplate.gameSpec.mechanics.map(
-            (mechanic) => mechanic.id
-          ),
-        },
-      },
-    ],
-  };
-}

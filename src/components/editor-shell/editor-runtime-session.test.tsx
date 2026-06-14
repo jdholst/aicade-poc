@@ -8,13 +8,11 @@ import {
   type GamePackStorageDriver,
   type StoredGamePackRecord,
 } from "@/game-spec";
-import {
-  createEmptyGamePackFixture,
-  createRepairedGenerationRunFixture,
-  createSuccessfulGenerationRunFixture,
-} from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
-import { createGenerationRunTestRepository } from "@/service/generation-run/testing/generation-run-test-harness";
+import {
+  createGenerationRunTestRepository,
+  createRunningPhaserSpecGenerationRun,
+} from "@/service/generation-run/testing/generation-run-test-harness";
 import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
 
 import { useEditorRuntimeSession } from "./editor-runtime-session";
@@ -141,7 +139,9 @@ describe("useEditorRuntimeSession", () => {
     const generationRunId = "generation_run_durable_success";
 
     await generationRunTestRepository.repository.create(
-      createRunningGenerationRun(generationRunId)
+      createRunningPhaserSpecGenerationRun({
+        id: generationRunId,
+      })
     );
 
     const { result } = renderHook(() =>
@@ -217,7 +217,10 @@ describe("useEditorRuntimeSession", () => {
     const generationRunId = "generation_run_repaired_durable_success";
 
     await generationRunTestRepository.repository.create(
-      createRunningRepairedGenerationRun(generationRunId)
+      createRunningPhaserSpecGenerationRun({
+        attempts: "repaired-success",
+        id: generationRunId,
+      })
     );
 
     const { result } = renderHook(() =>
@@ -303,7 +306,9 @@ describe("useEditorRuntimeSession", () => {
     const generationRunId = "generation_run_save_failed";
 
     await generationRunTestRepository.repository.create(
-      createRunningGenerationRun(generationRunId)
+      createRunningPhaserSpecGenerationRun({
+        id: generationRunId,
+      })
     );
 
     const { result } = renderHook(() =>
@@ -456,50 +461,4 @@ class MemoryGamePackStorage implements GamePackStorageDriver {
 
 function cloneRecord(record: StoredGamePackRecord): StoredGamePackRecord {
   return JSON.parse(JSON.stringify(record)) as StoredGamePackRecord;
-}
-
-function createRunningGenerationRun(id: GenerationRun["id"]): GenerationRun {
-  const gamePack = createEmptyGamePackFixture({
-    gameSpec: topDownPhaserTemplate.gameSpec,
-    runtimeKind: "phaser",
-    templateId: topDownPhaserTemplate.gameSpec.template.id,
-  });
-  const successfulRun = createSuccessfulGenerationRunFixture(gamePack, { id });
-
-  return {
-    id: successfulRun.id,
-    operationType: successfulRun.operationType,
-    status: "running",
-    createdAt: successfulRun.createdAt,
-    startedAt: successfulRun.startedAt,
-    request: successfulRun.request,
-    runtimeKind: successfulRun.runtimeKind,
-    templateId: successfulRun.templateId,
-    mechanicIds: successfulRun.mechanicIds,
-    attempts: successfulRun.attempts,
-  };
-}
-
-function createRunningRepairedGenerationRun(
-  id: GenerationRun["id"]
-): GenerationRun {
-  const gamePack = createEmptyGamePackFixture({
-    gameSpec: topDownPhaserTemplate.gameSpec,
-    runtimeKind: "phaser",
-    templateId: topDownPhaserTemplate.gameSpec.template.id,
-  });
-  const repairedRun = createRepairedGenerationRunFixture(gamePack, { id });
-
-  return {
-    id: repairedRun.id,
-    operationType: repairedRun.operationType,
-    status: "running",
-    createdAt: repairedRun.createdAt,
-    startedAt: repairedRun.startedAt,
-    request: repairedRun.request,
-    runtimeKind: repairedRun.runtimeKind,
-    templateId: repairedRun.templateId,
-    mechanicIds: repairedRun.mechanicIds,
-    attempts: repairedRun.attempts,
-  };
 }

@@ -1,6 +1,6 @@
 # Phase 8 Telemetry Test Adapters
 
-Draft status: first narrow test-harness pass implemented. Remaining adapter ideas are not approved implementation work.
+Draft status: implemented for Phase 8's current repeated telemetry setup. Further adapter expansion is not approved implementation work.
 
 Source: Phase 8 architecture review follow-up. The Strong extraction work added dedicated modules for Phaser GenerationRun receipt lifecycle and first-playable terminal finalization. The next testing friction is setup duplication around repositories, clocks, IDs, and terminal operation assertions.
 
@@ -31,11 +31,11 @@ Several tests now need the same small pieces of infrastructure:
 
 Copying these helpers keeps tests explicit, but it also makes every future telemetry scenario pay setup tax before it can state the behavior being protected. Phase 8 will likely add more scenarios around exports, filters, cost metadata, and repair evidence, so the duplication is starting to hide the business rule under test.
 
-## Proposed Interface Shape
+## Implemented Interface Shape
 
-Create test-only adapters that build real domain objects through the production repositories and validators.
+The test-only adapters build real domain objects through the production repositories and validators.
 
-Candidate helpers:
+Implemented helpers:
 
 ```ts
 function createGenerationRunTestRepository(): {
@@ -48,17 +48,19 @@ function createDeterministicClock(timestamps: string[]): () => string;
 function createRunningPhaserSpecGenerationRun(input: {
   id: GenerationRun["id"];
   gamePack?: GamePack;
+  attempts?: "single-success" | "repaired-success";
 }): GenerationRun;
 
-function createFirstPlayableAttemptFixture(
-  scenario: "passed" | "runtime-failed" | "pre-runtime-failed"
-): {
+function createFirstPlayableAttemptFixture(input: {
+  scenario: "passed" | "runtime-failed" | "pre-runtime-failed";
+  gamePack?: GamePack;
+}): {
   attempt: FirstPlayableValidationAttempt;
   gamePack: GamePack;
 };
 ```
 
-These should be adapters over production behavior, not fake pass/fail shortcuts. For example, a passed first-playable attempt should still call `startFirstPlayableValidation`, `recordFirstPlayableRuntimeStatus`, and `recordFirstPlayableRuntimeEvidence`.
+These are adapters over production behavior, not fake pass/fail shortcuts. For example, a passed first-playable attempt still calls `startFirstPlayableValidation`, `recordFirstPlayableRuntimeStatus`, and `recordFirstPlayableRuntimeEvidence`.
 
 ## Likely Files Affected
 
@@ -72,11 +74,11 @@ These should be adapters over production behavior, not fake pass/fail shortcuts.
 
 1. Start with the repeated in-memory GenerationRun storage and repository setup. Implemented.
 2. Move deterministic clock creation into the same test helper area. Implemented.
-3. Move running Phaser GenerationRun fixture creation after the current terminal finalization tests are stable. Still pending.
-4. Move first-playable attempt fixtures only if the helper still exercises production validation functions. Still pending.
+3. Move running Phaser GenerationRun fixture creation after the current terminal finalization tests are stable. Implemented.
+4. Move first-playable attempt fixtures only if the helper still exercises production validation functions. Implemented.
 5. Replace duplicated helpers one test file at a time, keeping assertions local and readable.
 
-The first implementation intentionally left first-playable pass/fail attempt builders local to the terminal-result tests because those helpers currently make the validation path under test easier to inspect.
+The implemented first-playable attempt fixtures still call the production validation functions (`startFirstPlayableValidation`, `recordFirstPlayableRuntimeStatus`, and `recordFirstPlayableRuntimeEvidence`) rather than creating fake terminal attempts directly. Behavior assertions remain local to the tests that protect terminal finalization, runtime-session persistence, and GenerationRun linking.
 
 ## Test Strategy
 
@@ -104,6 +106,6 @@ The first implementation intentionally left first-playable pass/fail attempt bui
 - Do not use fixtures to mask AI-generation failures.
 - Do not change the GenerationRun schema.
 
-## Decision Gate
+## Future Expansion Gate
 
-Implement this only when the next Phase 8 tests repeat the same repository, clock, and first-playable setup again. Keep the first adapter small enough that deleting it would leave the production tests easy to rewrite.
+Expand these adapters only when future Phase 8 tests repeat additional setup beyond the current repository, clock, running-run, and first-playable attempt helpers. Keep the harness small enough that deleting it would leave the production tests easy to rewrite.
