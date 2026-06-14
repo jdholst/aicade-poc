@@ -542,6 +542,7 @@ Resolved Phase 8 decisions from the planning grill:
 - The first implementation should instrument the current Phaser Spec Generation path before retrofitting legacy Canvas starter-project telemetry or future edit flows.
 - Create a correlation ID when the AI-backed operation starts and pass it through server generation, client validation, playable builds, checkpoints, and telemetry. Client-side ID creation is acceptable for the POC; v1 should likely mint the canonical run ID server-side.
 - Create the receipt when the operation starts, update it as generation, validation, mounting, build, and first-playable validation progress, and finalize it only after the operation reaches a terminal status.
+- First-playable terminal outcomes follow a deliberately narrow policy: passed generated drafts keep their `GenerationRun` running until durable `Game Pack` save succeeds and can link outcome IDs; failed first-playable attempts finalize as telemetry-only failures without durable project relationships; restored packs and fixtures do not create top-level runs.
 
 Deliverables:
 
