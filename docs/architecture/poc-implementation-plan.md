@@ -657,6 +657,8 @@ Transition rule: promote proven architecture, not POC scaffolding.
 
 Deferred learning loop: a later POC phase may inspect repeated successful Game Specs, builds, validation evidence, edit records, failed attempts, and GenerationRun receipts to identify candidates for promoted Mechanic Modules or template families. This should be treated as a deliberate later capability inspired by OpenGame's Template Skill, not as hidden Phase 5/6 scope.
 
+Post-POC v1 candidate: keep `GenerationOperationContext` deferred until a second AI-backed creator-intent operation repeats the same operation identity and provenance fields. The POC should preserve `GenerationRun` correlation seams without introducing this abstraction early.
+
 ## Open Decisions
 
 These should not block the first milestones, but they need decisions before or during v1 planning:
