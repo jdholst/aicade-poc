@@ -194,26 +194,26 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
     loadState.status === "idle" ? canSubmitPrompt : canRegeneratePrompt;
 
   return (
-    <aside className="flex min-h-0 flex-col border border-[var(--line-strong)] bg-[rgba(255,249,242,0.78)] backdrop-blur">
-      <div className="shrink-0 border-b border-[var(--line)] px-5 py-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+    <aside className="flex min-w-0 flex-col border border-[var(--line-strong)] bg-[rgba(255,249,242,0.78)] backdrop-blur lg:min-h-0">
+      <div className="shrink-0 border-b border-[var(--line)] px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)] sm:tracking-[0.2em]">
               Chat
             </div>
-            <div className="mt-2 text-lg font-semibold">
+            <div className="mt-2 text-base font-semibold sm:text-lg">
               Generated project log
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+            <div className="text-xs uppercase tracking-[0.16em] text-[var(--muted)] sm:tracking-[0.2em]">
               Read only
             </div>
             <button
               type="button"
               disabled={!canStartGeneration}
               onClick={onRegenerateGame}
-              className="inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
+              className="inline-flex w-full items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)] sm:w-auto sm:tracking-[0.16em]"
             >
               {isGenerating
                 ? "Generating..."
@@ -223,16 +223,16 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
             </button>
           </div>
         </div>
-        <p className="mt-3 max-w-xl text-sm leading-7 text-[var(--muted)]">
+        <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted)] sm:leading-7">
           This run uses your submitted prompt to generate the playable project,
           controls, and editor metadata below.
         </p>
       </div>
 
-      <div className="chat-history-scroll min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5">
+      <div className="chat-history-scroll min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
         {loadState.status !== "success" ? (
-          <article className="ml-auto max-w-[92%] border border-[var(--line)] bg-[rgba(21,18,14,0.93)] px-4 py-3 text-white">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+          <article className="ml-auto w-full border border-[var(--line)] bg-[rgba(21,18,14,0.93)] px-4 py-3 text-white sm:max-w-[92%]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/60 sm:tracking-[0.18em]">
               Prompt
             </div>
             {isPromptFormVisible ? (
@@ -265,7 +265,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                 <button
                   type="submit"
                   disabled={!canSubmitVisiblePrompt}
-                  className="inline-flex items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44"
+                  className="inline-flex w-full items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44 sm:w-auto sm:tracking-[0.18em]"
                 >
                   {promptSubmitButtonLabel}
                 </button>
@@ -277,7 +277,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                   <button
                     type="button"
                     onClick={onPromptEdit}
-                    className="mt-3 inline-flex items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)]"
+                    className="mt-3 inline-flex w-full items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)] sm:w-auto sm:tracking-[0.16em]"
                   >
                     {promptEditButtonLabel}
                   </button>
@@ -288,8 +288,8 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
         ) : null}
 
         {loadState.status === "idle" ? (
-          <article className="max-w-[92%] border border-[var(--line)] bg-white/88 px-4 py-3 text-[var(--ink)]">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+          <article className="w-full border border-[var(--line)] bg-white/88 px-4 py-3 text-[var(--ink)] sm:max-w-[92%]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)] sm:tracking-[0.18em]">
               AI
             </div>
             <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
@@ -311,7 +311,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
               type="button"
               disabled={!canStartGeneration}
               onClick={onStartGeneration}
-              className="mt-4 inline-flex items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
+              className="mt-4 inline-flex w-full items-center justify-center border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)] sm:w-auto sm:tracking-[0.18em]"
             >
               Build the project
             </button>
@@ -368,7 +368,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
         {loadState.status === "error" ? (
           <div className="space-y-4 border border-[rgba(169,72,42,0.24)] bg-[rgba(255,243,236,0.92)] p-5">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9d4b31]">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9d4b31] sm:tracking-[0.18em]">
                 Generation error
               </div>
               <p className="mt-3 text-sm leading-7 text-[#613128]">
@@ -390,7 +390,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
               type="button"
               disabled={!canStartGeneration}
               onClick={onRegenerateGame}
-              className="inline-flex items-center justify-center border border-[#9d4b31]/30 bg-[#9d4b31] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#81402b] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)]"
+              className="inline-flex w-full items-center justify-center border border-[#9d4b31]/30 bg-[#9d4b31] px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-[#81402b] disabled:cursor-not-allowed disabled:bg-[rgba(21,18,14,0.12)] disabled:text-[var(--muted)] sm:w-auto sm:tracking-[0.18em]"
             >
               Retry generation
             </button>
@@ -406,14 +406,14 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
             {generatedProjectSummary.transcript.map((message, index) => (
               <article
                 key={`${message.role}-${index}-${message.text}`}
-                className={`max-w-[92%] border px-4 py-3 ${
+                className={`w-full border px-4 py-3 sm:max-w-[92%] ${
                   message.role === "user"
                     ? "ml-auto border-[var(--line)] bg-[rgba(21,18,14,0.93)] text-white"
                     : "border-[var(--line)] bg-white/88 text-[var(--ink)]"
                 }`}
               >
                 <div
-                  className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                  className={`text-[11px] font-semibold uppercase tracking-[0.14em] sm:tracking-[0.18em] ${
                     message.role === "user"
                       ? "text-white/60"
                       : "text-[var(--muted)]"
@@ -446,7 +446,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                     <button
                       type="submit"
                       disabled={!canRegeneratePrompt}
-                      className="inline-flex items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44"
+                      className="inline-flex w-full items-center justify-center border border-white/16 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ink)] transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/44 sm:w-auto sm:tracking-[0.18em]"
                     >
                       Regenerate
                     </button>
@@ -458,7 +458,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                       <button
                         type="button"
                         onClick={onPromptEdit}
-                        className="mt-3 inline-flex items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)]"
+                        className="mt-3 inline-flex w-full items-center justify-center border border-white/24 bg-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white transition hover:border-white/60 hover:bg-white hover:text-[var(--ink)] sm:w-auto sm:tracking-[0.16em]"
                       >
                         Change Prompt
                       </button>
@@ -572,20 +572,20 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-[var(--line)] bg-[rgba(255,252,248,0.92)] px-5 py-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+      <div className="shrink-0 border-t border-[var(--line)] bg-[rgba(255,252,248,0.92)] px-4 py-4 sm:px-5">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)] sm:tracking-[0.18em]">
           Follow-up prompts
         </div>
-        <div className="mt-3 flex gap-3">
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
           <textarea
             disabled
-            className="min-h-24 flex-1 resize-none border border-[var(--line)] bg-white/75 px-4 py-3 text-sm text-[var(--muted)] outline-none"
+            className="min-h-28 w-full resize-none border border-[var(--line)] bg-white/75 px-4 py-3 text-sm leading-6 text-[var(--muted)] outline-none sm:min-h-24 sm:flex-1"
             placeholder="Follow-up prompts will use this generated module manifest and editable spec in v1."
           />
           <button
             type="button"
             disabled
-            className="min-w-28 border border-[var(--line)] bg-[rgba(21,18,14,0.08)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]"
+            className="min-h-12 w-full border border-[var(--line)] bg-[rgba(21,18,14,0.08)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)] sm:min-h-24 sm:w-auto sm:min-w-28 sm:tracking-[0.18em]"
           >
             Send
           </button>

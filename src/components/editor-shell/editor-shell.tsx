@@ -79,7 +79,7 @@ export function EditorShell({
           loadState={session.canvas.loadState}
         />
 
-        <section className="grid h-[calc(100vh-9.5rem)] min-h-[620px] gap-4 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.25fr)]">
+        <section className="grid gap-4 lg:h-[calc(100vh-9.5rem)] lg:min-h-[620px] lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.25fr)]">
           <EditorAIChat actions={actions.chat} chat={session.chat} />
 
           <EditorGameCanvas actions={actions.canvas} canvas={session.canvas} />
