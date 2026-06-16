@@ -60,6 +60,9 @@ describe("Top-Down Generation Capability Policy", () => {
     expect(guide).toContain(
       "Use template placeholder assets only; do not generate asset packs, tilemaps, Phaser source, or GDD prose."
     );
+    expect(guide).toContain(
+      'Include at least one template asset with role "player".'
+    );
     for (const forbiddenOutput of policy.forbiddenOutputs) {
       expect(promptPolicySurface).toContain(forbiddenOutput);
     }

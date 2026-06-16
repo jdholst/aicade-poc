@@ -112,6 +112,7 @@ export function renderTopDownSpecGenerationGuide(
       policy.optionalMechanicLimit
     )} early variation mechanic.`,
     "Use template placeholder assets only; do not generate asset packs, tilemaps, Phaser source, or GDD prose.",
+    'Include at least one template asset with role "player".',
     "Do not include unsupported fields, unsupported mechanics, unresolved references, or behavior outside the current mechanic registry.",
   ].join("\n");
 }

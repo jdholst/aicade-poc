@@ -25,6 +25,7 @@ export function getTopDownGameSpecValidationIssues(
   const context = createTopDownValidationContext(spec);
 
   addPrimaryObjectiveIssues(issues, spec);
+  addRenderPlaceholderAssetIssues(issues, spec);
   addValidationGoalReferenceIssues(issues, spec, context);
   addMechanicIssues(issues, spec, context);
   addUnusedModuleIssues(issues, spec, context);
@@ -47,6 +48,20 @@ function addPrimaryObjectiveIssues(
       message: "Expected exactly one primary objective.",
     });
   }
+}
+
+function addRenderPlaceholderAssetIssues(
+  issues: GameSpecValidationIssue[],
+  spec: TopDownGameSpec
+) {
+  if (spec.assets.some((asset) => asset.role === "player")) {
+    return;
+  }
+
+  issues.push({
+    path: "assets",
+    message: "Expected at least one tracked player asset.",
+  });
 }
 
 function addValidationGoalReferenceIssues(
