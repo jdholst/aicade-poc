@@ -90,14 +90,18 @@ exact manual browser steps.
 
 ## Keyword Setup
 
-For full manual generation without pasting a key into the UI, add a local keyword mapping in `.env.local`:
+For full manual generation without pasting a key into the UI, add or reuse a
+local keyword mapping in `.env.local`:
 
 ```bash
 OPENAI_MODEL=gpt-5.4-mini
-KEYWORD_INTERNAL_TEST=sk-...
+KEYWORD_<LOCAL_LABEL>=sk-...
 ```
 
-Then use `internal test` in the keyword field. The app normalizes that to `KEYWORD_INTERNAL_TEST`.
+Find usable local keywords by checking the repo's `.env` files for `KEYWORD_*`
+entries. Use the matching label in the keyword field; for example,
+`KEYWORD_MY_QA_KEY` maps to `my qa key`. Do not copy real local keyword labels
+or API keys into this guide.
 
 ## Debug Spec Generation Failures
 
@@ -110,6 +114,79 @@ AICADE_DEBUG_SPEC_GENERATION_FAILURE=missing_entity_reference npm run dev:local
 
 See [Debug Spec Generation Provider](./debug-spec-generation-provider.md) for
 the full mode list and API/UI examples.
+
+## Durable Outcome Link Inspection
+
+Use this runbook for manual QA that needs raw proof that a successful generated
+Phaser run is linked to durable Game Pack outcomes after first-playable
+validation.
+
+What to verify:
+
+- A successful build creates one saved Game Pack and one succeeded GenerationRun.
+- The saved GenerationRun relationships point at the saved Game Pack,
+  Game Spec, Build, Checkpoint, and validation evidence ids.
+- The developer export reports those same ids through `linkedOutcomeIds`.
+- Failed pre-project or first-playable attempts remain telemetry-only and do
+  not get durable project relationships.
+
+Recommended reliable path:
+
+1. Keep any existing user dev server on `localhost:3000` running.
+2. Create a temporary QA copy under `/private/tmp`, excluding `.env.local`,
+   `.git`, `.next`, and `node_modules`.
+3. Symlink the temp copy's `node_modules` to this repo's `node_modules`.
+4. Start the temp server with deterministic debug success and webpack:
+
+```bash
+env AICADE_DEBUG_SPEC_GENERATION_SUCCESS=1 npm run dev -- --hostname 127.0.0.1 --port 3002 --webpack
+```
+
+Use webpack for this temp-copy path. Turbopack rejects a symlinked
+`node_modules` that points outside the temp project root.
+
+5. Open:
+
+```text
+http://127.0.0.1:3002/editor?idea=Make%20a%20simple%20top-down%20arcade%20game&openAiKeyword=<url-encoded-keyword-label-from-env>
+```
+
+6. Click `Build the project`.
+7. Wait for durable success UI, not ambiguous transient text:
+
+- `Generated a playable project plan`
+- `Runtime is running in the sandbox`
+
+8. Inspect IndexedDB in page context:
+
+- database `sparkline_game_packs`, store `game_packs`
+- database `sparkline_generation_runs`, store `generation_runs`
+- `window.__sparklineGenerationRunExport({ maxRuns: 5 })`
+
+9. Compare the latest Game Pack ids to the latest GenerationRun
+   `relationships`, and compare those to export `runs[0].linkedOutcomeIds`.
+10. Stop the temp QA server after verification.
+
+Gotchas from the June 12, 2026 manual QA run:
+
+- The in-app Browser can verify visible UI, but its page scope may hide
+  `indexedDB`, `localStorage`, and `window.__sparklineGenerationRunExport`.
+  Do not treat it as raw id-link evidence.
+- Browser policy blocks `javascript:` bookmarklet or page-context execution.
+  Do not bypass that policy with lower-level browser commands.
+- Local Playwright may exist without bundled Chromium. If downloading browsers
+  is not part of the task, use system Chrome with Playwright's
+  `executablePath` instead.
+- Launching system Chrome from Codex may need approval because the sandbox can
+  block process launch or cleanup.
+- `next start` is not a substitute for this debug-success check because debug
+  Spec Generation is intentionally blocked under production `NODE_ENV`.
+- A live provider headless run can time out while waiting for success. Prefer
+  deterministic debug success when the goal is relationship/id inspection.
+- Avoid strict waits for text like `Building the project`; multiple elements
+  can match. Wait for final success/runtime indicators instead.
+- The developer export uses `linkedOutcomeIds`; do not look for raw
+  `relationships` in the export payload.
 
 ## Browser Check
 
@@ -128,7 +205,7 @@ If Browser automation cannot type into fields because its virtual clipboard is
 unavailable, verify the submitted state directly with query params:
 
 ```text
-http://127.0.0.1:3000/editor?idea=A%20quick%20QA%20maze&openAiKeyword=internal%20test
+http://127.0.0.1:3000/editor?idea=A%20quick%20QA%20maze&openAiKeyword=<url-encoded-keyword-label-from-env>
 ```
 
 That should render the submitted Prompt bubble, the white AI config bubble, and

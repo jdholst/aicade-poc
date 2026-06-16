@@ -7,6 +7,7 @@ import {
   jsonValueSchema,
   stableIdSchema,
 } from "../game-spec-schema";
+import { generationRunSchema } from "../generation-run/generation-run-schema";
 
 const runtimeKindValues = ["canvas2d", "phaser"] as const satisfies readonly RuntimeKind[];
 
@@ -92,15 +93,6 @@ export const failedAttemptSchema = z
   })
   .strict();
 
-export const generationRunSchema = z
-  .object({
-    id: stableIdSchema,
-    createdAt: isoDateTimeSchema,
-    status: z.literal("reserved"),
-    metadata: metadataSchema.optional(),
-  })
-  .strict();
-
 export const gamePackSchema = z
   .object({
     schemaVersion: z.literal("game-pack/v1"),
@@ -127,6 +119,9 @@ export const gamePackSchema = z
     const buildIds = new Set(pack.builds.map((build) => build.id));
     const checkpointIds = new Set(
       pack.checkpoints.map((checkpoint) => checkpoint.id)
+    );
+    const failedAttemptIds = new Set(
+      pack.failedAttempts.map((failedAttempt) => failedAttempt.id)
     );
 
     addDuplicateIdIssues(
@@ -250,6 +245,97 @@ export const gamePackSchema = z
           "Failed attempt validationEvidenceIds must reference existing validation evidence.",
       });
     });
+
+    pack.generationRuns.forEach((generationRun, generationRunIndex) => {
+      const relationships = generationRun.relationships;
+
+      if (!relationships) {
+        return;
+      }
+
+      if (relationships.gamePackId && relationships.gamePackId !== pack.id) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "generationRuns",
+            generationRunIndex,
+            "relationships",
+            "gamePackId",
+          ],
+          message: "GenerationRun gamePackId must reference this Game Pack.",
+        });
+      }
+
+      if (
+        relationships.gameSpecId &&
+        relationships.gameSpecId !== pack.gameSpec.id
+      ) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "generationRuns",
+            generationRunIndex,
+            "relationships",
+            "gameSpecId",
+          ],
+          message:
+            "GenerationRun gameSpecId must match the saved Game Spec ID.",
+        });
+      }
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: relationships.buildIds ?? [],
+        pathPrefix: [
+          "generationRuns",
+          generationRunIndex,
+          "relationships",
+          "buildIds",
+        ],
+        knownIds: buildIds,
+        message: "GenerationRun buildIds must reference existing builds.",
+      });
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: relationships.checkpointIds ?? [],
+        pathPrefix: [
+          "generationRuns",
+          generationRunIndex,
+          "relationships",
+          "checkpointIds",
+        ],
+        knownIds: checkpointIds,
+        message:
+          "GenerationRun checkpointIds must reference existing checkpoints.",
+      });
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: relationships.validationEvidenceIds ?? [],
+        pathPrefix: [
+          "generationRuns",
+          generationRunIndex,
+          "relationships",
+          "validationEvidenceIds",
+        ],
+        knownIds: validationEvidenceIds,
+        message:
+          "GenerationRun validationEvidenceIds must reference existing validation evidence.",
+      });
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: relationships.failedAttemptIds ?? [],
+        pathPrefix: [
+          "generationRuns",
+          generationRunIndex,
+          "relationships",
+          "failedAttemptIds",
+        ],
+        knownIds: failedAttemptIds,
+        message:
+          "GenerationRun failedAttemptIds must reference existing failed attempts.",
+      });
+    });
   });
 
 type IdRecord = {
@@ -326,5 +412,4 @@ export type ValidationEvidence = z.infer<typeof validationEvidenceSchema>;
 export type PlayableBuild = z.infer<typeof playableBuildSchema>;
 export type VersionCheckpoint = z.infer<typeof versionCheckpointSchema>;
 export type FailedAttempt = z.infer<typeof failedAttemptSchema>;
-export type GenerationRun = z.infer<typeof generationRunSchema>;
 export type GamePack = z.infer<typeof gamePackSchema>;

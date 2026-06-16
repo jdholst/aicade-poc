@@ -332,6 +332,20 @@ describe("Top-down Game Spec pre-runtime validation", () => {
     });
   });
 
+  it("rejects specs missing the player placeholder asset", () => {
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      assets: validTopDownGameSpec.assets.filter(
+        (asset) => asset.role !== "player"
+      ),
+    });
+
+    expect(issues).toContainEqual({
+      path: "assets",
+      message: "Expected at least one tracked player asset.",
+    });
+  });
+
   it("rejects mechanics missing required asset roles and objective references", () => {
     const issues = getValidationIssues({
       ...validTopDownGameSpec,

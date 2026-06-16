@@ -426,7 +426,7 @@ Deliverables:
 - Start with `player_movement` and `pickup_collection`, plus at most one early variation mechanic such as `enemy_chase` or `hazard_contact`.
 - Validate AI output on the API/server path with schema, semantic reference, and mechanic validation before returning it to the editor.
 - Return a validated spec plus generation metadata, or a structured failure with creator-friendly copy and developer/repair validation details.
-- Keep generated specs ephemeral in the first implementation; do not require durable IndexedDB persistence, Version Checkpoints, durable Validation Evidence, or full GenerationRun telemetry.
+- Keep generated specs ephemeral before first-playable validation passes; durable IndexedDB persistence, Version Checkpoints, and durable Validation Evidence are allowed only after the generated draft passes the first-playable bar. Full GenerationRun telemetry remains Milestone 8 scope.
 - Build deterministic validation and friendly rejection before AI-assisted repair, then allow one bounded repair attempt using the invalid candidate spec plus exact validation errors.
 - Keep repair-attempt visibility compact and pre-telemetry: repaired successes may show that automatic repair happened, repaired failures may show repair-attempt details, but normal UI must not expose raw invalid candidate specs.
 - Distinguish Phaser fixture/test mode from Phaser AI generation mode. Hardcoded fixtures are explicit runtime-test inputs, not fallback content for failed AI generation.
@@ -442,8 +442,9 @@ Milestone 7 status after the first spine tasks:
 - Mechanic entity references were renamed from `targetIds` to `entityIds` as a strict contract break. The provider schema, validator paths, fixtures, runtime lookup, and generation guide now use `mechanics[].entityIds`.
 - The generation guide now explicitly separates mechanic `entityIds` from `assetIds`, including the first built-in mechanic rules for `player_movement`, `pickup_collection`, `enemy_chase`, and `hazard_contact`.
 - The debug provider can simulate deterministic success and failure modes in development, with operator-facing usage documented in `docs/debug-spec-generation-provider.md`.
-- Successful Phaser Spec Generation responses are stored as active ephemeral generated-spec editor state, not as persisted Game Packs.
+- Successful Phaser Spec Generation responses first enter active generated-spec editor state, then persist as durable Game Packs only after first-playable validation passes.
 - Generated specs mount through the trusted Phaser template and carry a `generated-spec` first-playable validation source. Runtime-ready alone is not enough; generated drafts stay blocked until first-playable evidence passes.
+- Generated specs that pass first-playable validation now save through the existing local Game Pack repository with a creator-facing initial checkpoint, validation evidence, playable build, and compact generated-spec metadata. Failed generated specs and failed first-playable attempts do not create creator-facing checkpoints.
 - Manual first-playable QA now has reliable breakpoint recipes for forcing each browser evidence failure: `nonblank_render`, `player_visible`, and `input_response`. Prompt-only requests such as "make the player invisible" are not reliable validation triggers because the trusted Phaser template owns player rendering and the runtime check currently measures player body plus viewport presence, not visual opacity.
 - Restored Game Packs were rechecked against the Phaser runtime plan. A persisted pack with a creator-facing checkpoint loads from IndexedDB, parses its saved top-down Game Spec, creates a Phaser template, and mounts with `source: "restored-game-pack"` before falling back to the fixture path.
 - Active generated specs now live in editor session state with their `runtimeKind`, generation metadata, and validated spec, so reset can remount the same generated draft without falling back to a fixture or losing the chat/editor summary.
@@ -481,7 +482,6 @@ Likely promotable to v1:
 
 Likely follow-up after the first Milestone 7 spine:
 
-- Persist successful generated playable drafts as Game Packs, Playable Builds, Validation Evidence, and Version Checkpoints.
 - Add a dev-only first-playable evidence failure switch so manual QA can force `nonblank_render`, `player_visible`, and `input_response` failures without depending on browser breakpoints or prompt steering.
 - Improve creator-facing validation-failure copy beyond the current repair receipt so mechanic/schema failures do not tell the user to "try a simpler prompt" when the prompt was reasonable.
 - Migrate Canvas mode toward the same Spec Generation architecture and deprecate the legacy starter-project endpoint.
@@ -508,15 +508,15 @@ Resolved implementation decisions from current Milestone 7 work:
 - Deterministic normalization is allowed only for provider schema compatibility before generation. Candidate specs returned by the model are validated, then at most one explicit repair attempt is made; unrepaired failures still fail honestly.
 - The compact Spec Generation Guide stays aligned with the Zod schema and Mechanic Registry by importing shared constants and registered mechanic types, then documenting the few intentional first-slice narrowings.
 - Mechanic reference fields should stay semantically narrow: `entityIds` for entities, `assetIds` for assets, and `regionIds` for `layout.regions` only. Collection placement should be expressed through pickup asset references plus pickup-zone layout coverage, not by putting pickup zone IDs in `regionIds`.
-- Active generated specs are intentionally ephemeral editor state until Game Pack persistence is wired into the generated-draft path. They should not be silently converted into persisted packs before first-playable validation and the later persistence task are explicit.
-- Restored Game Pack mounting currently works for saved Phaser packs created by the validated fixture/restored path. Generated Phaser specs validate and mount in the active session, but they do not yet become durable restored packs on reload.
+- Active generated specs are ephemeral until first-playable validation passes. After a pass, the resulting Game Pack is saved locally with compact generated-spec metadata and can restore on reload through `source: "restored-game-pack"`.
+- Restored Game Pack mounting works for saved Phaser packs created by the validated fixture/restored path and by generated Phaser specs that passed first-playable validation.
 - First-playable failure simulation should target runtime evidence directly. The spec prompt may include validation-error suggestions for operators, but the trusted template does not currently expose spec-level player visibility controls that can guarantee a `player_visible` failure.
 - Iframe `srcdoc` attachment is now an idempotent runtime-document mount step. The runtime host may update callback refs during React re-renders, but callback-only changes must not reboot the iframe or reset the runtime status.
 - The first golden prompt for smoke testing remains: "Make a simple top-down arcade game where the player moves around a small arena, collects coins, avoids one chasing enemy, and wins after collecting all coins."
 
 Remaining implementation questions for later Milestone 7 tasks:
 
-- Should generated specs be recoverable through URL or session state before durable persistence exists?
+- Should generated specs be recoverable through URL or session state before first-playable validation has created durable local persistence?
 - How much homepage copy should change when the app is in Phaser AI generation mode?
 - Which additional invalid stub cases should be added after the current debug-provider failure modes?
 
@@ -524,18 +524,52 @@ Remaining implementation questions for later Milestone 7 tasks:
 
 Goal: record enough evidence to understand whether the generation architecture is improving.
 
+Resolved Phase 8 decisions from the planning grill:
+
+- A `GenerationRun` represents one AI-backed creator-intent operation, such as generating from a prompt, editing an existing game, or repairing a failed draft. It is not one record per provider call.
+- Nested attempt receipts capture the initial provider call and any bounded repair calls, including per-call duration, cost inputs, validation issues, and failure evidence.
+- Purely local rebuilds, restores, and validation retries do not create top-level `GenerationRun` records unless they are part of an AI-backed operation. They remain `Playable Build`, `Validation Evidence`, checkpoint, or related outcome records that can be linked from a run.
+- All AI-backed operations should leave receipts, including schema failures, mechanic-validation failures, provider errors, timeouts, cancelled runs, repaired successes, and repaired failures.
+- Failed pre-project AI operations should persist in a separate internal telemetry store rather than forcing failed `Game Pack` records into existence.
+- `Game Pack` persistence remains reserved for successful playable drafts and later project-backed operations; when a run creates or modifies a durable project, link it to the relevant `Game Pack`, `Playable Build`, `Validation Evidence`, or `Version Checkpoint` records.
+- The first telemetry store should be local IndexedDB-first, behind a repository boundary, matching the POC's lightweight persistence approach.
+- Store raw prompt text and successful validated specs, but default invalid model outputs to compact structured issue/candidate summaries rather than durable raw invalid JSON.
+- Use a two-layer failure vocabulary: technical `stage` for where the operation failed, and comparable `failureClass` for trend review.
+- Require `failureClass` for failed, cancelled, timed-out, or repaired-but-still-failed runs. Successful runs leave `failureClass` absent.
+- Represent a repaired success as one successful `GenerationRun` with repair status and nested attempt receipts, not as a failed run followed by a separate successful run.
+- The first review surface should be a developer-facing JSON export or log, not a polished analytics dashboard.
+- Cost tracking should be best effort: store usage metadata and pricing inputs when available, compute approximate cost when safe, and allow cost to be absent when unavailable.
+- The first implementation should instrument the current Phaser Spec Generation path before retrofitting legacy Canvas starter-project telemetry or future edit flows.
+- Create a correlation ID when the AI-backed operation starts and pass it through server generation, client validation, playable builds, checkpoints, and telemetry. Client-side ID creation is acceptable for the POC; v1 should likely mint the canonical run ID server-side.
+- Create the receipt when the operation starts, update it as generation, validation, mounting, build, and first-playable validation progress, and finalize it only after the operation reaches a terminal status.
+- First-playable terminal outcomes follow a deliberately narrow policy: passed generated drafts keep their `GenerationRun` running until durable `Game Pack` save succeeds and can link outcome IDs; failed first-playable attempts finalize as telemetry-only failures without durable project relationships; restored packs and fixtures do not create top-level runs.
+
 Deliverables:
 
-- Add GenerationRun records for generation, edit, and repair attempts.
-- Track prompt/request, model/provider/task route, template/mechanics used, timestamps/duration, schema validation, build result, validation result, repair attempts, failure class, approximate cost, and created checkpoint/build IDs.
-- Add a simple internal view, log, or export path for reviewing runs.
+- Expand the placeholder `GenerationRun` schema into a receipt model for AI-backed creator-intent operations, with nested attempt receipts for provider calls and bounded repair.
+- Add a local IndexedDB-backed telemetry repository that can persist pre-project failed runs separately from `Game Pack` project history.
+- Track prompt/request, model/provider/task route, template/mechanics used, timestamps/duration, schema validation, build result, validation result, repair attempts, failure stage, failure class, approximate cost, and created checkpoint/build IDs.
+- Propagate a run correlation ID through Phaser Spec Generation, client mounting, first-playable validation, and any created build/checkpoint/evidence records.
+- Store raw prompt text and successful validated specs, but default invalid model outputs to compact structured issue/candidate summaries rather than durable raw invalid JSON.
+- Add a simple developer-facing JSON export or log for reviewing runs before investing in a polished analytics dashboard.
 - Use OpenGame's `result.json` receipt pattern as a reference for compact per-attempt receipts, adapted to Sparkline's Game Pack, Validation Evidence, Playable Build, and Version Checkpoint relationships.
+
+Likely implementation sequence:
+
+1. Define the `GenerationRun` receipt schema, attempt receipt shape, status lifecycle, failure-stage/failure-class taxonomy, cost estimate shape, and relationship fields.
+2. Add a local telemetry repository/export path that can save running, partial, completed, and pre-project runs independently of `Game Pack` persistence.
+3. Instrument the Phaser Spec Generation flow from prompt submission through server result/failure, bounded repair metadata, runtime mounting, and first-playable validation.
+4. Link successful runs to created Game Pack, Playable Build, Validation Evidence, and Version Checkpoint records once generated drafts become durable project state.
+5. Add a simple developer-facing JSON review/export surface for recent runs and failure-class inspection.
 
 Acceptance criteria:
 
 - Each generation attempt leaves a usable receipt.
+- Pre-project failures persist as telemetry without creating failed Game Packs.
+- Repaired successes appear as one successful run with nested failed-and-repair attempt evidence.
 - Failure classes can be compared over time.
 - Approximate model cost is visible where possible.
+- Missing cost data does not fail or block telemetry.
 - Telemetry informs readiness without acting as a hard gate.
 
 Proves:
@@ -547,6 +581,10 @@ Likely promotable to v1:
 - GenerationRun model.
 - Failure class taxonomy seed.
 - Cost/duration tracking approach.
+
+Follow-up polish:
+
+- Add an environment-flagged debug mode for local investigation that can opt into storing raw invalid candidate payloads after the main Phase 8 telemetry path is working.
 
 Later-phase reference:
 
@@ -619,6 +657,8 @@ Transition rule: promote proven architecture, not POC scaffolding.
 
 Deferred learning loop: a later POC phase may inspect repeated successful Game Specs, builds, validation evidence, edit records, failed attempts, and GenerationRun receipts to identify candidates for promoted Mechanic Modules or template families. This should be treated as a deliberate later capability inspired by OpenGame's Template Skill, not as hidden Phase 5/6 scope.
 
+Post-POC v1 candidate: keep `GenerationOperationContext` deferred until a second AI-backed creator-intent operation repeats the same operation identity and provenance fields. The POC should preserve `GenerationRun` correlation seams without introducing this abstraction early.
+
 ## Open Decisions
 
 These should not block the first milestones, but they need decisions before or during v1 planning:
@@ -652,5 +692,5 @@ Current implementation sequence:
 9. Completed: confirm restored saved Phaser Game Packs still load through the Phaser runtime plan and stay distinct from active ephemeral generated specs.
 10. Completed: document reliable manual first-playable evidence failure simulation and note that prompt steering alone is not enough to force runtime evidence failures.
 11. Completed: add one bounded AI repair attempt for invalid generated specs and surface compact repair-attempt visibility in success chat/failure receipts without exposing raw invalid candidate specs in normal UI.
-12. Later: persist successful generated playable drafts as durable Game Packs after first-playable validation passes.
+12. Completed: persist successful generated playable drafts as durable Game Packs after first-playable validation passes, while keeping failed drafts out of creator-facing checkpoint history.
 13. Keep OpenGame Template Skill, Debug Skill, asset-pack, and tilemap-generation ideas deferred unless they become explicit later-phase work.

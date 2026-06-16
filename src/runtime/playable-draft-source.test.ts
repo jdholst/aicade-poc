@@ -39,7 +39,7 @@ describe("createPlayableDraftSource", () => {
     });
   });
 
-  it("resolves a generated spec draft without durable Game Pack state", () => {
+  it("resolves a generated spec draft with pass-gated persistence metadata", () => {
     const generatedSpec = {
       ...topDownPhaserTemplate.gameSpec,
       title: "Generated Crystal Draft",
@@ -59,7 +59,7 @@ describe("createPlayableDraftSource", () => {
     });
 
     expect(source).toMatchObject({
-      persistencePolicy: "do-not-persist",
+      persistencePolicy: "persist-after-first-playable",
       readyPolicy: "ready-after-first-playable",
       runFirstPlayableChecksOnReady: true,
       source: "generated-spec",
@@ -72,6 +72,11 @@ describe("createPlayableDraftSource", () => {
       },
       type: "phaser",
       validationSource: {
+        generatedSpecMetadata: {
+          attemptCount: 2,
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+        },
         gameSpec: generatedSpec,
         source: "generated-spec",
       },

@@ -3,6 +3,7 @@ import type {
   GamePack,
   GameSpec,
   GameSpecValidationIssue,
+  GenerationRun,
 } from "@/game-spec";
 import {
   GameSpecValidationError,
@@ -33,8 +34,16 @@ export type PlayableDraftPersistencePolicy =
   | "do-not-persist"
   | "reuse-restored-game-pack";
 
+export type GeneratedPlayableDraftMetadata = {
+  taskRoute: string;
+  model: OpenAIModelId;
+  attemptCount: number;
+};
+
 export type PlayableDraftValidationSource = {
   gamePack?: GamePack;
+  generatedSpecMetadata?: GeneratedPlayableDraftMetadata;
+  generationRunId?: GenerationRun["id"];
   gameSpec: GameSpec;
   runtimeCandidate: FirstPlayableRuntimeCandidate;
   source: "fixture" | "generated-spec" | "restored-game-pack";
@@ -42,11 +51,8 @@ export type PlayableDraftValidationSource = {
 };
 
 export type GeneratedPlayableDraftSpec = {
-  metadata: {
-    taskRoute: string;
-    model: OpenAIModelId;
-    attemptCount: number;
-  };
+  generationRunId?: GenerationRun["id"];
+  metadata: GeneratedPlayableDraftMetadata;
   runtimeKind: Extract<RuntimeKind, "phaser">;
   spec: Parameters<typeof createTopDownPhaserTemplate>[0];
 };
@@ -153,9 +159,15 @@ function createGeneratedSpecDraftSource(
         generatedSpecDraft.metadata.attemptCount,
       ].join("-"),
       template,
-      validationSource: createValidationSource(template, "generated-spec"),
+      validationSource: {
+        ...createValidationSource(template, "generated-spec"),
+        generatedSpecMetadata: generatedSpecDraft.metadata,
+        ...(generatedSpecDraft.generationRunId
+          ? { generationRunId: generatedSpecDraft.generationRunId }
+          : {}),
+      },
       readyPolicy: "ready-after-first-playable",
-      persistencePolicy: "do-not-persist",
+      persistencePolicy: "persist-after-first-playable",
       runFirstPlayableChecksOnReady: true,
     };
   } catch (error) {

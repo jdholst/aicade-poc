@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { EditorHeader } from "@/components/editor-shell/editor-header";
 import { EditorAIChat } from "@/components/editor-shell/editor-ai-chat";
 import { EditorGameCanvas } from "@/components/editor-shell/editor-game-canvas";
 import { useEditorSession } from "@/hooks/use-editor-session";
+import { installGenerationRunDeveloperJsonExport } from "@/service/generation-run";
 
 type EditorShellProps = {
   enteredPrompt: string;
@@ -61,6 +64,12 @@ export function EditorShell({
     needsOpenAiModel,
   });
 
+  useEffect(() => {
+    const installation = installGenerationRunDeveloperJsonExport();
+
+    return () => installation.uninstall();
+  }, []);
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#f5efe3_0%,_#ede3d2_36%,_#e0e9e1_100%)] px-4 py-4 text-[var(--ink)] sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
@@ -70,7 +79,7 @@ export function EditorShell({
           loadState={session.canvas.loadState}
         />
 
-        <section className="grid h-[calc(100vh-9.5rem)] min-h-[620px] gap-4 lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.25fr)]">
+        <section className="grid gap-4 lg:h-[calc(100vh-9.5rem)] lg:min-h-[620px] lg:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.25fr)]">
           <EditorAIChat actions={actions.chat} chat={session.chat} />
 
           <EditorGameCanvas actions={actions.canvas} canvas={session.canvas} />

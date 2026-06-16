@@ -347,7 +347,7 @@ describe("EditorGameCanvas", () => {
     });
   });
 
-  it("does not persist active generated specs as durable Game Pack history", async () => {
+  it("persists active generated specs as durable Game Pack history after first-playable passes", async () => {
     const storage = new MemoryGamePackStorage();
     const put = vi.spyOn(storage, "put");
     const repository = createGamePackRepository(storage);
@@ -403,12 +403,24 @@ describe("EditorGameCanvas", () => {
     await waitFor(() => {
       expect(screen.getByTitle("Generated Crystal Draft")).toBeVisible();
     });
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-    expect(put).not.toHaveBeenCalled();
-    await expect(repository.load("game_pack_crystal_spec_chase")).resolves.toBe(
-      null
-    );
+    await waitFor(() => {
+      expect(put).toHaveBeenCalledTimes(1);
+    });
+    await expect(repository.load("game_pack_crystal_spec_chase")).resolves.toMatchObject({
+      checkpoints: [
+        expect.objectContaining({
+          id: "checkpoint_initial_playable",
+        }),
+      ],
+      metadata: {
+        generatedSpec: {
+          attemptCount: 1,
+          model: "gpt-5.4-mini",
+          source: "phaser-spec",
+          taskRoute: "spec_generation.primary",
+        },
+      },
+    });
   });
 
   it("keeps active generated specs out of ready state until first-playable checks pass", async () => {

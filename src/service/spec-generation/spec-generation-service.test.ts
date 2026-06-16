@@ -186,6 +186,63 @@ describe("Spec Generation service contract", () => {
     });
   });
 
+  it("repairs generated specs missing the player placeholder asset", async () => {
+    const invalidCandidate = getMutableFixture();
+    invalidCandidate.assets = invalidCandidate.assets.filter(
+      (asset) => asset.role !== "player"
+    );
+    const repairedCandidate = getMutableFixture();
+    const providerCalls: unknown[] = [];
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make a tiny top-down collection game.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async (input) => {
+        providerCalls.push(input);
+
+        return input.repairContext ? repairedCandidate : invalidCandidate;
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      spec: repairedCandidate,
+      metadata: {
+        taskRoute: "spec_generation.primary",
+        model: "gpt-5.4-mini",
+        attemptCount: 2,
+        repairStatus: "repaired",
+        repairAttempts: [
+          {
+            attempt: 1,
+            outcome: "failed_validation",
+            stage: "semantic_validation",
+            issues: [
+              {
+                path: "assets",
+                message: "Expected at least one tracked player asset.",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(providerCalls[1]).toMatchObject({
+      repairContext: {
+        failedAttempt: 1,
+        invalidCandidate,
+        stage: "semantic_validation",
+        validationIssues: [
+          {
+            path: "assets",
+            message: "Expected at least one tracked player asset.",
+          },
+        ],
+      },
+    });
+  });
+
   it("returns structured validation failure when the repair candidate is still invalid", async () => {
     const invalidCandidate = getMutableFixture();
     invalidCandidate.mechanics[0].entityIds = ["entity_missing"];

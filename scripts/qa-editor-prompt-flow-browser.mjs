@@ -160,6 +160,38 @@ function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function expectNarrowEditorLayout(page, expect) {
+  await page.setViewportSize({
+    width: 560,
+    height: 900,
+  });
+  await page.waitForTimeout(250);
+
+  const horizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth
+  );
+
+  expect(horizontalOverflow).toBeLessThanOrEqual(1);
+
+  const followUpPrompt = page.getByPlaceholder(
+    "Follow-up prompts will use this generated module manifest and editable spec in v1."
+  );
+  const followUpSend = page.getByRole("button", {
+    exact: true,
+    name: "Send",
+  });
+
+  await expect(followUpPrompt).toBeVisible();
+  await expect(followUpSend).toBeVisible();
+
+  const promptBox = await followUpPrompt.boundingBox();
+  const sendBox = await followUpSend.boundingBox();
+
+  expect(promptBox).not.toBeNull();
+  expect(sendBox).not.toBeNull();
+  expect(sendBox.y).toBeGreaterThanOrEqual(promptBox.y + promptBox.height + 8);
+}
+
 async function main() {
   console.log("AI-Cade browser QA: editor prompt flow");
   console.log(`Target editor URL: ${editorUrl}`);
@@ -241,7 +273,7 @@ async function main() {
 
     const keywordBox = page.getByPlaceholder("Secret Word");
     const buildStarterGame = page.getByRole("button", {
-      name: "Build the starter game",
+      name: "Build the project",
     });
 
     if (await keywordBox.isVisible().catch(() => false)) {
@@ -254,6 +286,11 @@ async function main() {
     await expect(headerBuild).toBeEnabled();
     await page.screenshot({
       path: path.join(artifactsDir, "03-build-ready.png"),
+    });
+
+    await expectNarrowEditorLayout(page, expect);
+    await page.screenshot({
+      path: path.join(artifactsDir, "04-narrow-responsive-chat.png"),
     });
 
     if (browserIssues.length > 0) {

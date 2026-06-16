@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createSuccessfulGenerationRunFixture,
   createRestoredForwardGamePackFixture,
   createValidatedGamePackFixture,
   GAME_PACK_FIXTURE_LATER_UPDATED_AT,
@@ -76,7 +77,10 @@ describe("Game Pack repository", () => {
 
   it("preserves validation evidence, builds, checkpoints, failed attempts, and generation runs", async () => {
     const repository = createGamePackRepository(new MemoryGamePackStorage());
-    const gamePack = createValidatedGamePackFixture();
+    const baseGamePack = createValidatedGamePackFixture();
+    const gamePack = createValidatedGamePackFixture({
+      generationRuns: [createSuccessfulGenerationRunFixture(baseGamePack)],
+    });
 
     await repository.save(gamePack);
 
@@ -112,8 +116,15 @@ describe("Game Pack repository", () => {
       ],
       generationRuns: [
         expect.objectContaining({
-          id: "generation_run_reserved",
-          status: "reserved",
+          id: "generation_run_initial_prompt",
+          operationType: "generate",
+          status: "succeeded",
+          attempts: [
+            expect.objectContaining({
+              id: "generation_attempt_initial",
+              status: "succeeded",
+            }),
+          ],
         }),
       ],
     });

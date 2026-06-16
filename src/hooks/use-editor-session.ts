@@ -76,7 +76,7 @@ export type RuntimeWarningIssue = Extract<RuntimeIssue, { recoverable: true }>;
 
 export type ActiveGeneratedSpecState = Pick<
   Extract<StarterProjectLoadState, { status: "success"; source: "phaser-spec" }>,
-  "metadata" | "runtimeKind" | "source" | "spec"
+  "generationRunId" | "metadata" | "runtimeKind" | "source" | "spec"
 >;
 
 export type GeneratedGameStatus =
@@ -176,6 +176,9 @@ export function useEditorSession({
   const activeGeneratedSpec =
     loadState.status === "success" && loadState.source === "phaser-spec"
       ? {
+          ...(loadState.generationRunId
+            ? { generationRunId: loadState.generationRunId }
+            : {}),
           metadata: loadState.metadata,
           runtimeKind: loadState.runtimeKind,
           source: loadState.source,

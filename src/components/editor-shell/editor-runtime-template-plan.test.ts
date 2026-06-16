@@ -109,7 +109,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
     });
   });
 
-  it("resolves an active generated spec without durable Game Pack state", () => {
+  it("resolves an active generated spec with pass-gated persistence metadata", () => {
     const plan = createEditorRuntimeTemplatePlan({
       activeGeneratedSpec: {
         metadata: {
@@ -127,13 +127,18 @@ describe("createEditorRuntimeTemplatePlan", () => {
 
     expect(plan).toMatchObject({
       firstPlayableValidationSource: {
+        generatedSpecMetadata: {
+          attemptCount: 1,
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+        },
         gameSpec: topDownPhaserTemplate.gameSpec,
         runtimeCandidate: {
           templateId: topDownPhaserTemplate.gameSpec.template.id,
         },
         source: "generated-spec",
       },
-      persistencePolicy: "do-not-persist",
+      persistencePolicy: "persist-after-first-playable",
       readyPolicy: "ready-after-first-playable",
       runFirstPlayableChecksOnReady: true,
       template: {

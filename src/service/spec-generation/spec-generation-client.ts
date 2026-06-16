@@ -18,6 +18,10 @@ export type TopDownSpecGenerationClientResult = {
   spec: TopDownGameSpec;
 };
 
+export type TopDownSpecGenerationClientOptions = {
+  generationRunId?: string;
+};
+
 export class SpecGenerationClientError extends Error {
   readonly validationFailure?: SpecGenerationValidationFailure;
 
@@ -49,7 +53,8 @@ type SpecGenerationPayload =
 
 export async function requestTopDownSpecGeneration(
   request: StarterProjectRequest,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: TopDownSpecGenerationClientOptions = {}
 ): Promise<TopDownSpecGenerationClientResult> {
   const response = await fetch("/api/spec-generation", {
     method: "POST",
@@ -60,6 +65,7 @@ export async function requestTopDownSpecGeneration(
     signal,
     body: JSON.stringify({
       enteredPrompt: request.prompt || undefined,
+      ...(options.generationRunId ? { generationRunId: options.generationRunId } : {}),
       openAiApiKey: request.openAiApiKey,
       openAiKeyword: request.openAiKeyword,
       openAiModel: request.openAiModel,

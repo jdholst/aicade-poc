@@ -1,8 +1,12 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
+import {
+  createGenerationRunTestRepository,
+  createRunningPhaserSpecGenerationRun,
+} from "@/service/generation-run/testing/generation-run-test-harness";
 
 import { useFirstPlayableValidationGate } from "./editor-first-playable-validation-gate";
 import type { FirstPlayableValidationSource } from "./editor-runtime-template-plan";
@@ -251,6 +255,61 @@ describe("useFirstPlayableValidationGate", () => {
     });
   });
 
+  it("keeps a generated Phaser GenerationRun running after first-playable validation passes before durable persistence", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+
+    await repository.create(
+      createRunningPhaserSpecGenerationRun({
+        id: "generation_run_first_playable_success",
+      })
+    );
+
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          generationRunRepository: repository,
+          validationSource: {
+            ...validationSource,
+            generationRunId: "generation_run_first_playable_success",
+            source: "generated-spec",
+          },
+        })
+      )
+    );
+
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const generationRun = await repository.fetch(
+      "generation_run_first_playable_success"
+    );
+
+    expect(result.current.firstPlayableGenerationRunId).toBe(
+      "generation_run_first_playable_success"
+    );
+    expect(generationRun).toMatchObject({
+      status: "running",
+    });
+    expect(generationRun?.relationships).toBeUndefined();
+  });
+
   it("blocks editor state when runtime validation evidence fails", () => {
     const onGameStatusChange = vi.fn();
     const { result } = renderHook(() =>
@@ -297,6 +356,60 @@ describe("useFirstPlayableValidationGate", () => {
         }),
       ],
     });
+  });
+
+  it("finalizes a generated Phaser GenerationRun when first-playable validation fails", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+
+    await repository.create(
+      createRunningPhaserSpecGenerationRun({
+        id: "generation_run_first_playable_failure",
+      })
+    );
+
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          generationRunRepository: repository,
+          validationSource: {
+            ...validationSource,
+            generationRunId: "generation_run_first_playable_failure",
+            source: "generated-spec",
+          },
+        })
+      )
+    );
+
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "failed",
+        message: "Runtime did not respond to movement input.",
+        issues: [
+          {
+            code: "input_probe_no_velocity",
+            path: "runtime.input",
+            message: "Runtime did not respond to movement input.",
+          },
+        ],
+      });
+    });
+
+    await waitFor(async () => {
+      await expect(
+        repository.fetch("generation_run_first_playable_failure")
+      ).resolves.toMatchObject({
+        failureClass: "first-playable-failure",
+        stage: "browser-check",
+        status: "failed",
+      });
+    });
+    const generationRun = await repository.fetch(
+      "generation_run_first_playable_failure"
+    );
+
+    expect(generationRun?.relationships).toBeUndefined();
   });
 
   it("records fatal runtime errors as blocking editor errors", () => {
@@ -376,6 +489,63 @@ describe("useFirstPlayableValidationGate", () => {
         }),
       ],
     });
+  });
+
+  it("finalizes a generated Phaser GenerationRun when first-playable validation fails before runtime boot", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+    const gameSpec = {
+      ...topDownPhaserTemplate.gameSpec,
+      objectives: topDownPhaserTemplate.gameSpec.objectives.map(
+        (objective) => ({
+          ...objective,
+          primary: false,
+        })
+      ),
+    };
+
+    await repository.create(
+      createRunningPhaserSpecGenerationRun({
+        id: "generation_run_pre_runtime_failure",
+      })
+    );
+
+    const { result } = renderHook(() =>
+      useFirstPlayableValidationGate(
+        createInput({
+          generationRunRepository: repository,
+          validationSource: {
+            gameSpec,
+            generationRunId: "generation_run_pre_runtime_failure",
+            runtimeCandidate: {
+              ...validationSource.runtimeCandidate,
+            },
+            source: "generated-spec",
+            runtimeKind: "phaser",
+          },
+        })
+      )
+    );
+
+    expect(result.current.firstPlayableValidationAttempt).toMatchObject({
+      failureMessage: "Expected exactly one primary objective.",
+      shouldBlockPlayable: true,
+      status: "failed",
+    });
+
+    await waitFor(async () => {
+      await expect(
+        repository.fetch("generation_run_pre_runtime_failure")
+      ).resolves.toMatchObject({
+        failureClass: "first-playable-failure",
+        stage: "artifact-build",
+        status: "failed",
+      });
+    });
+    const generationRun = await repository.fetch(
+      "generation_run_pre_runtime_failure"
+    );
+
+    expect(generationRun?.relationships).toBeUndefined();
   });
 
   it("starts a new attempt when the runtime reset key changes", () => {

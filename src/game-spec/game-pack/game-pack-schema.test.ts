@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { gamePackSchema, parseGamePack } from "@/game-spec";
 import {
-  gamePackSchema,
-  parseGamePack,
-} from "@/game-spec";
-import { createValidatedGamePackFixture } from "./testing/game-pack-fixtures";
+  createSuccessfulGenerationRunFixture,
+  createValidatedGamePackFixture,
+} from "./testing/game-pack-fixtures";
 
 const createMinimalGamePack = createValidatedGamePackFixture;
 
@@ -115,6 +115,91 @@ describe("Game Pack schema", () => {
       },
     });
     expect(parsed.generationRuns).toEqual([]);
+  });
+
+  it("rejects duplicate GenerationRun IDs", () => {
+    const pack = createMinimalGamePack();
+    const run = createSuccessfulGenerationRunFixture(pack);
+
+    expect(
+      gamePackSchema.safeParse({
+        ...pack,
+        generationRuns: [
+          run,
+          {
+            ...run,
+            createdAt: "2026-05-23T12:00:03.000Z",
+            startedAt: "2026-05-23T12:00:03.000Z",
+          },
+        ],
+      }).success
+    ).toBe(false);
+  });
+
+  it("rejects GenerationRun relationship fields that point outside the Game Pack", () => {
+    const pack = createMinimalGamePack();
+    const run = createSuccessfulGenerationRunFixture(pack, {
+      relationships: {
+        ...createSuccessfulGenerationRunFixture(pack).relationships,
+        gamePackId: pack.id,
+        failedAttemptIds: ["failed_attempt_preflight"],
+      },
+    });
+
+    expect(
+      gamePackSchema.safeParse({
+        ...pack,
+        generationRuns: [run],
+      }).success
+    ).toBe(true);
+
+    const invalidRelationshipRuns = [
+      createSuccessfulGenerationRunFixture(pack, {
+        relationships: {
+          ...run.relationships,
+          gamePackId: "game_pack_missing",
+        },
+      }),
+      createSuccessfulGenerationRunFixture(pack, {
+        relationships: {
+          ...run.relationships,
+          gameSpecId: "game_missing",
+        },
+      }),
+      createSuccessfulGenerationRunFixture(pack, {
+        relationships: {
+          ...run.relationships,
+          buildIds: ["build_missing"],
+        },
+      }),
+      createSuccessfulGenerationRunFixture(pack, {
+        relationships: {
+          ...run.relationships,
+          checkpointIds: ["checkpoint_missing"],
+        },
+      }),
+      createSuccessfulGenerationRunFixture(pack, {
+        relationships: {
+          ...run.relationships,
+          validationEvidenceIds: ["evidence_missing"],
+        },
+      }),
+      createSuccessfulGenerationRunFixture(pack, {
+        relationships: {
+          ...run.relationships,
+          failedAttemptIds: ["failed_attempt_missing"],
+        },
+      }),
+    ];
+
+    for (const invalidRun of invalidRelationshipRuns) {
+      expect(
+        gamePackSchema.safeParse({
+          ...pack,
+          generationRuns: [invalidRun],
+        }).success
+      ).toBe(false);
+    }
   });
 
   it("requires both receipt IDs and stable check IDs for validation evidence", () => {

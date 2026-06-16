@@ -2,14 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { RuntimeIframeStatus } from "@/components/runtime-iframe-host";
 import {
+  createIndexedDbGenerationRunRepository,
   createInitialGamePack,
+  finalizeGenerationRunFromFirstPlayable,
   recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
+  writeFirstPlayableTerminalResult,
   type FirstPlayableValidationAttempt,
   type GamePack,
-  writeFirstPlayableValidationResult,
+  type GenerationRun,
+  type GenerationRunRepository,
 } from "@/game-spec";
+import type { JsonValue } from "@/game-spec/game-spec-schema";
 import type { RuntimeValidationEvidence } from "@/runtime/runtime-adapter";
 import type {
   EditorGameCanvasActions,
@@ -21,6 +26,7 @@ import type { FirstPlayableValidationSource } from "./editor-runtime-template-pl
 
 type FirstPlayableValidationState = {
   attempt: FirstPlayableValidationAttempt;
+  generationRunId?: GenerationRun["id"];
   gamePack: GamePack;
   key: string;
   readyPolicy: PlayableDraftReadyPolicy;
@@ -29,6 +35,7 @@ type FirstPlayableValidationState = {
 };
 
 type UseFirstPlayableValidationGateInput = {
+  generationRunRepository?: Pick<GenerationRunRepository, "update"> | null;
   gameResetNonce: EditorGameCanvasSession["gameResetNonce"];
   loadStateStatus: EditorGameCanvasSession["loadState"]["status"];
   onGameStatusChange: EditorGameCanvasActions["onGameStatusChange"];
@@ -37,6 +44,7 @@ type UseFirstPlayableValidationGateInput = {
 };
 
 export type FirstPlayableValidationGate = {
+  firstPlayableGenerationRunId: GenerationRun["id"] | null;
   firstPlayableGamePack: GamePack | null;
   firstPlayableValidationAttempt: FirstPlayableValidationAttempt | null;
   handleRuntimeStatusChange: (status: RuntimeIframeStatus) => void;
@@ -46,12 +54,17 @@ export type FirstPlayableValidationGate = {
 };
 
 export function useFirstPlayableValidationGate({
+  generationRunRepository,
   gameResetNonce,
   loadStateStatus,
   onGameStatusChange,
   readyPolicy = "ready-on-runtime-ready",
   validationSource,
 }: UseFirstPlayableValidationGateInput): FirstPlayableValidationGate {
+  const resolvedGenerationRunRepository = useMemo(
+    () => generationRunRepository ?? getBrowserGenerationRunRepository(),
+    [generationRunRepository]
+  );
   const validationSeed = useMemo(
     () =>
       createFirstPlayableValidationSeed({
@@ -70,10 +83,43 @@ export function useFirstPlayableValidationGate({
       : validationSeed;
   const activeValidationStateRef =
     useRef<FirstPlayableValidationState | null>(activeValidationState);
+  const finalizedSeedGenerationRunKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     activeValidationStateRef.current = activeValidationState;
   }, [activeValidationState]);
+
+  useEffect(() => {
+    if (
+      !activeValidationState ||
+      !activeValidationState.generationRunId ||
+      !activeValidationState.resultWritten ||
+      activeValidationState.attempt.status !== "failed" ||
+      !resolvedGenerationRunRepository
+    ) {
+      return;
+    }
+
+    const finalizationKey = [
+      activeValidationState.generationRunId,
+      activeValidationState.key,
+      activeValidationState.attempt.status,
+    ].join(":");
+
+    if (finalizedSeedGenerationRunKeyRef.current === finalizationKey) {
+      return;
+    }
+
+    finalizedSeedGenerationRunKeyRef.current = finalizationKey;
+
+    void finalizeGenerationRunFromFirstPlayable({
+      attempt: activeValidationState.attempt,
+      completedAt: new Date().toISOString(),
+      gamePack: activeValidationState.gamePack,
+      generationRunId: activeValidationState.generationRunId,
+      repository: resolvedGenerationRunRepository,
+    });
+  }, [activeValidationState, resolvedGenerationRunRepository]);
 
   const handleRuntimeStatusChange = useCallback(
     (status: RuntimeIframeStatus) => {
@@ -93,10 +139,13 @@ export function useFirstPlayableValidationGate({
         status,
       });
 
-      const nextValidationState = writeTerminalValidationResult({
+      const terminalResult = writeFirstPlayableTerminalResult({
         currentValidationState,
         attempt: nextAttempt,
+        generationRunRepository: resolvedGenerationRunRepository,
       });
+      const nextValidationState = terminalResult.state;
+      void terminalResult.generationRunFinalization;
 
       activeValidationStateRef.current = nextValidationState;
 
@@ -124,7 +173,7 @@ export function useFirstPlayableValidationGate({
 
       onGameStatusChange(status);
     },
-    [onGameStatusChange, validationSeed]
+    [onGameStatusChange, resolvedGenerationRunRepository, validationSeed]
   );
 
   const handleRuntimeValidationEvidence = useCallback(
@@ -144,10 +193,13 @@ export function useFirstPlayableValidationGate({
         observedAt: new Date().toISOString(),
       });
 
-      const nextValidationState = writeTerminalValidationResult({
+      const terminalResult = writeFirstPlayableTerminalResult({
         currentValidationState,
         attempt: nextAttempt,
+        generationRunRepository: resolvedGenerationRunRepository,
       });
+      const nextValidationState = terminalResult.state;
+      void terminalResult.generationRunFinalization;
 
       activeValidationStateRef.current = nextValidationState;
 
@@ -172,10 +224,12 @@ export function useFirstPlayableValidationGate({
         onGameStatusChange({ state: "ready" });
       }
     },
-    [onGameStatusChange, validationSeed]
+    [onGameStatusChange, resolvedGenerationRunRepository, validationSeed]
   );
 
   return {
+    firstPlayableGenerationRunId:
+      activeValidationState?.generationRunId ?? null,
     firstPlayableGamePack: activeValidationState?.gamePack ?? null,
     firstPlayableValidationAttempt: activeValidationState?.attempt ?? null,
     handleRuntimeStatusChange,
@@ -203,6 +257,7 @@ function createFirstPlayableValidationSeed({
 
   const gamePack = createInitialGamePack({
     gameSpec: validationSource.gameSpec,
+    metadata: createGamePackMetadataFromValidationSource(validationSource),
     runtimeKind: validationSource.runtimeKind,
   });
   const restoredGamePack = validationSource.gamePack;
@@ -223,8 +278,11 @@ function createFirstPlayableValidationSeed({
     startedAt: new Date().toISOString(),
   });
 
-  return writeTerminalValidationResult({
+  return writeFirstPlayableTerminalResult({
     currentValidationState: {
+      ...(validationSource.generationRunId
+        ? { generationRunId: validationSource.generationRunId }
+        : {}),
       key,
       gamePack: activeGamePack,
       attempt,
@@ -233,33 +291,42 @@ function createFirstPlayableValidationSeed({
       source: validationSource.source,
     },
     attempt,
-  });
+    generationRunRepository: null,
+  }).state;
 }
 
-function writeTerminalValidationResult({
-  currentValidationState,
-  attempt,
-}: {
-  currentValidationState: FirstPlayableValidationState;
-  attempt: FirstPlayableValidationAttempt;
-}): FirstPlayableValidationState {
-  if (attempt.status === "running" || currentValidationState.resultWritten) {
-    return {
-      ...currentValidationState,
-      attempt,
-    };
+function createGamePackMetadataFromValidationSource(
+  validationSource: FirstPlayableValidationSource
+): Record<string, JsonValue> | undefined {
+  if (validationSource.source !== "generated-spec") {
+    return undefined;
   }
 
-  const nextGamePack = writeFirstPlayableValidationResult({
-    gamePack: currentValidationState.gamePack,
-    attempt,
-    completedAt: new Date().toISOString(),
-  });
+  const generatedSpec: Record<string, JsonValue> = {
+    source: "phaser-spec",
+    ...(validationSource.generationRunId
+      ? { generationRunId: validationSource.generationRunId }
+      : {}),
+    ...(validationSource.generatedSpecMetadata
+      ? {
+          attemptCount: validationSource.generatedSpecMetadata.attemptCount,
+          model: validationSource.generatedSpecMetadata.model,
+          taskRoute: validationSource.generatedSpecMetadata.taskRoute,
+        }
+      : {}),
+  };
 
   return {
-    ...currentValidationState,
-    attempt,
-    gamePack: nextGamePack,
-    resultWritten: true,
+    generatedSpec,
   };
+}
+
+function getBrowserGenerationRunRepository():
+  | Pick<GenerationRunRepository, "update">
+  | null {
+  if (typeof globalThis.indexedDB === "undefined") {
+    return null;
+  }
+
+  return createIndexedDbGenerationRunRepository();
 }

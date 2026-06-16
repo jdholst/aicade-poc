@@ -16,7 +16,6 @@ export {
   failedAttemptSchema,
   gamePackRuntimeKindSchema,
   gamePackSchema,
-  generationRunSchema,
   parseGamePack,
   playableBuildSchema,
   validationEvidenceSchema,
@@ -26,13 +25,70 @@ export {
   type FailedAttempt,
   type GamePack,
   type GamePackRuntimeKind,
-  type GenerationRun,
   type PlayableBuild,
   type ValidationEvidence,
   type ValidationEvidenceStage,
   type ValidationEvidenceStatus,
   type VersionCheckpoint,
 } from "./game-pack/game-pack-schema";
+
+export {
+  createGenerationRunRepository,
+  createIndexedDbGenerationRunRepository,
+  GenerationRunRepositoryError,
+  type GenerationRunRepository,
+  type GenerationRunRepositoryErrorCode,
+  type GenerationRunRepositoryOperation,
+  type GenerationRunStorageDriver,
+  type IndexedDbGenerationRunRepositoryOptions,
+  type StoredGenerationRunRecord,
+} from "./generation-run/generation-run-repository";
+
+export {
+  createGenerationRunJsonExport,
+  createGenerationRunJsonExportText,
+  createGenerationRunRepositoryJsonExport,
+  createGenerationRunRepositoryJsonExportText,
+  GENERATION_RUN_JSON_EXPORT_SCHEMA_VERSION,
+  type GenerationRunJsonExport,
+  type GenerationRunJsonExportAttempt,
+  type GenerationRunJsonExportCandidate,
+  type GenerationRunJsonExportCost,
+  type GenerationRunJsonExportFilters,
+  type GenerationRunJsonExportOptions,
+  type GenerationRunJsonExportProviderModel,
+  type GenerationRunJsonExportRun,
+  type GenerationRunJsonExportValidation,
+} from "./generation-run/generation-run-json-export";
+
+export {
+  generationRunAttemptReceiptSchema,
+  generationRunAttemptValidationSchema,
+  generationRunCandidateSummarySchema,
+  generationRunCostEstimateSchema,
+  generationRunFailureClassSchema,
+  generationRunFailureStageSchema,
+  generationRunOperationTypeSchema,
+  generationRunRelationshipsSchema,
+  generationRunRepairStatusSchema,
+  generationRunRequestSchema,
+  generationRunSchema,
+  generationRunStatusSchema,
+  generationRunUsageSchema,
+  type GenerationRun,
+  type GenerationRunAttemptReceipt,
+  type GenerationRunAttemptValidation,
+  type GenerationRunCandidateSummary,
+  type GenerationRunCostEstimate,
+  type GenerationRunFailureClass,
+  type GenerationRunFailureStage,
+  type GenerationRunOperationType,
+  type GenerationRunRelationships,
+  type GenerationRunRepairStatus,
+  type GenerationRunRequest,
+  type GenerationRunStatus,
+  type GenerationRunUsage,
+} from "./generation-run/generation-run-schema";
 
 export {
   createInitialGamePack,
@@ -73,6 +129,14 @@ export {
   type StartFirstPlayableValidationInput,
   type WriteFirstPlayableValidationResultInput,
 } from "./game-pack/first-playable-validation";
+
+export {
+  finalizeGenerationRunFromFirstPlayable,
+  writeFirstPlayableTerminalResult,
+  type FirstPlayableTerminalValidationState,
+  type WriteFirstPlayableTerminalResultInput,
+  type WriteFirstPlayableTerminalResultOutput,
+} from "./game-pack/first-playable-terminal-result";
 
 export {
   createMechanicRuntimeBridge,

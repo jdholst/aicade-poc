@@ -47,6 +47,31 @@ describe("Spec Generation API route contract", () => {
     });
   });
 
+  it("correlates successful responses with a GenerationRun ID", async () => {
+    const fixture = getFirstValidTopDownGameSpecFixture();
+    const post = createSpecGenerationPostHandler({
+      env: {},
+      provider: async () => fixture,
+    });
+
+    const response = await post(
+      jsonRequest({
+        enteredPrompt: "Make a tiny top-down collection game.",
+        generationRunId: "generation_run_route_success",
+        openAiApiKey: "sk-test",
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      ok: true,
+      metadata: {
+        generationRunId: "generation_run_route_success",
+      },
+    });
+  });
+
   it("accepts the existing keyword-based API key input path", async () => {
     const fixture = getFirstValidTopDownGameSpecFixture();
     const providerCalls: unknown[] = [];
@@ -208,6 +233,31 @@ describe("Spec Generation API route contract", () => {
         }),
       ])
     );
+  });
+
+  it("correlates validation failures with a GenerationRun ID", async () => {
+    const invalidCandidate = getMutableFixture();
+    invalidCandidate.template.config.scenes[0].layout.pickupZones = [];
+    const post = createSpecGenerationPostHandler({
+      env: {},
+      provider: async () => invalidCandidate,
+    });
+
+    const response = await post(
+      jsonRequest({
+        enteredPrompt: "Make a tiny top-down collection game.",
+        generationRunId: "generation_run_route_failure",
+        openAiApiKey: "sk-test",
+      })
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(payload).toMatchObject({
+      ok: false,
+      generationRunId: "generation_run_route_failure",
+      stage: "mechanic_validation",
+    });
   });
 
   it("uses the local debug generation adapter without an OpenAI key in development", async () => {
