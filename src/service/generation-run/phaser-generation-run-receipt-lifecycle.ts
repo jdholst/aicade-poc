@@ -43,6 +43,7 @@ export function createPhaserGenerationRunReceiptLifecycle({
     generationSource === "phaser-ai" && repository
       ? createGenerationRunId()
       : undefined;
+  let isPersistenceDisabled = false;
 
   return {
     ...(generationRunId ? { generationRunId } : {}),
@@ -52,12 +53,14 @@ export function createPhaserGenerationRunReceiptLifecycle({
         return;
       }
 
-      await createInitialPhaserGenerationRunReceipt({
-        generationRunId,
-        now,
-        repository,
-        request,
-      });
+      await persistGenerationRunReceipt(() =>
+        createInitialPhaserGenerationRunReceipt({
+          generationRunId,
+          now,
+          repository,
+          request,
+        })
+      );
     },
 
     async recordSpecGenerationFailure(error) {
@@ -65,13 +68,15 @@ export function createPhaserGenerationRunReceiptLifecycle({
         return;
       }
 
-      await recordFailedSpecGenerationAttempt({
-        completedAt: now(),
-        error,
-        generationRunId,
-        repository,
-        request,
-      });
+      await persistGenerationRunReceipt(() =>
+        recordFailedSpecGenerationAttempt({
+          completedAt: now(),
+          error,
+          generationRunId,
+          repository,
+          request,
+        })
+      );
     },
 
     async recordSpecGenerationInterruption(status) {
@@ -79,13 +84,15 @@ export function createPhaserGenerationRunReceiptLifecycle({
         return;
       }
 
-      await recordInterruptedSpecGenerationAttempt({
-        completedAt: now(),
-        generationRunId,
-        repository,
-        request,
-        status,
-      });
+      await persistGenerationRunReceipt(() =>
+        recordInterruptedSpecGenerationAttempt({
+          completedAt: now(),
+          generationRunId,
+          repository,
+          request,
+          status,
+        })
+      );
     },
 
     async recordSpecGenerationSuccess(result) {
@@ -93,15 +100,29 @@ export function createPhaserGenerationRunReceiptLifecycle({
         return;
       }
 
-      await recordSuccessfulSpecGenerationAttempt({
-        completedAt: now(),
-        generationRunId,
-        repository,
-        request,
-        result,
-      });
+      await persistGenerationRunReceipt(() =>
+        recordSuccessfulSpecGenerationAttempt({
+          completedAt: now(),
+          generationRunId,
+          repository,
+          request,
+          result,
+        })
+      );
     },
   };
+
+  async function persistGenerationRunReceipt(persist: () => Promise<void>) {
+    if (isPersistenceDisabled) {
+      return;
+    }
+
+    try {
+      await persist();
+    } catch {
+      isPersistenceDisabled = true;
+    }
+  }
 }
 
 async function createInitialPhaserGenerationRunReceipt({

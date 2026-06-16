@@ -130,6 +130,51 @@ describe("startEditorGenerationRun", () => {
     });
   });
 
+  it("keeps Phaser AI generation running when GenerationRun persistence is unavailable", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const repository = {
+      create: vi.fn().mockRejectedValue(new Error("Storage blocked.")),
+      update: vi.fn().mockRejectedValue(new Error("Storage blocked.")),
+    };
+    const requestPhaserSpecGeneration = vi.fn().mockResolvedValue({
+      metadata: {
+        attemptCount: 1,
+        model: "gpt-5.4-mini",
+        taskRoute: "spec_generation.primary",
+      },
+      runtimeKind: "phaser",
+      spec,
+    });
+
+    const run = startEditorGenerationRun({
+      createGenerationRunId: () => "generation_run_storage_blocked",
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      request: {
+        prompt: "make a top-down crystal chase",
+      },
+      requestPhaserSpecGeneration,
+    });
+
+    await expect(run.done).resolves.toMatchObject({
+      generationRunId: "generation_run_storage_blocked",
+      status: "success",
+      source: "phaser-spec",
+      spec,
+    });
+    expect(requestPhaserSpecGeneration).toHaveBeenCalledWith(
+      {
+        prompt: "make a top-down crystal chase",
+      },
+      expect.any(AbortSignal),
+      {
+        generationRunId: "generation_run_storage_blocked",
+      }
+    );
+    expect(repository.create).toHaveBeenCalledTimes(1);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
   it("aborts the active adapter and returns a timeout error when generation stalls", async () => {
     vi.useFakeTimers();
     let observedSignal: AbortSignal | null = null;
