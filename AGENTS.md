@@ -47,3 +47,17 @@ This project is indexed by GitNexus as **aicade-poc** (1470 symbols, 3557 relati
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Agent skills
+
+### Issue tracker
+
+Notion is authoritative for project work; GitHub is used for branches and pull requests. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The tracker uses the five default canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository. See `docs/agents/domain.md`.
