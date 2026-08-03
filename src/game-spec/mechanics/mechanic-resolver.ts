@@ -208,7 +208,11 @@ export function resolveMechanicIntent({
     };
   }
 
-  if (getIntentRequirements(intent).length === 0) {
+  if (
+    intent.triggers.length === 0 ||
+    intent.behaviors.length === 0 ||
+    intent.outcomes.length === 0
+  ) {
     return {
       kind: "clarification_failure",
       intentId: intent.id,

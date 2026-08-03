@@ -45,6 +45,26 @@ const movementIntent: MechanicIntent = {
   ambiguities: [],
 };
 
+const contentFreeIntent: MechanicIntent = {
+  id: "intent_empty",
+  summary: "",
+  triggers: [],
+  actors: [],
+  targets: [],
+  behaviors: [],
+  ownedObjects: [],
+  stateChanges: [],
+  temporalRules: [],
+  spatialRules: [],
+  constraints: [],
+  configuration: [],
+  connections: [],
+  references: [],
+  outcomes: [],
+  requiredCapabilities: [],
+  ambiguities: [],
+};
+
 const movementContract: BuiltInMechanicContract = {
   mechanicType: "player_movement",
   scope: TOP_DOWN_PHASER_MECHANIC_SCOPE,
@@ -618,25 +638,7 @@ describe("resolveMechanicIntent", () => {
   it("fails clarification instead of selecting a built-in for content-free intent", () => {
     expect(
       resolveTopDownMechanicIntent({
-        intent: {
-          id: "intent_empty",
-          summary: "",
-          triggers: [],
-          actors: [],
-          targets: [],
-          behaviors: [],
-          ownedObjects: [],
-          stateChanges: [],
-          temporalRules: [],
-          spatialRules: [],
-          constraints: [],
-          configuration: [],
-          connections: [],
-          references: [],
-          outcomes: [],
-          requiredCapabilities: [],
-          ambiguities: [],
-        },
+        intent: contentFreeIntent,
         availableCapabilities: [],
       })
     ).toEqual({
@@ -648,6 +650,51 @@ describe("resolveMechanicIntent", () => {
           id: "ambiguity_missing_requirements",
           description:
             "The mechanic intent does not contain any behavior requirements to resolve.",
+        },
+      ],
+    });
+  });
+
+  it.each([
+    {
+      label: "reference-only",
+      intent: {
+        ...contentFreeIntent,
+        id: "intent_reference_only",
+        references: [
+          {
+            kind: "entity" as const,
+            id: "entity_player",
+          },
+        ],
+      },
+    },
+    {
+      label: "configuration-only",
+      intent: {
+        ...contentFreeIntent,
+        id: "intent_configuration_only",
+        configuration: [
+          {
+            key: "speed",
+            value: 180,
+          },
+        ],
+      },
+    },
+  ])("fails clarification for $label intent fragments", ({ intent }) => {
+    expect(
+      resolveTopDownMechanicIntent({
+        intent,
+        availableCapabilities: [],
+      })
+    ).toMatchObject({
+      kind: "clarification_failure",
+      intentId: intent.id,
+      strategy: "infer_or_fail",
+      unresolvedAmbiguities: [
+        {
+          id: "ambiguity_missing_requirements",
         },
       ],
     });
