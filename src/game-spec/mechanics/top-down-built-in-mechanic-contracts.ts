@@ -33,7 +33,7 @@ export const topDownBuiltInMechanicContracts = [
           port: "move_action",
         },
       ],
-      references: ["entity", "scene"],
+      references: ["entity"],
       outcomes: ["actor_position_changes"],
     },
     compatibleWith: [
@@ -64,7 +64,7 @@ export const topDownBuiltInMechanicContracts = [
         },
       ],
       connections: [],
-      references: ["entity", "objective", "region", "scene"],
+      references: ["entity", "objective"],
       outcomes: [
         "actor_distance_to_target_decreases",
         "round_resets_on_contact",
@@ -96,7 +96,7 @@ export const topDownBuiltInMechanicContracts = [
           port: "objective_progress",
         },
       ],
-      references: ["asset", "entity", "objective", "region", "scene"],
+      references: ["entity", "objective"],
       outcomes: ["objective_progress_increases", "target_repositions"],
     },
     compatibleWith: [
@@ -120,7 +120,7 @@ export const topDownBuiltInMechanicContracts = [
       constraints: [],
       configuration: [],
       connections: [],
-      references: ["entity", "objective", "scene"],
+      references: ["entity", "objective"],
       outcomes: ["round_resets_on_contact"],
     },
     compatibleWith: [

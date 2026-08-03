@@ -13,6 +13,11 @@ export type MechanicReferenceKind =
   | "region"
   | "scene";
 
+export type MechanicIntentReference = {
+  kind: MechanicReferenceKind;
+  id: StableId;
+};
+
 export type MechanicIntentConfigurationValue = {
   key: StableId;
   value: boolean | number | string;
@@ -40,7 +45,7 @@ export type MechanicIntent = {
   constraints: readonly StableId[];
   configuration: readonly MechanicIntentConfigurationValue[];
   connections: readonly MechanicIntentConnection[];
-  references: readonly MechanicReferenceKind[];
+  references: readonly MechanicIntentReference[];
   outcomes: readonly StableId[];
   requiredCapabilities: readonly StableId[];
   ambiguities: readonly MechanicIntentAmbiguity[];
@@ -110,6 +115,14 @@ export type MechanicCoverageRequirement = {
 export type MechanicCoverageEvidence = {
   coveredRequirements: MechanicCoverageRequirement[];
   uncoveredRequirements: MechanicCoverageRequirement[];
+};
+
+type IntentCoverageRequirement = Omit<
+  MechanicCoverageRequirement,
+  "coveredBy"
+> & {
+  configurationValue?: MechanicIntentConfigurationValue;
+  referenceValue?: MechanicIntentReference;
 };
 
 export type MechanicResolutionAssumption = {
@@ -192,6 +205,21 @@ export function resolveMechanicIntent({
       intentId: intent.id,
       strategy: clarificationStrategy,
       unresolvedAmbiguities,
+    };
+  }
+
+  if (getIntentRequirements(intent).length === 0) {
+    return {
+      kind: "clarification_failure",
+      intentId: intent.id,
+      strategy: clarificationStrategy,
+      unresolvedAmbiguities: [
+        {
+          id: "ambiguity_missing_requirements",
+          description:
+            "The mechanic intent does not contain any behavior requirements to resolve.",
+        },
+      ],
     };
   }
 
@@ -391,8 +419,9 @@ function getCoverageEvidence(
     const coveredBy = contracts
       .filter((contract) => contractCoversRequirement(contract, requirement))
       .map((contract) => contract.mechanicType);
-    const evidence = {
-      ...requirement,
+    const evidence: MechanicCoverageRequirement = {
+      category: requirement.category,
+      value: requirement.value,
       coveredBy,
     };
 
@@ -411,7 +440,7 @@ function getCoverageEvidence(
 
 function getIntentRequirements(
   intent: MechanicIntent
-): Omit<MechanicCoverageRequirement, "coveredBy">[] {
+): IntentCoverageRequirement[] {
   return [
     ...toRequirements("trigger", intent.triggers),
     ...toRequirements("actor", intent.actors),
@@ -425,20 +454,28 @@ function getIntentRequirements(
     ...intent.configuration.map(({ key, value }) => ({
       category: "configuration" as const,
       value: `${key}=${String(value)}`,
+      configurationValue: { key, value },
     })),
     ...intent.connections.map(({ direction, port }) => ({
       category: "connection" as const,
       value: `${direction}:${port}`,
     })),
-    ...toRequirements("reference", intent.references),
+    ...intent.references.map((reference) => ({
+      category: "reference" as const,
+      value: `${reference.kind}:${reference.id}`,
+      referenceValue: reference,
+    })),
     ...toRequirements("outcome", intent.outcomes),
   ];
 }
 
 function toRequirements(
-  category: Exclude<MechanicRequirementCategory, "configuration" | "connection">,
+  category: Exclude<
+    MechanicRequirementCategory,
+    "configuration" | "connection" | "reference"
+  >,
   values: readonly string[]
-): Omit<MechanicCoverageRequirement, "coveredBy">[] {
+): IntentCoverageRequirement[] {
   return values.map((value) => ({
     category,
     value,
@@ -447,14 +484,17 @@ function toRequirements(
 
 function contractCoversRequirement(
   contract: BuiltInMechanicContract,
-  requirement: Omit<MechanicCoverageRequirement, "coveredBy">
+  requirement: IntentCoverageRequirement
 ) {
   if (requirement.category === "configuration") {
-    const separatorIndex = requirement.value.indexOf("=");
-    const key = requirement.value.slice(0, separatorIndex);
-    const value = requirement.value.slice(separatorIndex + 1);
+    const configurationValue = requirement.configurationValue;
+
+    if (!configurationValue) {
+      return false;
+    }
+
     return contract.coverage.configuration.some((field) =>
-      configurationFieldCoversValue(field, key, value)
+      configurationFieldCoversValue(field, configurationValue)
     );
   }
 
@@ -464,20 +504,29 @@ function contractCoversRequirement(
     );
   }
 
+  if (requirement.category === "reference") {
+    return (
+      requirement.referenceValue !== undefined &&
+      contract.coverage.references.includes(requirement.referenceValue.kind)
+    );
+  }
+
   const coverageByCategory = {
     actor: contract.coverage.actors,
     behavior: contract.coverage.behaviors,
     constraint: contract.coverage.constraints,
     outcome: contract.coverage.outcomes,
     owned_object: contract.coverage.ownedObjects,
-    reference: contract.coverage.references,
     spatial_rule: contract.coverage.spatialRules,
     state_change: contract.coverage.stateChanges,
     target: contract.coverage.targets,
     temporal_rule: contract.coverage.temporalRules,
     trigger: contract.coverage.triggers,
   } satisfies Record<
-    Exclude<MechanicRequirementCategory, "configuration" | "connection">,
+    Exclude<
+      MechanicRequirementCategory,
+      "configuration" | "connection" | "reference"
+    >,
     readonly string[]
   >;
 
@@ -488,23 +537,22 @@ function contractCoversRequirement(
 
 function configurationFieldCoversValue(
   field: BuiltInMechanicConfigurationField,
-  key: string,
-  serializedValue: string
+  { key, value }: MechanicIntentConfigurationValue
 ) {
   if (field.key !== key) {
     return false;
   }
 
   if (field.valueType === "boolean") {
-    return serializedValue === "true" || serializedValue === "false";
+    return typeof value === "boolean";
   }
 
   if (field.valueType === "enum") {
-    return field.values.includes(serializedValue);
+    return typeof value === "string" && field.values.includes(value);
   }
 
-  const value = Number(serializedValue);
   return (
+    typeof value === "number" &&
     Number.isFinite(value) &&
     (field.minimum === undefined || value >= field.minimum) &&
     (field.maximum === undefined || value <= field.maximum)

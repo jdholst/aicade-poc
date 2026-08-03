@@ -172,6 +172,7 @@ export {
   type MechanicIntentAmbiguity,
   type MechanicIntentConfigurationValue,
   type MechanicIntentConnection,
+  type MechanicIntentReference,
   type MechanicReferenceKind,
   type MechanicResolution,
   type MechanicRequirementCategory,

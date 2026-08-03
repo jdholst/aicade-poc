@@ -34,7 +34,12 @@ const movementIntent: MechanicIntent = {
       port: "move_action",
     },
   ],
-  references: ["entity"],
+  references: [
+    {
+      kind: "entity",
+      id: "entity_player",
+    },
+  ],
   outcomes: ["actor_position_changes"],
   requiredCapabilities: ["logical_input", "entity_motion"],
   ambiguities: [],
@@ -121,6 +126,13 @@ describe("resolveMechanicIntent", () => {
       mechanicType: "player_movement",
       assumptions: [],
       coverage: {
+        coveredRequirements: expect.arrayContaining([
+          {
+            category: "reference",
+            value: "entity:entity_player",
+            coveredBy: ["player_movement"],
+          },
+        ]),
         uncoveredRequirements: [],
       },
     });
@@ -181,6 +193,63 @@ describe("resolveMechanicIntent", () => {
       },
     });
   });
+
+  it.each([
+    {
+      label: "numeric",
+      value: "180",
+      configuration: movementContract.coverage.configuration,
+    },
+    {
+      label: "boolean",
+      value: "true",
+      configuration: [
+        {
+          key: "speed",
+          valueType: "boolean" as const,
+        },
+      ],
+    },
+  ])(
+    "does not coerce a string intent value into a $label contract value",
+    ({ value, configuration }) => {
+      expect(
+        resolveMechanicIntent({
+          intent: {
+            ...movementIntent,
+            configuration: [
+              {
+                key: "speed",
+                value,
+              },
+            ],
+          },
+          builtInContracts: [
+            {
+              ...movementContract,
+              coverage: {
+                ...movementContract.coverage,
+                configuration,
+              },
+            },
+          ],
+          availableCapabilities: ["logical_input", "entity_motion"],
+          clarificationStrategy: "infer_or_fail",
+        })
+      ).toMatchObject({
+        kind: "generated_mechanic",
+        coverage: {
+          uncoveredRequirements: [
+            {
+              category: "configuration",
+              value: `speed=${value}`,
+              coveredBy: [],
+            },
+          ],
+        },
+      });
+    }
+  );
 
   it("returns a capability gap when uncovered behavior needs an unavailable primitive", () => {
     const navigationIntent: MechanicIntent = {
@@ -304,7 +373,20 @@ describe("resolveMechanicIntent", () => {
           port: "objective_progress",
         },
       ],
-      references: ["asset", "entity", "objective"],
+      references: [
+        {
+          kind: "asset",
+          id: "asset_pickup",
+        },
+        {
+          kind: "entity",
+          id: "entity_player",
+        },
+        {
+          kind: "objective",
+          id: "objective_primary",
+        },
+      ],
       outcomes: [
         "actor_position_changes",
         "score_increases",
@@ -358,7 +440,20 @@ describe("resolveMechanicIntent", () => {
           port: "objective_progress",
         },
       ],
-      references: ["asset", "entity", "objective"],
+      references: [
+        {
+          kind: "asset",
+          id: "asset_pickup",
+        },
+        {
+          kind: "entity",
+          id: "entity_player",
+        },
+        {
+          kind: "objective",
+          id: "objective_primary",
+        },
+      ],
       outcomes: [
         "actor_position_changes",
         "score_increases",
@@ -433,7 +528,7 @@ describe("resolveMechanicIntent", () => {
             port: "move_action",
           },
         ],
-        references: ["entity", "scene"],
+        references: ["entity"],
         outcomes: ["actor_position_changes"],
       },
       compatibleWith: [
@@ -456,6 +551,105 @@ describe("resolveMechanicIntent", () => {
       coverage: {
         uncoveredRequirements: [],
       },
+    });
+  });
+
+  it("resolves supported pickup intent without claiming ignored asset or region bindings", () => {
+    expect(
+      resolveTopDownMechanicIntent({
+        intent: {
+          id: "intent_pickup_collection",
+          summary: "Collect and reposition a pickup to advance the objective.",
+          triggers: ["actor_overlaps_target"],
+          actors: ["player"],
+          targets: ["pickup"],
+          behaviors: ["collect_target", "reposition_target"],
+          ownedObjects: [],
+          stateChanges: ["increment_objective_progress"],
+          temporalRules: [],
+          spatialRules: ["reposition_inside_pickup_zone"],
+          constraints: [],
+          configuration: [],
+          connections: [
+            {
+              direction: "output",
+              port: "objective_progress",
+            },
+          ],
+          references: [
+            {
+              kind: "entity",
+              id: "entity_player",
+            },
+            {
+              kind: "objective",
+              id: "objective_primary",
+            },
+          ],
+          outcomes: [
+            "objective_progress_increases",
+            "target_repositions",
+          ],
+          requiredCapabilities: [
+            "collision_observation",
+            "entity_motion",
+            "game_system_signal",
+          ],
+          ambiguities: [],
+        },
+        availableCapabilities: [],
+      })
+    ).toMatchObject({
+      kind: "built_in",
+      mechanicType: "pickup_collection",
+      coverage: {
+        coveredRequirements: expect.arrayContaining([
+          {
+            category: "reference",
+            value: "objective:objective_primary",
+            coveredBy: ["pickup_collection"],
+          },
+        ]),
+        uncoveredRequirements: [],
+      },
+    });
+  });
+
+  it("fails clarification instead of selecting a built-in for content-free intent", () => {
+    expect(
+      resolveTopDownMechanicIntent({
+        intent: {
+          id: "intent_empty",
+          summary: "",
+          triggers: [],
+          actors: [],
+          targets: [],
+          behaviors: [],
+          ownedObjects: [],
+          stateChanges: [],
+          temporalRules: [],
+          spatialRules: [],
+          constraints: [],
+          configuration: [],
+          connections: [],
+          references: [],
+          outcomes: [],
+          requiredCapabilities: [],
+          ambiguities: [],
+        },
+        availableCapabilities: [],
+      })
+    ).toEqual({
+      kind: "clarification_failure",
+      intentId: "intent_empty",
+      strategy: "infer_or_fail",
+      unresolvedAmbiguities: [
+        {
+          id: "ambiguity_missing_requirements",
+          description:
+            "The mechanic intent does not contain any behavior requirements to resolve.",
+        },
+      ],
     });
   });
 });
