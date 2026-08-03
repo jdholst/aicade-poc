@@ -187,6 +187,24 @@ export {
 } from "./mechanics/top-down-built-in-mechanic-contracts";
 
 export {
+  GENERATION_CONSTRAINT_SET_SCHEMA_VERSION,
+  generationConstraintSetSchema,
+  parseGenerationConstraintSet,
+  PHASE_9_GENERATION_CONSTRAINT_SET,
+  type GenerationConstraintParseResult,
+  type GenerationConstraintSet,
+  type GenerationConstraintValidationIssue,
+} from "./mechanics/mechanic-generation-constraints";
+
+export {
+  coordinateMechanicGeneration,
+  type AdmittedGeneratedMechanicRequest,
+  type CoordinateMechanicGenerationInput,
+  type MechanicGenerationConstraintConflictEvidence,
+  type MechanicGenerationCoordination,
+} from "./mechanics/mechanic-generation-coordinator";
+
+export {
   GameSpecValidationError,
   getTopDownGameSpecValidationIssues,
   validateTopDownGameSpec,
