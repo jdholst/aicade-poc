@@ -157,6 +157,35 @@ export {
 } from "./mechanics/mechanic-registry";
 
 export {
+  resolveMechanicIntent,
+  type BuiltInMechanicConfigurationField,
+  type BuiltInMechanicCompositionResolution,
+  type BuiltInMechanicContract,
+  type BuiltInMechanicContractCoverage,
+  type BuiltInMechanicResolution,
+  type GeneratedMechanicResolution,
+  type MechanicCoverageEvidence,
+  type MechanicCoverageRequirement,
+  type MechanicCapabilityGapResolution,
+  type MechanicClarificationFailureResolution,
+  type MechanicIntent,
+  type MechanicIntentAmbiguity,
+  type MechanicIntentConfigurationValue,
+  type MechanicIntentConnection,
+  type MechanicReferenceKind,
+  type MechanicResolution,
+  type MechanicRequirementCategory,
+  type MechanicResolutionAssumption,
+  type ResolveMechanicIntentInput,
+} from "./mechanics/mechanic-resolver";
+
+export {
+  resolveTopDownMechanicIntent,
+  topDownBuiltInMechanicContracts,
+  type ResolveTopDownMechanicIntentInput,
+} from "./mechanics/top-down-built-in-mechanic-contracts";
+
+export {
   GameSpecValidationError,
   getTopDownGameSpecValidationIssues,
   validateTopDownGameSpec,
