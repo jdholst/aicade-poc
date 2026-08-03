@@ -13,8 +13,8 @@ Use the `$mattpocock-skills:notion-tracker` skill for every tracker mutation.
 - **Project Work database:** `https://www.notion.so/cbc62c9af551488996a15be37526df45`
 - **Project Work data source:** `collection://c373c36f-7aa1-4068-aa77-d48104431134`
 - **Active milestone page:** `https://www.notion.so/3759db009ee581af97f0cb2b8ae26c68`
-- **Active milestone database:** `https://www.notion.so/2d89f23dd39648f196d15f7ea8734235`
-- **Active milestone data source:** `collection://8bda40b4-641d-4b42-873e-5f2b6a7cecaf`
+- **Active milestone database:** `https://www.notion.so/e398860364124ecf8a5eda68f5aec5d0`
+- **Active milestone data source:** `collection://b8eed442-7022-4ed9-9f73-252f67292f61`
 
 Fetch each target before use. Update this file only after verifying a moved or replaced target.
 

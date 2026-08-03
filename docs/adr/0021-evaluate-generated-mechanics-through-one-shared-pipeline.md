@@ -1,0 +1,3 @@
+# Evaluate generated mechanics through one shared pipeline
+
+Every Phase 9 Generated Mechanic Evaluation Case will run independently through the same intent, resolution, contract, capability admission, source generation, deterministic validation, bounded repair, Final Game Spec binding, and browser first-playable pipeline. Evaluator-authored External Acceptance Observations remain separate from model-declared scenarios, and case-specific information is limited to creator-style prompts, fixtures, generated artifacts, and Game Specs so passing known examples cannot be achieved through mechanic-specific orchestration or helpers.

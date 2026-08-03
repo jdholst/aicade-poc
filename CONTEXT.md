@@ -366,6 +366,146 @@ The first top-down Phaser template should have a stable core engine layer that A
 
 The first top-down Phaser template should ship with a small library of modular, configurable Mechanic Modules for common top-down patterns such as player movement, enemy chasing or patrolling, collectible pickups, projectiles or attacks, health/damage, score, timer, win/loss conditions, spawn waves, and simple obstacles or walls. These modules should be opt-in through the Game Spec: a game can include, exclude, configure, combine, or extend them as needed. Some mechanics may be included by default in starter specs, but they should still appear explicitly in the spec so the active gameplay contract is inspectable and editable. Built-in modules provide reliable generation and validation, while versioned extension blocks remain the flexibility path for mechanics the library cannot express yet.
 
+## Mechanic Capability API
+
+The Mechanic Capability API is the Sparkline-owned primitive runtime boundary available to Generated Mechanic Extensions. It exposes reusable operations such as dynamic-object ownership, movement, collision, input, time, entity state, and cleanup rather than mechanic-shaped services; extensions may compose those primitives freely but receive no direct access to raw Phaser, the DOM, storage, network, or arbitrary globals, and a mechanic that needs an unavailable primitive produces an explicit capability gap.
+
+## Mechanic Config DSL
+
+The Mechanic Config DSL is the restricted Sparkline-owned schema language through which a Generated Mechanic Extension declares its configuration contract. AI may compose bounded scalar, enum, stable-ID reference, object, and collection primitives from the DSL, while Sparkline retains control of validation semantics, complexity limits, compatibility, and generation constraints.
+
+## Generation Constraint Set
+
+A Generation Constraint Set is internal, request- or evaluation-scoped configuration that narrows generated mechanic count, available capabilities, resource budgets, config-contract complexity, or required observable evidence without changing the general generator. Sparkline selects it automatically; ordinary creators do not author, select, or manage constraint sets, and a policy-management system is deferred until a real product need emerges.
+
+## Generated Mechanic Contract
+
+A Generated Mechanic Contract is the validated pre-implementation agreement for one Generated Mechanic Extension. It combines the behavior plan, manifest, Mechanic Config DSL contract, declared capabilities and references, owned state and resources, lifecycle expectations, and Behavior Scenario DSL evidence that generated source must satisfy.
+
+## Behavior Scenario DSL
+
+The Behavior Scenario DSL is the restricted, non-executable language through which a Generated Mechanic Contract declares deterministic setup, actions, elapsed time or events, and observable outcomes. Sparkline owns the DSL semantics, harness, observations, constraint-required coverage, and pass/fail evaluation; generated code cannot grade itself.
+
+## Artifact-Scoped Repair
+
+Artifact-Scoped Repair remediates the smallest generated artifact responsible for a failure while keeping approved upstream artifacts locked. Repairing an artifact invalidates and revalidates its downstream dependents, never relaxes the Mechanic Capability API or Generation Constraint Set, and remains a bounded attempt within the original GenerationRun.
+
+## Artifact Repair Budget
+
+An Artifact Repair Budget is the Generation Constraint Set limit on repair attempts for each generated-artifact stage within one GenerationRun. Phase 9 permits one initial attempt plus three repairs per contract, source, or Final Game Spec stage; exhausting any stage ends the run honestly.
+
+## Generated Mechanic Evaluation Set
+
+The Generated Mechanic Evaluation Set is the Phase 9 proof suite for mechanic-agnostic generation. It contains multiple structurally different successful mechanics, at least one mechanic selected only after the general pipeline is implemented, and at least one honest capability-gap case; every case must use the same orchestration, contracts, primitive capability boundary, validation, repair, runtime loading, and evidence flow.
+
+## Generated Mechanic Evaluation Case
+
+A Generated Mechanic Evaluation Case is one reproducible game-generation run defined by creator-style intent, a shared Generation Constraint Set and capability version, fixed seeds where relevant, independent acceptance observations, and an expected success or Capability Gap outcome. Case-specific behavior belongs in the fixture and resulting artifacts, never in the reusable generation pipeline or capability surface.
+
+## External Acceptance Observation
+
+An External Acceptance Observation is evaluator-authored evidence required from a Generated Mechanic Evaluation Case independently of the scenarios proposed by the generating model. It describes observable behavior without prescribing implementation and is measured by Sparkline's deterministic harness or browser validation rather than graded by generated code.
+
+## Holdout Mechanic
+
+A Holdout Mechanic is a Generated Mechanic Evaluation Case selected only after the general pipeline reaches its Evaluation Freeze. It tests whether the unchanged architecture can handle previously unseen creator intent without mechanic-specific routing, schemas, prompts, helpers, or orchestration.
+
+## Evaluation Freeze
+
+An Evaluation Freeze is the checkpoint after known evaluation cases pass at which Phase 9 fixes the generator orchestration, artifact contracts, capability version, execution lifecycle, and Generation Constraint Set before selecting the Holdout Mechanic. Generic defect fixes remain allowed, but holdout-specific accommodations invalidate the unchanged holdout result.
+
+## Generation Guidance Boundary
+
+The Generation Guidance Boundary separates generic Sparkline-owned schemas, capability documentation, constraints, lifecycle rules, accepted upstream artifacts, and exact repair evidence from prohibited mechanic-specific source scaffolding or algorithms. Case behavior may reach source generation through its accepted contract, but reusable orchestration and prompts may not prescribe how a named mechanic composes primitives.
+
+## Mechanic Generation Coordinator
+
+The Mechanic Generation Coordinator receives the custom mechanic requests identified during game planning, applies run-level Generation Constraint Set limits, and invokes the single-mechanic generation pipeline once for each admitted request. Phase 9 sets the maximum to one generated mechanic per GenerationRun through configuration rather than embedding that limit in the reusable pipeline.
+
+## Mechanic Intent
+
+A Mechanic Intent is the structured, implementation-neutral account of gameplay behavior requested by the creator. It captures triggers, actors, targets, owned objects, state changes, temporal or spatial rules, constraints, and observable outcomes so Sparkline can resolve the behavior without relying on keywords or silently dropping requirements.
+
+## Built-in Mechanic Contract
+
+A Built-in Mechanic Contract declares the triggers, behaviors, configuration range, connections, references, and observable outcomes that one trusted Mechanic Module can express. The Mechanic Resolver uses these declarations rather than mechanic names or implementation-source inference when proving coverage.
+
+## Mechanic Resolver
+
+The Mechanic Resolver maps structured Mechanic Intents to a fully covering built-in module, a proven compatible built-in composition, generated mechanic work, an explicit capability gap, or creator clarification. AI may extract intent and propose candidates, but Sparkline deterministically verifies complete, auditable contract coverage before accepting a built-in resolution.
+
+## Clarification Strategy
+
+A Clarification Strategy decides how a generation flow handles ambiguities already detected and preserved by the Mechanic Resolver. Phase 9 uses `infer_or_fail`: Sparkline records bounded reversible assumptions and continues, or fails honestly when no safe interpretation exists, while leaving room for a future `ask_when_material` strategy and creator-facing Clarification Request without changing intent resolution.
+
+## Mechanic Execution Realm
+
+The Mechanic Execution Realm is the isolated environment in which a Generated Mechanic Extension implementation executes with only its admitted Mechanic Capability API primitives. Generated source receives no ambient authority over raw Phaser, DOM, network, storage, module loading, dynamic evaluation, or arbitrary globals, and is subject to CPU, memory, resource, and lifecycle budgets; static source checks remain defense-in-depth rather than the security boundary.
+
+## Execution Realm Conformance Suite
+
+The Execution Realm Conformance Suite is the Phase 9 pass/fail evaluation for candidate Mechanic Execution Realm technologies. It requires usable capability execution, forbidden-authority and escape resistance, runaway termination, resource enforcement, determinism, opaque-handle isolation, cleanup and recovery, real browser integration, and repair-quality diagnostics; failing any hard boundary rejects the candidate.
+
+## Generated Mechanic Source
+
+Generated Mechanic Source is model-authored TypeScript checked against the approved Generated Mechanic Contract, generated config types, and Mechanic Capability API. Sparkline parses, typechecks, and compiles it into a normalized JavaScript runtime artifact before static safety checks and Mechanic Execution Realm evaluation; TypeScript improves correctness and repair evidence but provides no security boundary.
+
+## Mechanic Object Binding
+
+A Mechanic Object Binding connects a named role in a Generated Mechanic Contract to stable Game Spec identities and supplies the extension with opaque handles rather than engine objects. Bindings may represent one object or a live collection, while all observation and mutation occurs through the Mechanic Capability API.
+
+## Mechanic-Owned Object Archetype
+
+A Mechanic-Owned Object Archetype is a Generated Mechanic Contract declaration for transient objects that an extension may create through admitted capabilities. Sparkline owns the resulting objects' identity, resource accounting, lifecycle tracking, and cleanup.
+
+## Mechanic Capability Registry
+
+The Mechanic Capability Registry is the versioned Sparkline-owned definition of every primitive operation that Generated Mechanic Extensions may request. It is the authoritative capability vocabulary shared by generation contracts, constraints, execution, observation, and validation.
+
+## Mechanic Capability Version
+
+A Mechanic Capability Version identifies the exact Mechanic Capability API contract against which a Generated Mechanic Extension was authored and accepted. An extension retains that version until an explicit migration produces and revalidates a new extension version.
+
+## Mechanic Capability Grant
+
+A Mechanic Capability Grant is the exact least-authority subset of a pinned Mechanic Capability Version exposed to one Generated Mechanic Extension. It must be declared by the Generated Mechanic Contract and admitted by the active Generation Constraint Set; undeclared use and unjustified unused declarations fail validation.
+
+## Mechanic Resource Budget
+
+A Mechanic Resource Budget is the Sparkline-owned limit on one Generated Mechanic Extension's objects, operations, timers, subscriptions, signals, state, execution time, and failures. The active Generation Constraint Set selects the budget; generated contracts may declare expected usage but cannot increase it.
+
+## Deterministic Mechanic Services
+
+Deterministic Mechanic Services are Sparkline-owned simulation time and seeded randomness capabilities available to Generated Mechanic Extensions when admitted by their contracts. They make mechanic decisions reproducible from recorded clock progression, seeds, inputs, and signals while raw JavaScript clocks, timers, and entropy remain unavailable.
+
+## Generated Mechanic Lifecycle
+
+The Generated Mechanic Lifecycle is the Sparkline-controlled sequence of installation, logical input or gameplay events, scheduled callbacks, optional fixed-step updates, and disposal through which a Generated Mechanic Extension runs. Sparkline invokes every entry point under execution and resource budgets and guarantees cancellation and cleanup even when extension code fails.
+
+## Mechanic Port
+
+A Mechanic Port is a contract-declared, typed input or output through which Mechanic Modules and Generated Mechanic Extensions exchange gameplay signals. The Final Game Spec connects compatible ports explicitly, while Sparkline validates and mediates delivery so mechanics never discover or call one another directly.
+
+## Game System Port
+
+A Game System Port is a typed input or output through which Sparkline-owned systems such as game lifecycle, score, health, and objectives exchange gameplay signals with mechanics. It preserves explicit state ownership by exposing validated observations and commands instead of shared mutable global game state.
+
+## Gameplay Signal Queue
+
+The Gameplay Signal Queue is the Sparkline-owned deterministic delivery path for connected Mechanic Ports and Game System Ports. It completes the current callback before delivering immutable signals in stable order and enforces per-step delivery limits so cycles become structured failures rather than recursive event storms.
+
+## Mechanic Runtime State
+
+Mechanic Runtime State is private, restricted, serializable state owned by one Generated Mechanic Extension instance for the lifetime of its active round or scene. It resets deterministically and is destroyed on disposal; shared game state belongs to explicit state-owning systems, and durable creator or player data requires a separate persistence contract.
+
+## Runtime Failure Evidence
+
+Runtime Failure Evidence is Sparkline-captured diagnostic data tied to the exact Generated Mechanic Extension, Playable Build, capability version, and execution context in which a contained failure occurred. Validation-time evidence may drive bounded repair in the current GenerationRun, while post-acceptance evidence may seed a later GenerationRun that produces and fully validates a new extension version.
+
+## Capability Gap
+
+A Capability Gap is an honest generation outcome showing that a requested Mechanic Intent requires a primitive operation absent from the admitted Mechanic Capability API. It is evidence for evaluating the capability surface, not permission for generated code to widen that surface.
+
 The current hand-authored Phaser template is best understood as a spec-configured top-down chaser proof, not the final general top-down template architecture. It has proven that title, arena, layout, objective text, and entity placement can come from a Game Spec, but its behavior is still chaser-shaped: one player, one collectible objective, one chasing enemy, direct pursuit AI, pickup scoring, and reset-on-catch. This is an acceptable intermediate milestone, but the Mechanic Registry phase should turn those assumptions into opt-in mechanics rather than treating every top-down game as a chaser game.
 
 The first mechanic extraction pass should use a strict vertical-slice order instead of extracting every behavior at once: extract `player_movement` first as the runtime installation tracer bullet, then `pickup_collection` to prove objective, score, and zone-driven behavior, then `enemy_chase` after the module seam exists. Enemy chase is intentionally last because obstacle-aware pursuit and pathfinding can expand quickly and should not define the initial module boundary.

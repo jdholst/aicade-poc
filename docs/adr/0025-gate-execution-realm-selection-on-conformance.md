@@ -1,0 +1,3 @@
+# Gate execution-realm selection on conformance
+
+Phase 9 will select its Mechanic Execution Realm technology only after a runnable candidate passes the Execution Realm Conformance Suite in Sparkline's real browser architecture. Any raw-engine or forbidden-authority access, representative escape, inability to terminate runaway code without freezing the editor, opaque-handle leak, cleanup failure, or loss of controlled deterministic execution is a hard rejection; source scanning alone is insufficient, while performance and implementation ergonomics only distinguish candidates that first pass every boundary gate.
