@@ -28,6 +28,7 @@ export type MechanicCapabilityDefinition = {
   evaluation: {
     actions: readonly StableId[];
     observations: readonly StableId[];
+    scenarioInputs?: readonly StableId[];
   };
   resourceCosts: MechanicCapabilityResourceCosts;
   requiresOpaqueHandle: boolean;
@@ -245,7 +246,11 @@ export const mechanicCapabilityRegistry = {
         signature: "() => number",
       },
       runtimeOperation: "random_next",
-      evaluation: { actions: ["set_seed"], observations: [] },
+      evaluation: {
+        actions: [],
+        observations: [],
+        scenarioInputs: ["seed"],
+      },
       resourceCosts: { operationsPerTick: 1 },
       requiresOpaqueHandle: false,
     },

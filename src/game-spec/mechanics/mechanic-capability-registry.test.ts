@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  behaviorScenarioSchema,
   createMechanicCapabilityGrant,
   getMechanicCapabilityVersion,
   MECHANIC_CAPABILITY_VERSION,
@@ -179,7 +180,11 @@ describe("Mechanic Capability Registry", () => {
           signature: "() => number",
         },
         runtimeOperation: "random_next",
-        evaluation: { actions: ["set_seed"], observations: [] },
+        evaluation: {
+          actions: [],
+          observations: [],
+          scenarioInputs: ["seed"],
+        },
         resourceCosts: { operationsPerTick: 1 },
         requiresOpaqueHandle: false,
       },
@@ -207,6 +212,97 @@ describe("Mechanic Capability Registry", () => {
         requiresOpaqueHandle: false,
       },
     ]);
+  });
+
+  it("keeps registry evaluation vocabulary accepted by the scenario DSL", () => {
+    const version = getMechanicCapabilityVersion(MECHANIC_CAPABILITY_VERSION);
+
+    expect(version).toBeDefined();
+    if (!version) {
+      throw new Error("Expected the first capability version to exist.");
+    }
+
+    const actionFixtures: Record<string, unknown> = {
+      advance_time: { kind: "advance_time", milliseconds: 16 },
+      receive_input: {
+        kind: "receive_input",
+        portId: "input_port",
+        value: true,
+      },
+    };
+    const observationFixtures: Record<string, unknown> = {
+      binding_property: {
+        kind: "binding_property",
+        bindingId: "actor_binding",
+        property: "active",
+        operator: "equals",
+        value: true,
+      },
+      owned_object_count: {
+        kind: "owned_object_count",
+        archetypeId: "owned_object",
+        operator: "equals",
+        value: 1,
+      },
+      output_emitted: {
+        kind: "output_emitted",
+        portId: "output_port",
+        value: true,
+      },
+      state_equals: {
+        kind: "state_equals",
+        stateId: "private_state",
+        value: true,
+      },
+    };
+    const baseScenario = {
+      id: "registry_vocabulary",
+      seed: 42,
+      setup: [],
+      steps: [actionFixtures.advance_time],
+      observations: [observationFixtures.state_equals],
+    };
+    const actions = new Set(
+      version.capabilities.flatMap(
+        (capability) => capability.evaluation.actions
+      )
+    );
+    const observations = new Set(
+      version.capabilities.flatMap(
+        (capability) => capability.evaluation.observations
+      )
+    );
+    const scenarioInputs = new Set(
+      version.capabilities.flatMap((capability) =>
+        "scenarioInputs" in capability.evaluation
+          ? capability.evaluation.scenarioInputs
+          : []
+      )
+    );
+
+    for (const action of actions) {
+      expect(actionFixtures[action]).toBeDefined();
+      expect(
+        behaviorScenarioSchema.safeParse({
+          ...baseScenario,
+          steps: [actionFixtures[action]],
+        }).success
+      ).toBe(true);
+    }
+
+    for (const observation of observations) {
+      expect(observationFixtures[observation]).toBeDefined();
+      expect(
+        behaviorScenarioSchema.safeParse({
+          ...baseScenario,
+          observations: [observationFixtures[observation]],
+        }).success
+      ).toBe(true);
+    }
+
+    for (const scenarioInput of scenarioInputs) {
+      expect(Object.hasOwn(baseScenario, scenarioInput)).toBe(true);
+    }
   });
 
   it("keeps the active constraints pinned to registry membership", () => {

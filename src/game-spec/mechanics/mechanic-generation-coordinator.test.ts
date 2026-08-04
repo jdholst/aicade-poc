@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   coordinateMechanicGeneration,
+  getMechanicCapabilityVersion,
+  MECHANIC_CAPABILITY_VERSION,
   PHASE_9_GENERATION_CONSTRAINT_SET,
   type BuiltInMechanicResolution,
   type GeneratedMechanicResolution,
@@ -26,6 +28,11 @@ const generatedResolution: GeneratedMechanicResolution = {
 
 describe("coordinateMechanicGeneration", () => {
   it("admits one custom mechanic with the internal Phase 9 constraint set", () => {
+    const capabilityVersion = getMechanicCapabilityVersion(
+      MECHANIC_CAPABILITY_VERSION
+    );
+
+    expect(capabilityVersion).toBeDefined();
     expect(
       coordinateMechanicGeneration({
         generationRunId: "generation_run_seeded_hazards",
@@ -47,20 +54,9 @@ describe("coordinateMechanicGeneration", () => {
       id: "phase_9_generation_constraints",
       maximumGeneratedMechanicsPerRun: 1,
       capabilityVersion: "mechanic_capability/v1",
-      admittedCapabilities: [
-        "object_read",
-        "object_create",
-        "object_motion_write",
-        "object_destroy",
-        "spatial_query",
-        "state_read",
-        "state_write",
-        "time_read",
-        "time_schedule",
-        "random_next",
-        "event_subscribe",
-        "signal_emit",
-      ],
+      admittedCapabilities: capabilityVersion?.capabilities.map(
+        (capability) => capability.id
+      ),
       resourceBudgetProfile: "phase_9_fixed_budget",
       configDslComplexity: {
         maximumDepth: 4,
