@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import { stableIdSchema } from "../game-spec-schema";
+import {
+  MECHANIC_CAPABILITY_VERSION,
+  mechanicCapabilityRegistry,
+} from "./mechanic-capability-registry";
 
 export const GENERATION_CONSTRAINT_SET_SCHEMA_VERSION =
   "generation-constraint-set/v1";
@@ -14,6 +18,7 @@ export const generationConstraintSetSchema = z
     id: stableIdSchema,
     maximumGeneratedMechanicsPerRun: positiveIntegerSchema,
     capabilityVersion: z.string().min(1).max(80),
+    admittedCapabilities: z.array(stableIdSchema).min(1),
     resourceBudgetProfile: stableIdSchema,
     configDslComplexity: z
       .object({
@@ -73,7 +78,10 @@ export const PHASE_9_GENERATION_CONSTRAINT_SET =
     schemaVersion: GENERATION_CONSTRAINT_SET_SCHEMA_VERSION,
     id: "phase_9_generation_constraints",
     maximumGeneratedMechanicsPerRun: 1,
-    capabilityVersion: "mechanic_capability/v1",
+    capabilityVersion: MECHANIC_CAPABILITY_VERSION,
+    admittedCapabilities: mechanicCapabilityRegistry.capabilities.map(
+      (capability) => capability.id
+    ),
     resourceBudgetProfile: "phase_9_fixed_budget",
     configDslComplexity: {
       maximumDepth: 4,

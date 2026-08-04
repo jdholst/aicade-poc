@@ -222,6 +222,26 @@ export {
 } from "./mechanics/generated-mechanic-contract";
 
 export {
+  createMechanicCapabilityGrant,
+  getMechanicCapabilityVersion,
+  MECHANIC_CAPABILITY_VERSION,
+  mechanicCapabilityRegistry,
+  validateMechanicCapabilityUsage,
+  type MechanicCapabilityConformanceRequirement,
+  type MechanicCapabilityDefinition,
+  type MechanicCapabilityRegistryVersion,
+  type MechanicCapabilityResourceCosts,
+  type CreateMechanicCapabilityGrantInput,
+  type MechanicCapabilityGrant,
+  type MechanicCapabilityGrantEntry,
+  type MechanicCapabilityGrantIssue,
+  type MechanicCapabilityGrantResult,
+  type MechanicCapabilityUsageIssue,
+  type MechanicCapabilityUsageValidationResult,
+  type ValidateMechanicCapabilityUsageInput,
+} from "./mechanics/mechanic-capability-registry";
+
+export {
   GameSpecValidationError,
   getTopDownGameSpecValidationIssues,
   validateTopDownGameSpec,
