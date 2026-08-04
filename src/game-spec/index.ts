@@ -205,6 +205,23 @@ export {
 } from "./mechanics/mechanic-generation-coordinator";
 
 export {
+  GENERATED_MECHANIC_CONTRACT_SCHEMA_VERSION,
+  behaviorScenarioSchema,
+  generatedMechanicContractSchema,
+  mechanicConfigDslValueSchema,
+  validateGeneratedMechanicContract,
+  type BehaviorScenario,
+  type GeneratedMechanicContract,
+  type GeneratedMechanicReferenceCatalog,
+  type GeneratedMechanicResourceBudget,
+  type GeneratedMechanicContractValidationIssue,
+  type GeneratedMechanicContractValidationResult,
+  type MechanicConfigDslField,
+  type MechanicConfigDslValue,
+  type ValidateGeneratedMechanicContractInput,
+} from "./mechanics/generated-mechanic-contract";
+
+export {
   GameSpecValidationError,
   getTopDownGameSpecValidationIssues,
   validateTopDownGameSpec,
