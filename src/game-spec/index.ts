@@ -242,6 +242,24 @@ export {
 } from "./mechanics/mechanic-capability-registry";
 
 export {
+  MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY,
+  MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
+  runMechanicExecutionRealmConformanceSuite,
+  type MechanicExecutionRealmCandidateAdapter,
+  type MechanicExecutionRealmCandidateRun,
+  type MechanicExecutionRealmConformanceGate,
+  type MechanicExecutionRealmConformanceGateId,
+  type MechanicExecutionRealmConformanceHost,
+  type MechanicExecutionRealmConformanceProbe,
+  type MechanicExecutionRealmConformanceReport,
+  type MechanicExecutionRealmProbeDiagnostic,
+  type MechanicExecutionRealmProbeResult,
+  type MechanicExecutionRealmResourceBudget,
+  type MechanicExecutionRealmResourceDimension,
+  type RunMechanicExecutionRealmConformanceSuiteInput,
+} from "./mechanics/mechanic-execution-realm-conformance";
+
+export {
   GameSpecValidationError,
   getTopDownGameSpecValidationIssues,
   validateTopDownGameSpec,
