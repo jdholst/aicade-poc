@@ -35,10 +35,16 @@ const intent: MechanicIntent = {
 const resolution: GeneratedMechanicResolution = {
   kind: "generated_mechanic",
   intentId: intent.id,
-  candidateBuiltInTypes: [],
+  candidateBuiltInTypes: ["projectile_shooting"],
   assumptions: [],
   coverage: {
-    coveredRequirements: [],
+    coveredRequirements: [
+      {
+        category: "trigger",
+        value: "logical_action",
+        coveredBy: ["hazard_contact"],
+      },
+    ],
     uncoveredRequirements: [
       {
         category: "behavior",

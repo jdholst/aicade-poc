@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   PHASE_9_GENERATION_CONSTRAINT_SET,
@@ -164,6 +164,52 @@ describe("OpenAI mechanic contract provider", () => {
     });
   });
 
+  it("keeps the timeout active while the provider response body is consumed", async () => {
+    vi.useFakeTimers();
+    let markBodyReadStarted: (() => void) | undefined;
+    const bodyReadStarted = new Promise<void>((resolve) => {
+      markBodyReadStarted = resolve;
+    });
+    const provider = createOpenAiMechanicContractProvider({
+      fetchImpl: async (_input, init) =>
+        ({
+          ok: true,
+          status: 200,
+          json: () => {
+            markBodyReadStarted?.();
+            return new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener(
+                "abort",
+                () => reject(new DOMException("Aborted", "AbortError")),
+                { once: true }
+              );
+            });
+          },
+        }) as Response,
+      timeoutMs: 5,
+    });
+
+    try {
+      const outcomePromise = provider(providerInput).catch((error) => error);
+      await bodyReadStarted;
+      await vi.advanceTimersByTimeAsync(5);
+      const outcome = await Promise.race([
+        outcomePromise,
+        Promise.resolve("still_pending"),
+      ]);
+
+      expect(outcome).toMatchObject({
+        name: "MechanicContractGenerationProviderError",
+        evidence: {
+          stage: "contract_generation",
+          code: "provider_timeout",
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("honors caller cancellation separately from provider timeout", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -198,6 +244,47 @@ describe("OpenAI mechanic contract provider", () => {
             message: "Generated Mechanic Contract creation was cancelled.",
           },
         ],
+      },
+    });
+  });
+
+  it("honors caller cancellation while the response body is consumed", async () => {
+    const controller = new AbortController();
+    let markBodyReadStarted: (() => void) | undefined;
+    const bodyReadStarted = new Promise<void>((resolve) => {
+      markBodyReadStarted = resolve;
+    });
+    const provider = createOpenAiMechanicContractProvider({
+      fetchImpl: async (_input, init) =>
+        ({
+          ok: true,
+          status: 200,
+          json: () => {
+            markBodyReadStarted?.();
+            return new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener(
+                "abort",
+                () => reject(new DOMException("Aborted", "AbortError")),
+                { once: true }
+              );
+            });
+          },
+        }) as Response,
+      timeoutMs: 100,
+    });
+
+    const outcomePromise = provider({
+      ...providerInput,
+      signal: controller.signal,
+    });
+    await bodyReadStarted;
+    controller.abort();
+
+    await expect(outcomePromise).rejects.toMatchObject({
+      name: "MechanicContractGenerationProviderError",
+      evidence: {
+        stage: "contract_generation",
+        code: "provider_cancelled",
       },
     });
   });

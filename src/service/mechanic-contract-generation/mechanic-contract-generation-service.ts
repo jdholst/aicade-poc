@@ -57,6 +57,16 @@ export type MechanicContractGenerationProviderEvidence = {
   }[];
 };
 
+export type MechanicContractGenerationRequestEvidence = {
+  stage: "contract_generation";
+  code: "invalid_generation_request";
+  issues: {
+    path: "resolution.intentId";
+    code: "intent_mismatch";
+    message: string;
+  }[];
+};
+
 export class MechanicContractGenerationProviderError extends Error {
   readonly evidence: MechanicContractGenerationProviderEvidence;
 
@@ -65,6 +75,23 @@ export class MechanicContractGenerationProviderError extends Error {
     this.name = "MechanicContractGenerationProviderError";
     this.evidence = evidence;
   }
+}
+
+export function createMechanicContractProviderError(
+  code: MechanicContractGenerationProviderFailureCode,
+  message: string
+) {
+  return new MechanicContractGenerationProviderError({
+    stage: "contract_generation",
+    code,
+    issues: [
+      {
+        path: "provider",
+        code,
+        message,
+      },
+    ],
+  });
 }
 
 export type MechanicContractGenerationResult =
@@ -80,7 +107,8 @@ export type MechanicContractGenerationResult =
       evidence:
         | ContractValidationEvidence
         | CapabilityGrantEvidence
-        | MechanicContractGenerationProviderEvidence;
+        | MechanicContractGenerationProviderEvidence
+        | MechanicContractGenerationRequestEvidence;
     };
 
 export type GenerateMechanicContractInput = {
@@ -105,6 +133,24 @@ export async function generateMechanicContract({
   signal,
 }: GenerateMechanicContractInput): Promise<MechanicContractGenerationResult> {
   const { resolution, constraintSet } = admittedRequest;
+
+  if (resolution.intentId !== intent.id) {
+    return {
+      success: false,
+      evidence: {
+        stage: "contract_generation",
+        code: "invalid_generation_request",
+        issues: [
+          {
+            path: "resolution.intentId",
+            code: "intent_mismatch",
+            message: `Admitted resolution intent "${resolution.intentId}" does not match accepted intent "${intent.id}".`,
+          },
+        ],
+      },
+    };
+  }
+
   let candidate: unknown;
 
   try {
@@ -128,19 +174,13 @@ export async function generateMechanicContract({
       error instanceof Error
         ? error.message
         : "Mechanic contract provider request failed.";
+    const providerError = createMechanicContractProviderError(
+      "provider_failure",
+      message
+    );
     return {
       success: false,
-      evidence: {
-        stage: "contract_generation",
-        code: "provider_failure",
-        issues: [
-          {
-            path: "provider",
-            code: "provider_failure",
-            message,
-          },
-        ],
-      },
+      evidence: providerError.evidence,
     };
   }
 

@@ -243,6 +243,46 @@ describe("generateMechanicContract", () => {
     });
   });
 
+  it("rejects mismatched admitted resolution evidence before calling the provider", async () => {
+    let providerCallCount = 0;
+    const mismatchedResolution = {
+      ...resolution,
+      intentId: "intent_other_rule",
+    };
+
+    const result = await generateMechanicContract({
+      intent,
+      admittedRequest: {
+        resolution: mismatchedResolution,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => {
+        providerCallCount += 1;
+        return candidate;
+      },
+    });
+
+    expect(providerCallCount).toBe(0);
+    expect(result).toEqual({
+      success: false,
+      evidence: {
+        stage: "contract_generation",
+        code: "invalid_generation_request",
+        issues: [
+          {
+            path: "resolution.intentId",
+            code: "intent_mismatch",
+            message:
+              'Admitted resolution intent "intent_other_rule" does not match accepted intent "intent_runtime_rule".',
+          },
+        ],
+      },
+    });
+  });
+
   it("returns the registry's exact capability-admission evidence", async () => {
     const result = await generateMechanicContract({
       intent,

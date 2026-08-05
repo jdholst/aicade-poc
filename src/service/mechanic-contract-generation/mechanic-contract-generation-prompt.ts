@@ -47,6 +47,13 @@ export function createMechanicContractGenerationSystemPrompt({
         resourceCosts: capability.resourceCosts,
         requiresOpaqueHandle: capability.requiresOpaqueHandle,
       })) ?? [];
+  const acceptedGenerationEvidence = {
+    intentId: resolution.intentId,
+    assumptions: resolution.assumptions,
+    uncoveredRequirements: resolution.coverage.uncoveredRequirements.map(
+      ({ category, value }) => ({ category, value })
+    ),
+  };
 
   return `
 You are producing the validated pre-implementation contract for one generated game mechanic.
@@ -56,8 +63,8 @@ Task route: ${taskRoute}
 Accepted Mechanic Intent JSON:
 ${JSON.stringify(intent, null, 2)}
 
-Accepted generated-mechanic resolution JSON:
-${JSON.stringify(resolution, null, 2)}
+Accepted generic generation evidence JSON:
+${JSON.stringify(acceptedGenerationEvidence, null, 2)}
 
 Active Generation Constraint Set JSON:
 ${JSON.stringify(constraintSet, null, 2)}

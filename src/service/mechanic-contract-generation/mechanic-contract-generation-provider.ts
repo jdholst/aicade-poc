@@ -9,9 +9,8 @@ import {
   generatedMechanicContractJsonSchema,
 } from "./mechanic-contract-generation-schema";
 import {
-  MechanicContractGenerationProviderError,
+  createMechanicContractProviderError,
   type MechanicContractGenerationProvider,
-  type MechanicContractGenerationProviderFailureCode,
 } from "./mechanic-contract-generation-service";
 
 type ResponsesFunctionCall = {
@@ -47,7 +46,7 @@ export function createOpenAiMechanicContractProvider({
 }: CreateOpenAiMechanicContractProviderInput = {}): MechanicContractGenerationProvider {
   return async (input) => {
     if (input.signal?.aborted) {
-      throw createProviderError(
+      throw createMechanicContractProviderError(
         "provider_cancelled",
         "Generated Mechanic Contract creation was cancelled."
       );
@@ -66,6 +65,7 @@ export function createOpenAiMechanicContractProvider({
       controller.abort();
     }, timeoutMs);
     let response: Response;
+    let payload: OpenAIResponsePayload;
 
     try {
       response = await fetchImpl(OPENAI_RESPONSES_URL, {
@@ -110,22 +110,23 @@ export function createOpenAiMechanicContractProvider({
         }),
         cache: "no-store",
       });
+      payload = await readOpenAIResponsePayload(response, controller.signal);
     } catch (error) {
       if (cancelled) {
-        throw createProviderError(
+        throw createMechanicContractProviderError(
           "provider_cancelled",
           "Generated Mechanic Contract creation was cancelled."
         );
       }
 
       if (timedOut) {
-        throw createProviderError(
+        throw createMechanicContractProviderError(
           "provider_timeout",
           "OpenAI generation timed out while creating the Generated Mechanic Contract."
         );
       }
 
-      throw createProviderError(
+      throw createMechanicContractProviderError(
         "provider_failure",
         error instanceof Error
           ? error.message
@@ -136,10 +137,8 @@ export function createOpenAiMechanicContractProvider({
       input.signal?.removeEventListener("abort", cancelFromCaller);
     }
 
-    const payload = await readOpenAIResponsePayload(response);
-
     if (!response.ok) {
-      throw createProviderError(
+      throw createMechanicContractProviderError(
         "provider_failure",
         payload.error?.message ??
           `OpenAI request failed with status ${response.status}.`
@@ -154,7 +153,7 @@ export function createOpenAiMechanicContractProvider({
     );
 
     if (!functionCall) {
-      throw createProviderError(
+      throw createMechanicContractProviderError(
         "invalid_provider_output",
         "OpenAI did not return a Generated Mechanic Contract."
       );
@@ -163,7 +162,7 @@ export function createOpenAiMechanicContractProvider({
     try {
       return JSON.parse(functionCall.arguments) as unknown;
     } catch {
-      throw createProviderError(
+      throw createMechanicContractProviderError(
         "invalid_provider_output",
         "OpenAI returned invalid JSON for the Generated Mechanic Contract."
       );
@@ -174,27 +173,17 @@ export function createOpenAiMechanicContractProvider({
 export const requestGeneratedMechanicContractFromProvider =
   createOpenAiMechanicContractProvider();
 
-async function readOpenAIResponsePayload(response: Response) {
+async function readOpenAIResponsePayload(
+  response: Response,
+  signal: AbortSignal
+) {
   try {
     return (await response.json()) as OpenAIResponsePayload;
-  } catch {
+  } catch (error) {
+    if (signal.aborted) {
+      throw error;
+    }
+
     return {} satisfies OpenAIResponsePayload;
   }
-}
-
-function createProviderError(
-  code: MechanicContractGenerationProviderFailureCode,
-  message: string
-) {
-  return new MechanicContractGenerationProviderError({
-    stage: "contract_generation",
-    code,
-    issues: [
-      {
-        path: "provider",
-        code,
-        message,
-      },
-    ],
-  });
 }
