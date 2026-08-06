@@ -28,6 +28,7 @@ const modes = [
   "runtime_sandbox_mutated",
   "runtime_same_origin_retagged",
   "runtime_popup_retagged",
+  "runtime_rejection_cleans_candidate_preparation",
 ];
 const sandboxContractRejectionModes = new Set([
   "candidate_extra_sandbox_authority",
@@ -42,6 +43,9 @@ const retainedPreCaptureAuthorityModes = new Set([
   "candidate_popup_retagged",
   "runtime_same_origin_retagged",
   "runtime_popup_retagged",
+]);
+const preparationCleanupModes = new Set([
+  "runtime_rejection_cleans_candidate_preparation",
 ]);
 
 const vite = await createViteServer({
@@ -119,6 +123,22 @@ try {
         throw new Error(
           `${mode}: the laundering fixture did not finish with exact sandbox tokens`
         );
+      }
+      console.log(`PASS ${mode}`);
+      await page.close();
+      continue;
+    }
+    if (preparationCleanupModes.has(mode)) {
+      if (
+        fixture.runtimeRejectionReleasedCandidatePreparation !== true ||
+        fixture.report !== undefined
+      ) {
+        throw new Error(
+          `${mode}: runtime-first rejection did not release candidate preparation`
+        );
+      }
+      if (fixture.activeMessageListeners !== 0) {
+        throw new Error(`${mode}: browser-conformance listeners leaked`);
       }
       console.log(`PASS ${mode}`);
       await page.close();

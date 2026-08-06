@@ -2,6 +2,7 @@ import {
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
   createMechanicExecutionRealmBrowserConformanceSession,
   createMechanicExecutionRealmConformanceSession,
+  disposeMechanicExecutionRealmBrowserConformanceIframePreparation,
   prepareMechanicExecutionRealmBrowserConformanceIframe,
   runMechanicExecutionRealmConformanceSuite,
   type MechanicExecutionRealmConformanceProbe,
@@ -31,7 +32,8 @@ type FixtureMode =
   | "runtime_missing_allow_scripts"
   | "runtime_sandbox_mutated"
   | "runtime_same_origin_retagged"
-  | "runtime_popup_retagged";
+  | "runtime_popup_retagged"
+  | "runtime_rejection_cleans_candidate_preparation";
 
 type FixtureAudit = {
   source: "candidate" | "runtime";
@@ -54,6 +56,7 @@ declare global {
       activeMessageListeners: number;
       sandboxValues: string[];
       retainedPreCaptureAuthority?: boolean;
+      runtimeRejectionReleasedCandidatePreparation?: boolean;
     };
   }
 }
@@ -61,6 +64,7 @@ declare global {
 const mode = (new URLSearchParams(location.search).get("mode") ??
   "pass") as FixtureMode;
 const audits: FixtureAudit[] = [];
+const prepareSessionIframes = mode !== "unattested_mix";
 const candidateIframe = createSandboxedIframe(
   candidateResponder,
   mode,
@@ -68,7 +72,8 @@ const candidateIframe = createSandboxedIframe(
     ? "allow-scripts allow-same-origin"
     : mode === "candidate_popup_retagged"
       ? "allow-scripts allow-popups"
-      : undefined
+      : undefined,
+  prepareSessionIframes
 );
 const runtimeIframe = createSandboxedIframe(
   runtimeResponder,
@@ -77,9 +82,15 @@ const runtimeIframe = createSandboxedIframe(
     ? "allow-scripts allow-same-origin"
     : mode === "runtime_popup_retagged"
       ? "allow-scripts allow-popups"
-      : undefined
+      : undefined,
+  prepareSessionIframes
 );
-const relayIframe = createSandboxedIframe(relayResponder, mode);
+const relayIframe = createSandboxedIframe(
+  relayResponder,
+  mode,
+  undefined,
+  false
+);
 
 window.addEventListener("message", (event) => {
   const data = event.data as Record<string, unknown> | null;
@@ -124,13 +135,16 @@ await Promise.all([
   waitForResponderReady(candidateIframe),
   waitForResponderReady(runtimeIframe),
   waitForResponderReady(relayIframe),
-]);
+]).catch(throwAfterFixturePreparationCleanup);
 
 if (mode === "candidate_extra_sandbox_authority") {
   candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
 }
 if (mode === "runtime_missing_allow_scripts") {
   runtimeIframe.removeAttribute("sandbox");
+}
+if (mode === "runtime_rejection_cleans_candidate_preparation") {
+  runtimeIframe.setAttribute("sandbox", "allow-scripts allow-popups");
 }
 if (mode === "candidate_same_origin_retagged") {
   candidateIframe.setAttribute("sandbox", "allow-scripts");
@@ -150,9 +164,13 @@ if (mode === "candidate_same_origin_retagged") {
 } else if (mode === "runtime_same_origin_retagged") {
   retainedPreCaptureAuthority = canReadIframeDocument(runtimeIframe);
 } else if (mode === "candidate_popup_retagged") {
-  retainedPreCaptureAuthority = await probeRetainedPopupAccess(candidateIframe);
+  retainedPreCaptureAuthority = await probeRetainedPopupAccess(
+    candidateIframe
+  ).catch(throwAfterFixturePreparationCleanup);
 } else if (mode === "runtime_popup_retagged") {
-  retainedPreCaptureAuthority = await probeRetainedPopupAccess(runtimeIframe);
+  retainedPreCaptureAuthority = await probeRetainedPopupAccess(
+    runtimeIframe
+  ).catch(throwAfterFixturePreparationCleanup);
 }
 
 const activeMessageListeners = new Set<EventListenerOrEventListenerObject>();
@@ -180,36 +198,54 @@ window.removeEventListener = ((
 }) as typeof window.removeEventListener;
 
 try {
-  const session =
-    mode === "unattested_mix"
-      ? createUnattestedMixedSession(runtimeIframe)
-      : createMechanicExecutionRealmBrowserConformanceSession({
-          candidateId: "chromium_reference_candidate",
-          candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
-          runtimeIframe,
-        });
-  if (mode === "candidate_sandbox_mutated") {
-    candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
-  }
-  if (mode === "runtime_sandbox_mutated") {
-    runtimeIframe.removeAttribute("sandbox");
-  }
-  if (mode === "candidate_send_failure") {
-    candidateIframe.remove();
-  }
-  const report = await runMechanicExecutionRealmConformanceSuite({ session });
+  if (mode === "runtime_rejection_cleans_candidate_preparation") {
+    const runtimeRejectionReleasedCandidatePreparation =
+      await verifyRuntimeRejectionReleasesCandidatePreparation(
+        candidateIframe,
+        runtimeIframe
+      );
+    window.__mechanicRealmConformanceFixture = {
+      mode,
+      audits,
+      activeMessageListeners: activeMessageListeners.size,
+      sandboxValues: [
+        candidateIframe.getAttribute("sandbox") ?? "",
+        runtimeIframe.getAttribute("sandbox") ?? "",
+      ],
+      runtimeRejectionReleasedCandidatePreparation,
+    };
+  } else {
+    const session =
+      mode === "unattested_mix"
+        ? createUnattestedMixedSession(runtimeIframe)
+        : createMechanicExecutionRealmBrowserConformanceSession({
+            candidateId: "chromium_reference_candidate",
+            candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+            runtimeIframe,
+          });
+    if (mode === "candidate_sandbox_mutated") {
+      candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
+    }
+    if (mode === "runtime_sandbox_mutated") {
+      runtimeIframe.removeAttribute("sandbox");
+    }
+    if (mode === "candidate_send_failure") {
+      candidateIframe.remove();
+    }
+    const report = await runMechanicExecutionRealmConformanceSuite({ session });
 
-  window.__mechanicRealmConformanceFixture = {
-    mode,
-    report,
-    audits,
-    activeMessageListeners: activeMessageListeners.size,
-    sandboxValues: [
-      candidateIframe.getAttribute("sandbox") ?? "",
-      runtimeIframe.getAttribute("sandbox") ?? "",
-    ],
-    retainedPreCaptureAuthority,
-  };
+    window.__mechanicRealmConformanceFixture = {
+      mode,
+      report,
+      audits,
+      activeMessageListeners: activeMessageListeners.size,
+      sandboxValues: [
+        candidateIframe.getAttribute("sandbox") ?? "",
+        runtimeIframe.getAttribute("sandbox") ?? "",
+      ],
+      retainedPreCaptureAuthority,
+    };
+  }
 } catch (error) {
   window.__mechanicRealmConformanceFixture = {
     mode,
@@ -225,12 +261,14 @@ try {
 } finally {
   window.addEventListener = nativeAddEventListener;
   window.removeEventListener = nativeRemoveEventListener;
+  disposeFixturePreparations();
 }
 
 function createSandboxedIframe(
   responder: (mode: FixtureMode) => void,
   responderMode: FixtureMode,
-  initialSandbox?: string
+  initialSandbox?: string,
+  prepareForConformance = true
 ): HTMLIFrameElement {
   const iframe = document.createElement("iframe");
   if (initialSandbox) {
@@ -240,10 +278,88 @@ function createSandboxedIframe(
     responderMode
   )})<\/script>`;
   if (!initialSandbox) {
-    prepareMechanicExecutionRealmBrowserConformanceIframe(iframe);
+    if (prepareForConformance) {
+      prepareMechanicExecutionRealmBrowserConformanceIframe(iframe);
+    } else {
+      iframe.setAttribute("sandbox", "allow-scripts");
+    }
   }
   document.body.append(iframe);
   return iframe;
+}
+
+function disposeFixturePreparations(): void {
+  disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+    candidateIframe
+  );
+  disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+    runtimeIframe
+  );
+  disposeMechanicExecutionRealmBrowserConformanceIframePreparation(relayIframe);
+}
+
+function throwAfterFixturePreparationCleanup(error: unknown): never {
+  disposeFixturePreparations();
+  throw error;
+}
+
+async function verifyRuntimeRejectionReleasesCandidatePreparation(
+  candidate: HTMLIFrameElement,
+  invalidRuntime: HTMLIFrameElement
+): Promise<boolean> {
+  let rejectedForRuntimeSandbox = false;
+  let unexpectedFirstSession:
+    | ReturnType<typeof createMechanicExecutionRealmBrowserConformanceSession>
+    | undefined;
+  try {
+    unexpectedFirstSession =
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "runtime_first_cleanup_probe",
+        candidateEndpoint: { kind: "iframe", iframe: candidate },
+        runtimeIframe: invalidRuntime,
+      });
+  } catch (error) {
+    rejectedForRuntimeSandbox =
+      error instanceof Error &&
+      error.message.includes('exactly sandbox="allow-scripts"');
+  } finally {
+    unexpectedFirstSession?.dispose();
+  }
+  if (!rejectedForRuntimeSandbox) {
+    return false;
+  }
+
+  const freshRuntime = createSandboxedIframe(runtimeResponder, mode);
+  try {
+    await waitForResponderReady(freshRuntime);
+    let unexpectedReuseSession:
+      | ReturnType<
+          typeof createMechanicExecutionRealmBrowserConformanceSession
+        >
+      | undefined;
+    try {
+      unexpectedReuseSession =
+        createMechanicExecutionRealmBrowserConformanceSession({
+          candidateId: "candidate_reuse_cleanup_probe",
+          candidateEndpoint: { kind: "iframe", iframe: candidate },
+          runtimeIframe: freshRuntime,
+        });
+      return false;
+    } catch (error) {
+      return (
+        error instanceof Error &&
+        error.message ===
+          "Browser conformance iframes require trusted pre-load preparation."
+      );
+    } finally {
+      unexpectedReuseSession?.dispose();
+    }
+  } finally {
+    disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+      freshRuntime
+    );
+    freshRuntime.remove();
+  }
 }
 
 function canReadIframeDocument(iframe: HTMLIFrameElement): boolean {

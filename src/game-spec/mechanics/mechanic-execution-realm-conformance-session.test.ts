@@ -292,6 +292,80 @@ describe("Execution Realm browser-conformance session", () => {
     );
   });
 
+  it("atomically releases candidate preparation when runtime capture fails first", () => {
+    const disconnectObserver = vi.spyOn(
+      MutationObserver.prototype,
+      "disconnect"
+    );
+    const candidateIframe = createSandboxedIframe();
+    const invalidRuntimeIframe = createSandboxedIframe();
+    invalidRuntimeIframe.setAttribute(
+      "sandbox",
+      "allow-scripts allow-popups"
+    );
+
+    expect(() =>
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "runtime_first_rejection",
+        candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+        runtimeIframe: invalidRuntimeIframe,
+      })
+    ).toThrow('exactly sandbox="allow-scripts"');
+    expect(disconnectObserver).toHaveBeenCalledTimes(2);
+
+    const freshRuntimeIframe = createSandboxedIframe();
+    let reusedSession: MechanicExecutionRealmConformanceSession | undefined;
+    let reuseError: unknown;
+    try {
+      reusedSession = createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "reused_candidate_after_runtime_rejection",
+        candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+        runtimeIframe: freshRuntimeIframe,
+      });
+    } catch (error) {
+      reuseError = error;
+    } finally {
+      reusedSession?.dispose();
+    }
+
+    expect(reuseError).toBeInstanceOf(TypeError);
+    expect((reuseError as TypeError).message).toContain(
+      "trusted pre-load preparation"
+    );
+  });
+
+  it("allows a disconnected candidate to be prepared again after runtime-first rejection", () => {
+    const disconnectedCandidate = document.createElement("iframe");
+    prepareMechanicExecutionRealmBrowserConformanceIframe(
+      disconnectedCandidate
+    );
+    const invalidRuntimeIframe = createSandboxedIframe();
+    invalidRuntimeIframe.setAttribute(
+      "sandbox",
+      "allow-scripts allow-popups"
+    );
+
+    expect(() =>
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "disconnected_candidate_cleanup",
+        candidateEndpoint: {
+          kind: "iframe",
+          iframe: disconnectedCandidate,
+        },
+        runtimeIframe: invalidRuntimeIframe,
+      })
+    ).toThrow('exactly sandbox="allow-scripts"');
+
+    expect(() =>
+      prepareMechanicExecutionRealmBrowserConformanceIframe(
+        disconnectedCandidate
+      )
+    ).not.toThrow();
+    disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+      disconnectedCandidate
+    );
+  });
+
   it.each([
     ["no sandbox attribute", null],
     ["an empty sandbox", ""],

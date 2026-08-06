@@ -290,21 +290,9 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
   candidateEndpoint,
   runtimeIframe,
 }: CreateMechanicExecutionRealmBrowserConformanceSessionInput): MechanicExecutionRealmConformanceSession {
-  const ownerWindow = requireOwnerWindow(runtimeIframe);
-  const capturedRuntime = requireSandboxedIframe(runtimeIframe, ownerWindow);
+  const { ownerWindow, capturedRuntime, capturedCandidate } =
+    captureBrowserConformanceEndpoints(candidateEndpoint, runtimeIframe);
   const runtimeWindow = capturedRuntime.capturedWindow;
-  let capturedCandidate: CapturedCandidateEndpoint;
-  try {
-    capturedCandidate = captureCandidateEndpoint(
-      candidateEndpoint,
-      runtimeIframe,
-      runtimeWindow,
-      ownerWindow
-    );
-  } catch (error) {
-    discardPreparedIframe(capturedRuntime.preparation);
-    throw error;
-  }
   const discardCapturedIframes = () => {
     discardPreparedIframe(capturedRuntime.preparation);
     if (capturedCandidate.kind === "iframe") {
@@ -520,6 +508,40 @@ function requireOwnerWindow(iframe: HTMLIFrameElement): Window {
   }
 
   return ownerWindow;
+}
+
+function captureBrowserConformanceEndpoints(
+  candidateEndpoint: MechanicExecutionRealmBrowserCandidateEndpoint,
+  runtimeIframe: HTMLIFrameElement
+): {
+  ownerWindow: Window;
+  capturedRuntime: CapturedSandboxedIframe;
+  capturedCandidate: CapturedCandidateEndpoint;
+} {
+  let capturedRuntime: CapturedSandboxedIframe | undefined;
+
+  try {
+    const ownerWindow = requireOwnerWindow(runtimeIframe);
+    capturedRuntime = requireSandboxedIframe(runtimeIframe, ownerWindow);
+    const capturedCandidate = captureCandidateEndpoint(
+      candidateEndpoint,
+      runtimeIframe,
+      capturedRuntime.capturedWindow,
+      ownerWindow
+    );
+
+    return { ownerWindow, capturedRuntime, capturedCandidate };
+  } catch (error) {
+    if (capturedRuntime) {
+      discardPreparedIframe(capturedRuntime.preparation);
+    } else {
+      discardUnclaimedPreparedIframe(runtimeIframe);
+    }
+    if (candidateEndpoint.kind === "iframe") {
+      discardUnclaimedPreparedIframe(candidateEndpoint.iframe);
+    }
+    throw error;
+  }
 }
 
 function requireSandboxedIframe(
