@@ -249,7 +249,6 @@ export {
   type MechanicExecutionRealmCandidateRun,
   type MechanicExecutionRealmConformanceGate,
   type MechanicExecutionRealmConformanceGateId,
-  type MechanicExecutionRealmConformanceHost,
   type MechanicExecutionRealmConformanceProbe,
   type MechanicExecutionRealmConformanceReport,
   type MechanicExecutionRealmProbeDiagnostic,
@@ -258,6 +257,24 @@ export {
   type MechanicExecutionRealmResourceDimension,
   type RunMechanicExecutionRealmConformanceSuiteInput,
 } from "./mechanics/mechanic-execution-realm-conformance";
+
+export {
+  MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+  createMechanicExecutionRealmBrowserConformanceSession,
+  createMechanicExecutionRealmConformanceSession,
+  type CreateMechanicExecutionRealmBrowserConformanceSessionInput,
+  type CreateMechanicExecutionRealmConformanceSessionInput,
+  type MechanicExecutionRealmBrowserCandidateEndpoint,
+  type MechanicExecutionRealmBrowserCandidateExecutionAcknowledgement,
+  type MechanicExecutionRealmBrowserCandidateInitialization,
+  type MechanicExecutionRealmBrowserCandidateRequest,
+  type MechanicExecutionRealmBrowserCandidateResponse,
+  type MechanicExecutionRealmBrowserRuntimeHeartbeatChallenge,
+  type MechanicExecutionRealmBrowserRuntimeHeartbeatResponse,
+  type MechanicExecutionRealmBrowserRuntimeInitialization,
+  type MechanicExecutionRealmConformanceHost,
+  type MechanicExecutionRealmConformanceSession,
+} from "./mechanics/mechanic-execution-realm-conformance-session";
 
 export {
   GameSpecValidationError,

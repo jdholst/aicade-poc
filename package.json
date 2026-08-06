@@ -10,6 +10,7 @@
     "test:editor-prompt-flow": "vitest run src/hooks/use-editor-session.test.ts src/components/editor-shell/editor-ai-chat.test.tsx",
     "qa:editor-prompt-flow": "node scripts/qa-editor-prompt-flow.mjs",
     "qa:editor-prompt-flow:browser": "node scripts/qa-editor-prompt-flow-browser.mjs",
+    "qa:mechanic-realm-conformance:browser": "node scripts/qa-mechanic-execution-realm-conformance-browser.mjs",
     "test:smoke": "vitest run .smoke.test",
     "start": "next start",
     "lint": "eslint"

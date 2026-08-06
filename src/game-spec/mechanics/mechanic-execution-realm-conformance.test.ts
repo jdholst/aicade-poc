@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY,
+  MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
+  createMechanicExecutionRealmConformanceSession,
   mechanicCapabilityRegistry,
-  runMechanicExecutionRealmConformanceSuite,
+  runMechanicExecutionRealmConformanceSuite as runOpaqueConformanceSuite,
+  type CreateMechanicExecutionRealmConformanceSessionInput,
   type MechanicExecutionRealmCandidateAdapter,
   type MechanicExecutionRealmConformanceProbe,
   type MechanicExecutionRealmProbeDiagnostic,
@@ -145,7 +148,91 @@ function createTerminationResult(
   };
 }
 
+function runMechanicExecutionRealmConformanceSuite(
+  input: CreateMechanicExecutionRealmConformanceSessionInput
+) {
+  return runOpaqueConformanceSuite({
+    session: createMechanicExecutionRealmConformanceSession(input),
+  });
+}
+
 describe("Execution Realm Conformance Suite", () => {
+  it("rejects an independently supplied candidate paired with a healthy host", async () => {
+    const session = createMechanicExecutionRealmConformanceSession({
+      candidate: createReferenceCandidate(false),
+      host: {
+        async isResponsive() {
+          return true;
+        },
+      },
+    });
+
+    const report = await runOpaqueConformanceSuite({ session });
+
+    expect(MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION).toBe(
+      "mechanic_execution_realm_conformance/v2"
+    );
+    expect(report.gates).toContainEqual(
+      expect.objectContaining({
+        id: "browser_integration",
+        status: "failed",
+        failures: expect.arrayContaining([
+          expect.objectContaining({
+            code: "candidate_execution_not_browser_attested",
+          }),
+          expect.objectContaining({
+            code: "runtime_heartbeat_not_browser_attested",
+          }),
+        ]),
+      })
+    );
+  });
+
+  it("atomically rejects concurrent reuse of a single-run session", async () => {
+    const session = createMechanicExecutionRealmConformanceSession({
+      candidate: createReferenceCandidate(false),
+      host: {
+        async isResponsive() {
+          return true;
+        },
+      },
+    });
+
+    const firstRun = runOpaqueConformanceSuite({ session });
+
+    await expect(runOpaqueConformanceSuite({ session })).rejects.toThrow(
+      "already been consumed"
+    );
+    await expect(firstRun).resolves.toEqual(
+      expect.objectContaining({ candidateId: "passing_reference_candidate" })
+    );
+  });
+
+  it("rejects an explicitly disposed session before invoking its candidate", async () => {
+    const candidate = createReferenceCandidate(false);
+    const start = candidate.start.bind(candidate);
+    let startCount = 0;
+    candidate.start = (probe) => {
+      startCount += 1;
+      return start(probe);
+    };
+    const session = createMechanicExecutionRealmConformanceSession({
+      candidate,
+      host: {
+        async isResponsive() {
+          return true;
+        },
+      },
+    });
+
+    session.dispose();
+
+    await expect(runOpaqueConformanceSuite({ session })).rejects.toThrow(
+      "already been consumed"
+    );
+    expect(startCount).toBe(0);
+  });
+
   it("exercises every registered primitive through an exact candidate grant", async () => {
     const receivedProbes: MechanicExecutionRealmConformanceProbe[] = [];
     const candidate: MechanicExecutionRealmCandidateAdapter = {
@@ -723,7 +810,7 @@ describe("Execution Realm Conformance Suite", () => {
       id: "recovering_candidate",
       environment: "browser",
       start(probe) {
-        const result = {
+        const result: MechanicExecutionRealmProbeResult = {
           probeId: probe.id,
           outcome: "rejected" as const,
           durationMilliseconds: 1,
@@ -843,7 +930,7 @@ describe("Execution Realm Conformance Suite", () => {
         status: "failed",
         failures: expect.arrayContaining([
           expect.objectContaining({
-            code: "real_browser_environment_not_observed",
+            code: "candidate_execution_not_browser_attested",
           }),
         ]),
       })

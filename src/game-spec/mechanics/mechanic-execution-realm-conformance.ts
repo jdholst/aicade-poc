@@ -3,9 +3,14 @@ import {
   mechanicCapabilityRegistry,
   type MechanicCapabilityGrant,
 } from "./mechanic-capability-registry";
+import {
+  consumeMechanicExecutionRealmConformanceSessionState,
+  type MechanicExecutionRealmConformanceSession,
+  type MechanicExecutionRealmConformanceSessionState,
+} from "./mechanic-execution-realm-conformance-session";
 
 export const MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION =
-  "mechanic_execution_realm_conformance/v1";
+  "mechanic_execution_realm_conformance/v2";
 
 export type MechanicExecutionRealmResourceDimension =
   | "owned_objects"
@@ -148,6 +153,7 @@ export type MechanicExecutionRealmProbeResult = {
 export type MechanicExecutionRealmCandidateRun = {
   result: Promise<MechanicExecutionRealmProbeResult>;
   terminate(): Promise<MechanicExecutionRealmProbeResult>;
+  dispose?(): void;
 };
 
 export type MechanicExecutionRealmCandidateAdapter = {
@@ -156,27 +162,6 @@ export type MechanicExecutionRealmCandidateAdapter = {
   start(
     probe: MechanicExecutionRealmConformanceProbe
   ): MechanicExecutionRealmCandidateRun;
-};
-
-const REAL_BROWSER_EVIDENCE = Symbol("real_browser_evidence");
-
-type MechanicExecutionRealmRealBrowserEvidence = {
-  [REAL_BROWSER_EVIDENCE]: true;
-  kind: "sparkline_runtime_iframe_heartbeat";
-  probeId: StableId;
-  runtimeIframeId: StableId;
-};
-
-export type MechanicExecutionRealmConformanceHost = {
-  isResponsive(
-    probeId: StableId
-  ): Promise<
-    | boolean
-    | {
-        responsive: boolean;
-        browserEvidence?: MechanicExecutionRealmRealBrowserEvidence;
-      }
-  >;
 };
 
 export type MechanicExecutionRealmConformanceGate = {
@@ -199,14 +184,15 @@ export type MechanicExecutionRealmConformanceReport = {
     probeId: StableId;
     kind: MechanicExecutionRealmConformanceProbe["kind"];
     hostResponsive: boolean;
+    candidateExecutionBrowserEvidence: boolean;
+    runtimeHeartbeatBrowserEvidence: boolean;
     realBrowserEvidence: boolean;
     result: MechanicExecutionRealmProbeResult;
   }>;
 };
 
 export type RunMechanicExecutionRealmConformanceSuiteInput = {
-  candidate: MechanicExecutionRealmCandidateAdapter;
-  host: MechanicExecutionRealmConformanceHost;
+  session: MechanicExecutionRealmConformanceSession;
 };
 
 const REQUIRED_GATES: readonly MechanicExecutionRealmConformanceGateId[] = [
@@ -279,10 +265,34 @@ const RESOURCE_PROBE_DEFINITIONS: ReadonlyArray<{
 ];
 const DEADLINE_EXCEEDED = Symbol("deadline_exceeded");
 
-export async function runMechanicExecutionRealmConformanceSuite({
-  candidate,
-  host,
-}: RunMechanicExecutionRealmConformanceSuiteInput): Promise<MechanicExecutionRealmConformanceReport> {
+export async function runMechanicExecutionRealmConformanceSuite(
+  input: RunMechanicExecutionRealmConformanceSuiteInput
+): Promise<MechanicExecutionRealmConformanceReport> {
+  const session = input.session;
+  const sessionState =
+    consumeMechanicExecutionRealmConformanceSessionState(session);
+
+  if (!sessionState) {
+    throw new TypeError(
+      "Execution Realm Conformance requires an opaque session created by the trusted session factory that has not already been consumed."
+    );
+  }
+
+  try {
+    return await runMechanicExecutionRealmConformanceSession(
+      session,
+      sessionState
+    );
+  } finally {
+    sessionState.dispose();
+  }
+}
+
+async function runMechanicExecutionRealmConformanceSession(
+  session: MechanicExecutionRealmConformanceSession,
+  sessionState: MechanicExecutionRealmConformanceSessionState
+): Promise<MechanicExecutionRealmConformanceReport> {
+  const candidate = sessionState.candidate;
   const probes = [
     createAdmittedCapabilityProbe(),
     ...createForbiddenAuthorityProbes(),
@@ -295,17 +305,26 @@ export async function runMechanicExecutionRealmConformanceSuite({
   const results = new Map<StableId, MechanicExecutionRealmProbeResult>();
   const hostHeartbeats = new Map<
     StableId,
-    { responsive: boolean; realBrowserEvidence: boolean }
+    {
+      responsive: boolean;
+      candidateExecutionBrowserAttested: boolean;
+      runtimeHeartbeatBrowserAttested: boolean;
+    }
   >();
 
   for (const probe of probes) {
-    results.set(
-      probe.id,
-      await executeProbe(candidate, probe)
-    );
+    const result = await executeProbe(candidate, probe);
+    results.set(probe.id, result);
     hostHeartbeats.set(
       probe.id,
-      await checkHostResponsiveness(host, probe.id)
+      {
+        ...(await sessionState.checkHostResponsiveness(
+          probe.id,
+          MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumHostHeartbeatMilliseconds
+        )),
+        candidateExecutionBrowserAttested:
+          sessionState.consumeCandidateExecutionEvidence(probe, result),
+      }
     );
   }
 
@@ -437,15 +456,20 @@ export async function runMechanicExecutionRealmConformanceSuite({
   const everyProbeLeftHostResponsive = probes.every(
     (probe) => hostHeartbeats.get(probe.id)?.responsive === true
   );
-  const everyProbeHasRealBrowserEvidence = probes.every(
-    (probe) => hostHeartbeats.get(probe.id)?.realBrowserEvidence === true
+  const everyProbeHasCandidateExecutionBrowserEvidence = probes.every(
+    (probe) =>
+      hostHeartbeats.get(probe.id)?.candidateExecutionBrowserAttested === true
+  );
+  const everyProbeHasRuntimeHeartbeatBrowserEvidence = probes.every(
+    (probe) =>
+      hostHeartbeats.get(probe.id)?.runtimeHeartbeatBrowserAttested === true
   );
   const unresponsiveProbeIds = probes
     .filter((probe) => hostHeartbeats.get(probe.id)?.responsive !== true)
     .map((probe) => probe.id);
   const browserIntegrationGatePassed =
-    candidate.environment === "browser" &&
-    everyProbeHasRealBrowserEvidence &&
+    everyProbeHasCandidateExecutionBrowserEvidence &&
+    everyProbeHasRuntimeHeartbeatBrowserEvidence &&
     everyProbeLeftHostResponsive;
   const cleanupAndRecoveryGatePassed =
     cleanupSuccessResult?.outcome === "completed" &&
@@ -599,19 +623,19 @@ export async function runMechanicExecutionRealmConformanceSuite({
       if (id === "browser_integration") {
         const failures: MechanicExecutionRealmConformanceGate["failures"] = [];
 
-        if (candidate.environment !== "browser") {
+        if (!everyProbeHasCandidateExecutionBrowserEvidence) {
           failures.push({
-            code: "candidate_not_browser_integrated",
+            code: "candidate_execution_not_browser_attested",
             message:
-              "The candidate adapter did not execute in the real browser environment.",
+              "Every probe must execute through the candidate endpoint captured by the trusted browser-conformance session.",
           });
         }
 
-        if (!everyProbeHasRealBrowserEvidence) {
+        if (!everyProbeHasRuntimeHeartbeatBrowserEvidence) {
           failures.push({
-            code: "real_browser_environment_not_observed",
+            code: "runtime_heartbeat_not_browser_attested",
             message:
-              "The trusted browser harness did not attach a runtime-iframe heartbeat to every probe; simulated DOMs cannot admit a realm candidate.",
+              "The trusted browser-conformance session did not observe a fresh runtime-iframe heartbeat for every probe.",
           });
         }
 
@@ -659,7 +683,7 @@ export async function runMechanicExecutionRealmConformanceSuite({
   return {
     suiteVersion: MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
     capabilityVersion: mechanicCapabilityRegistry.version,
-    candidateId: candidate.id,
+    candidateId: session.candidateId,
     verdict: gates.every((gate) => gate.status === "passed")
       ? "passed"
       : "rejected",
@@ -677,8 +701,15 @@ export async function runMechanicExecutionRealmConformanceSuite({
         probeId: probe.id,
         kind: probe.kind,
         hostResponsive: hostHeartbeats.get(probe.id)?.responsive === true,
+        candidateExecutionBrowserEvidence:
+          hostHeartbeats.get(probe.id)?.candidateExecutionBrowserAttested ===
+          true,
+        runtimeHeartbeatBrowserEvidence:
+          hostHeartbeats.get(probe.id)?.runtimeHeartbeatBrowserAttested === true,
         realBrowserEvidence:
-          hostHeartbeats.get(probe.id)?.realBrowserEvidence === true,
+          hostHeartbeats.get(probe.id)?.candidateExecutionBrowserAttested ===
+            true &&
+          hostHeartbeats.get(probe.id)?.runtimeHeartbeatBrowserAttested === true,
         result,
       };
     }),
@@ -707,59 +738,63 @@ async function executeProbe(
   let result: MechanicExecutionRealmProbeResult | typeof DEADLINE_EXCEEDED;
 
   try {
-    result = await Promise.race([
-      run.result,
-      new Promise<typeof DEADLINE_EXCEEDED>((resolve) => {
-        timeoutId = setTimeout(
-          () => resolve(DEADLINE_EXCEEDED),
-          MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds
-        );
-      }),
-    ]);
-  } catch (error) {
-    return terminateAfterExecutionFailure(
-      run,
-      createCandidateFailureResult(
+    try {
+      result = await Promise.race([
+        run.result,
+        new Promise<typeof DEADLINE_EXCEEDED>((resolve) => {
+          timeoutId = setTimeout(
+            () => resolve(DEADLINE_EXCEEDED),
+            MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds
+          );
+        }),
+      ]);
+    } catch (error) {
+      return terminateAfterExecutionFailure(
+        run,
+        createCandidateFailureResult(
+          probe,
+          "realm_execution",
+          error,
+          startedAt
+        ),
         probe,
-        "realm_execution",
+        startedAt
+      );
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    if (result !== DEADLINE_EXCEEDED) {
+      return result;
+    }
+
+    try {
+      const terminationResult = await raceAgainstDeadline(
+        run.terminate(),
+        MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumTerminationMilliseconds
+      );
+
+      return terminationResult === DEADLINE_EXCEEDED
+        ? createCandidateFailureResult(
+            probe,
+            "realm_termination",
+            new Error("Candidate termination exceeded the fixed deadline."),
+            startedAt,
+            "candidate_termination_timed_out"
+          )
+        : terminationResult;
+    } catch (error) {
+      return createCandidateFailureResult(
+        probe,
+        "realm_termination",
         error,
         startedAt
-      ),
-      probe,
-      startedAt
-    );
-  } finally {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
+      );
     }
-  }
-
-  if (result !== DEADLINE_EXCEEDED) {
-    return result;
-  }
-
-  try {
-    const terminationResult = await raceAgainstDeadline(
-      run.terminate(),
-      MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumTerminationMilliseconds
-    );
-
-    return terminationResult === DEADLINE_EXCEEDED
-      ? createCandidateFailureResult(
-          probe,
-          "realm_termination",
-          new Error("Candidate termination exceeded the fixed deadline."),
-          startedAt,
-          "candidate_termination_timed_out"
-        )
-      : terminationResult;
-  } catch (error) {
-    return createCandidateFailureResult(
-      probe,
-      "realm_termination",
-      error,
-      startedAt
-    );
+  } finally {
+    run.dispose?.();
   }
 }
 
@@ -820,38 +855,6 @@ async function raceAgainstDeadline<T>(
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
-  }
-}
-
-async function checkHostResponsiveness(
-  host: MechanicExecutionRealmConformanceHost,
-  probeId: StableId
-): Promise<{ responsive: boolean; realBrowserEvidence: boolean }> {
-  try {
-    const heartbeat = await raceAgainstDeadline(
-      host.isResponsive(probeId),
-      MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumHostHeartbeatMilliseconds
-    );
-
-    if (heartbeat === DEADLINE_EXCEEDED) {
-      return { responsive: false, realBrowserEvidence: false };
-    }
-
-    if (typeof heartbeat === "boolean") {
-      return { responsive: heartbeat, realBrowserEvidence: false };
-    }
-
-    return {
-      responsive: heartbeat.responsive,
-      realBrowserEvidence:
-        heartbeat.browserEvidence?.[REAL_BROWSER_EVIDENCE] === true &&
-        heartbeat.browserEvidence.kind ===
-          "sparkline_runtime_iframe_heartbeat" &&
-        heartbeat.browserEvidence.probeId === probeId &&
-        heartbeat.browserEvidence.runtimeIframeId.length > 0,
-    };
-  } catch {
-    return { responsive: false, realBrowserEvidence: false };
   }
 }
 
