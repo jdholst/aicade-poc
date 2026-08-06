@@ -262,6 +262,8 @@ export {
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
   createMechanicExecutionRealmBrowserConformanceSession,
   createMechanicExecutionRealmConformanceSession,
+  disposeMechanicExecutionRealmBrowserConformanceIframePreparation,
+  prepareMechanicExecutionRealmBrowserConformanceIframe,
   type CreateMechanicExecutionRealmBrowserConformanceSessionInput,
   type CreateMechanicExecutionRealmConformanceSessionInput,
   type MechanicExecutionRealmBrowserCandidateEndpoint,

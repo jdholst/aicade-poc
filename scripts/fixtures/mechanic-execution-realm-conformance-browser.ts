@@ -2,6 +2,7 @@ import {
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
   createMechanicExecutionRealmBrowserConformanceSession,
   createMechanicExecutionRealmConformanceSession,
+  prepareMechanicExecutionRealmBrowserConformanceIframe,
   runMechanicExecutionRealmConformanceSuite,
   type MechanicExecutionRealmConformanceProbe,
 } from "../../src/game-spec/index";
@@ -20,9 +21,17 @@ type FixtureMode =
   | "candidate_timeout"
   | "candidate_terminate_without_execute"
   | "candidate_send_failure"
+  | "candidate_extra_sandbox_authority"
+  | "candidate_sandbox_mutated"
+  | "candidate_same_origin_retagged"
+  | "candidate_popup_retagged"
   | "runtime_wrong_id"
   | "runtime_wrong_session"
-  | "runtime_disconnected";
+  | "runtime_disconnected"
+  | "runtime_missing_allow_scripts"
+  | "runtime_sandbox_mutated"
+  | "runtime_same_origin_retagged"
+  | "runtime_popup_retagged";
 
 type FixtureAudit = {
   source: "candidate" | "runtime";
@@ -44,6 +53,7 @@ declare global {
       audits: FixtureAudit[];
       activeMessageListeners: number;
       sandboxValues: string[];
+      retainedPreCaptureAuthority?: boolean;
     };
   }
 }
@@ -51,8 +61,24 @@ declare global {
 const mode = (new URLSearchParams(location.search).get("mode") ??
   "pass") as FixtureMode;
 const audits: FixtureAudit[] = [];
-const candidateIframe = createSandboxedIframe(candidateResponder, mode);
-const runtimeIframe = createSandboxedIframe(runtimeResponder, mode);
+const candidateIframe = createSandboxedIframe(
+  candidateResponder,
+  mode,
+  mode === "candidate_same_origin_retagged"
+    ? "allow-scripts allow-same-origin"
+    : mode === "candidate_popup_retagged"
+      ? "allow-scripts allow-popups"
+      : undefined
+);
+const runtimeIframe = createSandboxedIframe(
+  runtimeResponder,
+  mode,
+  mode === "runtime_same_origin_retagged"
+    ? "allow-scripts allow-same-origin"
+    : mode === "runtime_popup_retagged"
+      ? "allow-scripts allow-popups"
+      : undefined
+);
 const relayIframe = createSandboxedIframe(relayResponder, mode);
 
 window.addEventListener("message", (event) => {
@@ -100,6 +126,35 @@ await Promise.all([
   waitForResponderReady(relayIframe),
 ]);
 
+if (mode === "candidate_extra_sandbox_authority") {
+  candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
+}
+if (mode === "runtime_missing_allow_scripts") {
+  runtimeIframe.removeAttribute("sandbox");
+}
+if (mode === "candidate_same_origin_retagged") {
+  candidateIframe.setAttribute("sandbox", "allow-scripts");
+}
+if (mode === "runtime_same_origin_retagged") {
+  runtimeIframe.setAttribute("sandbox", "allow-scripts");
+}
+if (mode === "candidate_popup_retagged") {
+  candidateIframe.setAttribute("sandbox", "allow-scripts");
+}
+if (mode === "runtime_popup_retagged") {
+  runtimeIframe.setAttribute("sandbox", "allow-scripts");
+}
+let retainedPreCaptureAuthority: boolean | undefined;
+if (mode === "candidate_same_origin_retagged") {
+  retainedPreCaptureAuthority = canReadIframeDocument(candidateIframe);
+} else if (mode === "runtime_same_origin_retagged") {
+  retainedPreCaptureAuthority = canReadIframeDocument(runtimeIframe);
+} else if (mode === "candidate_popup_retagged") {
+  retainedPreCaptureAuthority = await probeRetainedPopupAccess(candidateIframe);
+} else if (mode === "runtime_popup_retagged") {
+  retainedPreCaptureAuthority = await probeRetainedPopupAccess(runtimeIframe);
+}
+
 const activeMessageListeners = new Set<EventListenerOrEventListenerObject>();
 const nativeAddEventListener = window.addEventListener.bind(window);
 const nativeRemoveEventListener = window.removeEventListener.bind(window);
@@ -133,6 +188,12 @@ try {
           candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
           runtimeIframe,
         });
+  if (mode === "candidate_sandbox_mutated") {
+    candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
+  }
+  if (mode === "runtime_sandbox_mutated") {
+    runtimeIframe.removeAttribute("sandbox");
+  }
   if (mode === "candidate_send_failure") {
     candidateIframe.remove();
   }
@@ -147,6 +208,7 @@ try {
       candidateIframe.getAttribute("sandbox") ?? "",
       runtimeIframe.getAttribute("sandbox") ?? "",
     ],
+    retainedPreCaptureAuthority,
   };
 } catch (error) {
   window.__mechanicRealmConformanceFixture = {
@@ -158,6 +220,7 @@ try {
       candidateIframe.getAttribute("sandbox") ?? "",
       runtimeIframe.getAttribute("sandbox") ?? "",
     ],
+    retainedPreCaptureAuthority,
   };
 } finally {
   window.addEventListener = nativeAddEventListener;
@@ -166,15 +229,29 @@ try {
 
 function createSandboxedIframe(
   responder: (mode: FixtureMode) => void,
-  responderMode: FixtureMode
+  responderMode: FixtureMode,
+  initialSandbox?: string
 ): HTMLIFrameElement {
   const iframe = document.createElement("iframe");
-  iframe.setAttribute("sandbox", "allow-scripts");
+  if (initialSandbox) {
+    iframe.setAttribute("sandbox", initialSandbox);
+  }
   iframe.srcdoc = `<script>(${responder.toString()})(${JSON.stringify(
     responderMode
   )})<\/script>`;
+  if (!initialSandbox) {
+    prepareMechanicExecutionRealmBrowserConformanceIframe(iframe);
+  }
   document.body.append(iframe);
   return iframe;
+}
+
+function canReadIframeDocument(iframe: HTMLIFrameElement): boolean {
+  try {
+    return iframe.contentWindow?.document !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 function waitForResponderReady(iframe: HTMLIFrameElement): Promise<void> {
@@ -208,6 +285,39 @@ function waitForResponderReady(iframe: HTMLIFrameElement): Promise<void> {
 
     window.addEventListener("message", onMessage);
     ping();
+  });
+}
+
+function probeRetainedPopupAccess(
+  iframe: HTMLIFrameElement
+): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const iframeWindow = iframe.contentWindow;
+    if (!iframeWindow) {
+      reject(new Error("The popup-retention probe could not capture an iframe."));
+      return;
+    }
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("message", onMessage);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (
+        event.isTrusted &&
+        event.source === iframeWindow &&
+        event.data?.kind === "fixture_retained_popup_response"
+      ) {
+        cleanup();
+        resolve(event.data.retainedPopupAccess === true);
+      }
+    };
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error("The retained-popup probe timed out."));
+    }, 2_000);
+
+    window.addEventListener("message", onMessage);
+    iframeWindow.postMessage({ kind: "fixture_retained_popup_probe" }, "*");
   });
 }
 
@@ -305,6 +415,21 @@ function candidateResponder(responderMode: FixtureMode) {
     const request = event.data;
     if (request?.kind === "fixture_ready_probe") {
       parent.postMessage({ kind: "fixture_ready" }, "*");
+      return;
+    }
+    if (request?.kind === "fixture_retained_popup_probe") {
+      let retainedPopupAccess = false;
+      try {
+        const popup = window.open("about:blank", "_candidate_fixture_popup");
+        retainedPopupAccess = popup !== null;
+        popup?.close();
+      } catch {
+        retainedPopupAccess = false;
+      }
+      parent.postMessage(
+        { kind: "fixture_retained_popup_response", retainedPopupAccess },
+        "*"
+      );
       return;
     }
     if (
@@ -581,6 +706,21 @@ function runtimeResponder(responderMode: FixtureMode) {
     const challenge = event.data;
     if (challenge?.kind === "fixture_ready_probe") {
       parent.postMessage({ kind: "fixture_ready" }, "*");
+      return;
+    }
+    if (challenge?.kind === "fixture_retained_popup_probe") {
+      let retainedPopupAccess = false;
+      try {
+        const popup = window.open("about:blank", "_runtime_fixture_popup");
+        retainedPopupAccess = popup !== null;
+        popup?.close();
+      } catch {
+        retainedPopupAccess = false;
+      }
+      parent.postMessage(
+        { kind: "fixture_retained_popup_response", retainedPopupAccess },
+        "*"
+      );
       return;
     }
     if (

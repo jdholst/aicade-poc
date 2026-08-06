@@ -17,10 +17,32 @@ const modes = [
   "candidate_timeout",
   "candidate_terminate_without_execute",
   "candidate_send_failure",
+  "candidate_extra_sandbox_authority",
+  "candidate_sandbox_mutated",
+  "candidate_same_origin_retagged",
+  "candidate_popup_retagged",
   "runtime_wrong_id",
   "runtime_wrong_session",
   "runtime_disconnected",
+  "runtime_missing_allow_scripts",
+  "runtime_sandbox_mutated",
+  "runtime_same_origin_retagged",
+  "runtime_popup_retagged",
 ];
+const sandboxContractRejectionModes = new Set([
+  "candidate_extra_sandbox_authority",
+  "runtime_missing_allow_scripts",
+]);
+const sandboxDriftModes = new Set([
+  "candidate_sandbox_mutated",
+  "runtime_sandbox_mutated",
+]);
+const retainedPreCaptureAuthorityModes = new Set([
+  "candidate_same_origin_retagged",
+  "candidate_popup_retagged",
+  "runtime_same_origin_retagged",
+  "runtime_popup_retagged",
+]);
 
 const vite = await createViteServer({
   root: process.cwd(),
@@ -54,11 +76,56 @@ try {
       () => window.__mechanicRealmConformanceFixture
     );
 
-    if (!fixture || fixture.error) {
-      throw new Error(`${mode}: ${fixture?.error ?? "fixture did not finish"}`);
+    if (!fixture) {
+      throw new Error(`${mode}: fixture did not finish`);
     }
     if (browserErrors.length > 0) {
       throw new Error(`${mode}: ${browserErrors.join("\n")}`);
+    }
+    if (sandboxContractRejectionModes.has(mode)) {
+      if (
+        !fixture.error?.includes('exactly sandbox="allow-scripts"') ||
+        fixture.report !== undefined
+      ) {
+        throw new Error(
+          `${mode}: malformed sandbox tokens were not rejected during session construction`
+        );
+      }
+      if (fixture.activeMessageListeners !== 0) {
+        throw new Error(`${mode}: browser-conformance listeners leaked`);
+      }
+      console.log(`PASS ${mode}`);
+      await page.close();
+      continue;
+    }
+    if (retainedPreCaptureAuthorityModes.has(mode)) {
+      if (
+        fixture.retainedPreCaptureAuthority !== true ||
+        !fixture.error?.includes("trusted pre-load preparation") ||
+        fixture.report !== undefined
+      ) {
+        throw new Error(
+          `${mode}: retained pre-capture authority was not rejected during session construction`
+        );
+      }
+      if (fixture.activeMessageListeners !== 0) {
+        throw new Error(`${mode}: browser-conformance listeners leaked`);
+      }
+      if (
+        fixture.sandboxValues.some(
+          (sandbox) => !hasExactAllowScriptsSandbox(sandbox)
+        )
+      ) {
+        throw new Error(
+          `${mode}: the laundering fixture did not finish with exact sandbox tokens`
+        );
+      }
+      console.log(`PASS ${mode}`);
+      await page.close();
+      continue;
+    }
+    if (fixture.error) {
+      throw new Error(`${mode}: ${fixture.error}`);
     }
     if (fixture.report?.probeResults.length !== 32) {
       throw new Error(`${mode}: the 32-probe corpus changed`);
@@ -103,11 +170,14 @@ try {
       throw new Error(`${mode}: browser-conformance listeners leaked`);
     }
     if (
-      fixture.sandboxValues.some((sandbox) =>
-        sandbox.split(/\s+/u).includes("allow-same-origin")
+      !sandboxDriftModes.has(mode) &&
+      fixture.sandboxValues.some(
+        (sandbox) => !hasExactAllowScriptsSandbox(sandbox)
       )
     ) {
-      throw new Error(`${mode}: iframe sandboxing was weakened`);
+      throw new Error(
+        `${mode}: iframe sandbox tokens were not exactly {allow-scripts}`
+      );
     }
 
     console.log(`PASS ${mode}`);
@@ -117,6 +187,20 @@ try {
   await browser.close();
   await vite.close();
   await new Promise((resolve) => server.close(resolve));
+}
+
+function hasExactAllowScriptsSandbox(sandbox) {
+  const tokens = new Set(
+    sandbox
+      .split(/[\t\n\f\r ]+/u)
+      .filter(Boolean)
+      .map(toAsciiLowercase)
+  );
+  return tokens.size === 1 && tokens.has("allow-scripts");
+}
+
+function toAsciiLowercase(value) {
+  return value.replace(/[A-Z]/gu, (character) => character.toLowerCase());
 }
 
 function assertFreshPairedEvidence(audits) {

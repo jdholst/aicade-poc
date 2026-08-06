@@ -142,10 +142,23 @@ type CancellableCandidateRequest = {
   cancel(): void;
 };
 
+type PreparedIframeState = {
+  iframe: HTMLIFrameElement;
+  ownerWindow: Window;
+  observer: MutationObserver;
+  valid: boolean;
+  claimed: boolean;
+};
+
+type CapturedSandboxedIframe = {
+  iframe: HTMLIFrameElement;
+  capturedWindow: Window;
+  preparation: PreparedIframeState;
+};
+
 type CapturedCandidateEndpoint =
-  MechanicExecutionRealmBrowserCandidateEndpoint & {
-    capturedWindow?: Window;
-  };
+  | ({ kind: "iframe" } & CapturedSandboxedIframe)
+  | { kind: "worker"; worker: Worker };
 
 type BrowserCandidateRequestContext = {
   endpoint: CapturedCandidateEndpoint;
@@ -168,6 +181,61 @@ const sessionStates = new WeakMap<
   MechanicExecutionRealmConformanceSession,
   MechanicExecutionRealmConformanceSessionState
 >();
+const preparedBrowserIframes = new WeakMap<
+  HTMLIFrameElement,
+  PreparedIframeState
+>();
+
+export function prepareMechanicExecutionRealmBrowserConformanceIframe(
+  iframe: HTMLIFrameElement
+): HTMLIFrameElement {
+  const ownerWindow = requireOwnerWindow(iframe);
+  const browserWindow = ownerWindow as Window & typeof globalThis;
+  const IframeConstructor = browserWindow.HTMLIFrameElement;
+
+  if (!(iframe instanceof IframeConstructor)) {
+    throw new TypeError(
+      "Browser conformance requires an iframe from the current browser document."
+    );
+  }
+  if (iframe.isConnected || iframe.contentWindow !== null) {
+    throw new TypeError(
+      "Browser conformance iframes must be prepared before they are connected or loaded."
+    );
+  }
+  if (preparedBrowserIframes.has(iframe)) {
+    throw new TypeError("The browser conformance iframe is already prepared.");
+  }
+
+  iframe.setAttribute("sandbox", "allow-scripts");
+  const preparation = {} as PreparedIframeState;
+  const observer = new browserWindow.MutationObserver(() => {
+    preparation.valid = false;
+  });
+  Object.assign(preparation, {
+    iframe,
+    ownerWindow,
+    observer,
+    valid: true,
+    claimed: false,
+  });
+  observer.observe(iframe, {
+    attributes: true,
+    attributeFilter: ["sandbox"],
+  });
+  preparedBrowserIframes.set(iframe, preparation);
+
+  return iframe;
+}
+
+export function disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+  iframe: HTMLIFrameElement
+): void {
+  const preparation = preparedBrowserIframes.get(iframe);
+  if (preparation) {
+    discardPreparedIframe(preparation);
+  }
+}
 
 export function createMechanicExecutionRealmConformanceSession({
   candidate,
@@ -223,21 +291,42 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
   runtimeIframe,
 }: CreateMechanicExecutionRealmBrowserConformanceSessionInput): MechanicExecutionRealmConformanceSession {
   const ownerWindow = requireOwnerWindow(runtimeIframe);
-  const runtimeWindow = requireSandboxedIframe(runtimeIframe, ownerWindow);
-  const capturedCandidate = captureCandidateEndpoint(
-    candidateEndpoint,
-    runtimeIframe,
-    runtimeWindow,
-    ownerWindow
-  );
+  const capturedRuntime = requireSandboxedIframe(runtimeIframe, ownerWindow);
+  const runtimeWindow = capturedRuntime.capturedWindow;
+  let capturedCandidate: CapturedCandidateEndpoint;
+  try {
+    capturedCandidate = captureCandidateEndpoint(
+      candidateEndpoint,
+      runtimeIframe,
+      runtimeWindow,
+      ownerWindow
+    );
+  } catch (error) {
+    discardPreparedIframe(capturedRuntime.preparation);
+    throw error;
+  }
+  const discardCapturedIframes = () => {
+    discardPreparedIframe(capturedRuntime.preparation);
+    if (capturedCandidate.kind === "iframe") {
+      discardPreparedIframe(capturedCandidate.preparation);
+    }
+  };
   const sessionIdentity = Object.freeze({});
   const issuedNonces = new Set<StableId>();
-  const sessionId = createCryptographicNonce(ownerWindow.crypto, issuedNonces);
-  const candidateEndpointId = createCryptographicNonce(
-    ownerWindow.crypto,
-    issuedNonces
-  );
-  const runtimeId = createCryptographicNonce(ownerWindow.crypto, issuedNonces);
+  let sessionId: StableId;
+  let candidateEndpointId: StableId;
+  let runtimeId: StableId;
+  try {
+    sessionId = createCryptographicNonce(ownerWindow.crypto, issuedNonces);
+    candidateEndpointId = createCryptographicNonce(
+      ownerWindow.crypto,
+      issuedNonces
+    );
+    runtimeId = createCryptographicNonce(ownerWindow.crypto, issuedNonces);
+  } catch (error) {
+    discardCapturedIframes();
+    throw error;
+  }
   const candidateEvidence = new WeakMap<
     MechanicExecutionRealmProbeResult,
     CandidateExecutionBrowserEvidence
@@ -261,6 +350,7 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
     pendingCancellations.clear();
     candidateAcknowledgements.clear();
     issuedNonces.clear();
+    discardCapturedIframes();
     sessionStates.delete(session);
   };
   const candidateRequestContext: BrowserCandidateRequestContext = Object.freeze({
@@ -326,6 +416,17 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
 
   try {
     postToCandidate(capturedCandidate, candidateInitialization);
+    if (
+      !isCurrentSandboxedIframe(
+        capturedRuntime.iframe,
+        capturedRuntime.capturedWindow,
+        capturedRuntime.preparation
+      )
+    ) {
+      throw new Error(
+        "The captured runtime iframe changed after trusted pre-load preparation."
+      );
+    }
     runtimeWindow.postMessage(runtimeInitialization, "*");
   } catch (error) {
     disposeBrowserState();
@@ -351,6 +452,7 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
         deadlineMilliseconds,
         runtimeIframe,
         runtimeWindow,
+        runtimePreparation: capturedRuntime.preparation,
         ownerWindow,
         sessionIdentity,
         sessionId,
@@ -411,6 +513,7 @@ function requireOwnerWindow(iframe: HTMLIFrameElement): Window {
   const ownerWindow = iframe.ownerDocument?.defaultView;
 
   if (!ownerWindow) {
+    discardUnclaimedPreparedIframe(iframe);
     throw new TypeError(
       "Browser conformance requires an iframe attached to a live browser document."
     );
@@ -422,29 +525,113 @@ function requireOwnerWindow(iframe: HTMLIFrameElement): Window {
 function requireSandboxedIframe(
   iframe: HTMLIFrameElement,
   ownerWindow: Window
-): Window {
+): CapturedSandboxedIframe {
   const browserWindow = ownerWindow as Window & typeof globalThis;
   const IframeConstructor = browserWindow.HTMLIFrameElement;
 
   if (!(iframe instanceof IframeConstructor) || !iframe.isConnected) {
+    discardUnclaimedPreparedIframe(iframe);
     throw new TypeError(
       "Browser conformance requires a connected, captured iframe element."
     );
   }
 
-  const sandbox = iframe.getAttribute("sandbox");
-  if (sandbox === null || sandbox.split(/\s+/u).includes("allow-same-origin")) {
+  if (!hasExactAllowScriptsSandbox(iframe)) {
+    const invalidPreparation = preparedBrowserIframes.get(iframe);
+    if (invalidPreparation) {
+      discardPreparedIframe(invalidPreparation);
+    }
     throw new TypeError(
-      'Browser conformance iframes must be sandboxed without "allow-same-origin".'
+      'Browser conformance iframes must use exactly sandbox="allow-scripts".'
+    );
+  }
+
+  const preparation = preparedBrowserIframes.get(iframe);
+  if (
+    !preparation ||
+    preparation.ownerWindow !== ownerWindow ||
+    preparation.claimed
+  ) {
+    if (preparation && !preparation.claimed) {
+      discardPreparedIframe(preparation);
+    }
+    throw new TypeError(
+      "Browser conformance iframes require trusted pre-load preparation."
+    );
+  }
+  refreshPreparedIframe(preparation);
+  if (!preparation.valid) {
+    discardPreparedIframe(preparation);
+    throw new TypeError(
+      "Browser conformance iframe sandbox changed after trusted pre-load preparation."
     );
   }
 
   const iframeWindow = iframe.contentWindow;
   if (!iframeWindow) {
+    discardPreparedIframe(preparation);
     throw new TypeError("Browser conformance could not capture the iframe window.");
   }
 
-  return iframeWindow;
+  preparation.claimed = true;
+  return { iframe, capturedWindow: iframeWindow, preparation };
+}
+
+function hasExactAllowScriptsSandbox(iframe: HTMLIFrameElement): boolean {
+  const sandbox = iframe.getAttribute("sandbox");
+  if (sandbox === null) {
+    return false;
+  }
+
+  const sandboxTokens = new Set(
+    sandbox
+      .split(/[\t\n\f\r ]+/u)
+      .filter((token) => token.length > 0)
+      .map(toAsciiLowercase)
+  );
+  return sandboxTokens.size === 1 && sandboxTokens.has("allow-scripts");
+}
+
+function toAsciiLowercase(value: string): string {
+  return value.replace(/[A-Z]/gu, (character) => character.toLowerCase());
+}
+
+function refreshPreparedIframe(preparation: PreparedIframeState): void {
+  if (preparation.observer.takeRecords().length > 0) {
+    preparation.valid = false;
+  }
+}
+
+function discardPreparedIframe(preparation: PreparedIframeState): void {
+  preparation.valid = false;
+  preparation.observer.disconnect();
+  if (preparedBrowserIframes.get(preparation.iframe) === preparation) {
+    preparedBrowserIframes.delete(preparation.iframe);
+  }
+}
+
+function discardUnclaimedPreparedIframe(iframe: HTMLIFrameElement): void {
+  const preparation = preparedBrowserIframes.get(iframe);
+  if (preparation && !preparation.claimed) {
+    discardPreparedIframe(preparation);
+  }
+}
+
+function isCurrentSandboxedIframe(
+  iframe: HTMLIFrameElement,
+  capturedWindow: Window,
+  preparation: PreparedIframeState
+): boolean {
+  refreshPreparedIframe(preparation);
+  return (
+    preparation.valid &&
+    preparation.claimed &&
+    preparation.iframe === iframe &&
+    preparedBrowserIframes.get(iframe) === preparation &&
+    iframe.isConnected &&
+    iframe.contentWindow === capturedWindow &&
+    hasExactAllowScriptsSandbox(iframe)
+  );
 }
 
 function captureCandidateEndpoint(
@@ -454,9 +641,18 @@ function captureCandidateEndpoint(
   ownerWindow: Window
 ): CapturedCandidateEndpoint {
   if (endpoint.kind === "iframe") {
-    const candidateWindow = requireSandboxedIframe(endpoint.iframe, ownerWindow);
+    if (endpoint.iframe === runtimeIframe) {
+      throw new TypeError(
+        "The whole-game runtime iframe cannot also be the Mechanic Execution Realm candidate endpoint."
+      );
+    }
+    const capturedCandidate = requireSandboxedIframe(
+      endpoint.iframe,
+      ownerWindow
+    );
 
-    if (endpoint.iframe === runtimeIframe || candidateWindow === runtimeWindow) {
+    if (capturedCandidate.capturedWindow === runtimeWindow) {
+      discardPreparedIframe(capturedCandidate.preparation);
       throw new TypeError(
         "The whole-game runtime iframe cannot also be the Mechanic Execution Realm candidate endpoint."
       );
@@ -464,8 +660,7 @@ function captureCandidateEndpoint(
 
     return Object.freeze({
       kind: "iframe" as const,
-      iframe: endpoint.iframe,
-      capturedWindow: candidateWindow,
+      ...capturedCandidate,
     });
   }
 
@@ -546,13 +741,20 @@ function requestCandidate(
           event.isTrusted &&
           context.endpoint.kind === "iframe" &&
           event.source === context.endpoint.capturedWindow &&
-          (!context.endpoint.iframe.isConnected ||
-            context.endpoint.iframe.contentWindow !==
-              context.endpoint.capturedWindow)
+          (event.origin !== "null" ||
+            !isCurrentSandboxedIframe(
+              context.endpoint.iframe,
+              context.endpoint.capturedWindow,
+              context.endpoint.preparation
+            ))
         ) {
           cleanup();
           context.disposeBrowserState();
-          reject(new Error("The captured candidate iframe endpoint was replaced."));
+          reject(
+            new Error(
+              "The captured candidate iframe endpoint was replaced, its sandbox policy changed, or its document is not opaque-origin sandboxed."
+            )
+          );
           return;
         }
 
@@ -650,6 +852,7 @@ type RuntimeHeartbeatRequestInput = {
   deadlineMilliseconds: number;
   runtimeIframe: HTMLIFrameElement;
   runtimeWindow: Window;
+  runtimePreparation: PreparedIframeState;
   ownerWindow: Window;
   sessionIdentity: BrowserSessionIdentity;
   sessionId: StableId;
@@ -665,6 +868,7 @@ function requestRuntimeHeartbeat({
   deadlineMilliseconds,
   runtimeIframe,
   runtimeWindow,
+  runtimePreparation,
   ownerWindow,
   sessionIdentity,
   sessionId,
@@ -703,8 +907,12 @@ function requestRuntimeHeartbeat({
       if (
         event.isTrusted &&
         event.source === runtimeWindow &&
-        (!runtimeIframe.isConnected ||
-          runtimeIframe.contentWindow !== runtimeWindow)
+        (event.origin !== "null" ||
+          !isCurrentSandboxedIframe(
+            runtimeIframe,
+            runtimeWindow,
+            runtimePreparation
+          ))
       ) {
         cleanup();
         disposeBrowserState();
@@ -715,8 +923,12 @@ function requestRuntimeHeartbeat({
       if (
         !event.isTrusted ||
         event.source !== runtimeWindow ||
-        !runtimeIframe.isConnected ||
-        runtimeIframe.contentWindow !== runtimeWindow ||
+        event.origin !== "null" ||
+        !isCurrentSandboxedIframe(
+          runtimeIframe,
+          runtimeWindow,
+          runtimePreparation
+        ) ||
         !isMatchingRuntimeHeartbeatResponse(
           event.data,
           challenge,
@@ -753,8 +965,11 @@ function requestRuntimeHeartbeat({
 
     try {
       if (
-        !runtimeIframe.isConnected ||
-        runtimeIframe.contentWindow !== runtimeWindow
+        !isCurrentSandboxedIframe(
+          runtimeIframe,
+          runtimeWindow,
+          runtimePreparation
+        )
       ) {
         disposeBrowserState();
         finish(noBrowserEvidence(false));
@@ -770,20 +985,22 @@ function requestRuntimeHeartbeat({
 }
 
 function postToCandidate(
-  endpoint: MechanicExecutionRealmBrowserCandidateEndpoint & {
-    capturedWindow?: Window;
-  },
+  endpoint: CapturedCandidateEndpoint,
   request:
     | MechanicExecutionRealmBrowserCandidateInitialization
     | MechanicExecutionRealmBrowserCandidateRequest
 ) {
   if (endpoint.kind === "iframe") {
     if (
-      !endpoint.iframe.isConnected ||
-      endpoint.iframe.contentWindow !== endpoint.capturedWindow ||
-      !endpoint.capturedWindow
+      !isCurrentSandboxedIframe(
+        endpoint.iframe,
+        endpoint.capturedWindow,
+        endpoint.preparation
+      )
     ) {
-      throw new Error("The captured candidate iframe endpoint was replaced.");
+      throw new Error(
+        "The captured candidate iframe endpoint was replaced or its sandbox policy changed."
+      );
     }
     endpoint.capturedWindow.postMessage(request, "*");
     return;
@@ -794,17 +1011,19 @@ function postToCandidate(
 
 function isCurrentCandidateEvent(
   event: MessageEvent<unknown>,
-  endpoint: MechanicExecutionRealmBrowserCandidateEndpoint & {
-    capturedWindow?: Window;
-  },
+  endpoint: CapturedCandidateEndpoint,
   ownerWindow: Window
 ): boolean {
   if (endpoint.kind === "iframe") {
     return (
       event.currentTarget === ownerWindow &&
       event.source === endpoint.capturedWindow &&
-      endpoint.iframe.isConnected &&
-      endpoint.iframe.contentWindow === endpoint.capturedWindow
+      event.origin === "null" &&
+      isCurrentSandboxedIframe(
+        endpoint.iframe,
+        endpoint.capturedWindow,
+        endpoint.preparation
+      )
     );
   }
 

@@ -170,7 +170,7 @@ describe("Execution Realm Conformance Suite", () => {
     const report = await runOpaqueConformanceSuite({ session });
 
     expect(MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION).toBe(
-      "mechanic_execution_realm_conformance/v2"
+      "mechanic_execution_realm_conformance/v3"
     );
     expect(report.gates).toContainEqual(
       expect.objectContaining({

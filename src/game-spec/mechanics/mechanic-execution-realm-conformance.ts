@@ -10,7 +10,7 @@ import {
 } from "./mechanic-execution-realm-conformance-session";
 
 export const MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION =
-  "mechanic_execution_realm_conformance/v2";
+  "mechanic_execution_realm_conformance/v3";
 
 export type MechanicExecutionRealmResourceDimension =
   | "owned_objects"

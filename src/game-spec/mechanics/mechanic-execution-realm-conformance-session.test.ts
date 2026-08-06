@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
   createMechanicExecutionRealmBrowserConformanceSession,
+  disposeMechanicExecutionRealmBrowserConformanceIframePreparation,
+  prepareMechanicExecutionRealmBrowserConformanceIframe,
   runMechanicExecutionRealmConformanceSuite,
   type MechanicExecutionRealmBrowserCandidateRequest,
   type MechanicExecutionRealmBrowserCandidateInitialization,
@@ -187,13 +189,8 @@ describe("Execution Realm browser-conformance session", () => {
     expect(addListener.mock.calls).toHaveLength(listenersBeforeDisposedReuse);
   });
 
-  it("requires distinct sandboxed candidate and runtime iframes", () => {
+  it("requires distinct candidate and runtime iframes", () => {
     const runtimeIframe = createSandboxedIframe();
-    const sameOriginCandidate = createSandboxedIframe();
-    sameOriginCandidate.setAttribute(
-      "sandbox",
-      "allow-scripts allow-same-origin"
-    );
 
     expect(() =>
       createMechanicExecutionRealmBrowserConformanceSession({
@@ -202,13 +199,208 @@ describe("Execution Realm browser-conformance session", () => {
         runtimeIframe,
       })
     ).toThrow("whole-game runtime iframe");
+  });
+
+  it("rejects an unprepared iframe even when its current sandbox looks exact", () => {
+    const candidateIframe = document.createElement("iframe");
+    candidateIframe.setAttribute("sandbox", "allow-scripts");
+    document.body.append(candidateIframe);
+
     expect(() =>
       createMechanicExecutionRealmBrowserConformanceSession({
-        candidateId: "same_origin_candidate",
-        candidateEndpoint: { kind: "iframe", iframe: sameOriginCandidate },
+        candidateId: "unprepared_candidate",
+        candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+        runtimeIframe: createSandboxedIframe(),
+      })
+    ).toThrow("trusted pre-load preparation");
+  });
+
+  it("rejects sandbox authority that was added and removed before capture", () => {
+    const candidateIframe = document.createElement("iframe");
+    prepareMechanicExecutionRealmBrowserConformanceIframe(candidateIframe);
+    candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
+    candidateIframe.setAttribute("sandbox", "allow-scripts");
+    document.body.append(candidateIframe);
+
+    expect(() =>
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "retagged_candidate",
+        candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+        runtimeIframe: createSandboxedIframe(),
+      })
+    ).toThrow("changed after trusted pre-load preparation");
+  });
+
+  it("releases an abandoned preparation before the iframe is loaded", () => {
+    const candidateIframe = document.createElement("iframe");
+    prepareMechanicExecutionRealmBrowserConformanceIframe(candidateIframe);
+    disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+      candidateIframe
+    );
+    prepareMechanicExecutionRealmBrowserConformanceIframe(candidateIframe);
+    document.body.append(candidateIframe);
+
+    const session = createMechanicExecutionRealmBrowserConformanceSession({
+      candidateId: "reprepared_candidate",
+      candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+      runtimeIframe: createSandboxedIframe(),
+    });
+
+    session.dispose();
+  });
+
+  it("releases candidate preparation after a disconnected capture failure", () => {
+    const candidateIframe = document.createElement("iframe");
+    prepareMechanicExecutionRealmBrowserConformanceIframe(candidateIframe);
+
+    expect(() =>
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "disconnected_prepared_candidate",
+        candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+        runtimeIframe: createSandboxedIframe(),
+      })
+    ).toThrow("connected, captured iframe");
+
+    expect(() =>
+      prepareMechanicExecutionRealmBrowserConformanceIframe(candidateIframe)
+    ).not.toThrow();
+    disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+      candidateIframe
+    );
+  });
+
+  it("releases runtime preparation after a disconnected capture failure", () => {
+    const runtimeIframe = document.createElement("iframe");
+    prepareMechanicExecutionRealmBrowserConformanceIframe(runtimeIframe);
+
+    expect(() =>
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "disconnected_prepared_runtime",
+        candidateEndpoint: {
+          kind: "iframe",
+          iframe: document.createElement("iframe"),
+        },
         runtimeIframe,
       })
-    ).toThrow('without "allow-same-origin"');
+    ).toThrow("connected, captured iframe");
+
+    expect(() =>
+      prepareMechanicExecutionRealmBrowserConformanceIframe(runtimeIframe)
+    ).not.toThrow();
+    disposeMechanicExecutionRealmBrowserConformanceIframePreparation(
+      runtimeIframe
+    );
+  });
+
+  it.each([
+    ["no sandbox attribute", null],
+    ["an empty sandbox", ""],
+    ["no allow-scripts token", "allow-forms"],
+    ["additional authority", "allow-scripts allow-popups"],
+    ["same-origin authority", "allow-scripts allow-same-origin"],
+    ["non-ASCII whitespace", "allow-scripts\u00a0"],
+  ])("rejects a candidate iframe with %s", (_description, sandbox) => {
+    const candidateIframe = createSandboxedIframe();
+    if (sandbox === null) {
+      candidateIframe.removeAttribute("sandbox");
+    } else {
+      candidateIframe.setAttribute("sandbox", sandbox);
+    }
+
+    expect(() =>
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "invalid_sandbox_candidate",
+        candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+        runtimeIframe: createSandboxedIframe(),
+      })
+    ).toThrow('exactly sandbox="allow-scripts"');
+  });
+
+  it("applies the exact sandbox contract to the runtime iframe", () => {
+    const runtimeIframe = createSandboxedIframe();
+    runtimeIframe.setAttribute("sandbox", "allow-scripts allow-forms");
+
+    expect(() =>
+      createMechanicExecutionRealmBrowserConformanceSession({
+        candidateId: "invalid_runtime_sandbox_candidate",
+        candidateEndpoint: { kind: "iframe", iframe: createSandboxedIframe() },
+        runtimeIframe,
+      })
+    ).toThrow('exactly sandbox="allow-scripts"');
+  });
+
+  it("canonicalizes the sandbox before either iframe is loaded", () => {
+    const candidateIframe = document.createElement("iframe");
+    const runtimeIframe = document.createElement("iframe");
+    candidateIframe.setAttribute(
+      "sandbox",
+      "  ALLOW-SCRIPTS\tallow-scripts  "
+    );
+    runtimeIframe.setAttribute("sandbox", "allow-scripts allow-popups");
+    prepareMechanicExecutionRealmBrowserConformanceIframe(candidateIframe);
+    prepareMechanicExecutionRealmBrowserConformanceIframe(runtimeIframe);
+    document.body.append(candidateIframe, runtimeIframe);
+
+    expect(candidateIframe.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(runtimeIframe.getAttribute("sandbox")).toBe("allow-scripts");
+
+    const session = createMechanicExecutionRealmBrowserConformanceSession({
+      candidateId: "normalized_sandbox_candidate",
+      candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+      runtimeIframe,
+    });
+
+    session.dispose();
+  });
+
+  it("invalidates the session if the candidate iframe sandbox changes after capture", async () => {
+    vi.useFakeTimers();
+    const candidateIframe = createSandboxedIframe();
+    const candidateWindow = candidateIframe.contentWindow;
+    if (!candidateWindow) {
+      throw new Error("JSDOM did not create a candidate iframe window.");
+    }
+    const candidatePostMessage = vi.spyOn(candidateWindow, "postMessage");
+    const session = createMechanicExecutionRealmBrowserConformanceSession({
+      candidateId: "mutated_candidate_sandbox",
+      candidateEndpoint: { kind: "iframe", iframe: candidateIframe },
+      runtimeIframe: createSandboxedIframe(),
+    });
+
+    candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
+    const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
+    await vi.runAllTimersAsync();
+    const report = await reportPromise;
+
+    expect(candidatePostMessage).toHaveBeenCalledTimes(1);
+    expect(report.gates).toContainEqual(
+      expect.objectContaining({ id: "browser_integration", status: "failed" })
+    );
+  });
+
+  it("invalidates the session if the runtime iframe sandbox changes after capture", async () => {
+    vi.useFakeTimers();
+    const runtimeIframe = createSandboxedIframe();
+    const runtimeWindow = runtimeIframe.contentWindow;
+    if (!runtimeWindow) {
+      throw new Error("JSDOM did not create a runtime iframe window.");
+    }
+    const runtimePostMessage = vi.spyOn(runtimeWindow, "postMessage");
+    const session = createMechanicExecutionRealmBrowserConformanceSession({
+      candidateId: "mutated_runtime_sandbox",
+      candidateEndpoint: { kind: "iframe", iframe: createSandboxedIframe() },
+      runtimeIframe,
+    });
+
+    runtimeIframe.removeAttribute("sandbox");
+    const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
+    await vi.runAllTimersAsync();
+    const report = await reportPromise;
+
+    expect(runtimePostMessage).toHaveBeenCalledTimes(1);
+    expect(report.gates).toContainEqual(
+      expect.objectContaining({ id: "browser_integration", status: "failed" })
+    );
   });
 
   it("keeps the exact captured Worker when the caller mutates its endpoint object", async () => {
@@ -245,7 +437,7 @@ describe("Execution Realm browser-conformance session", () => {
 
 function createSandboxedIframe(): HTMLIFrameElement {
   const iframe = document.createElement("iframe");
-  iframe.setAttribute("sandbox", "allow-scripts");
+  prepareMechanicExecutionRealmBrowserConformanceIframe(iframe);
   document.body.append(iframe);
   return iframe;
 }
