@@ -1,14 +1,19 @@
 export {
   GAME_SPEC_SCHEMA_VERSION,
+  MECHANIC_PORT_CONNECTIONS_SCHEMA_VERSION,
   STABLE_ID_PATTERN,
   STABLE_ID_PATTERN_SOURCE,
   gameSpecSchema,
+  finalGameSpecMechanicConnectionPlanSchema,
   parseGameSpec,
   stableIdSchema,
   type GameSpec,
+  type FinalGameSpecMechanicConnectionPlan,
   type GameSpecMechanicEntry,
   type GameSpecObjective,
   type GameSpecValidationGoal,
+  type MechanicPortConnection,
+  type MechanicPortEndpoint,
   type StableId,
 } from "./game-spec-schema";
 

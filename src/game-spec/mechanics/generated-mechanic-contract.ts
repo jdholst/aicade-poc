@@ -1145,7 +1145,7 @@ function addBehaviorScenarioValueIssues(
   });
 }
 
-function configDslValueMatches(
+export function configDslValueMatches(
   declaration: MechanicConfigDslValue,
   value: unknown,
   referenceCatalog: GeneratedMechanicReferenceCatalog

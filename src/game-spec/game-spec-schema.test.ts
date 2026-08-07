@@ -161,6 +161,49 @@ describe("Game Spec schema", () => {
     });
   });
 
+  it("parses explicit versioned mechanic port connections in the Final Game Spec", () => {
+    const spec = parseGameSpec({
+      ...minimalCoreGameSpec,
+      mechanicConnections: {
+        schemaVersion: "mechanic_port_connections/v1",
+        connections: [
+          {
+            id: "collector_score",
+            output: {
+              ownerKind: "mechanic",
+              ownerId: "collector",
+              portId: "points_awarded",
+            },
+            input: {
+              ownerKind: "game_system",
+              ownerId: "score",
+              portId: "increment",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(spec.mechanicConnections).toEqual({
+      schemaVersion: "mechanic_port_connections/v1",
+      connections: [
+        {
+          id: "collector_score",
+          output: {
+            ownerKind: "mechanic",
+            ownerId: "collector",
+            portId: "points_awarded",
+          },
+          input: {
+            ownerKind: "game_system",
+            ownerId: "score",
+            portId: "increment",
+          },
+        },
+      ],
+    });
+  });
+
   it("rejects non-JSON template config and extension values", () => {
     expect(() =>
       parseGameSpec({
