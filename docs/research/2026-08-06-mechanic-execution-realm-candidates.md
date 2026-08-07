@@ -48,6 +48,34 @@ alternative, and the plain Worker baseline were not promoted to executable
 comparison after SES passed every hard gate. Their research remains here as
 replacement guidance, not as ergonomic or performance ranking.
 
+## Replacement-evaluation triggers
+
+Do not reopen the candidate comparison merely to produce a four-way ranking.
+Re-evaluate QuickJS/Wasm in a dedicated Worker when at least one of these
+concrete requirements or counterexamples appears:
+
+1. Sparkline requires an enforceable per-realm heap limit or engine-level
+   instruction interruption rather than Worker termination as the only hard
+   backstop.
+2. The production Content Security Policy or deployment topology cannot permit
+   the evaluator behavior required by SES without weakening the whole-game
+   runtime policy.
+3. The threat model expands to mutually distrustful tenants or another
+   isolation boundary materially stronger than the current generated-mechanic
+   model.
+4. Production measurements show unacceptable Worker termination latency,
+   memory overshoot, or recovery behavior against the runtime's availability
+   targets.
+
+If a trigger occurs, evaluate QuickJS/Wasm first through the same unchanged
+real-browser conformance gates and production adapter contract. The plain
+Worker remains a hard-rejection baseline unless it gains a genuine inner
+authority boundary. Reconsider the iframe-plus-inner-realm option only if the
+browser platform supplies a dependable hard-interruption boundary or Sparkline
+develops a requirement that specifically favors document isolation. Until
+then, preserve the replaceable adapter and continue with the selected SES
+Worker architecture.
+
 ## Evaluation boundary
 
 The shortlist is evaluated only as four concrete browser architectures:
