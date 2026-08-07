@@ -537,6 +537,11 @@ function containSlowRuntimeCallback(
     executionId: job.request.executionId,
     outcome: "resource_limit",
     durationMilliseconds: performance.now() - job.startedAt,
+    resourceUsage: {
+      dimension: "callback_milliseconds",
+      limit,
+      observed: limit + 1,
+    },
     diagnostic: runtimeDiagnostic(
       job.request.executionId,
       "realm_execution",

@@ -4,6 +4,7 @@ import type {
   MechanicExecutionRealmExecutionInput,
   MechanicExecutionRealmExecutionResult,
   MechanicExecutionRealmResourceBudget,
+  MechanicExecutionRealmResourceUsage,
 } from "@/runtime/mechanics/mechanic-execution-realm";
 
 export const SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION =
@@ -71,5 +72,6 @@ export type SesWorkerRealmCapabilityResponse = {
   error?: {
     code: StableId;
     message: string;
+    resourceUsage?: MechanicExecutionRealmResourceUsage;
   };
 };

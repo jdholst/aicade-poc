@@ -14,6 +14,8 @@ import type {
   MechanicExecutionRealmResourceBudget,
   MechanicExecutionRealmResourceDimension,
 } from "@/runtime/mechanics/mechanic-execution-realm";
+import { isMechanicExecutionRealmResourceUsage } from "@/runtime/mechanics/mechanic-execution-realm";
+import { runMechanicRuntimeCallbacks } from "@/runtime/mechanics/mechanic-runtime-callback-runner";
 import {
   SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
   type SesWorkerRealmBindingDescriptor,
@@ -338,6 +340,11 @@ async function executeMechanicRuntimeInSesCompartment(
         executionId: input.executionId,
         outcome: "resource_limit",
         durationMilliseconds: performance.now() - startedAt,
+        resourceUsage: {
+          dimension: error.dimension,
+          limit: error.limit,
+          observed: error.observed,
+        },
         diagnostic: runtimeDiagnostic(
           input.executionId,
           "realm_execution",
@@ -591,30 +598,15 @@ async function runRuntimeLifecycle(
   const callbacks = new Map(
     lifecycle.callbacks.map((callback) => [callback.id, callback.source])
   );
-  for (const invocation of lifecycle.invocations) {
-    const callbackSource = callbacks.get(invocation.callbackId);
-    if (typeof callbackSource !== "string") {
-      throw new Error("Missing callback source.");
-    }
-    for (let count = 0; count < invocation.count; count += 1) {
+  await runMechanicRuntimeCallbacks({
+    mode: input.mode,
+    callbacks,
+    invocations: lifecycle.invocations,
+    evaluate: async (callbackSource) => {
       const callbackStartedAt = performance.now();
       input.onCallbackStarted?.();
       try {
-        await compartment.evaluate(
-          `(async () => { ${callbackSource}\n})()`
-        );
-        counters.consecutive_failures = 0;
-      } catch (error) {
-        if (error instanceof ResourceLimitError) {
-          throw error;
-        }
-        counters.consecutive_failures += 1;
-        enforceRuntimeDimension(
-          "consecutive_failures",
-          counters.consecutive_failures,
-          input.resourceBudget
-        );
-        enforceTarget(input.resourceTarget, counters);
+        await compartment.evaluate(`(async () => { ${callbackSource}\n})()`);
       } finally {
         const elapsed = performance.now() - callbackStartedAt;
         counters.callback_milliseconds = Math.max(
@@ -623,14 +615,31 @@ async function runRuntimeLifecycle(
         );
         input.onCallbackFinished?.();
       }
+    },
+    onCallbackCompleted: () => {
+      counters.consecutive_failures = 0;
+    },
+    onCallbackFailed: (error) => {
+      if (error instanceof ResourceLimitError) {
+        throw error;
+      }
+      counters.consecutive_failures += 1;
+      enforceRuntimeDimension(
+        "consecutive_failures",
+        counters.consecutive_failures,
+        input.resourceBudget
+      );
+      enforceTarget(input.resourceTarget, counters);
+    },
+    afterCallback: () => {
       enforceRuntimeDimension(
         "callback_milliseconds",
         counters.callback_milliseconds,
         input.resourceBudget
       );
       enforceTarget(input.resourceTarget, counters);
-    }
-  }
+    },
+  });
 }
 
 function inspectReturnedOpaqueHandle(
@@ -862,6 +871,17 @@ function settleRuntimeCapabilityResponse(
   pendingCapabilityCalls.delete(key);
   if (response.success && response.value) {
     pending.resolve(response.value);
+    return;
+  }
+  const resourceUsage = response.error?.resourceUsage;
+  if (isMechanicExecutionRealmResourceUsage(resourceUsage)) {
+    pending.reject(
+      new ResourceLimitError(
+        resourceUsage.dimension,
+        resourceUsage.limit,
+        resourceUsage.observed
+      )
+    );
     return;
   }
   pending.reject(

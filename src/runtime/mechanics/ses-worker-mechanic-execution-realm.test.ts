@@ -4,6 +4,7 @@ import { STABLE_ID_PATTERN } from "@/game-spec/game-spec-schema";
 import { mechanicCapabilityRegistry } from "@/game-spec/mechanics/mechanic-capability-registry";
 import { MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY } from "@/game-spec/mechanics/mechanic-execution-realm-conformance";
 import type { MechanicObjectHandle } from "@/runtime/mechanics/mechanic-object-host";
+import { MechanicExecutionRealmResourceLimitError } from "./mechanic-execution-realm";
 
 import {
   createSesWorkerMechanicExecutionRealmAdapter,
@@ -409,6 +410,65 @@ describe("SES Worker Mechanic Execution Realm adapter", () => {
     realm.dispose();
   });
 
+  it("preserves host-owned cumulative resource measurements across the capability channel", async () => {
+    const actorHandle = Object.freeze(Object.create(null)) as MechanicObjectHandle;
+    const controller = new FakeSesController();
+    const adapter = createSesWorkerMechanicExecutionRealmAdapter({
+      createController: () => controller,
+    });
+    const realm = await adapter.create({
+      ...createEmptyRealmInput("mechanic_state_budget"),
+      capabilityGrant: {
+        capabilityVersion: mechanicCapabilityRegistry.version,
+        capabilities: [
+          {
+            ...requireCapability("state_write"),
+            justification: {
+              kind: "contract_declaration",
+              path: "mechanic.capabilities.0",
+            },
+          },
+        ],
+      },
+      bindings: [
+        {
+          id: "binding_actor",
+          cardinality: "one",
+          handles: [actorHandle],
+        },
+      ],
+      capabilityHost: {
+        invoke: vi.fn(() => {
+          throw new MechanicExecutionRealmResourceLimitError(
+            "state_bytes",
+            6,
+            7
+          );
+        }),
+      },
+    });
+
+    await expect(
+      realm.execute({ id: "state_over_limit", source: "return tagged json;" })
+        .result
+    ).resolves.toMatchObject({ outcome: "failed" });
+    expect(controller.capabilityResponses).toContainEqual(
+      expect.objectContaining({
+        success: false,
+        error: {
+          code: "resource_budget_exceeded",
+          message: "Resource state_bytes exceeded 6 with 7.",
+          resourceUsage: {
+            dimension: "state_bytes",
+            limit: 6,
+            observed: 7,
+          },
+        },
+      })
+    );
+    realm.dispose();
+  });
+
   it("rejects a termination response whose outcome claims completion", async () => {
     vi.useFakeTimers();
     try {
@@ -435,6 +495,43 @@ describe("SES Worker Mechanic Execution Realm adapter", () => {
       );
       await rejection;
       expect(controller.terminated).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects malformed runtime resource measurements at the controller boundary", async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new FakeSesController();
+      controller.executionResultOverride = {
+        outcome: "resource_limit",
+        resourceUsage: {
+          dimension: "unbounded_memory",
+          limit: 4,
+          observed: 5,
+        },
+      };
+      const adapter = createSesWorkerMechanicExecutionRealmAdapter({
+        createController: () => controller,
+      });
+      const realm = await adapter.create(
+        createEmptyRealmInput("mechanic_invalid_resource_evidence")
+      );
+      const run = realm.execute({
+        id: "invalid_resource_evidence",
+        source: "return null;",
+      });
+
+      await vi.advanceTimersByTimeAsync(
+        MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds
+      );
+
+      await expect(run.result).resolves.toEqual({
+        executionId: "invalid_resource_evidence",
+        outcome: "terminated",
+      });
+      realm.dispose();
     } finally {
       vi.useRealTimers();
     }
@@ -513,6 +610,7 @@ class FakeSesController implements SesWorkerMechanicExecutionRealmController {
   throwOnReady = false;
   deferReady = false;
   terminateOutcome: "completed" | "terminated" = "terminated";
+  executionResultOverride?: Record<string, unknown>;
   private readyProbeReceived = false;
   private capabilityPort?: MessagePort;
 
@@ -571,6 +669,13 @@ class FakeSesController implements SesWorkerMechanicExecutionRealmController {
         this.emitExecutionResponse(realmId, executionId, "terminate", {
           executionId,
           outcome: this.terminateOutcome,
+        });
+        return;
+      }
+      if (this.executionResultOverride) {
+        this.emitExecutionResponse(realmId, executionId, "execute", {
+          executionId,
+          ...this.executionResultOverride,
         });
         return;
       }

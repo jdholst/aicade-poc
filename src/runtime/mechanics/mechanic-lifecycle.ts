@@ -1,14 +1,19 @@
 import type { JsonValue, StableId } from "@/game-spec/game-spec-schema";
-import type { MechanicCapabilityGrant } from "@/game-spec/mechanics/mechanic-capability-registry";
 import type {
-  MechanicExecutionRealm,
-  MechanicExecutionRealmCapabilityArgument,
-  MechanicExecutionRealmCapabilityHost,
-  MechanicExecutionRealmCapabilityResult,
-  MechanicExecutionRealmDiagnostic,
-  MechanicExecutionRealmExecutionResult,
-  MechanicExecutionRealmResourceBudget,
-  MechanicExecutionRealmRun,
+  MechanicCapabilityGrant,
+  MechanicCapabilityResourceCosts,
+} from "@/game-spec/mechanics/mechanic-capability-registry";
+import {
+  MechanicExecutionRealmResourceLimitError,
+  type MechanicExecutionRealm,
+  type MechanicExecutionRealmCapabilityArgument,
+  type MechanicExecutionRealmCapabilityHost,
+  type MechanicExecutionRealmCapabilityResult,
+  type MechanicExecutionRealmCallbackReference,
+  type MechanicExecutionRealmDiagnostic,
+  type MechanicExecutionRealmExecutionResult,
+  type MechanicExecutionRealmResourceBudget,
+  type MechanicExecutionRealmRun,
 } from "./mechanic-execution-realm";
 
 export const MECHANIC_LIFECYCLE_SERVICES_VERSION =
@@ -65,6 +70,8 @@ export type MechanicLifecycleServices = {
   readonly pendingScheduledCallbackCount: number;
   readonly activeSubscriptionCount: number;
   readonly lastDiagnostic: MechanicExecutionRealmDiagnostic | undefined;
+  readonly resourceBudget: Readonly<MechanicExecutionRealmResourceBudget>;
+  readonly callbackReferences: readonly MechanicExecutionRealmCallbackReference[];
   readonly capabilityHost: MechanicExecutionRealmCapabilityHost;
   install(): Promise<MechanicExecutionRealmExecutionResult>;
   dispatchLogicalAction(
@@ -78,7 +85,7 @@ export type MechanicLifecycleServices = {
   advanceSimulation(
     elapsedMilliseconds: number
   ): Promise<readonly MechanicExecutionRealmExecutionResult[]>;
-  dispose(): Promise<void>;
+  dispose(): Promise<MechanicExecutionRealmExecutionResult | undefined>;
   createCapabilityHost(
     delegate: MechanicExecutionRealmCapabilityHost
   ): MechanicExecutionRealmCapabilityHost;
@@ -119,6 +126,12 @@ export async function createMechanicLifecycleServices({
     resourceBudget.maximumOperationsPerTick,
     "maximumOperationsPerTick"
   );
+  validateNonnegativeLimit(
+    resourceBudget.maximumSignalsPerTick,
+    "maximumSignalsPerTick"
+  );
+
+  const admittedResourceBudget = Object.freeze({ ...resourceBudget });
 
   const callbacksById = new Map(
     program.callbacks.map((callback) => [callback.id, callback])
@@ -126,8 +139,11 @@ export async function createMechanicLifecycleServices({
   const callbacksByKind = new Map(
     program.callbacks.map((callback) => [callback.kind, callback])
   );
-  const grantedCapabilities = new Set(
-    capabilityGrant.capabilities.map((capability) => capability.id)
+  const grantedCapabilities = new Map(
+    capabilityGrant.capabilities.map((capability) => [capability.id, capability])
+  );
+  const callbackReferences = Object.freeze(
+    program.callbacks.map(({ id, kind }) => Object.freeze({ id, kind }))
   );
   const callbackDefinitions = program.callbacks.map(({ id, source }) => ({
     id,
@@ -145,7 +161,12 @@ export async function createMechanicLifecycleServices({
   let realmDisposed = false;
   let activeRun: MechanicExecutionRealmRun | undefined;
   let lastDiagnostic: MechanicExecutionRealmDiagnostic | undefined;
-  let disposePromise: Promise<void> | undefined;
+  let disposePromise:
+    | Promise<MechanicExecutionRealmExecutionResult | undefined>
+    | undefined;
+  let activeCapabilityResourceStep:
+    | { operationsPerTick: number; signalsPerTick: number }
+    | undefined;
 
   const enqueue = <Result>(operation: () => Promise<Result>): Promise<Result> => {
     const next = operationQueue.then(operation);
@@ -156,13 +177,52 @@ export async function createMechanicLifecycleServices({
     return next;
   };
 
+  const withCapabilityResourceStep = async <Result>(
+    operation: () => Promise<Result>
+  ): Promise<Result> => {
+    if (activeCapabilityResourceStep) {
+      throw new Error("Mechanic capability resource steps cannot overlap.");
+    }
+    activeCapabilityResourceStep = { operationsPerTick: 0, signalsPerTick: 0 };
+    try {
+      return await operation();
+    } finally {
+      activeCapabilityResourceStep = undefined;
+    }
+  };
+
+  const chargeCapabilityUse = (costs: MechanicCapabilityResourceCosts): void => {
+    const step = activeCapabilityResourceStep;
+    if (!step) {
+      return;
+    }
+    const nextOperations = step.operationsPerTick + costs.operationsPerTick;
+    if (nextOperations > admittedResourceBudget.maximumOperationsPerTick) {
+      throw new MechanicExecutionRealmResourceLimitError(
+        "operations_per_tick",
+        admittedResourceBudget.maximumOperationsPerTick,
+        nextOperations
+      );
+    }
+    const nextSignals = step.signalsPerTick + (costs.signalsPerTick ?? 0);
+    if (nextSignals > admittedResourceBudget.maximumSignalsPerTick) {
+      throw new MechanicExecutionRealmResourceLimitError(
+        "signals_per_tick",
+        admittedResourceBudget.maximumSignalsPerTick,
+        nextSignals
+      );
+    }
+    step.operationsPerTick = nextOperations;
+    step.signalsPerTick = nextSignals;
+  };
+
   const disposeRealm = () => {
     if (realmDisposed) {
       return;
     }
-    realmDisposed = true;
     try {
       realm.dispose();
+      realmDisposed = true;
     } catch (error) {
       lastDiagnostic = {
         stage: "cleanup",
@@ -172,6 +232,7 @@ export async function createMechanicLifecycleServices({
             ? error.message
             : "Mechanic lifecycle realm disposal failed.",
       };
+      throw error;
     }
   };
 
@@ -184,7 +245,12 @@ export async function createMechanicLifecycleServices({
     if (lifecycleState === "active") {
       lifecycleState = "failed";
       clearRegistrations();
-      disposeRealm();
+      try {
+        disposeRealm();
+      } catch {
+        // The primary callback failure remains authoritative. A later explicit
+        // disposal retries the realm and exposes cleanup failure to its caller.
+      }
     }
   };
 
@@ -224,7 +290,14 @@ export async function createMechanicLifecycleServices({
         },
       });
       activeRun = run;
-      const result = await run.result;
+      const realmResult = await run.result;
+      const result: MechanicExecutionRealmExecutionResult = Object.freeze({
+        ...realmResult,
+        callback: Object.freeze({ id: callback.id, kind: callback.kind }),
+      });
+      if (result.diagnostic) {
+        lastDiagnostic = result.diagnostic;
+      }
       if (result.outcome !== "completed" && failOnError) {
         failLifecycle();
       }
@@ -233,6 +306,7 @@ export async function createMechanicLifecycleServices({
       const result: MechanicExecutionRealmExecutionResult = {
         executionId,
         outcome: "failed",
+        callback: Object.freeze({ id: callback.id, kind: callback.kind }),
         diagnostic: {
           stage: "realm_execution",
           code: "lifecycle_callback_failed",
@@ -242,6 +316,7 @@ export async function createMechanicLifecycleServices({
               : "Mechanic lifecycle callback failed.",
         },
       };
+      lastDiagnostic = result.diagnostic;
       if (failOnError) {
         failLifecycle();
       }
@@ -270,9 +345,14 @@ export async function createMechanicLifecycleServices({
     if (lifecycleState !== "active") {
       throw new Error("Mechanic lifecycle scheduling is unavailable.");
     }
-    if (scheduledCallbacks.size >= resourceBudget.maximumScheduledCallbacks) {
-      throw new Error(
-        `Mechanic lifecycle scheduled callback limit ${resourceBudget.maximumScheduledCallbacks} was exceeded.`
+    if (
+      scheduledCallbacks.size >=
+      admittedResourceBudget.maximumScheduledCallbacks
+    ) {
+      throw new MechanicExecutionRealmResourceLimitError(
+        "scheduled_callbacks",
+        admittedResourceBudget.maximumScheduledCallbacks,
+        scheduledCallbacks.size + 1
       );
     }
     if (
@@ -301,9 +381,11 @@ export async function createMechanicLifecycleServices({
     if (lifecycleState !== "active") {
       throw new Error("Mechanic lifecycle subscriptions are unavailable.");
     }
-    if (subscriptions.size >= resourceBudget.maximumSubscriptions) {
-      throw new Error(
-        `Mechanic lifecycle subscription limit ${resourceBudget.maximumSubscriptions} was exceeded.`
+    if (subscriptions.size >= admittedResourceBudget.maximumSubscriptions) {
+      throw new MechanicExecutionRealmResourceLimitError(
+        "subscriptions",
+        admittedResourceBudget.maximumSubscriptions,
+        subscriptions.size + 1
       );
     }
 
@@ -350,10 +432,17 @@ export async function createMechanicLifecycleServices({
         break;
       }
       scheduledCallbacks.delete(due.id);
-      if (callbackBudget.dispatched >= resourceBudget.maximumOperationsPerTick) {
+      if (
+        callbackBudget.dispatched >=
+        admittedResourceBudget.maximumOperationsPerTick
+      ) {
         failLifecycle();
         results.push(
-          createResourceLimitResult("scheduled_callback_budget_exceeded")
+          createResourceLimitResult(
+            "scheduled_callback_budget_exceeded",
+            admittedResourceBudget.maximumOperationsPerTick,
+            { id: due.callbackId, kind: "scheduled" }
+          )
         );
         break;
       }
@@ -370,7 +459,7 @@ export async function createMechanicLifecycleServices({
   };
 
   const install = () =>
-    enqueue(async () => {
+    enqueue(() => withCapabilityResourceStep(async () => {
       if (lifecycleState !== "created") {
         throw new Error(
           `Mechanic lifecycle cannot install from state "${lifecycleState}".`
@@ -382,10 +471,10 @@ export async function createMechanicLifecycleServices({
         throw new Error('Lifecycle callback kind "install" is not declared.');
       }
       return executeCallback(callback.id, "mechanic_install");
-    });
+    }));
 
   const dispatchLogicalAction = (actionId: StableId, payload?: JsonValue) =>
-    enqueue(async () => {
+    enqueue(() => withCapabilityResourceStep(async () => {
       if (!requireActive()) {
         return [];
       }
@@ -400,10 +489,10 @@ export async function createMechanicLifecycleServices({
           payload === undefined ? actionId : { actionId, payload }
         ),
       ];
-    });
+    }));
 
   const dispatchGameplayEvent = (eventId: StableId, payload?: JsonValue) =>
-    enqueue(async () => {
+    enqueue(() => withCapabilityResourceStep(async () => {
       if (!requireActive()) {
         return [];
       }
@@ -413,10 +502,17 @@ export async function createMechanicLifecycleServices({
       const results: MechanicExecutionRealmExecutionResult[] = [];
       const callbackBudget = { dispatched: 0 };
       for (const subscription of matchingSubscriptions) {
-        if (callbackBudget.dispatched >= resourceBudget.maximumOperationsPerTick) {
+        if (
+          callbackBudget.dispatched >=
+          admittedResourceBudget.maximumOperationsPerTick
+        ) {
           failLifecycle();
           results.push(
-            createResourceLimitResult("event_callback_budget_exceeded")
+            createResourceLimitResult(
+              "event_callback_budget_exceeded",
+              admittedResourceBudget.maximumOperationsPerTick,
+              { id: subscription.callbackId, kind: "gameplay_event" }
+            )
           );
           break;
         }
@@ -433,10 +529,10 @@ export async function createMechanicLifecycleServices({
         }
       }
       return results;
-    });
+    }));
 
   const advanceSimulation = (elapsedMilliseconds: number) =>
-    enqueue(async () => {
+    enqueue(() => withCapabilityResourceStep(async () => {
       if (!requireActive()) {
         return [];
       }
@@ -466,10 +562,17 @@ export async function createMechanicLifecycleServices({
             break;
           }
           if (
-            callbackBudget.dispatched >= resourceBudget.maximumOperationsPerTick
+            callbackBudget.dispatched >=
+            admittedResourceBudget.maximumOperationsPerTick
           ) {
             failLifecycle();
-            results.push(createResourceLimitResult("fixed_step_budget_exceeded"));
+            results.push(
+              createResourceLimitResult(
+                "fixed_step_budget_exceeded",
+                admittedResourceBudget.maximumOperationsPerTick,
+                { id: fixedStep.callbackId, kind: "fixed_step" }
+              )
+            );
             break;
           }
           callbackBudget.dispatched += 1;
@@ -492,30 +595,42 @@ export async function createMechanicLifecycleServices({
       simulationTimeMilliseconds += elapsedMilliseconds;
       results.push(...(await drainScheduledCallbacks(callbackBudget)));
       return results;
-    });
+    }));
 
   const dispose = () => {
     if (disposePromise) {
       return disposePromise;
     }
     if (lifecycleState === "disposed") {
-      return Promise.resolve();
+      return Promise.resolve(undefined);
     }
     clearRegistrations();
     void activeRun?.terminate().catch(() => undefined);
     const shouldInvokeDispose = lifecycleState === "active";
     lifecycleState = "disposing";
-    disposePromise = enqueue(async () => {
+    disposePromise = enqueue(() => withCapabilityResourceStep(async () => {
+      let disposeResult: MechanicExecutionRealmExecutionResult | undefined;
       if (shouldInvokeDispose) {
         const callback = callbacksByKind.get("dispose");
         if (callback) {
-          await executeCallback(callback.id, "mechanic_dispose", undefined, false);
+          disposeResult = await executeCallback(
+            callback.id,
+            "mechanic_dispose",
+            undefined,
+            false
+          );
         }
       }
       clearRegistrations();
-      lifecycleState = "disposed";
-      disposeRealm();
-    });
+      try {
+        disposeRealm();
+        lifecycleState = "disposed";
+      } catch (error) {
+        lifecycleState = "failed";
+        throw error;
+      }
+      return disposeResult;
+    }));
     return disposePromise;
   };
 
@@ -523,6 +638,11 @@ export async function createMechanicLifecycleServices({
     delegate: MechanicExecutionRealmCapabilityHost
   ): MechanicExecutionRealmCapabilityHost => ({
     invoke: async ({ capabilityId, arguments: capabilityArguments }) => {
+      const capability = grantedCapabilities.get(capabilityId);
+      if (!capability) {
+        throw new Error(`Mechanic capability "${capabilityId}" was not granted.`);
+      }
+      chargeCapabilityUse(capability.resourceCosts);
       switch (capabilityId) {
         case "time_read":
           if (
@@ -531,13 +651,10 @@ export async function createMechanicLifecycleServices({
           ) {
             throw new Error("Mechanic lifecycle time is unavailable.");
           }
-          requireGrantedCapability(grantedCapabilities, capabilityId);
           return jsonResult(simulationTimeMilliseconds);
         case "random_next":
-          requireGrantedCapability(grantedCapabilities, capabilityId);
           return jsonResult(nextRandom());
         case "time_schedule":
-          requireGrantedCapability(grantedCapabilities, capabilityId);
           return jsonResult(
             schedule(
               requireNumberArgument(capabilityArguments, 0, "delayMilliseconds"),
@@ -545,7 +662,6 @@ export async function createMechanicLifecycleServices({
             )
           );
         case "event_subscribe":
-          requireGrantedCapability(grantedCapabilities, capabilityId);
           return jsonResult(
             subscribe(
               requireStringArgument(capabilityArguments, 0, "eventId"),
@@ -553,7 +669,6 @@ export async function createMechanicLifecycleServices({
             )
           );
         default:
-          requireGrantedCapability(grantedCapabilities, capabilityId);
           return delegate.invoke({ capabilityId, arguments: capabilityArguments });
       }
     },
@@ -563,7 +678,7 @@ export async function createMechanicLifecycleServices({
   const realm = await createRealm({
     capabilityGrant,
     capabilityHost,
-    resourceBudget,
+    resourceBudget: admittedResourceBudget,
     seed,
   });
 
@@ -584,6 +699,8 @@ export async function createMechanicLifecycleServices({
     get lastDiagnostic() {
       return lastDiagnostic;
     },
+    resourceBudget: admittedResourceBudget,
+    callbackReferences,
     capabilityHost,
     install,
     dispatchLogicalAction,
@@ -653,15 +770,6 @@ function requireCallbackKind(
   }
 }
 
-function requireGrantedCapability(
-  grantedCapabilities: ReadonlySet<StableId>,
-  capabilityId: StableId
-): void {
-  if (!grantedCapabilities.has(capabilityId)) {
-    throw new Error(`Mechanic capability "${capabilityId}" was not granted.`);
-  }
-}
-
 function validatePositiveFiniteNumber(value: number, label: string): void {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new TypeError(`${label} must be a finite positive number.`);
@@ -711,11 +819,22 @@ function jsonResult(value: JsonValue): MechanicExecutionRealmCapabilityResult {
 }
 
 function createResourceLimitResult(
-  code: StableId
+  code: StableId,
+  limit: number,
+  callback: Readonly<{
+    id: StableId;
+    kind: "scheduled" | "gameplay_event" | "fixed_step";
+  }>
 ): MechanicExecutionRealmExecutionResult {
   return {
     executionId: `mechanic_${code}`,
     outcome: "resource_limit",
+    callback: Object.freeze({ ...callback }),
+    resourceUsage: {
+      dimension: "operations_per_tick",
+      limit,
+      observed: limit + 1,
+    },
     diagnostic: {
       stage: "realm_execution",
       code,

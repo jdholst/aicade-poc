@@ -6,6 +6,8 @@ import {
 import { MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY } from "@/game-spec/mechanics/mechanic-execution-realm-conformance";
 import {
   MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
+  MechanicExecutionRealmResourceLimitError,
+  isMechanicExecutionRealmResourceUsage,
   type CreateMechanicExecutionRealmInput,
   type MechanicExecutionRealm,
   type MechanicExecutionRealmAdapter,
@@ -513,6 +515,14 @@ async function answerCapabilityRequest(
       value,
     };
   } catch (error) {
+    const resourceUsage =
+      error instanceof MechanicExecutionRealmResourceLimitError
+        ? {
+            dimension: error.dimension,
+            limit: error.limit,
+            observed: error.observed,
+          }
+        : undefined;
     response = {
       kind: "sparkline_mechanic_realm_capability_response",
       protocolVersion: SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
@@ -521,11 +531,14 @@ async function answerCapabilityRequest(
       callId: request.callId,
       success: false,
       error: {
-        code: "capability_invocation_failed",
+        code: resourceUsage
+          ? "resource_budget_exceeded"
+          : "capability_invocation_failed",
         message:
           error instanceof Error
             ? error.message
             : "Mechanic capability invocation failed.",
+        ...(resourceUsage ? { resourceUsage } : {}),
       },
     };
   }
@@ -760,6 +773,13 @@ function isExecutionResponse(
     value.result.output !== undefined &&
     (value.result.outcome !== "completed" ||
       !jsonValueSchema.safeParse(value.result.output).success)
+  ) {
+    return false;
+  }
+  if (
+    value.result.outcome === "resource_limit"
+      ? !isMechanicExecutionRealmResourceUsage(value.result.resourceUsage)
+      : value.result.resourceUsage !== undefined
   ) {
     return false;
   }

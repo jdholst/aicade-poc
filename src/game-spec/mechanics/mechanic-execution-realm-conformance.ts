@@ -1,5 +1,10 @@
 import type { JsonValue, StableId } from "../game-spec-schema";
 import {
+  PHASE_9_MECHANIC_RESOURCE_BUDGET,
+  type MechanicExecutionRealmResourceBudget,
+  type MechanicExecutionRealmResourceDimension,
+} from "@/runtime/mechanics/mechanic-execution-realm";
+import {
   mechanicCapabilityRegistry,
   type MechanicCapabilityGrant,
 } from "./mechanic-capability-registry";
@@ -12,44 +17,17 @@ import {
 export const MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION =
   "mechanic_execution_realm_conformance/v3";
 
-export type MechanicExecutionRealmResourceDimension =
-  | "owned_objects"
-  | "operations_per_tick"
-  | "scheduled_callbacks"
-  | "subscriptions"
-  | "signals_per_tick"
-  | "state_bytes"
-  | "callback_milliseconds"
-  | "consecutive_failures";
-
-export type MechanicExecutionRealmResourceBudget = {
-  profileId: "phase_9_fixed_budget";
-  maximumOwnedObjects: number;
-  maximumOperationsPerTick: number;
-  maximumScheduledCallbacks: number;
-  maximumSubscriptions: number;
-  maximumSignalsPerTick: number;
-  maximumStateBytes: number;
-  maximumCallbackMilliseconds: number;
-  maximumConsecutiveFailures: number;
-};
+export type {
+  MechanicExecutionRealmResourceBudget,
+  MechanicExecutionRealmResourceDimension,
+} from "@/runtime/mechanics/mechanic-execution-realm";
 
 export const MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY = {
   profileId: "phase_9_realm_conformance",
   maximumExecutionMilliseconds: 50,
   maximumTerminationMilliseconds: 50,
   maximumHostHeartbeatMilliseconds: 50,
-  resourceBudget: {
-    profileId: "phase_9_fixed_budget",
-    maximumOwnedObjects: 4,
-    maximumOperationsPerTick: 16,
-    maximumScheduledCallbacks: 4,
-    maximumSubscriptions: 4,
-    maximumSignalsPerTick: 8,
-    maximumStateBytes: 1024,
-    maximumCallbackMilliseconds: 8,
-    maximumConsecutiveFailures: 3,
-  },
+  resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
 } as const satisfies {
   profileId: StableId;
   maximumExecutionMilliseconds: number;

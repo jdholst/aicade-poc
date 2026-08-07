@@ -3,10 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { mechanicCapabilityRegistry } from "@/game-spec/mechanics/mechanic-capability-registry";
 import type {
   MechanicExecutionRealm,
+  MechanicExecutionRealmCapabilityHost,
   MechanicExecutionRealmExecutionInput,
   MechanicExecutionRealmExecutionResult,
   MechanicExecutionRealmRun,
 } from "./mechanic-execution-realm";
+import { MechanicExecutionRealmResourceLimitError } from "./mechanic-execution-realm";
 import {
   createMechanicLifecycleServices,
   type MechanicLifecycleProgram,
@@ -24,7 +26,7 @@ describe("Mechanic lifecycle services", () => {
     );
     const host = lifecycle.capabilityHost;
 
-    await lifecycle.install();
+    const installResult = await lifecycle.install();
     await host.invoke({
       capabilityId: "time_schedule",
       arguments: [5, "scheduled"],
@@ -37,6 +39,8 @@ describe("Mechanic lifecycle services", () => {
     await lifecycle.dispatchGameplayEvent("enemy_hit", { damage: 3 });
     await lifecycle.advanceSimulation(25);
     await lifecycle.dispose();
+
+    expect(installResult.callback).toEqual({ id: "install", kind: "install" });
 
     expect(realm.executionIds()).toEqual([
       "mechanic_install",
@@ -145,9 +149,30 @@ describe("Mechanic lifecycle services", () => {
       {
         executionId: "mechanic_action_1",
         outcome: "terminated",
+        callback: { id: "logical_action", kind: "logical_action" },
       },
     ]);
     expect(realm.terminateCalls).toBe(1);
+    expect(realm.disposed).toBe(true);
+  });
+
+  it("returns a controlled dispose callback failure after cleanup completes", async () => {
+    const realm = new RecordingRealm({ failCallbackId: "dispose" });
+    const lifecycle = await createLifecycle(realm, 7, createProgram());
+
+    await lifecycle.install();
+    const result = await lifecycle.dispose();
+
+    expect(result).toMatchObject({
+      executionId: "mechanic_dispose",
+      outcome: "failed",
+      diagnostic: {
+        code: "recording_failure",
+      },
+    });
+    expect(lifecycle.state).toBe("disposed");
+    expect(lifecycle.pendingScheduledCallbackCount).toBe(0);
+    expect(lifecycle.activeSubscriptionCount).toBe(0);
     expect(realm.disposed).toBe(true);
   });
 
@@ -165,6 +190,178 @@ describe("Mechanic lifecycle services", () => {
         arguments: [0, "missing_callback"],
       })
     ).rejects.toThrow('Lifecycle callback "missing_callback" is not declared.');
+  });
+
+  it.each([
+    {
+      capabilityId: "time_schedule",
+      arguments: [0, "scheduled"],
+      dimension: "scheduled_callbacks",
+    },
+    {
+      capabilityId: "event_subscribe",
+      arguments: ["enemy_hit", "gameplay_event"],
+      dimension: "subscriptions",
+    },
+  ] as const)(
+    "reports cumulative $dimension violations with exact measurements",
+    async ({ capabilityId, arguments: capabilityArguments, dimension }) => {
+      const lifecycle = await createLifecycle(
+        new RecordingRealm(),
+        7,
+        createProgram()
+      );
+      await lifecycle.install();
+
+      for (let index = 0; index < 4; index += 1) {
+        await lifecycle.capabilityHost.invoke({
+          capabilityId,
+          arguments: capabilityArguments,
+        });
+      }
+
+      await expect(
+        lifecycle.capabilityHost.invoke({
+          capabilityId,
+          arguments: capabilityArguments,
+        })
+      ).rejects.toMatchObject({
+        name: "MechanicExecutionRealmResourceLimitError",
+        dimension,
+        limit: 4,
+        observed: 5,
+      });
+    }
+  );
+
+  it.each([
+    {
+      dimension: "operations_per_tick" as const,
+      capabilityId: "time_read",
+      maximumOperationsPerTick: 3,
+      maximumSignalsPerTick: 4,
+      invocationsPerCallback: 2,
+    },
+    {
+      dimension: "signals_per_tick" as const,
+      capabilityId: "signal_emit",
+      maximumOperationsPerTick: 16,
+      maximumSignalsPerTick: 1,
+      invocationsPerCallback: 1,
+    },
+  ])(
+    "aggregates $dimension across callbacks in one host-controlled step",
+    async ({
+      dimension,
+      capabilityId,
+      maximumOperationsPerTick,
+      maximumSignalsPerTick,
+      invocationsPerCallback,
+    }) => {
+      let capabilityHost: MechanicExecutionRealmCapabilityHost | undefined;
+      const delegate = {
+        invoke: vi.fn(async () => ({ kind: "json" as const, value: null })),
+      };
+      const realm: MechanicExecutionRealm = {
+        execute: (input) => ({
+          result: Promise.resolve().then(async () => {
+            const callbackId = input.lifecycle?.invocations[0]?.callbackId;
+            if (callbackId === "gameplay_event") {
+              try {
+                for (let index = 0; index < invocationsPerCallback; index += 1) {
+                  await capabilityHost?.invoke({
+                    capabilityId,
+                    arguments:
+                      capabilityId === "signal_emit" ? ["out", null] : [],
+                  });
+                }
+              } catch (error) {
+                if (error instanceof MechanicExecutionRealmResourceLimitError) {
+                  return {
+                    executionId: input.id,
+                    outcome: "resource_limit" as const,
+                    resourceUsage: {
+                      dimension: error.dimension,
+                      limit: error.limit,
+                      observed: error.observed,
+                    },
+                  };
+                }
+                throw error;
+              }
+            }
+            return { executionId: input.id, outcome: "completed" as const };
+          }),
+          terminate: async () => ({
+            executionId: input.id,
+            outcome: "terminated" as const,
+          }),
+        }),
+        dispose: vi.fn(),
+      };
+      const lifecycle = await createMechanicLifecycleServices({
+        capabilityGrant: createCapabilityGrant([
+          "event_subscribe",
+          capabilityId,
+        ]),
+        createRealm: async (input) => {
+          capabilityHost = input.capabilityHost;
+          return realm;
+        },
+        delegateCapabilityHost: delegate,
+        program: createProgram(),
+        resourceBudget: {
+          ...createResourceBudget(),
+          maximumOperationsPerTick,
+          maximumSignalsPerTick,
+        },
+        seed: 7,
+      });
+      await lifecycle.install();
+      for (let index = 0; index < 2; index += 1) {
+        await lifecycle.capabilityHost.invoke({
+          capabilityId: "event_subscribe",
+          arguments: ["enemy_hit", "gameplay_event"],
+        });
+      }
+
+      const results = await lifecycle.dispatchGameplayEvent("enemy_hit");
+
+      expect(results).toHaveLength(2);
+      expect(results[1]).toMatchObject({
+        outcome: "resource_limit",
+        resourceUsage: {
+          dimension,
+          limit:
+            dimension === "operations_per_tick"
+              ? maximumOperationsPerTick
+              : maximumSignalsPerTick,
+          observed: dimension === "operations_per_tick" ? 4 : 2,
+        },
+        callback: { id: "gameplay_event", kind: "gameplay_event" },
+      });
+      expect(lifecycle.state).toBe("failed");
+      if (capabilityId === "signal_emit") {
+        expect(delegate.invoke).toHaveBeenCalledOnce();
+      }
+    }
+  );
+
+  it("does not report a realm disposal failure as successful cleanup", async () => {
+    const realm = new RecordingRealm({
+      failCallbackId: "logical_action",
+      disposeFailure: new Error("realm worker stayed alive"),
+    });
+    const lifecycle = await createLifecycle(realm, 7, createProgram());
+
+    await lifecycle.install();
+    await lifecycle.dispatchLogicalAction("jump");
+
+    await expect(lifecycle.dispose()).rejects.toThrow(
+      "realm worker stayed alive"
+    );
+    expect(lifecycle.state).toBe("failed");
+    expect(realm.disposeCalls).toBe(2);
   });
 });
 
@@ -192,10 +389,17 @@ async function createLifecycle(
   return lifecycle;
 }
 
-function createCapabilityGrant() {
+function createCapabilityGrant(
+  capabilityIds = [
+    "time_read",
+    "random_next",
+    "time_schedule",
+    "event_subscribe",
+  ]
+) {
   return {
     capabilityVersion: mechanicCapabilityRegistry.version,
-    capabilities: ["time_read", "random_next", "time_schedule", "event_subscribe"].map(
+    capabilities: capabilityIds.map(
       (capabilityId, index) => ({
         ...mechanicCapabilityRegistry.capabilities.find(
           (capability) => capability.id === capabilityId
@@ -252,6 +456,7 @@ class RecordingRealm implements MechanicExecutionRealm {
   readonly executions: MechanicExecutionRealmExecutionInput[] = [];
   disposed = false;
   terminateCalls = 0;
+  disposeCalls = 0;
   readonly pendingStarted: Promise<void>;
   private resolvePendingStarted!: () => void;
   private resolvePendingResult: ((result: MechanicExecutionRealmExecutionResult) => void) | undefined;
@@ -260,6 +465,7 @@ class RecordingRealm implements MechanicExecutionRealm {
     private readonly options: {
       failCallbackId?: string;
       pendingCallbackId?: string;
+      disposeFailure?: Error;
     } = {}
   ) {
     this.pendingStarted = new Promise((resolve) => {
@@ -313,6 +519,10 @@ class RecordingRealm implements MechanicExecutionRealm {
   }
 
   dispose(): void {
+    this.disposeCalls += 1;
+    if (this.options.disposeFailure) {
+      throw this.options.disposeFailure;
+    }
     this.disposed = true;
   }
 
