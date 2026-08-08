@@ -1,9 +1,9 @@
 import type { JsonValue, StableId } from "../game-spec-schema";
 import {
-  PHASE_9_MECHANIC_RESOURCE_BUDGET,
   type MechanicExecutionRealmResourceBudget,
   type MechanicExecutionRealmResourceDimension,
 } from "@/runtime/mechanics/mechanic-execution-realm";
+import { PHASE_9_MECHANIC_RESOURCE_BUDGET } from "@/runtime/mechanics/phase-9-mechanic-resource-policy";
 import {
   mechanicCapabilityRegistry,
   type MechanicCapabilityGrant,

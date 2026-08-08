@@ -5,47 +5,33 @@ import type {
   MechanicExecutionRealmResourceBudget,
   MechanicExecutionRealmResourceDimension,
 } from "./mechanic-execution-realm";
-import { PHASE_9_MECHANIC_RESOURCE_BUDGET } from "./mechanic-execution-realm";
 import type { MechanicLifecycleServices } from "./mechanic-lifecycle";
 import { createContainedMechanicRuntime } from "./contained-mechanic-runtime";
 
 describe("Contained generated mechanic runtime", () => {
-  it("publishes one immutable fixed Phase 9 budget covering every resource dimension", () => {
-    expect(PHASE_9_MECHANIC_RESOURCE_BUDGET).toEqual({
-      profileId: "phase_9_fixed_budget",
-      maximumOwnedObjects: 4,
-      maximumOperationsPerTick: 16,
-      maximumScheduledCallbacks: 4,
-      maximumSubscriptions: 4,
-      maximumSignalsPerTick: 8,
-      maximumStateBytes: 1024,
-      maximumCallbackMilliseconds: 8,
-      maximumConsecutiveFailures: 3,
-    });
-    expect(Object.isFrozen(PHASE_9_MECHANIC_RESOURCE_BUDGET)).toBe(true);
-  });
-
-  it("rejects a caller-supplied budget that differs from the fixed Phase 9 profile", () => {
+  it("accepts any coherent budget admitted by an outer composition policy", () => {
+    const admittedBudget = {
+      ...createResourceBudget(),
+      profileId: "evaluation_budget",
+      maximumOwnedObjects: 5,
+    } satisfies MechanicExecutionRealmResourceBudget;
     const lifecycle = createLifecycleStub({
       executionId: "mechanic_install",
       outcome: "completed",
-    });
+    }, undefined, true, admittedBudget);
 
     expect(() =>
       createContainedMechanicRuntime({
-        extensionId: "extension_budget_override",
-        buildId: "build_budget_override",
+        extensionId: "extension_evaluation",
+        buildId: "build_evaluation",
         capabilityVersion: "mechanic_capability/v1",
         seed: 1729,
-        resourceBudget: {
-          ...createResourceBudget(),
-          maximumOwnedObjects: 5,
-        },
+        resourceBudget: admittedBudget,
         lifecycle,
         ownedObjects: createOwnedObjectCleanupStub(0),
-        privateState: createPrivateStateCleanupStub(0),
+        privateState: createPrivateStateCleanupStub(0, admittedBudget),
       })
-    ).toThrow("Contained mechanics require the fixed Phase 9 resource budget.");
+    ).not.toThrow();
   });
 
   it("contains a resource violation and retains repair-quality failure evidence", async () => {
@@ -384,14 +370,15 @@ function createRuntime(
 function createLifecycleStub(
   installResult: MechanicExecutionRealmExecutionResult,
   disposeResult?: MechanicExecutionRealmExecutionResult,
-  includeDisposeCallback = true
+  includeDisposeCallback = true,
+  resourceBudget: MechanicExecutionRealmResourceBudget = createResourceBudget()
 ): MechanicLifecycleServices {
   let state: MechanicLifecycleServices["state"] = "created";
   let scheduledCallbacks = 1;
   let subscriptions = 1;
   return {
     servicesVersion: "mechanic_lifecycle_services/v1",
-    resourceBudget: Object.freeze(createResourceBudget()),
+    resourceBudget: Object.freeze({ ...resourceBudget }),
     callbackReferences: Object.freeze([
       { id: "install_declared", kind: "install" as const },
       { id: "logical_action_declared", kind: "logical_action" as const },
@@ -443,10 +430,13 @@ function createOwnedObjectCleanupStub(initialCount: number) {
   };
 }
 
-function createPrivateStateCleanupStub(initialBytes: number) {
+function createPrivateStateCleanupStub(
+  initialBytes: number,
+  resourceBudget: MechanicExecutionRealmResourceBudget = createResourceBudget()
+) {
   let usedBytes = initialBytes;
   return {
-    resourceBudget: Object.freeze(createResourceBudget()),
+    resourceBudget: Object.freeze({ ...resourceBudget }),
     dispose: vi.fn(() => {
       usedBytes = 0;
     }),

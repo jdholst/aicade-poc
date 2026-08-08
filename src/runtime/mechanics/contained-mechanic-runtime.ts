@@ -1,6 +1,5 @@
 import type { JsonValue, StableId } from "@/game-spec/game-spec-schema";
 import {
-  assertPhase9MechanicResourceBudget,
   type MechanicExecutionRealmDiagnostic,
   type MechanicExecutionRealmExecutionResult,
   type MechanicExecutionRealmResourceBudget,
@@ -149,7 +148,6 @@ export function createContainedMechanicRuntime({
   ownedObjects,
   privateState,
 }: CreateContainedMechanicRuntimeInput): ContainedMechanicRuntime {
-  assertPhase9MechanicResourceBudget(resourceBudget);
   assertMatchingResourceBudget("lifecycle", resourceBudget, lifecycle.resourceBudget);
   assertMatchingResourceBudget(
     "private-state host",

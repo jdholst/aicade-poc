@@ -16,7 +16,7 @@ export type MechanicExecutionRealmResourceDimension =
   | "consecutive_failures";
 
 export type MechanicExecutionRealmResourceBudget = {
-  profileId: "phase_9_fixed_budget";
+  profileId: StableId;
   maximumOwnedObjects: number;
   maximumOperationsPerTick: number;
   maximumScheduledCallbacks: number;
@@ -43,32 +43,6 @@ const MECHANIC_EXECUTION_REALM_RESOURCE_DIMENSIONS = new Set<string>([
   "callback_milliseconds",
   "consecutive_failures",
 ]);
-
-export const PHASE_9_MECHANIC_RESOURCE_BUDGET = Object.freeze({
-  profileId: "phase_9_fixed_budget",
-  maximumOwnedObjects: 4,
-  maximumOperationsPerTick: 16,
-  maximumScheduledCallbacks: 4,
-  maximumSubscriptions: 4,
-  maximumSignalsPerTick: 8,
-  maximumStateBytes: 1024,
-  maximumCallbackMilliseconds: 8,
-  maximumConsecutiveFailures: 3,
-} as const satisfies MechanicExecutionRealmResourceBudget);
-
-export function assertPhase9MechanicResourceBudget(
-  budget: MechanicExecutionRealmResourceBudget
-): void {
-  for (const key of Object.keys(
-    PHASE_9_MECHANIC_RESOURCE_BUDGET
-  ) as Array<keyof MechanicExecutionRealmResourceBudget>) {
-    if (budget[key] !== PHASE_9_MECHANIC_RESOURCE_BUDGET[key]) {
-      throw new Error(
-        `Contained mechanics require the fixed Phase 9 resource budget. "${key}" was altered.`
-      );
-    }
-  }
-}
 
 export class MechanicExecutionRealmResourceLimitError extends Error {
   override readonly name = "MechanicExecutionRealmResourceLimitError";
