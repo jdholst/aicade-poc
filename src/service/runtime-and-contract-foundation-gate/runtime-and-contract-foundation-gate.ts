@@ -21,6 +21,7 @@ import {
   type MechanicCapabilityGrant,
 } from "@/game-spec/mechanics/mechanic-capability-registry";
 import {
+  consumeMechanicExecutionRealmConformanceReport,
   MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
   type MechanicExecutionRealmConformanceGateId,
   type MechanicExecutionRealmConformanceReport,
@@ -63,16 +64,23 @@ import {
   createPhase9ContainedMechanicRuntime,
   PHASE_9_MECHANIC_RESOURCE_BUDGET,
 } from "@/runtime/mechanics/phase-9-contained-mechanic-runtime";
-import type { MechanicRuntimeFailureEvidence } from "@/runtime/mechanics/contained-mechanic-runtime";
+import type {
+  ContainedMechanicRuntimeStep,
+  MechanicRuntimeFailureEvidence,
+} from "@/runtime/mechanics/contained-mechanic-runtime";
 
 export const RUNTIME_AND_CONTRACT_FOUNDATION_GATE_VERSION =
   "runtime_contract_foundation_gate/v1";
+export const RUNTIME_AND_CONTRACT_FOUNDATION_GATE_INTERNAL_TEST_CONTROL = Symbol(
+  "runtime_contract_foundation_gate_internal_test_control"
+);
 
 const FOUNDATION_FIXTURE_ID = "runtime_contract_foundation_fixture";
 const FOUNDATION_EXTENSION_ID = "foundation_fixture_extension";
 const FOUNDATION_INTENT_ID = "foundation_fixture_intent";
 const FOUNDATION_BUILD_ID = "foundation_fixture_build";
 const FOUNDATION_SEED = 1729;
+const FOUNDATION_REALM_CONFORMANCE_PROBE_COUNT = 32;
 const FOUNDATION_SUBJECT_ID = "foundation_subject_object";
 const FOUNDATION_USED_CAPABILITIES = Object.freeze([
   "object_read",
@@ -417,6 +425,12 @@ type FoundationCycleResult = Readonly<{
   containment?: MechanicRuntimeFailureEvidence;
 }>;
 
+const passedGateResults = new WeakSet<RuntimeAndContractFoundationGateResult>();
+const deliberateFailureBoundaries = new WeakMap<
+  RuntimeAndContractFoundationCheck[],
+  RuntimeAndContractFoundationBoundary
+>();
+
 class FoundationBoundaryError extends Error {
   constructor(
     readonly boundary: RuntimeAndContractFoundationBoundary,
@@ -433,18 +447,30 @@ export function isMechanicSourceGenerationAvailable(
   gateResult: RuntimeAndContractFoundationGateResult | undefined
 ): boolean {
   return (
-    gateResult?.schemaVersion ===
+    gateResult !== undefined &&
+    passedGateResults.has(gateResult) &&
+    gateResult.schemaVersion ===
       RUNTIME_AND_CONTRACT_FOUNDATION_GATE_VERSION &&
     gateResult.status === "passed" &&
     gateResult.sourceGenerationAvailable === true
   );
 }
 
-export async function runRuntimeAndContractFoundationGate({
-  realmAdapter,
-  realmConformanceReport,
-}: RunRuntimeAndContractFoundationGateInput): Promise<RuntimeAndContractFoundationGateResult> {
+export async function runRuntimeAndContractFoundationGate(
+  input: RunRuntimeAndContractFoundationGateInput
+): Promise<RuntimeAndContractFoundationGateResult> {
+  const { realmAdapter, realmConformanceReport } = input;
   const checks: RuntimeAndContractFoundationCheck[] = [];
+  const internalTestControl = (
+    input as RunRuntimeAndContractFoundationGateInput & {
+      [RUNTIME_AND_CONTRACT_FOUNDATION_GATE_INTERNAL_TEST_CONTROL]?: Readonly<{
+        failBoundary: RuntimeAndContractFoundationBoundary;
+      }>;
+    }
+  )[RUNTIME_AND_CONTRACT_FOUNDATION_GATE_INTERNAL_TEST_CONTROL];
+  if (internalTestControl) {
+    deliberateFailureBoundaries.set(checks, internalTestControl.failBoundary);
+  }
 
   try {
     const resolution = runBoundary(
@@ -825,7 +851,7 @@ export async function runRuntimeAndContractFoundationGate({
       },
     }) as RuntimeAndContractFoundationGateEvidence;
 
-    return Object.freeze({
+    const passedResult = Object.freeze({
       schemaVersion: RUNTIME_AND_CONTRACT_FOUNDATION_GATE_VERSION,
       status: "passed",
       sourceGenerationAvailable: true,
@@ -834,7 +860,9 @@ export async function runRuntimeAndContractFoundationGate({
       terminalResult: Object.freeze({
         code: "runtime_contract_foundation_gate_passed",
       }),
-    });
+    }) satisfies RuntimeAndContractFoundationGateResult;
+    passedGateResults.add(passedResult);
+    return passedResult;
   } catch (error) {
     const failure = normalizeBoundaryFailure(error);
     checks.push(failure);
@@ -853,15 +881,34 @@ function validateRealmConformance(
       "Mechanic Execution Realm conformance evidence is required."
     );
   }
+  const trustedReport =
+    consumeMechanicExecutionRealmConformanceReport(report);
+  if (!trustedReport) {
+    failBoundary(
+      "realm_conformance",
+      "realm_conformance_evidence_untrusted",
+      "Mechanic Execution Realm conformance evidence must come directly from the trusted single-run suite."
+    );
+  }
   const reportedGateStatuses = new Map(
-    report.gates.map((gate) => [gate.id, gate.status])
+    trustedReport.gates.map((gate) => [gate.id, gate.status])
   );
   const passed =
-    report.suiteVersion === MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION &&
-    report.capabilityVersion === MECHANIC_CAPABILITY_VERSION &&
-    report.candidateId === realmAdapter.id &&
+    trustedReport.suiteVersion === MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION &&
+    trustedReport.capabilityVersion === MECHANIC_CAPABILITY_VERSION &&
+    trustedReport.candidateId === realmAdapter.id &&
     realmAdapter.adapterVersion === MECHANIC_EXECUTION_REALM_ADAPTER_VERSION &&
-    report.verdict === "passed" &&
+    trustedReport.verdict === "passed" &&
+    trustedReport.gates.length === REQUIRED_REALM_CONFORMANCE_GATES.length &&
+    trustedReport.probeResults.length ===
+      FOUNDATION_REALM_CONFORMANCE_PROBE_COUNT &&
+    trustedReport.probeResults.every(
+      (probe) =>
+        probe.hostResponsive &&
+        probe.candidateExecutionBrowserEvidence &&
+        probe.runtimeHeartbeatBrowserEvidence &&
+        probe.realBrowserEvidence
+    ) &&
     REQUIRED_REALM_CONFORMANCE_GATES.every(
       (gateId) => reportedGateStatuses.get(gateId) === "passed"
     );
@@ -873,8 +920,8 @@ function validateRealmConformance(
     );
   }
   return Object.freeze({
-    suiteVersion: report.suiteVersion,
-    candidateId: report.candidateId,
+    suiteVersion: trustedReport.suiteVersion,
+    candidateId: trustedReport.candidateId,
     verdict: "passed",
     gateIds: Object.freeze([...REQUIRED_REALM_CONFORMANCE_GATES]),
   });
@@ -951,12 +998,11 @@ async function runFoundationCycle({
   let runtime:
     | ReturnType<typeof createPhase9ContainedMechanicRuntime>
     | undefined;
+  let bindingObservation: JsonValue | undefined;
+  let primaryFailure: FoundationBoundaryError | undefined;
 
   try {
     const subjectHandle = objectHost.resolveOne("foundation_subject");
-    const bindingObservation = objectObservationToJson(
-      objectHost.read(subjectHandle)
-    );
     const observer = createTrustedGameSystemPortOwner<{
       receivedCount: number;
       lastValue: number | null;
@@ -1000,7 +1046,12 @@ async function runFoundationCycle({
       mechanicReceivers: [],
       gameSystemOwners: [observer],
     });
-    const objectCapabilityHost = createObjectCapabilityHost(objectHost);
+    const objectCapabilityHost = createObjectCapabilityHost(
+      objectHost,
+      (observation) => {
+        bindingObservation = observation;
+      }
+    );
     const portCapabilityHost = portRuntime.createMechanicCapabilityHost(
       FOUNDATION_EXTENSION_ID,
       objectCapabilityHost
@@ -1078,7 +1129,7 @@ async function runFoundationCycle({
       return Object.freeze({
         trace: emptyFoundationTrace(observer.readState()),
         cleanup: cleanupFromFailureEvidence(containment),
-        bindingObservation,
+        bindingObservation: bindingObservation ?? null,
         containment,
       });
     }
@@ -1105,38 +1156,82 @@ async function runFoundationCycle({
       trustedState: observer.readState(),
     }) as RuntimeAndContractFoundationTrace;
 
-    const disposeStep = await runFoundationPortStep(
+    const disposeStep = await runFoundationCleanupStep(
       portRuntime,
-      "disposal",
       () => runtime!.dispose()
     );
-    requirePortStepCompleted(disposeStep, "disposal");
-    requireRuntimeStepCompleted(disposeStep.callbackResult, "disposal");
+    requireFoundationCleanupStepCompleted(disposeStep);
     const cleanup = createCleanupRecord(lifecycle, objectHost, privateState);
 
     return Object.freeze({
       trace,
       cleanup,
-      bindingObservation,
+      bindingObservation: bindingObservation ?? null,
     });
   } catch (error) {
     if (error instanceof FoundationBoundaryError) {
+      primaryFailure = error;
       throw error;
     }
-    failBoundary(
+    primaryFailure = new FoundationBoundaryError(
       "lifecycle",
       "foundation_runtime_cycle_failed",
       errorMessage(error, "The foundation runtime cycle failed.")
     );
+    throw primaryFailure;
   } finally {
-    await runtime?.dispose().catch(() => undefined);
-    await lifecycle?.dispose().catch(() => undefined);
+    const cleanupFailures: JsonValue[] = [];
+    try {
+      const cleanupResult = await runtime?.dispose();
+      if (
+        cleanupResult?.outcome === "contained_failure" &&
+        !isCompleteCleanupEvidence(cleanupResult.evidence)
+      ) {
+        cleanupFailures.push(
+          snapshotJsonValue({
+            source: "contained_runtime",
+            cleanup: cleanupResult.evidence.cleanup,
+          })
+        );
+      }
+    } catch (error) {
+      cleanupFailures.push({
+        source: "contained_runtime",
+        message: errorMessage(error, "Contained runtime cleanup failed."),
+      });
+    }
+    try {
+      await lifecycle?.dispose();
+    } catch (error) {
+      cleanupFailures.push({
+        source: "lifecycle",
+        message: errorMessage(error, "Lifecycle cleanup failed."),
+      });
+    }
     try {
       objectHost.dispose();
-    } catch {}
+    } catch (error) {
+      cleanupFailures.push({
+        source: "owned_objects",
+        message: errorMessage(error, "Owned-object cleanup failed."),
+      });
+    }
     try {
       privateState.dispose();
-    } catch {}
+    } catch (error) {
+      cleanupFailures.push({
+        source: "private_state",
+        message: errorMessage(error, "Private-state cleanup failed."),
+      });
+    }
+    if (cleanupFailures.length > 0 && primaryFailure?.boundary !== "cleanup") {
+      failBoundary(
+        "cleanup",
+        "foundation_fallback_cleanup_failed",
+        "Foundation fallback cleanup failed.",
+        cleanupFailures
+      );
+    }
   }
   throw new Error("Foundation runtime cycle terminated without a result.");
 }
@@ -1174,15 +1269,18 @@ function createFoundationProgram(
 }
 
 function createObjectCapabilityHost(
-  objectHost: ReturnType<typeof createMechanicObjectHost>
+  objectHost: ReturnType<typeof createMechanicObjectHost>,
+  recordObservation: (observation: JsonValue) => void
 ): MechanicExecutionRealmCapabilityHost {
   return {
     invoke: ({ capabilityId, arguments: capabilityArguments }) => {
       if (capabilityId === "object_read") {
         const handle = requireHandle(capabilityArguments[0]);
+        const observation = objectObservationToJson(objectHost.read(handle));
+        recordObservation(observation);
         return {
           kind: "json",
-          value: objectObservationToJson(objectHost.read(handle)),
+          value: observation,
         };
       }
       if (capabilityId === "object_create") {
@@ -1227,6 +1325,39 @@ async function runFoundationPortStep<Result>(
       "foundation_signal_delivery_failed",
       `Foundation ${label} signal delivery failed.`,
       { message: errorMessage(error, "Foundation signal delivery failed.") }
+    );
+  }
+}
+
+async function runFoundationCleanupStep(
+  portRuntime: MechanicPortRuntime,
+  callback: () => Promise<ContainedMechanicRuntimeStep>
+): Promise<MechanicPortStepResult<ContainedMechanicRuntimeStep>> {
+  try {
+    return await portRuntime.runStep(callback);
+  } catch (error) {
+    failBoundary(
+      "cleanup",
+      "foundation_disposal_failed",
+      "Foundation disposal failed.",
+      { message: errorMessage(error, "Foundation disposal failed.") }
+    );
+  }
+}
+
+function requireFoundationCleanupStepCompleted(
+  step: MechanicPortStepResult<ContainedMechanicRuntimeStep>
+): void {
+  if (
+    step.outcome !== "completed" ||
+    step.callbackResult.outcome !== "completed" ||
+    step.callbackResult.results.some((result) => result.outcome !== "completed")
+  ) {
+    failBoundary(
+      "cleanup",
+      "foundation_disposal_failed",
+      "Foundation disposal failed.",
+      snapshotData(step)
     );
   }
 }
@@ -1305,6 +1436,18 @@ function cleanupFromFailureEvidence(
   });
 }
 
+function isCompleteCleanupEvidence(
+  evidence: MechanicRuntimeFailureEvidence
+): boolean {
+  return (
+    evidence.cleanup.lifecycleDisposed &&
+    evidence.cleanup.registrationsRemoved &&
+    evidence.cleanup.ownedObjectsRemoved &&
+    evidence.cleanup.privateStateRemoved &&
+    evidence.cleanup.issues.length === 0
+  );
+}
+
 function emptyFoundationTrace(
   trustedState: JsonValue
 ): RuntimeAndContractFoundationTrace {
@@ -1375,6 +1518,14 @@ function runBoundary<Result>(
   operation: () => Result
 ): Result {
   try {
+    if (deliberateFailureBoundaries.get(checks) === boundary) {
+      failBoundary(
+        boundary,
+        `foundation_${boundary}_deliberate_failure`,
+        `The foundation gate deliberately failed boundary "${boundary}".`,
+        { deliberate: true }
+      );
+    }
     const result = operation();
     checks.push(Object.freeze({ boundary, status: "passed", code, message }));
     return result;

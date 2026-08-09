@@ -1,4 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const conformanceTrust = vi.hoisted(() => ({ trustSynthetic: false }));
+
+vi.mock(
+  "@/game-spec/mechanics/mechanic-execution-realm-conformance",
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("@/game-spec/mechanics/mechanic-execution-realm-conformance")
+    >();
+    return {
+      ...actual,
+      consumeMechanicExecutionRealmConformanceReport: (
+        report: MechanicExecutionRealmConformanceReport | undefined
+      ) =>
+        conformanceTrust.trustSynthetic
+          ? report
+          : actual.consumeMechanicExecutionRealmConformanceReport(report),
+    };
+  }
+);
 
 import {
   MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
@@ -19,8 +39,13 @@ import {
   runRuntimeAndContractFoundationGate,
   type RuntimeAndContractFoundationGateResult,
 } from ".";
+import { runRuntimeAndContractFoundationGateWithDeliberateFailure } from "./runtime-and-contract-foundation-gate.testing";
 
 describe("Runtime and Contract Foundation Gate", () => {
+  beforeEach(() => {
+    conformanceTrust.trustSynthetic = false;
+  });
+
   it("keeps mechanic source generation unavailable without a passing gate result", () => {
     const failedResult = {
       schemaVersion: "runtime_contract_foundation_gate/v1",
@@ -35,9 +60,50 @@ describe("Runtime and Contract Foundation Gate", () => {
 
     expect(isMechanicSourceGenerationAvailable(undefined)).toBe(false);
     expect(isMechanicSourceGenerationAvailable(failedResult)).toBe(false);
+    expect(
+      isMechanicSourceGenerationAvailable({
+        schemaVersion: "runtime_contract_foundation_gate/v1",
+        status: "passed",
+        sourceGenerationAvailable: true,
+        checks: [],
+        evidence: {},
+        terminalResult: {
+          code: "runtime_contract_foundation_gate_passed",
+        },
+      } as unknown as RuntimeAndContractFoundationGateResult)
+    ).toBe(false);
+  });
+
+  it("rejects a structurally passing report that the trusted runner did not emit", async () => {
+    const result = await runRuntimeAndContractFoundationGate({
+      realmAdapter: {
+        adapterVersion: MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
+        id: "foundation_realm",
+        create: async () => {
+          throw new Error("An untrusted report must not create a realm.");
+        },
+      },
+      realmConformanceReport: createPassingConformanceReport(),
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      sourceGenerationAvailable: false,
+      terminalResult: {
+        failedBoundary: "realm_conformance",
+      },
+    });
+    expect(result.checks.at(-1)).toEqual({
+      boundary: "realm_conformance",
+      status: "failed",
+      code: "realm_conformance_evidence_untrusted",
+      message:
+        "Mechanic Execution Realm conformance evidence must come directly from the trusted single-run suite.",
+    });
   });
 
   it("rejects realm evidence when any conformance gate failed", async () => {
+    conformanceTrust.trustSynthetic = true;
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: {
         adapterVersion: MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
@@ -85,6 +151,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("passes one generic fixture through the complete foundation and opens source generation", async () => {
+    conformanceTrust.trustSynthetic = true;
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: createFoundationRealmAdapter(),
       realmConformanceReport: createPassingConformanceReport(),
@@ -176,6 +243,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("returns stable boundary evidence when integrated realm startup fails", async () => {
+    conformanceTrust.trustSynthetic = true;
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: {
         adapterVersion: MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
@@ -204,7 +272,28 @@ describe("Runtime and Contract Foundation Gate", () => {
     expect(isMechanicSourceGenerationAvailable(result)).toBe(false);
   });
 
+  it("rejects a realm that does not exercise its admitted opaque binding", async () => {
+    conformanceTrust.trustSynthetic = true;
+    const result = await runRuntimeAndContractFoundationGate({
+      realmAdapter: createFoundationRealmAdapter({ skipBindingRead: true }),
+      realmConformanceReport: createPassingConformanceReport(),
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      sourceGenerationAvailable: false,
+      terminalResult: { failedBoundary: "binding_admission" },
+    });
+    expect(result.checks.at(-1)).toEqual({
+      boundary: "binding_admission",
+      status: "failed",
+      code: "foundation_binding_observation_invalid",
+      message: "The foundation binding did not produce the admitted observation.",
+    });
+  });
+
   it("disposes the integrated realm when the containment probe fails open", async () => {
+    conformanceTrust.trustSynthetic = true;
     let disposedRealmCount = 0;
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: createFoundationRealmAdapter({
@@ -232,6 +321,94 @@ describe("Runtime and Contract Foundation Gate", () => {
     });
     expect(disposedRealmCount).toBe(2);
   });
+
+  it("classifies realm disposal failures at the cleanup boundary", async () => {
+    conformanceTrust.trustSynthetic = true;
+    const result = await runRuntimeAndContractFoundationGate({
+      realmAdapter: createFoundationRealmAdapter({ failDispose: true }),
+      realmConformanceReport: createPassingConformanceReport(),
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      sourceGenerationAvailable: false,
+      terminalResult: { failedBoundary: "cleanup" },
+    });
+    expect(result.checks.at(-1)).toMatchObject({
+      boundary: "cleanup",
+      status: "failed",
+      code: "foundation_disposal_failed",
+    });
+  });
+
+  it("surfaces fallback cleanup failures instead of swallowing them", async () => {
+    conformanceTrust.trustSynthetic = true;
+    const result = await runRuntimeAndContractFoundationGate({
+      realmAdapter: createFoundationRealmAdapter({
+        skipContainmentFailure: true,
+        failDisposeOnRealm: 2,
+      }),
+      realmConformanceReport: createPassingConformanceReport(),
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      sourceGenerationAvailable: false,
+      terminalResult: { failedBoundary: "cleanup" },
+    });
+    expect(result.checks.at(-1)).toMatchObject({
+      boundary: "cleanup",
+      status: "failed",
+      code: "foundation_fallback_cleanup_failed",
+    });
+  });
+
+  it.each([
+    "intent_resolution",
+    "constraint_admission",
+    "contract_validation",
+    "config_dsl",
+    "capability_registry",
+    "capability_grant",
+    "realm_conformance",
+    "binding_admission",
+    "lifecycle",
+    "ports",
+    "deterministic_services",
+    "resource_budget",
+    "containment",
+    "cleanup",
+  ] as const)(
+    "returns stable structured evidence for a deliberate %s failure",
+    async (failBoundary) => {
+      conformanceTrust.trustSynthetic = true;
+      const result =
+        await runRuntimeAndContractFoundationGateWithDeliberateFailure({
+          input: {
+            realmAdapter: createFoundationRealmAdapter(),
+            realmConformanceReport: createPassingConformanceReport(),
+          },
+          failBoundary,
+        });
+
+      expect(result).toMatchObject({
+        status: "failed",
+        sourceGenerationAvailable: false,
+        terminalResult: {
+          code: "runtime_contract_foundation_gate_failed",
+          failedBoundary: failBoundary,
+        },
+      });
+      expect(result.checks.at(-1)).toEqual({
+        boundary: failBoundary,
+        status: "failed",
+        code: `foundation_${failBoundary}_deliberate_failure`,
+        message: `The foundation gate deliberately failed boundary "${failBoundary}".`,
+        details: { deliberate: true },
+      });
+      expect(isMechanicSourceGenerationAvailable(result)).toBe(false);
+    }
+  );
 });
 
 const PASSED_REALM_GATES = [
@@ -248,22 +425,39 @@ const PASSED_REALM_GATES = [
 ] as const;
 
 function createPassingConformanceReport(): MechanicExecutionRealmConformanceReport {
+  const probeResults = Array.from({ length: 32 }, (_, index) => ({
+    probeId: `foundation_probe_${index}`,
+    kind: "capability_use" as const,
+    hostResponsive: true,
+    candidateExecutionBrowserEvidence: true,
+    runtimeHeartbeatBrowserEvidence: true,
+    realBrowserEvidence: true,
+    result: {
+      probeId: `foundation_probe_${index}`,
+      outcome: "completed" as const,
+      durationMilliseconds: 0,
+      evidence: {},
+    },
+  }));
   return {
     suiteVersion: MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
     capabilityVersion: "mechanic_capability/v1",
     candidateId: "foundation_realm",
     verdict: "passed",
-    gates: PASSED_REALM_GATES.map((id) => ({
+    gates: PASSED_REALM_GATES.map((id, index) => ({
       id,
       status: "passed",
-      probeIds: [],
+      probeIds: [probeResults[index]?.probeId ?? "foundation_probe_0"],
       failures: [],
     })),
-    probeResults: [],
+    probeResults,
   };
 }
 
 type FoundationRealmOptions = Readonly<{
+  failDispose?: boolean;
+  failDisposeOnRealm?: number;
+  skipBindingRead?: boolean;
   skipContainmentFailure?: boolean;
   onDispose?: () => void;
 }>;
@@ -271,10 +465,19 @@ type FoundationRealmOptions = Readonly<{
 function createFoundationRealmAdapter(
   options: FoundationRealmOptions = {}
 ): MechanicExecutionRealmAdapter {
+  let createdRealmCount = 0;
   return {
     adapterVersion: MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
     id: "foundation_realm",
-    create: async (input) => new FoundationRealm(input, options),
+    create: async (input) => {
+      createdRealmCount += 1;
+      return new FoundationRealm(input, {
+        ...options,
+        failDispose:
+          options.failDispose ||
+          options.failDisposeOnRealm === createdRealmCount,
+      });
+    },
   };
 }
 
@@ -303,6 +506,9 @@ class FoundationRealm implements MechanicExecutionRealm {
   dispose() {
     this.disposed = true;
     this.options.onDispose?.();
+    if (this.options.failDispose) {
+      throw new Error("foundation realm disposal failed");
+    }
   }
 
   private async executeCallback(
@@ -315,10 +521,12 @@ class FoundationRealm implements MechanicExecutionRealm {
         if (!subject) {
           throw new Error("The foundation subject binding was absent.");
         }
-        const observation = await this.input.capabilityHost.invoke({
-          capabilityId: "object_read",
-          arguments: [subject],
-        });
+        const observation = this.options.skipBindingRead
+          ? { kind: "json" as const, value: null }
+          : await this.input.capabilityHost.invoke({
+              capabilityId: "object_read",
+              arguments: [subject],
+            });
         await this.input.capabilityHost.invoke({
           capabilityId: "object_create",
           arguments: ["foundation_owned", { active: true }],

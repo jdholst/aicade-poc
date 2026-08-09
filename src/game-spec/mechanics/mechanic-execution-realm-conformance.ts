@@ -173,6 +173,19 @@ export type RunMechanicExecutionRealmConformanceSuiteInput = {
   session: MechanicExecutionRealmConformanceSession;
 };
 
+const trustedConformanceReports = new WeakSet<
+  MechanicExecutionRealmConformanceReport
+>();
+
+export function consumeMechanicExecutionRealmConformanceReport(
+  report: MechanicExecutionRealmConformanceReport | undefined
+): MechanicExecutionRealmConformanceReport | undefined {
+  if (!report || !trustedConformanceReports.delete(report)) {
+    return undefined;
+  }
+  return report;
+}
+
 const REQUIRED_GATES: readonly MechanicExecutionRealmConformanceGateId[] = [
   "usable_capability_execution",
   "forbidden_authority_isolation",
@@ -257,10 +270,12 @@ export async function runMechanicExecutionRealmConformanceSuite(
   }
 
   try {
-    return await runMechanicExecutionRealmConformanceSession(
+    const report = await runMechanicExecutionRealmConformanceSession(
       session,
       sessionState
     );
+    trustedConformanceReports.add(report);
+    return report;
   } finally {
     sessionState.dispose();
   }
