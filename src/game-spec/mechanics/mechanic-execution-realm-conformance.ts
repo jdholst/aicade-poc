@@ -270,9 +270,8 @@ export async function runMechanicExecutionRealmConformanceSuite(
   }
 
   try {
-    const report = await runMechanicExecutionRealmConformanceSession(
-      session,
-      sessionState
+    const report = deepFreezeConformanceReport(
+      await runMechanicExecutionRealmConformanceSession(session, sessionState)
     );
     trustedConformanceReports.add(report);
     return report;
@@ -1294,4 +1293,14 @@ function requireCapability(capabilityId: StableId) {
   }
 
   return capability;
+}
+
+function deepFreezeConformanceReport<Value>(value: Value): Value {
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) {
+      deepFreezeConformanceReport(child);
+    }
+    Object.freeze(value);
+  }
+  return value;
 }

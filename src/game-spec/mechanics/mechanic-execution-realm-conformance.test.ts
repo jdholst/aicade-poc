@@ -266,6 +266,12 @@ describe("Execution Realm Conformance Suite", () => {
       },
     });
 
+    expect(Object.isFrozen(report)).toBe(true);
+    expect(Object.isFrozen(report.gates)).toBe(true);
+    expect(Object.isFrozen(report.gates[0])).toBe(true);
+    expect(Object.isFrozen(report.probeResults)).toBe(true);
+    expect(Object.isFrozen(report.probeResults[0]?.result.evidence)).toBe(true);
+
     const capabilityProbes = receivedProbes.filter(
       (probe) => probe.kind === "capability_use"
     );

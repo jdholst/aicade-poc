@@ -28,6 +28,7 @@ import {
 } from "@/runtime/mechanics/ses-worker-mechanic-execution-realm-protocol";
 
 const REALM_DISPOSED_MESSAGE = "Mechanic Execution Realm has been disposed.";
+const authenticSesWorkerAdapters = new WeakSet<MechanicExecutionRealmAdapter>();
 
 export const SES_WORKER_MECHANIC_EXECUTION_REALM_CANDIDATE_ID =
   "ses_compartment_dedicated_worker_2_2_0";
@@ -54,7 +55,7 @@ export function createSesWorkerMechanicExecutionRealmAdapter({
   createController = createSesWorkerMechanicExecutionRealmController,
   createMessageChannel = () => new MessageChannel(),
 }: CreateSesWorkerMechanicExecutionRealmAdapterInput = {}): MechanicExecutionRealmAdapter {
-  return Object.freeze({
+  const adapter: MechanicExecutionRealmAdapter = Object.freeze({
     adapterVersion: MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
     id: SES_WORKER_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
     async create(input) {
@@ -72,6 +73,14 @@ export function createSesWorkerMechanicExecutionRealmAdapter({
       }
     },
   });
+  authenticSesWorkerAdapters.add(adapter);
+  return adapter;
+}
+
+export function isSesWorkerMechanicExecutionRealmAdapter(
+  adapter: MechanicExecutionRealmAdapter
+): boolean {
+  return authenticSesWorkerAdapters.has(adapter);
 }
 
 export function createSesWorkerMechanicExecutionRealmController(): Worker {

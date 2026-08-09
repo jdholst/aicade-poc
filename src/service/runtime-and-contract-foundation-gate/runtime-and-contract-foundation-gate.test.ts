@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const conformanceTrust = vi.hoisted(() => ({ trustSynthetic: false }));
+const adapterTrust = vi.hoisted(() => ({ trustSynthetic: false }));
 
 vi.mock(
   "@/game-spec/mechanics/mechanic-execution-realm-conformance",
@@ -16,6 +17,23 @@ vi.mock(
         conformanceTrust.trustSynthetic
           ? report
           : actual.consumeMechanicExecutionRealmConformanceReport(report),
+    };
+  }
+);
+
+vi.mock(
+  "@/runtime/mechanics/mechanic-execution-realm-adapter-authenticity",
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("@/runtime/mechanics/mechanic-execution-realm-adapter-authenticity")
+    >();
+    return {
+      ...actual,
+      isMechanicExecutionRealmAdapterAuthentic: (
+        adapter: MechanicExecutionRealmAdapter
+      ) =>
+        adapterTrust.trustSynthetic ||
+        actual.isMechanicExecutionRealmAdapterAuthentic(adapter),
     };
   }
 );
@@ -44,6 +62,7 @@ import { runRuntimeAndContractFoundationGateWithDeliberateFailure } from "./runt
 describe("Runtime and Contract Foundation Gate", () => {
   beforeEach(() => {
     conformanceTrust.trustSynthetic = false;
+    adapterTrust.trustSynthetic = false;
   });
 
   it("keeps mechanic source generation unavailable without a passing gate result", () => {
@@ -103,7 +122,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("rejects realm evidence when any conformance gate failed", async () => {
-    conformanceTrust.trustSynthetic = true;
+    trustSyntheticFoundationBoundary();
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: {
         adapterVersion: MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
@@ -151,7 +170,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("passes one generic fixture through the complete foundation and opens source generation", async () => {
-    conformanceTrust.trustSynthetic = true;
+    trustSyntheticFoundationBoundary();
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: createFoundationRealmAdapter(),
       realmConformanceReport: createPassingConformanceReport(),
@@ -243,7 +262,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("returns stable boundary evidence when integrated realm startup fails", async () => {
-    conformanceTrust.trustSynthetic = true;
+    trustSyntheticFoundationBoundary();
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: {
         adapterVersion: MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
@@ -273,7 +292,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("rejects a realm that does not exercise its admitted opaque binding", async () => {
-    conformanceTrust.trustSynthetic = true;
+    trustSyntheticFoundationBoundary();
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: createFoundationRealmAdapter({ skipBindingRead: true }),
       realmConformanceReport: createPassingConformanceReport(),
@@ -293,7 +312,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("disposes the integrated realm when the containment probe fails open", async () => {
-    conformanceTrust.trustSynthetic = true;
+    trustSyntheticFoundationBoundary();
     let disposedRealmCount = 0;
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: createFoundationRealmAdapter({
@@ -323,7 +342,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   });
 
   it("classifies realm disposal failures at the cleanup boundary", async () => {
-    conformanceTrust.trustSynthetic = true;
+    trustSyntheticFoundationBoundary();
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: createFoundationRealmAdapter({ failDispose: true }),
       realmConformanceReport: createPassingConformanceReport(),
@@ -338,11 +357,16 @@ describe("Runtime and Contract Foundation Gate", () => {
       boundary: "cleanup",
       status: "failed",
       code: "foundation_disposal_failed",
+      details: {
+        fallbackFailures: expect.arrayContaining([
+          expect.objectContaining({ source: "lifecycle" }),
+        ]),
+      },
     });
   });
 
   it("surfaces fallback cleanup failures instead of swallowing them", async () => {
-    conformanceTrust.trustSynthetic = true;
+    trustSyntheticFoundationBoundary();
     const result = await runRuntimeAndContractFoundationGate({
       realmAdapter: createFoundationRealmAdapter({
         skipContainmentFailure: true,
@@ -381,7 +405,7 @@ describe("Runtime and Contract Foundation Gate", () => {
   ] as const)(
     "returns stable structured evidence for a deliberate %s failure",
     async (failBoundary) => {
-      conformanceTrust.trustSynthetic = true;
+      trustSyntheticFoundationBoundary();
       const result =
         await runRuntimeAndContractFoundationGateWithDeliberateFailure({
           input: {
@@ -409,7 +433,33 @@ describe("Runtime and Contract Foundation Gate", () => {
       expect(isMechanicSourceGenerationAvailable(result)).toBe(false);
     }
   );
+
+  it("rejects a same-ID adapter that the selected factory did not mint", async () => {
+    conformanceTrust.trustSynthetic = true;
+    const result = await runRuntimeAndContractFoundationGate({
+      realmAdapter: createFoundationRealmAdapter(),
+      realmConformanceReport: createPassingConformanceReport(),
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      sourceGenerationAvailable: false,
+      terminalResult: { failedBoundary: "realm_conformance" },
+    });
+    expect(result.checks.at(-1)).toEqual({
+      boundary: "realm_conformance",
+      status: "failed",
+      code: "realm_conformance_adapter_untrusted",
+      message:
+        "The Mechanic Execution Realm adapter was not minted by an admitted implementation factory.",
+    });
+  });
 });
+
+function trustSyntheticFoundationBoundary(): void {
+  conformanceTrust.trustSynthetic = true;
+  adapterTrust.trustSynthetic = true;
+}
 
 const PASSED_REALM_GATES = [
   "usable_capability_execution",

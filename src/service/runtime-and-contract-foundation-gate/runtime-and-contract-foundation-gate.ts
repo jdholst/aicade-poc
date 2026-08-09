@@ -41,6 +41,7 @@ import {
   type MechanicExecutionRealmCapabilityHost,
   type MechanicExecutionRealmExecutionResult,
 } from "@/runtime/mechanics/mechanic-execution-realm";
+import { isMechanicExecutionRealmAdapterAuthentic } from "@/runtime/mechanics/mechanic-execution-realm-adapter-authenticity";
 import {
   createMechanicLifecycleServices,
   type MechanicLifecycleProgram,
@@ -890,6 +891,13 @@ function validateRealmConformance(
       "Mechanic Execution Realm conformance evidence must come directly from the trusted single-run suite."
     );
   }
+  if (!isMechanicExecutionRealmAdapterAuthentic(realmAdapter)) {
+    failBoundary(
+      "realm_conformance",
+      "realm_conformance_adapter_untrusted",
+      "The Mechanic Execution Realm adapter was not minted by an admitted implementation factory."
+    );
+  }
   const reportedGateStatuses = new Map(
     trustedReport.gates.map((gate) => [gate.id, gate.status])
   );
@@ -1224,7 +1232,18 @@ async function runFoundationCycle({
         message: errorMessage(error, "Private-state cleanup failed."),
       });
     }
-    if (cleanupFailures.length > 0 && primaryFailure?.boundary !== "cleanup") {
+    if (cleanupFailures.length > 0) {
+      if (primaryFailure?.boundary === "cleanup") {
+        throw new FoundationBoundaryError(
+          "cleanup",
+          primaryFailure.code,
+          primaryFailure.message,
+          snapshotJsonValue({
+            primary: primaryFailure.details ?? null,
+            fallbackFailures: cleanupFailures,
+          })
+        );
+      }
       failBoundary(
         "cleanup",
         "foundation_fallback_cleanup_failed",

@@ -8,10 +8,20 @@ import { MechanicExecutionRealmResourceLimitError } from "./mechanic-execution-r
 
 import {
   createSesWorkerMechanicExecutionRealmAdapter,
+  isSesWorkerMechanicExecutionRealmAdapter,
   type SesWorkerMechanicExecutionRealmController,
 } from "./ses-worker-mechanic-execution-realm";
 
 describe("SES Worker Mechanic Execution Realm adapter", () => {
+  it("authenticates only adapters minted by the official factory", () => {
+    const adapter = createSesWorkerMechanicExecutionRealmAdapter();
+
+    expect(isSesWorkerMechanicExecutionRealmAdapter(adapter)).toBe(true);
+    expect(
+      isSesWorkerMechanicExecutionRealmAdapter({ ...adapter })
+    ).toBe(false);
+  });
+
   it("fixes the exact grant, maps opaque bindings through a private capability channel, and disposes the worker", async () => {
     const actorHandle = Object.freeze(Object.create(null)) as MechanicObjectHandle;
     const grant = {
