@@ -1,8 +1,8 @@
 import {
-  PHASE_9_GENERATION_CONSTRAINT_SET,
   createMechanicCapabilityGrant,
   validateGeneratedMechanicContract,
   type AdmittedGeneratedMechanicRequest,
+  type GenerationConstraintSet,
   type GeneratedMechanicContractValidationResult,
   type GeneratedMechanicContract,
   type GeneratedMechanicReferenceCatalog,
@@ -12,7 +12,6 @@ import {
 } from "@/game-spec";
 import { isMechanicExecutionRealmAdapterAuthentic } from "@/runtime/mechanics/mechanic-execution-realm-adapter-authenticity";
 import type { MechanicExecutionRealmAdapter } from "@/runtime/mechanics/mechanic-execution-realm";
-import { PHASE_9_MECHANIC_RESOURCE_BUDGET } from "@/runtime/mechanics/phase-9-mechanic-resource-policy";
 import {
   isMechanicSourceGenerationAvailable,
   type RuntimeAndContractFoundationGateResult,
@@ -102,166 +101,186 @@ export type GenerateBuildAndExecuteMechanicSourceResult =
           >["evidence"];
     }>;
 
-export async function generateBuildAndExecuteMechanicSource(
+export type MechanicSourceGenerationPolicy = Readonly<{
+  constraintSet: GenerationConstraintSet;
+  resourceBudget: GeneratedMechanicResourceBudget;
+}>;
+
+export type MechanicSourceGenerationOrchestrator = (
   input: GenerateBuildAndExecuteMechanicSourceInput
-): Promise<GenerateBuildAndExecuteMechanicSourceResult> {
-  const { foundationGateResult } = input;
-  if (!isMechanicSourceGenerationAvailable(foundationGateResult)) {
-    return admissionFailure("foundation_gate_required", {
-      path: "foundationGateResult",
-      code: "foundation_gate_required",
-      message:
-        "Generated mechanic source requires the live authenticated passing Runtime and Contract Foundation Gate result.",
-    });
-  }
-  if (!foundationGateResult || foundationGateResult.status !== "passed") {
-    return admissionFailure("foundation_gate_required", {
-      path: "foundationGateResult",
-      code: "foundation_gate_required",
-      message:
-        "Generated mechanic source requires the live authenticated passing Runtime and Contract Foundation Gate result.",
-    });
-  }
-  if (!matchesPhase9ResourceBudget(input.resourceBudget)) {
-    return admissionFailure("invalid_upstream_artifacts", {
-      path: "resourceBudget",
-      code: "invalid_upstream_artifacts",
-      message:
-        "Mechanic source execution requires the exact immutable Phase 9 resource budget.",
-    });
-  }
+) => Promise<GenerateBuildAndExecuteMechanicSourceResult>;
 
-  let snapshot: ReturnType<typeof snapshotMechanicSourceInput>;
-  try {
-    snapshot = snapshotMechanicSourceInput(input);
-  } catch (error) {
-    return admissionFailure("invalid_upstream_artifacts", {
-      path: "input",
-      code: "invalid_upstream_artifacts",
-      message:
-        error instanceof Error
-          ? `Mechanic source admission could not snapshot its inputs: ${error.message}`
-          : "Mechanic source admission could not snapshot its inputs.",
-    });
-  }
-
-  const upstreamIssue = validateUpstreamArtifacts(snapshot);
-  if (upstreamIssue) {
-    return admissionFailure("invalid_upstream_artifacts", upstreamIssue);
-  }
-
+export function createMechanicSourceGenerationOrchestrator(
+  policy: MechanicSourceGenerationPolicy
+): MechanicSourceGenerationOrchestrator {
+  const canonicalConstraintSet = snapshotJson(policy.constraintSet);
+  const canonicalResourceBudget = snapshotJson(policy.resourceBudget);
   if (
-    !isMechanicExecutionRealmAdapterAuthentic(input.realmAdapter) ||
-    input.realmAdapter.id !==
-      foundationGateResult.evidence.realmConformance.candidateId
+    canonicalResourceBudget.profileId !==
+    canonicalConstraintSet.resourceBudgetProfile
   ) {
-    return admissionFailure("realm_adapter_mismatch", {
-      path: "realmAdapter",
-      code: "realm_adapter_mismatch",
-      message:
-        "Generated mechanic source must execute through the authentic realm adapter selected by the passing foundation gate.",
-    });
+    throw new TypeError(
+      "Mechanic source generation policy resource budget must match its constraint-set profile."
+    );
   }
 
-  const canonicalConstraintSet = snapshotJson(
-    PHASE_9_GENERATION_CONSTRAINT_SET
-  );
-  const canonicalResourceBudget = snapshotJson(
-    PHASE_9_MECHANIC_RESOURCE_BUDGET
-  );
-  const contractValidation = validateGeneratedMechanicContract({
-    input: snapshot.contract,
-    constraintSet: canonicalConstraintSet,
-    referenceCatalog: snapshot.referenceCatalog,
-    resourceBudget: canonicalResourceBudget,
-  });
-  if (!contractValidation.success) {
-    return contractValidation;
-  }
-  const acceptedContract = deepFreeze(contractValidation.data);
-  const grantCreation = createMechanicCapabilityGrant({
-    contract: acceptedContract,
-    constraintSet: canonicalConstraintSet,
-  });
-  if (!grantCreation.success) {
-    return admissionFailure("invalid_upstream_artifacts", {
-      path: "grant.capabilities",
-      code: "invalid_upstream_artifacts",
-      message:
-        grantCreation.evidence.issues[0]?.message ??
-        "The accepted contract could not produce an exact capability grant.",
-    });
-  }
-  const canonicalGrant = snapshotJson(grantCreation.data);
-  if (!sameJson(snapshot.grant, canonicalGrant)) {
-    return admissionFailure("invalid_upstream_artifacts", {
-      path: "grant.capabilities",
-      code: "invalid_upstream_artifacts",
-      message:
-        "Mechanic source generation requires the exact canonical capability grant derived from the accepted contract.",
-    });
-  }
-  const sourceContract = snapshotJson(
-    createMechanicSourceGenerationContract(acceptedContract)
-  );
-  const sourceResolution = snapshotJson(
-    createMechanicSourceGenerationResolution(
-      snapshot.admittedRequest.resolution
-    )
-  );
-  const sourceGrant = snapshotJson(
-    createMechanicSourceGenerationGrant(canonicalGrant)
-  );
+  return async (input) => {
+    const { foundationGateResult } = input;
+    if (!isMechanicSourceGenerationAvailable(foundationGateResult)) {
+      return admissionFailure("foundation_gate_required", {
+        path: "foundationGateResult",
+        code: "foundation_gate_required",
+        message:
+          "Generated mechanic source requires the live authenticated passing Runtime and Contract Foundation Gate result.",
+      });
+    }
+    if (!foundationGateResult || foundationGateResult.status !== "passed") {
+      return admissionFailure("foundation_gate_required", {
+        path: "foundationGateResult",
+        code: "foundation_gate_required",
+        message:
+          "Generated mechanic source requires the live authenticated passing Runtime and Contract Foundation Gate result.",
+      });
+    }
+    if (!matchesResourceBudget(input.resourceBudget, canonicalResourceBudget)) {
+      return admissionFailure("invalid_upstream_artifacts", {
+        path: "resourceBudget",
+        code: "invalid_upstream_artifacts",
+        message:
+          "Mechanic source execution requires the exact resource budget bound to its generation policy.",
+      });
+    }
 
-  let candidate: unknown;
-  try {
-    candidate = await input.provider({
-      intent: snapshot.intent,
-      resolution: sourceResolution,
+    let snapshot: ReturnType<typeof snapshotMechanicSourceInput>;
+    try {
+      snapshot = snapshotMechanicSourceInput(input);
+    } catch (error) {
+      return admissionFailure("invalid_upstream_artifacts", {
+        path: "input",
+        code: "invalid_upstream_artifacts",
+        message:
+          error instanceof Error
+            ? `Mechanic source admission could not snapshot its inputs: ${error.message}`
+            : "Mechanic source admission could not snapshot its inputs.",
+      });
+    }
+
+    const upstreamIssue = validateUpstreamArtifacts(
+      snapshot,
+      canonicalConstraintSet,
+      canonicalResourceBudget
+    );
+    if (upstreamIssue) {
+      return admissionFailure("invalid_upstream_artifacts", upstreamIssue);
+    }
+
+    if (
+      !isMechanicExecutionRealmAdapterAuthentic(input.realmAdapter) ||
+      input.realmAdapter.id !==
+        foundationGateResult.evidence.realmConformance.candidateId
+    ) {
+      return admissionFailure("realm_adapter_mismatch", {
+        path: "realmAdapter",
+        code: "realm_adapter_mismatch",
+        message:
+          "Generated mechanic source must execute through the authentic realm adapter selected by the passing foundation gate.",
+      });
+    }
+
+    const contractValidation = validateGeneratedMechanicContract({
+      input: snapshot.contract,
       constraintSet: canonicalConstraintSet,
-      contract: sourceContract,
-      grant: sourceGrant,
       referenceCatalog: snapshot.referenceCatalog,
       resourceBudget: canonicalResourceBudget,
-      model: input.model,
-      providerCredential: input.providerCredential,
-      taskRoute: MECHANIC_SOURCE_GENERATION_TASK_ROUTE,
-      ...(input.signal ? { signal: input.signal } : {}),
     });
-  } catch (error) {
-    if (error instanceof MechanicSourceGenerationProviderError) {
-      return { success: false, evidence: error.evidence };
+    if (!contractValidation.success) {
+      return contractValidation;
     }
-    return {
-      success: false,
-      evidence: {
-        stage: "source_generation",
-        code: "provider_failure",
-        issues: Object.freeze([
-          Object.freeze({
-            path: "provider" as const,
-            code: "provider_failure" as const,
-            message:
-              error instanceof Error
-                ? error.message
-                : "Mechanic source provider failed.",
-          }),
-        ]),
-      },
-    };
-  }
+    const acceptedContract = deepFreeze(contractValidation.data);
+    const grantCreation = createMechanicCapabilityGrant({
+      contract: acceptedContract,
+      constraintSet: canonicalConstraintSet,
+    });
+    if (!grantCreation.success) {
+      return admissionFailure("invalid_upstream_artifacts", {
+        path: "grant.capabilities",
+        code: "invalid_upstream_artifacts",
+        message:
+          grantCreation.evidence.issues[0]?.message ??
+          "The accepted contract could not produce an exact capability grant.",
+      });
+    }
+    const canonicalGrant = snapshotJson(grantCreation.data);
+    if (!sameJson(snapshot.grant, canonicalGrant)) {
+      return admissionFailure("invalid_upstream_artifacts", {
+        path: "grant.capabilities",
+        code: "invalid_upstream_artifacts",
+        message:
+          "Mechanic source generation requires the exact canonical capability grant derived from the accepted contract.",
+      });
+    }
+    const sourceContract = snapshotJson(
+      createMechanicSourceGenerationContract(acceptedContract)
+    );
+    const sourceResolution = snapshotJson(
+      createMechanicSourceGenerationResolution(
+        snapshot.admittedRequest.resolution
+      )
+    );
+    const sourceGrant = snapshotJson(
+      createMechanicSourceGenerationGrant(canonicalGrant)
+    );
 
-  return buildAndExecuteGeneratedMechanicSource({
-    candidate,
-    contract: acceptedContract,
-    grant: canonicalGrant,
-    referenceCatalog: snapshot.referenceCatalog,
-    realmAdapter: input.realmAdapter,
-    execution: {
-      ...snapshot.execution,
-      resourceBudget: canonicalResourceBudget,
-    },
-  });
+    let candidate: unknown;
+    try {
+      candidate = await input.provider({
+        intent: snapshot.intent,
+        resolution: sourceResolution,
+        constraintSet: canonicalConstraintSet,
+        contract: sourceContract,
+        grant: sourceGrant,
+        referenceCatalog: snapshot.referenceCatalog,
+        resourceBudget: canonicalResourceBudget,
+        model: input.model,
+        providerCredential: input.providerCredential,
+        taskRoute: MECHANIC_SOURCE_GENERATION_TASK_ROUTE,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+    } catch (error) {
+      if (error instanceof MechanicSourceGenerationProviderError) {
+        return { success: false, evidence: error.evidence };
+      }
+      return {
+        success: false,
+        evidence: {
+          stage: "source_generation",
+          code: "provider_failure",
+          issues: Object.freeze([
+            Object.freeze({
+              path: "provider" as const,
+              code: "provider_failure" as const,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Mechanic source provider failed.",
+            }),
+          ]),
+        },
+      };
+    }
+
+    return buildAndExecuteGeneratedMechanicSource({
+      candidate,
+      contract: acceptedContract,
+      grant: canonicalGrant,
+      referenceCatalog: snapshot.referenceCatalog,
+      realmAdapter: input.realmAdapter,
+      execution: {
+        ...snapshot.execution,
+        resourceBudget: canonicalResourceBudget,
+      },
+    });
+  };
 }
 
 function snapshotMechanicSourceInput(
@@ -306,15 +325,17 @@ function snapshotMechanicSourceInput(
 }
 
 function validateUpstreamArtifacts(
-  input: ReturnType<typeof snapshotMechanicSourceInput>
+  input: ReturnType<typeof snapshotMechanicSourceInput>,
+  canonicalConstraintSet: GenerationConstraintSet,
+  canonicalResourceBudget: GeneratedMechanicResourceBudget
 ): MechanicSourceAdmissionIssue | undefined {
   const { intent, admittedRequest, contract, grant, resourceBudget } = input;
-  if (!sameJson(admittedRequest.constraintSet, PHASE_9_GENERATION_CONSTRAINT_SET)) {
+  if (!sameJson(admittedRequest.constraintSet, canonicalConstraintSet)) {
     return {
       path: "admittedRequest.constraintSet",
       code: "invalid_upstream_artifacts",
       message:
-        "Mechanic source generation requires the exact immutable Phase 9 Generation Constraint Set.",
+        "Mechanic source generation requires the exact constraint set bound to its generation policy.",
     };
   }
   if (admittedRequest.resolution.intentId !== intent.id) {
@@ -362,26 +383,30 @@ function validateUpstreamArtifacts(
         "Mechanic Resource Budget does not match the admitted constraint set profile.",
     };
   }
-  if (!matchesPhase9ResourceBudget(resourceBudget)) {
+  if (!matchesResourceBudget(resourceBudget, canonicalResourceBudget)) {
     return {
       path: "resourceBudget",
       code: "invalid_upstream_artifacts",
       message:
-        "Mechanic source execution requires the exact immutable Phase 9 resource budget.",
+        "Mechanic source execution requires the exact resource budget bound to its generation policy.",
     };
   }
   return undefined;
 }
 
-function matchesPhase9ResourceBudget(
-  resourceBudget: GeneratedMechanicResourceBudget
+function matchesResourceBudget(
+  resourceBudget: GeneratedMechanicResourceBudget,
+  canonicalResourceBudget: GeneratedMechanicResourceBudget
 ): boolean {
+  const actualKeys = Object.keys(resourceBudget);
+  const canonicalKeys = Object.keys(canonicalResourceBudget) as Array<
+    keyof GeneratedMechanicResourceBudget
+  >;
   return (
-    Object.keys(PHASE_9_MECHANIC_RESOURCE_BUDGET) as Array<
-      keyof GeneratedMechanicResourceBudget
-    >
-  ).every(
-    (key) => resourceBudget[key] === PHASE_9_MECHANIC_RESOURCE_BUDGET[key]
+    actualKeys.length === canonicalKeys.length &&
+    canonicalKeys.every(
+      (key) => resourceBudget[key] === canonicalResourceBudget[key]
+    )
   );
 }
 

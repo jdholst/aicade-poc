@@ -1,4 +1,5 @@
 export * from "./mechanic-source-generation-orchestrator";
+export { generateBuildAndExecuteMechanicSource } from "./phase-9-mechanic-source-generation-orchestrator";
 export * from "./mechanic-source-generation-prompt";
 export * from "./mechanic-source-generation-provider";
 export * from "./mechanic-source-generation-schema";

@@ -54,9 +54,10 @@ import type {
 import type { MechanicSourceGenerationProvider } from "./mechanic-source-generation-provider";
 
 import {
-  generateBuildAndExecuteMechanicSource,
+  createMechanicSourceGenerationOrchestrator,
   type GenerateBuildAndExecuteMechanicSourceInput,
 } from "./mechanic-source-generation-orchestrator";
+import { generateBuildAndExecuteMechanicSource } from "./phase-9-mechanic-source-generation-orchestrator";
 
 describe("mechanic source generation admission", () => {
   beforeEach(() => {
@@ -150,12 +151,46 @@ describe("mechanic source generation admission", () => {
             path: "resourceBudget",
             code: "invalid_upstream_artifacts",
             message:
-              "Mechanic source execution requires the exact immutable Phase 9 resource budget.",
+              "Mechanic source execution requires the exact resource budget bound to its generation policy.",
           },
         ],
       },
     });
     expect(provider).not.toHaveBeenCalled();
+  });
+
+  it("binds admission to an injected generic resource policy", async () => {
+    foundationTrust.available = true;
+    adapterTrust.authentic = true;
+    const provider = vi.fn<MechanicSourceGenerationProvider>(async () =>
+      createValidCandidate()
+    );
+    const { input, realmAdapter } = createValidOrchestratorInput(provider);
+    const constraintSet = {
+      ...structuredClone(input.admittedRequest.constraintSet),
+      id: "generic_generation_constraints",
+      resourceBudgetProfile: "generic_fixed_budget",
+    };
+    const resourceBudget = {
+      ...structuredClone(input.resourceBudget),
+      profileId: "generic_fixed_budget",
+      maximumOperationsPerTick: 12,
+    };
+    input.admittedRequest = {
+      ...input.admittedRequest,
+      constraintSet,
+    };
+    input.resourceBudget = structuredClone(resourceBudget);
+    const generateWithGenericPolicy =
+      createMechanicSourceGenerationOrchestrator({
+        constraintSet,
+        resourceBudget,
+      });
+
+    const result = await generateWithGenericPolicy(input);
+
+    expect(result).toMatchObject({ success: true });
+    expect(realmAdapter.createdResourceBudget).toEqual(resourceBudget);
   });
 
   it("keeps evaluator scenarios outside the provider boundary", async () => {
