@@ -8,18 +8,68 @@ import type {
   MechanicIntent,
 } from "@/game-spec";
 
-import { GENERATED_MECHANIC_SOURCE_CANDIDATE_VERSION } from "./mechanic-source-generation-service";
+import {
+  GENERATED_MECHANIC_SOURCE_CALLBACK_KINDS,
+  GENERATED_MECHANIC_SOURCE_CANDIDATE_VERSION,
+} from "./mechanic-source-generation-service";
+import { sourceFacingCapabilitySignature } from "./mechanic-source-generation-signatures";
 
 export type MechanicSourceGenerationGuidanceInput = {
   intent: MechanicIntent;
-  resolution: GeneratedMechanicResolution;
+  resolution: MechanicSourceGenerationResolution;
   constraintSet: GenerationConstraintSet;
-  contract: GeneratedMechanicContract;
-  grant: MechanicCapabilityGrant;
+  contract: MechanicSourceGenerationContract;
+  grant: MechanicSourceGenerationGrant;
   referenceCatalog: GeneratedMechanicReferenceCatalog;
   resourceBudget: GeneratedMechanicResourceBudget;
   taskRoute: "mechanic_source_generation.primary";
 };
+
+export type MechanicSourceGenerationContract = Readonly<
+  Pick<
+    GeneratedMechanicContract,
+    | "schemaVersion"
+    | "id"
+    | "intentId"
+    | "capabilityVersion"
+    | "behavior"
+    | "config"
+    | "bindings"
+    | "ownedObjects"
+    | "privateState"
+    | "lifecycle"
+    | "ports"
+    | "capabilities"
+    | "resourceExpectations"
+  >
+>;
+
+export type MechanicSourceGenerationResolution = Readonly<{
+  intentId: GeneratedMechanicResolution["intentId"];
+  assumptions: GeneratedMechanicResolution["assumptions"];
+  uncoveredRequirements: ReadonlyArray<
+    Readonly<{
+      category: GeneratedMechanicResolution["coverage"]["uncoveredRequirements"][number]["category"];
+      value: string;
+    }>
+  >;
+}>;
+
+export type MechanicSourceGenerationGrant = Readonly<{
+  capabilityVersion: MechanicCapabilityGrant["capabilityVersion"];
+  capabilities: ReadonlyArray<
+    Readonly<
+      Pick<
+        MechanicCapabilityGrant["capabilities"][number],
+        | "id"
+        | "description"
+        | "authoring"
+        | "resourceCosts"
+        | "requiresOpaqueHandle"
+      >
+    >
+  >;
+}>;
 
 const sourceCandidateSchemaDocumentation = {
   schemaVersion: GENERATED_MECHANIC_SOURCE_CANDIDATE_VERSION,
@@ -30,14 +80,7 @@ const sourceCandidateSchemaDocumentation = {
     callbacks: [
       {
         id: "stable callback ID",
-        kind: [
-          "install",
-          "logical_action",
-          "gameplay_event",
-          "scheduled",
-          "fixed_step",
-          "dispose",
-        ],
+        kind: GENERATED_MECHANIC_SOURCE_CALLBACK_KINDS,
         source: "TypeScript callback body",
       },
     ],
@@ -57,15 +100,19 @@ export function createMechanicSourceGenerationSystemPrompt({
   const acceptedGenerationEvidence = {
     intentId: resolution.intentId,
     assumptions: resolution.assumptions,
-    uncoveredRequirements: resolution.coverage.uncoveredRequirements.map(
-      ({ category, value }) => ({ category, value })
-    ),
+    uncoveredRequirements: resolution.uncoveredRequirements,
   };
+  const acceptedSourceContract = createMechanicSourceGenerationContract(
+    contract
+  );
   const capabilityDocumentation = grant.capabilities.map((capability) => ({
     id: capability.id,
     description: capability.description,
     member: capability.authoring.member,
-    asyncSignature: asAsyncSignature(capability.authoring.signature),
+    asyncSignature: sourceFacingCapabilitySignature(
+      capability.id,
+      capability.authoring.signature
+    ),
     resourceCosts: capability.resourceCosts,
     requiresOpaqueHandle: capability.requiresOpaqueHandle,
   }));
@@ -89,25 +136,35 @@ export function createMechanicSourceGenerationSystemPrompt({
     })),
     lifecycleInput: {
       install: "undefined",
-      logical_action: contract.ports
-        .filter((port) => port.direction === "input")
-        .map((port) => ({
-          portId: port.id,
-          payload: port.payload,
-          runtimeShape: {
-            actionId: port.id,
-            payload: "value matching this port payload schema",
-          },
-        })),
-      gameplay_event: {
-        admittedEventIds: contract.behavior.triggers,
+      logical_action: {
+        admittedActionIds: referenceCatalog.action ?? [],
         runtimeShape:
-          "event ID or { readonly eventId: admitted event ID; readonly payload: JsonValue }",
+          "action ID or { readonly actionId: admitted action ID; readonly payload: JsonValue }",
       },
-      scheduled:
-        "{ readonly simulationTimeMilliseconds: number }",
-      fixed_step:
-        "{ readonly simulationTimeMilliseconds: number }",
+      gameplay_event: {
+        admittedEventIds: [
+          ...new Set([
+            ...contract.behavior.triggers,
+            ...contract.ports
+              .filter((port) => port.direction === "input")
+              .map((port) => port.id),
+          ]),
+        ],
+        inputPorts: contract.ports
+          .filter((port) => port.direction === "input")
+          .map((port) => ({
+            portId: port.id,
+            payload: port.payload,
+            runtimeShape: {
+              eventId: port.id,
+              payload: "value matching this port payload schema",
+            },
+          })),
+        runtimeShape:
+          "non-port event ID, or { readonly eventId: admitted event ID; readonly payload: JsonValue }; input-port events require the declared payload",
+      },
+      scheduled: "{ readonly simulationTimeMilliseconds: number }",
+      fixed_step: "{ readonly simulationTimeMilliseconds: number }",
       dispose: "undefined",
     },
   };
@@ -124,7 +181,7 @@ Accepted generic generation evidence JSON:
 ${JSON.stringify(acceptedGenerationEvidence, null, 2)}
 
 Accepted Generated Mechanic Contract JSON:
-${JSON.stringify(contract, null, 2)}
+${JSON.stringify(acceptedSourceContract, null, 2)}
 
 Active Generation Constraint Set JSON:
 ${JSON.stringify(constraintSet, null, 2)}
@@ -150,6 +207,7 @@ Source rules:
 - Callback bodies may reference only config, bindings, lifecycleInput, and the exact granted capability members documented above.
 - Input lifecycle payloads and emitted output payloads must match their contract-declared port schemas exactly.
 - Every granted capability must be used directly through its documented member, every capability call is asynchronous, and every call must be awaited.
+- time.schedule callback IDs must name scheduled callbacks, and events.subscribe callback IDs must name gameplay_event callbacks.
 - Do not reference raw realm primitives, engine objects, ambient globals, dynamic evaluation, DOM, network, storage, workers, raw timers, ambient time, or ambient randomness.
 - Compose behavior from the supplied primitive capability surface. Do not rely on named profiles, source skeletons, algorithms, prompt branches, hidden helpers, handwritten fragments, or any material not supplied above.
 - Preserve the accepted contract, capability version, bindings, configuration, ports, lifecycle, exact grant, and resource limits without widening authority.
@@ -158,12 +216,49 @@ Return one candidate Generated Mechanic Source for Sparkline to parse, typecheck
 `.trim();
 }
 
-function asAsyncSignature(signature: string): string {
-  const markerIndex = signature.lastIndexOf("=>");
-  if (markerIndex < 0) {
-    return signature;
-  }
-  const parameters = signature.slice(0, markerIndex).trim();
-  const result = signature.slice(markerIndex + 2).trim();
-  return `${parameters} => Promise<${result}>`;
+export function createMechanicSourceGenerationContract(
+  contract: MechanicSourceGenerationContract
+): MechanicSourceGenerationContract {
+  return {
+    schemaVersion: contract.schemaVersion,
+    id: contract.id,
+    intentId: contract.intentId,
+    capabilityVersion: contract.capabilityVersion,
+    behavior: contract.behavior,
+    config: contract.config,
+    bindings: contract.bindings,
+    ownedObjects: contract.ownedObjects,
+    privateState: contract.privateState,
+    lifecycle: contract.lifecycle,
+    ports: contract.ports,
+    capabilities: contract.capabilities,
+    resourceExpectations: contract.resourceExpectations,
+  };
+}
+
+export function createMechanicSourceGenerationResolution(
+  resolution: GeneratedMechanicResolution
+): MechanicSourceGenerationResolution {
+  return {
+    intentId: resolution.intentId,
+    assumptions: resolution.assumptions,
+    uncoveredRequirements: resolution.coverage.uncoveredRequirements.map(
+      ({ category, value }) => ({ category, value })
+    ),
+  };
+}
+
+export function createMechanicSourceGenerationGrant(
+  grant: MechanicCapabilityGrant
+): MechanicSourceGenerationGrant {
+  return {
+    capabilityVersion: grant.capabilityVersion,
+    capabilities: grant.capabilities.map((capability) => ({
+      id: capability.id,
+      description: capability.description,
+      authoring: capability.authoring,
+      resourceCosts: capability.resourceCosts,
+      requiresOpaqueHandle: capability.requiresOpaqueHandle,
+    })),
+  };
 }

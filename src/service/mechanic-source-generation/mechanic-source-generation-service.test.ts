@@ -12,6 +12,10 @@ import type {
   MechanicExecutionRealmExecutionInput,
   MechanicExecutionRealmExecutionResult,
 } from "@/runtime/mechanics/mechanic-execution-realm";
+import {
+  createMechanicObjectHost,
+  type MechanicObjectHandle,
+} from "@/runtime/mechanics/mechanic-object-host";
 
 import {
   GENERATED_MECHANIC_SOURCE_ARTIFACT_VERSION,
@@ -110,9 +114,21 @@ describe("generated mechanic source stage", () => {
     });
     expect(realmAdapter.createdGrant).toEqual(grant);
     expect(realmAdapter.executions).toHaveLength(1);
-    expect(realmAdapter.executions[0]?.source).toContain(
-      'realm.callCapability("state_write"'
-    );
+    expect(realmAdapter.executions[0]).toMatchObject({
+      source: "",
+      lifecycle: {
+        callbacks: [
+          {
+            id: "install_generic_source",
+            source: expect.stringContaining(
+              'realm.callCapability("state_write"'
+            ),
+          },
+          { id: "dispose_generic_source" },
+        ],
+        invocations: [{ callbackId: "install_generic_source", count: 1 }],
+      },
+    });
     expect(realmAdapter.disposed).toBe(true);
   });
 
@@ -223,6 +239,61 @@ describe("generated mechanic source stage", () => {
       source:
         'const value = new URL("https://example.test").hostname.length; await capabilities.state.write("counter", value);',
     },
+    {
+      authority: "constructor",
+      source:
+        'const key = "constructor"; const DynamicFunction = Object.getPrototypeOf(async function () {})[key]; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "Object.getPrototypeOf",
+      source:
+        'const key = ["con", "structor"].join(""); const DynamicFunction = Object.getPrototypeOf(async function () {})[key]; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'const key: "bind" = JSON.parse("\\\"constructor\\\""); const DynamicFunction = (async function () {})[key] as unknown as (source: string) => () => unknown; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'let target: any; target = async () => undefined; const key: any = JSON.parse("\\\"constructor\\\""); const DynamicFunction = target[key]; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'const { constructor: DynamicFunction } = async function () {}; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'const key: string = JSON.parse("\\\"constructor\\\""); const target = async function () {} as unknown as Record<string, any>; const { [key]: DynamicFunction } = target; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'let target: any; target = async () => undefined; const key: number = JSON.parse("\\\"constructor\\\""); const DynamicFunction = target[key]; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'let DynamicFunction: any; ({ constructor: DynamicFunction } = async function () {}); const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'let DynamicFunction: any; const key: string = JSON.parse("\\\"constructor\\\""); const target = async function () {} as unknown as Record<string, any>; ({ [key]: DynamicFunction } = target); const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'let DynamicFunction: any; for ({ constructor: DynamicFunction } of [async function () {}]) {} const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
+    {
+      authority: "constructor",
+      source:
+        'let DynamicFunction: any; const key: string = JSON.parse("\\\"constructor\\\""); const target = async function () {} as unknown as Record<string, any>; for ({ [key]: DynamicFunction } of [target]) {} const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
+    },
   ])(
     "rejects forbidden ambient API $authority",
     async ({ authority, source }) => {
@@ -250,6 +321,428 @@ describe("generated mechanic source stage", () => {
       expect(realmAdapter.executions).toHaveLength(0);
     }
   );
+
+  it("allows numeric array indexing while rejecting dynamic property authority", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter),
+      candidate: createCandidate(
+        'const index: number = 0; const value = [config.initialCount][index]; await capabilities.state.write("counter", value);'
+      ),
+    });
+
+    expect(result).toMatchObject({ success: true });
+    expect(realmAdapter.executions).toHaveLength(1);
+  });
+
+  it("supports the finite deterministic BigInt source surface", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter),
+      candidate: createCandidate(
+        'const value = Number(BigInt(1)); await capabilities.state.write("counter", value);'
+      ),
+    });
+
+    expect(result).toMatchObject({ success: true });
+    expect(realmAdapter.executions).toHaveLength(1);
+  });
+
+  it("narrows scheduled capability callback IDs to scheduled callbacks", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      lifecycle: {
+        callbacks: ["install", "scheduled"],
+        fixedStep: false,
+        dispose: true,
+      },
+      capabilities: ["time_schedule"],
+    });
+    const candidate = {
+      ...createCandidate(),
+      callbacks: [
+        {
+          id: "install_generic_source",
+          kind: "install" as const,
+          source:
+            'await capabilities.time.schedule(1, "install_generic_source");',
+        },
+        {
+          id: "scheduled_generic_source",
+          kind: "scheduled" as const,
+          source: "return null;",
+        },
+        {
+          id: "dispose_generic_source",
+          kind: "dispose" as const,
+          source: "return null;",
+        },
+      ],
+    };
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter, contract),
+      contract,
+      grant: createGrant("time_schedule"),
+      candidate,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "source_typecheck",
+        issues: [
+          {
+            code: "type_failure",
+            message: expect.stringContaining("install_generic_source"),
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
+  });
+
+  it("rejects execution bindings that do not match contract cardinality", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      bindings: [
+        {
+          id: "actor",
+          referenceKind: "entity",
+          cardinality: "one",
+          objectIds: ["actor_1"],
+        },
+      ],
+      capabilities: ["object_read"],
+    });
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter, contract),
+      contract,
+      grant: createGrant("object_read"),
+      candidate: createCandidate(
+        "return await capabilities.objects.read(bindings.actor);"
+      ),
+      execution: {
+        ...createBuildInput(realmAdapter, contract).execution,
+        bindings: [],
+      },
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "source_validation",
+        issues: [
+          {
+            path: "execution.bindings",
+            code: "invalid_execution_bindings",
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
+  });
+
+  it("rejects opaque handles attested to objects outside the contract binding", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      bindings: [
+        {
+          id: "actor",
+          referenceKind: "entity",
+          cardinality: "one",
+          objectIds: ["actor_1"],
+        },
+      ],
+      capabilities: ["object_read"],
+    });
+    const objectHost = createObjectBindingHost("actor_2");
+    const handle = objectHost.resolveOne("actor");
+    const buildInput = createBuildInput(realmAdapter, contract);
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...buildInput,
+      contract,
+      grant: createGrant("object_read"),
+      candidate: createCandidate(
+        "return await capabilities.objects.read(bindings.actor);"
+      ),
+      execution: {
+        ...buildInput.execution,
+        bindings: [{ id: "actor", cardinality: "one", handles: [handle] }],
+        bindingAuthority: objectHost.bindingAuthority,
+      },
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "source_validation",
+        issues: [
+          {
+            path: "execution.bindings",
+            code: "invalid_execution_bindings",
+            message: expect.stringContaining("object identities"),
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
+  });
+
+  it("accepts genuine object-host binding identity attestation", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      bindings: [
+        {
+          id: "actor",
+          referenceKind: "entity",
+          cardinality: "one",
+          objectIds: ["actor_1"],
+        },
+      ],
+      capabilities: ["object_read"],
+    });
+    const objectHost = createObjectBindingHost("actor_1");
+    const handle = objectHost.resolveOne("actor");
+    const buildInput = createBuildInput(realmAdapter, contract);
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...buildInput,
+      contract,
+      grant: createGrant("object_read"),
+      candidate: createCandidate(
+        "return await capabilities.objects.read(bindings.actor);"
+      ),
+      execution: {
+        ...buildInput.execution,
+        bindings: [{ id: "actor", cardinality: "one", handles: [handle] }],
+        bindingAuthority: objectHost.bindingAuthority,
+      },
+    });
+
+    expect(result).toMatchObject({ success: true });
+    expect(realmAdapter.executions).toHaveLength(1);
+  });
+
+  it("rejects caller-forged binding identity attestation", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      bindings: [
+        {
+          id: "actor",
+          referenceKind: "entity",
+          cardinality: "one",
+          objectIds: ["actor_1"],
+        },
+      ],
+      capabilities: ["object_read"],
+    });
+    const handle = Object.freeze(
+      Object.create(null)
+    ) as MechanicObjectHandle;
+    const buildInput = createBuildInput(realmAdapter, contract);
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...buildInput,
+      contract,
+      grant: createGrant("object_read"),
+      candidate: createCandidate(
+        "return await capabilities.objects.read(bindings.actor);"
+      ),
+      execution: {
+        ...buildInput.execution,
+        bindings: [{ id: "actor", cardinality: "one", handles: [handle] }],
+        bindingAuthority: {
+          objectIdForHandle: () => "actor_1",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "source_validation",
+        issues: [
+          {
+            path: "execution.bindings",
+            code: "invalid_execution_bindings",
+            message: expect.stringContaining("trusted object"),
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
+  });
+
+  it("rejects lifecycle input that violates an accepted input-port payload", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      lifecycle: {
+        callbacks: ["install", "gameplay_event"],
+        fixedStep: false,
+        dispose: true,
+      },
+      ports: [
+        {
+          id: "accepted_input",
+          direction: "input",
+          payload: { kind: "boolean" },
+        },
+      ],
+      scenarios: [
+        {
+          id: "receive_accepted_input",
+          seed: 1729,
+          setup: [],
+          steps: [
+            {
+              kind: "receive_input",
+              portId: "accepted_input",
+              value: true,
+            },
+          ],
+          observations: [
+            { kind: "state_equals", stateId: "counter", value: 3 },
+          ],
+        },
+      ],
+    });
+    const buildInput = createBuildInput(realmAdapter, contract);
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...buildInput,
+      contract,
+      candidate: {
+        ...createCandidate(),
+        callbacks: [
+          {
+            id: "install_generic_source",
+            kind: "install" as const,
+            source: "return null;",
+          },
+          {
+            id: "gameplay_event_generic_source",
+            kind: "gameplay_event" as const,
+            source:
+              'await capabilities.state.write("counter", config.initialCount);',
+          },
+          {
+            id: "dispose_generic_source",
+            kind: "dispose" as const,
+            source: "return null;",
+          },
+        ],
+      },
+      execution: {
+        ...buildInput.execution,
+        callbackId: "gameplay_event_generic_source",
+        lifecycleInput: {
+          eventId: "accepted_input",
+          payload: "wrong_payload",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "source_validation",
+        issues: [
+          {
+            path: "execution.lifecycleInput",
+            code: "invalid_lifecycle_input",
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
+  });
+
+  it("typechecks gameplay-event input payloads against their declared ports", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      lifecycle: {
+        callbacks: ["install", "gameplay_event"],
+        fixedStep: false,
+        dispose: true,
+      },
+      ports: [
+        {
+          id: "accepted_input",
+          direction: "input",
+          payload: { kind: "boolean" },
+        },
+      ],
+      scenarios: [
+        {
+          id: "receive_accepted_input",
+          seed: 1729,
+          setup: [],
+          steps: [
+            {
+              kind: "receive_input",
+              portId: "accepted_input",
+              value: true,
+            },
+          ],
+          observations: [
+            { kind: "state_equals", stateId: "counter", value: 3 },
+          ],
+        },
+      ],
+    });
+    const buildInput = createBuildInput(realmAdapter, contract);
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...buildInput,
+      contract,
+      candidate: {
+        ...createCandidate(),
+        callbacks: [
+          {
+            id: "install_generic_source",
+            kind: "install" as const,
+            source: "return null;",
+          },
+          {
+            id: "gameplay_event_generic_source",
+            kind: "gameplay_event" as const,
+            source:
+              'if (typeof lifecycleInput !== "string" && lifecycleInput.eventId === "accepted_input") { const invalidPayload: string = lifecycleInput.payload; await capabilities.state.write("counter", invalidPayload.length); }',
+          },
+          {
+            id: "dispose_generic_source",
+            kind: "dispose" as const,
+            source: "return null;",
+          },
+        ],
+      },
+      execution: {
+        ...buildInput.execution,
+        callbackId: "gameplay_event_generic_source",
+        lifecycleInput: { eventId: "accepted_input", payload: true },
+      },
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "source_typecheck",
+        issues: [
+          {
+            path: "callbacks.1.source",
+            code: "type_failure",
+            message: expect.stringContaining("boolean"),
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
+  });
 
   it("rejects source that shadows the trusted capability facade", async () => {
     const realmAdapter = new RecordingRealmAdapter();
@@ -531,6 +1024,24 @@ describe("generated mechanic source stage", () => {
       evidence: {
         stage: "realm_execution",
         code: "generated_mechanic_source_realm_rejected",
+        runtimeExecution: {
+          sourceArtifactId: "generic_source_v1",
+          contractId: "generic_contract",
+          intentId: "generic_intent",
+          capabilityVersion: MECHANIC_CAPABILITY_VERSION,
+          executionId: "execute_generic_source",
+          callbackId: "install_generic_source",
+          result: {
+            executionId: "execute_generic_source",
+            outcome: "failed",
+            output: { installed: true },
+            diagnostic: {
+              stage: "realm_execution",
+              code: "recording_rejection",
+              message: "recording realm rejected source",
+            },
+          },
+        },
         issues: [
           {
             path: "realm.execute",
@@ -541,6 +1052,68 @@ describe("generated mechanic source stage", () => {
       },
     });
     expect(realmAdapter.disposed).toBe(true);
+  });
+
+  it.each([
+    ["execute_throw" as const, "recording execute threw"],
+    ["result_rejection" as const, "recording result rejected"],
+  ])(
+    "keeps correlated evidence when realm execution fails through %s",
+    async (fault, message) => {
+      const realmAdapter = new FaultingRealmAdapter(fault);
+
+      const result = await buildAndExecuteGeneratedMechanicSource(
+        createBuildInput(realmAdapter)
+      );
+
+      expect(result).toEqual({
+        success: false,
+        evidence: {
+          stage: "realm_execution",
+          code: "generated_mechanic_source_realm_rejected",
+          runtimeExecution: {
+            sourceArtifactId: "generic_source_v1",
+            contractId: "generic_contract",
+            intentId: "generic_intent",
+            capabilityVersion: MECHANIC_CAPABILITY_VERSION,
+            executionId: "execute_generic_source",
+            callbackId: "install_generic_source",
+          },
+          issues: [
+            {
+              path: "realm.execute",
+              code: "realm_rejection",
+              message,
+            },
+          ],
+        },
+      });
+      expect(realmAdapter.disposed).toBe(true);
+    }
+  );
+
+  it("preserves the primary realm failure when cleanup also fails", async () => {
+    const realmAdapter = new RecordingRealmAdapter(
+      "failed",
+      new Error("recording disposal failed")
+    );
+
+    const result = await buildAndExecuteGeneratedMechanicSource(
+      createBuildInput(realmAdapter)
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        runtimeExecution: {
+          result: { outcome: "failed" },
+        },
+        issues: [
+          { path: "realm.execute", code: "realm_rejection" },
+          { path: "realm.dispose", code: "realm_cleanup_failure" },
+        ],
+      },
+    });
   });
 
   it("returns cleanup evidence when realm disposal fails after execution", async () => {
@@ -558,6 +1131,19 @@ describe("generated mechanic source stage", () => {
       evidence: {
         stage: "realm_execution",
         code: "generated_mechanic_source_realm_rejected",
+        runtimeExecution: {
+          sourceArtifactId: "generic_source_v1",
+          contractId: "generic_contract",
+          intentId: "generic_intent",
+          capabilityVersion: MECHANIC_CAPABILITY_VERSION,
+          executionId: "execute_generic_source",
+          callbackId: "install_generic_source",
+          result: {
+            executionId: "execute_generic_source",
+            outcome: "completed",
+            output: { installed: true },
+          },
+        },
         issues: [
           {
             path: "realm.dispose",
@@ -704,6 +1290,31 @@ function createGrant(...capabilityIds: string[]): MechanicCapabilityGrant {
   };
 }
 
+function createObjectBindingHost(objectId: string) {
+  return createMechanicObjectHost({
+    mechanicId: "generic_mechanic",
+    grant: createGrant("object_read"),
+    bindings: [
+      {
+        id: "actor",
+        cardinality: "one",
+        getObjectIds: () => [objectId],
+      },
+    ],
+    ownedObjectArchetypes: [],
+    adapter: {
+      hasObject: (candidateId) => candidateId === objectId,
+      observeObject: () => ({
+        active: true,
+        kind: "actor",
+        position: { x: 0, y: 0 },
+        properties: {},
+        velocity: { x: 0, y: 0 },
+      }),
+    },
+  });
+}
+
 class RecordingRealmAdapter implements MechanicExecutionRealmAdapter {
   readonly adapterVersion = "mechanic_execution_realm_adapter/v1";
   readonly id = "recording_realm_adapter";
@@ -751,5 +1362,35 @@ class RecordingRealmAdapter implements MechanicExecutionRealmAdapter {
         this.disposed = true;
       },
     } satisfies MechanicExecutionRealm;
+  }
+}
+
+class FaultingRealmAdapter implements MechanicExecutionRealmAdapter {
+  readonly adapterVersion = "mechanic_execution_realm_adapter/v1";
+  readonly id = "faulting_realm_adapter";
+  disposed = false;
+
+  constructor(
+    private readonly fault: "execute_throw" | "result_rejection"
+  ) {}
+
+  async create(): Promise<MechanicExecutionRealm> {
+    return {
+      execute: (execution) => {
+        if (this.fault === "execute_throw") {
+          throw new Error("recording execute threw");
+        }
+        return {
+          result: Promise.reject(new Error("recording result rejected")),
+          terminate: async () => ({
+            executionId: execution.id,
+            outcome: "terminated" as const,
+          }),
+        };
+      },
+      dispose: () => {
+        this.disposed = true;
+      },
+    };
   }
 }

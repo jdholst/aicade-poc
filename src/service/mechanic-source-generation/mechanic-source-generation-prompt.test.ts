@@ -10,7 +10,11 @@ import {
   type MechanicIntent,
 } from "@/game-spec";
 
-import { createMechanicSourceGenerationSystemPrompt } from "./mechanic-source-generation-prompt";
+import {
+  createMechanicSourceGenerationGrant,
+  createMechanicSourceGenerationResolution,
+  createMechanicSourceGenerationSystemPrompt,
+} from "./mechanic-source-generation-prompt";
 
 describe("createMechanicSourceGenerationSystemPrompt", () => {
   it("documents only the accepted generic source boundary and excludes evaluator scaffolding", () => {
@@ -19,10 +23,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     const grant = createGrant("state_write");
     const prompt = createMechanicSourceGenerationSystemPrompt({
       intent,
-      resolution: createResolution(intent),
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
       constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
       contract,
-      grant,
+      grant: createMechanicSourceGenerationGrant(grant),
       referenceCatalog: {},
       resourceBudget: {
         profileId: "phase_9_fixed_budget",
@@ -42,7 +48,7 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     });
 
     expect(prompt).toContain(JSON.stringify(intent, null, 2));
-    expect(prompt).toContain(JSON.stringify(contract, null, 2));
+    expect(prompt).toContain('"id": "generic_contract"');
     expect(prompt).toContain('"id": "state_write"');
     expect(prompt).toContain('"member": "state.write"');
     expect(prompt).toContain(
@@ -52,13 +58,17 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain("config");
     expect(prompt).toContain("bindings");
     expect(prompt).toContain("lifecycleInput");
-    expect(prompt).toContain('"logical_action": [');
+    expect(prompt).toContain('"logical_action": {');
+    expect(prompt).toContain('"gameplay_event": {');
+    expect(prompt).toContain('"inputPorts": [');
     expect(prompt).toContain('"portId": "accepted_input"');
-    expect(prompt).toContain('"payload": {\n          "kind": "boolean"');
+    expect(prompt).toContain('"kind": "boolean"');
     expect(prompt).toContain("The trusted host owns lifecycle scheduling");
     expect(prompt).not.toContain('"fixedStep": {');
     expect(prompt).toContain("Return one candidate Generated Mechanic Source");
     expect(prompt).not.toContain("EVALUATOR_ONLY_SENTINEL");
+    expect(prompt).not.toContain('"scenarios"');
+    expect(prompt).not.toContain("install_value");
     expect(prompt).not.toMatch(/projectile|hazard|proximity|navigation/i);
     expect(prompt).not.toContain("External Acceptance Observations");
     expect(prompt).not.toContain("evaluator tests");

@@ -12,6 +12,22 @@ export type MechanicObjectHandle = Readonly<{
   [mechanicObjectHandleBrand]: "MechanicObjectHandle";
 }>;
 
+export type MechanicObjectBindingAuthority = Readonly<{
+  objectIdForHandle(handle: MechanicObjectHandle): StableId | undefined;
+}>;
+
+const authenticMechanicObjectBindingAuthorities = new WeakSet<object>();
+
+export function isMechanicObjectBindingAuthorityAuthentic(
+  value: unknown
+): value is MechanicObjectBindingAuthority {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    authenticMechanicObjectBindingAuthorities.has(value)
+  );
+}
+
 export type MechanicObjectPoint = Readonly<{
   x: number;
   y: number;
@@ -87,6 +103,11 @@ export function createMechanicObjectHost({
     StableId,
     { archetypeId: StableId; handle: MechanicObjectHandle }
   >();
+  const bindingAuthority: MechanicObjectBindingAuthority = Object.freeze({
+    objectIdForHandle: (handle: MechanicObjectHandle) =>
+      objectIdsByHandle.get(handle),
+  });
+  authenticMechanicObjectBindingAuthorities.add(bindingAuthority);
   const grantedCapabilities = new Set(
     grant.capabilities.map((capability) => capability.id)
   );
@@ -382,6 +403,7 @@ export function createMechanicObjectHost({
   }
 
   return {
+    bindingAuthority,
     create,
     destroy,
     dispose,

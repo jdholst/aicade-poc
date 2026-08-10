@@ -5,7 +5,10 @@ import {
   mechanicCapabilityRegistry,
   type MechanicCapabilityGrant,
 } from "@/game-spec/mechanics/mechanic-capability-registry";
-import { createMechanicObjectHost } from "./mechanic-object-host";
+import {
+  createMechanicObjectHost,
+  isMechanicObjectBindingAuthorityAuthentic,
+} from "./mechanic-object-host";
 
 function createGrant(
   ...capabilityIds: MechanicCapabilityGrant["capabilities"][number]["id"][]
@@ -25,6 +28,48 @@ function createGrant(
 }
 
 describe("mechanic object host", () => {
+  it("mints authentic binding authority and invalidates disposed handles", () => {
+    const host = createMechanicObjectHost({
+      mechanicId: "mechanic_alpha",
+      grant: createGrant(),
+      bindings: [
+        {
+          id: "player_binding",
+          cardinality: "one",
+          getObjectIds: () => ["player_entity"],
+        },
+      ],
+      ownedObjectArchetypes: [],
+      adapter: {
+        hasObject: (objectId) => objectId === "player_entity",
+        observeObject: () => ({
+          active: true,
+          kind: "player",
+          position: { x: 0, y: 0 },
+          properties: {},
+          velocity: { x: 0, y: 0 },
+        }),
+      },
+    });
+    const handle = host.resolveOne("player_binding");
+
+    expect(isMechanicObjectBindingAuthorityAuthentic(host.bindingAuthority)).toBe(
+      true
+    );
+    expect(
+      isMechanicObjectBindingAuthorityAuthentic({
+        objectIdForHandle: () => "player_entity",
+      })
+    ).toBe(false);
+    expect(host.bindingAuthority.objectIdForHandle(handle)).toBe(
+      "player_entity"
+    );
+
+    host.dispose();
+
+    expect(host.bindingAuthority.objectIdForHandle(handle)).toBeUndefined();
+  });
+
   it("resolves a stable object binding without exposing the engine object", () => {
     const engineObject = {
       active: true,
