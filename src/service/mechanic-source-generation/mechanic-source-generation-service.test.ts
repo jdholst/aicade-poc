@@ -132,6 +132,72 @@ describe("generated mechanic source stage", () => {
     expect(realmAdapter.disposed).toBe(true);
   });
 
+  it.each([
+    {
+      name: "missing",
+      callbacks: [
+        {
+          id: "dispose_generic_source",
+          kind: "dispose" as const,
+          source: "return null;",
+        },
+      ],
+      expectedMessage:
+        'Accepted lifecycle callback kind "install" is missing from the source candidate.',
+    },
+    {
+      name: "duplicated",
+      callbacks: [
+        {
+          id: "install_generic_source_one",
+          kind: "install" as const,
+          source: "return null;",
+        },
+        {
+          id: "install_generic_source_two",
+          kind: "install" as const,
+          source: "return null;",
+        },
+        {
+          id: "dispose_generic_source",
+          kind: "dispose" as const,
+          source: "return null;",
+        },
+      ],
+      expectedMessage:
+        'Source candidate callback kind "install" must occur exactly once and be declared by the accepted contract.',
+    },
+  ])(
+    "rejects $name lifecycle callback coverage before compilation",
+    async ({ callbacks, expectedMessage }) => {
+      const realmAdapter = new RecordingRealmAdapter();
+
+      const result = await buildAndExecuteGeneratedMechanicSource({
+        ...createBuildInput(realmAdapter),
+        candidate: {
+          ...createCandidate(),
+          callbacks,
+        },
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        evidence: {
+          stage: "source_validation",
+          code: "invalid_generated_mechanic_source",
+          issues: [
+            {
+              path: "callbacks",
+              code: "callback_coverage_mismatch",
+              message: expectedMessage,
+            },
+          ],
+        },
+      });
+      expect(realmAdapter.executions).toHaveLength(0);
+    }
+  );
+
   it("returns repair-quality evidence when source violates contract-derived types", async () => {
     const realmAdapter = new RecordingRealmAdapter();
     const contract = createContract();
