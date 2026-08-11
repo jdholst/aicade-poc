@@ -270,9 +270,9 @@ export async function createMechanicLifecycleServices({
       throw new Error(`Lifecycle callback "${callbackId}" is not declared.`);
     }
 
-    const callbackSource = `const lifecycleInput = ${
-      payload === undefined ? "undefined" : serializeJson(payload)
-    };\n${callback.source}`;
+    const callbackSource = `const lifecycleInput = ${immutableJsonSource(
+      payload
+    )};\n${callback.source}`;
 
     let run: MechanicExecutionRealmRun | undefined;
     try {
@@ -811,6 +811,22 @@ function serializeJson(value: JsonValue): string {
     throw new TypeError("Lifecycle input must be JSON serializable.");
   }
   return serialized;
+}
+
+function immutableJsonSource(value: JsonValue | undefined): string {
+  if (value === undefined) {
+    return "undefined";
+  }
+  return `(() => {
+  const freezeJson = (input) => {
+    if (input !== null && typeof input === "object") {
+      for (const child of Object.values(input)) freezeJson(child);
+      Object.freeze(input);
+    }
+    return input;
+  };
+  return freezeJson(${serializeJson(value)});
+})()`;
 }
 
 function jsonResult(value: JsonValue): MechanicExecutionRealmCapabilityResult {

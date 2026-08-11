@@ -82,11 +82,12 @@ describe("createGeneratedMechanicLifecycleEvaluationRuntimeFactory", () => {
       ARTIFACT.callbacks[0]!.normalizedJavaScript
     );
     expect(realmAdapter.executions[1]?.source).toContain(
-      'const lifecycleInput = "activate";'
+      'return freezeJson("activate");'
     );
     expect(realmAdapter.executions[2]?.source).toContain(
-      "const lifecycleInput = {\"simulationTimeMilliseconds\":4};"
+      'return freezeJson({"simulationTimeMilliseconds":4});'
     );
+    expect(realmAdapter.executions[1]?.source).toContain("Object.freeze(input)");
   });
 });
 

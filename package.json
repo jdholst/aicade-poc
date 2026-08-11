@@ -13,6 +13,7 @@
     "qa:mechanic-realm-conformance:browser": "node scripts/qa-mechanic-execution-realm-conformance-browser.mjs",
     "qa:mechanic-realm-candidates:browser": "node scripts/qa-mechanic-execution-realm-candidates-browser.mjs",
     "qa:runtime-contract-foundation-gate:browser": "node scripts/qa-runtime-contract-foundation-gate-browser.mjs",
+    "qa:mechanic-evaluation:browser": "node scripts/qa-mechanic-evaluation-browser.mjs",
     "test:smoke": "vitest run .smoke.test",
     "start": "next start",
     "lint": "eslint"
