@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PHASE_9_GENERATION_CONSTRAINT_SET } from "@/game-spec";
+import {
+  artifactScopedRepairArtifactIdSchema,
+  createGenerationRunRepository,
+  createGenerationRunJsonExport,
+  generationRunSchema,
+  PHASE_9_GENERATION_CONSTRAINT_SET,
+  type GenerationRun,
+  type StoredGenerationRunRecord,
+} from "@/game-spec";
 
 import {
   runArtifactScopedMechanicRepair,
@@ -15,6 +23,37 @@ const sourceIssue: ArtifactScopedRepairIssue = {
 };
 
 describe("runArtifactScopedMechanicRepair", () => {
+  it("retains a no-repair success in the same GenerationRun", async () => {
+    const result = await runArtifactScopedMechanicRepair({
+      generationRun: createRunningGenerationRun(
+        "generation_run_no_repair_needed"
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      completedAt: () => "2026-08-11T15:00:05.000Z",
+      stageRunners: {
+        contract: async () => acceptedArtifact("contract_v1"),
+        source: async () => acceptedArtifact("source_v1"),
+        finalGameSpec: async () => acceptedArtifact("final_game_spec_v1"),
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: "succeeded",
+      receipt: {
+        status: "succeeded",
+        repairStatus: "not_needed",
+      },
+      generationRun: {
+        id: "generation_run_no_repair_needed",
+        status: "succeeded",
+        repairStatus: "not-needed",
+        artifactScopedRepair: {
+          repairStatus: "not_needed",
+        },
+      },
+    });
+  });
+
   it("repairs only the responsible source artifact while keeping the accepted contract locked", async () => {
     const contractInputs: ArtifactScopedRepairStageInput[] = [];
     const sourceInputs: ArtifactScopedRepairStageInput[] = [];
@@ -43,8 +82,11 @@ describe("runArtifactScopedMechanicRepair", () => {
     );
 
     const result = await runArtifactScopedMechanicRepair({
-      generationRunId: "generation_run_source_repair",
+      generationRun: createRunningGenerationRun(
+        "generation_run_source_repair"
+      ),
       constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      completedAt: () => "2026-08-11T15:01:00.000Z",
       stageRunners: { contract, source, finalGameSpec },
     });
 
@@ -92,6 +134,45 @@ describe("runArtifactScopedMechanicRepair", () => {
         finalGameSpec: 1,
       },
     });
+    expect(generationRunSchema.parse(result.generationRun)).toEqual(
+      result.generationRun
+    );
+    expect(result.generationRun).toMatchObject({
+      id: "generation_run_source_repair",
+      status: "succeeded",
+      repairStatus: "repaired",
+      completedAt: "2026-08-11T15:01:00.000Z",
+      artifactScopedRepair: result.receipt,
+    });
+    expect(
+      createGenerationRunJsonExport([result.generationRun], {
+        exportedAt: "2026-08-11T15:02:00.000Z",
+      }).runs[0]
+    ).toMatchObject({
+      id: "generation_run_source_repair",
+      artifactScopedRepair: result.receipt,
+    });
+    let storedRecord: StoredGenerationRunRecord | undefined;
+    const repository = createGenerationRunRepository({
+      put: async (record) => {
+        storedRecord = structuredClone(record);
+      },
+      get: async (generationRunId) =>
+        storedRecord?.id === generationRunId
+          ? structuredClone(storedRecord)
+          : null,
+      getAll: async () => (storedRecord ? [structuredClone(storedRecord)] : []),
+      delete: async () => {
+        storedRecord = undefined;
+      },
+      clear: async () => {
+        storedRecord = undefined;
+      },
+    });
+    await repository.create(result.generationRun);
+    expect(
+      (await repository.fetch(result.generationRun.id))?.artifactScopedRepair
+    ).toEqual(result.receipt);
     expect(
       result.receipt.attempts.find(
         (attempt) =>
@@ -134,7 +215,9 @@ describe("runArtifactScopedMechanicRepair", () => {
                 responsibleStage: "contract" as const,
                 issues: [contractIssue],
                 artifact: {
-                  id: "final_game_spec_rejected",
+                  id: artifactScopedRepairArtifactIdSchema.parse(
+                    "final_game_spec_rejected"
+                  ),
                   value: { id: "final_game_spec_rejected" },
                 },
               },
@@ -144,7 +227,9 @@ describe("runArtifactScopedMechanicRepair", () => {
     );
 
     const result = await runArtifactScopedMechanicRepair({
-      generationRunId: "generation_run_contract_repair",
+      generationRun: createRunningGenerationRun(
+        "generation_run_contract_repair"
+      ),
       constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
       stageRunners: { contract, source, finalGameSpec },
     });
@@ -257,9 +342,12 @@ describe("runArtifactScopedMechanicRepair", () => {
     const finalGameSpec = vi.fn();
 
     const result = await runArtifactScopedMechanicRepair({
-      generationRunId: "generation_run_source_exhausted",
+      generationRun: createRunningGenerationRun(
+        "generation_run_source_exhausted"
+      ),
       constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
       now: () => elapsedMs,
+      completedAt: () => "2026-08-11T15:05:00.000Z",
       stageRunners: {
         contract: async () => acceptedArtifact("contract_v1"),
         source,
@@ -319,6 +407,18 @@ describe("runArtifactScopedMechanicRepair", () => {
       status: "accepted",
       dependsOnArtifactIds: [],
     });
+    expect(result.generationRun).toMatchObject({
+      id: "generation_run_source_exhausted",
+      status: "failed",
+      repairStatus: "repair-exhausted",
+      stage: "repair",
+      failureClass: "repair-exhausted",
+      completedAt: "2026-08-11T15:05:00.000Z",
+      artifactScopedRepair: result.receipt,
+    });
+    expect(generationRunSchema.parse(result.generationRun)).toEqual(
+      result.generationRun
+    );
   });
 
   it("snapshots and freezes artifacts, repair evidence, and the completed receipt", async () => {
@@ -346,7 +446,9 @@ describe("runArtifactScopedMechanicRepair", () => {
     });
 
     const result = await runArtifactScopedMechanicRepair({
-      generationRunId: "generation_run_immutable_receipt",
+      generationRun: createRunningGenerationRun(
+        "generation_run_immutable_receipt"
+      ),
       constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
       stageRunners: {
         contract: async () => acceptedArtifact("contract_v1"),
@@ -376,7 +478,9 @@ describe("runArtifactScopedMechanicRepair", () => {
 
     await expect(
       runArtifactScopedMechanicRepair({
-        generationRunId: "generation_run_invalid_classification",
+        generationRun: createRunningGenerationRun(
+          "generation_run_invalid_classification"
+        ),
         constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
         stageRunners: {
           contract: async () => ({
@@ -442,7 +546,9 @@ describe("runArtifactScopedMechanicRepair", () => {
     );
 
     const result = await runArtifactScopedMechanicRepair({
-      generationRunId: "generation_run_independent_budgets",
+      generationRun: createRunningGenerationRun(
+        "generation_run_independent_budgets"
+      ),
       constraintSet,
       stageRunners: { contract, source, finalGameSpec },
     });
@@ -480,7 +586,9 @@ describe("runArtifactScopedMechanicRepair", () => {
 
     await expect(
       runArtifactScopedMechanicRepair({
-        generationRunId: "generation_run_duplicate_artifact",
+        generationRun: createRunningGenerationRun(
+          "generation_run_duplicate_artifact"
+        ),
         constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
         stageRunners: {
           contract: async () => acceptedArtifact("artifact_shared"),
@@ -493,6 +601,36 @@ describe("runArtifactScopedMechanicRepair", () => {
     );
     expect(finalGameSpec).not.toHaveBeenCalled();
   });
+
+  it("does not overwrite an already timed-out GenerationRun", async () => {
+    const stageRunner = vi.fn();
+    const runningGenerationRun = createRunningGenerationRun(
+      "generation_run_already_timed_out"
+    );
+    const timedOutGenerationRun = generationRunSchema.parse({
+      ...runningGenerationRun,
+      status: "timed-out",
+      completedAt: "2026-08-11T15:01:00.000Z",
+      durationMs: 60_000,
+      stage: "timeout",
+      failureClass: "timeout",
+    });
+
+    await expect(
+      runArtifactScopedMechanicRepair({
+        generationRun: timedOutGenerationRun,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+        stageRunners: {
+          contract: stageRunner,
+          source: stageRunner,
+          finalGameSpec: stageRunner,
+        },
+      })
+    ).rejects.toThrow(
+      'Artifact-scoped repair requires a running GenerationRun; received "timed-out".'
+    );
+    expect(stageRunner).not.toHaveBeenCalled();
+  });
 });
 
 function acceptedArtifact(id: string) {
@@ -500,9 +638,23 @@ function acceptedArtifact(id: string) {
     success: true as const,
     data: {
       artifact: {
-        id,
+        id: artifactScopedRepairArtifactIdSchema.parse(id),
         value: { id },
       },
     },
   };
+}
+
+function createRunningGenerationRun(id: string): GenerationRun {
+  return generationRunSchema.parse({
+    id,
+    operationType: "repair",
+    status: "running",
+    createdAt: "2026-08-11T15:00:00.000Z",
+    startedAt: "2026-08-11T15:00:00.000Z",
+    request: {
+      summary: "Repair generated mechanic artifacts.",
+    },
+    attempts: [],
+  });
 }

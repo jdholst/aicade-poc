@@ -1,30 +1,39 @@
-import type { GenerationConstraintSet } from "@/game-spec";
+import {
+  ARTIFACT_SCOPED_MECHANIC_REPAIR_VERSION,
+  ARTIFACT_SCOPED_REPAIR_STAGES,
+  artifactScopedRepairAttemptIdSchema,
+  generationRunSchema,
+  getArtifactScopedRepairGenerationRunOutcome,
+  type ArtifactScopedMechanicRepairReceipt,
+  type ArtifactScopedRepairArtifactReceipt,
+  type ArtifactScopedRepairArtifactId,
+  type ArtifactScopedRepairAttemptReceipt,
+  type ArtifactScopedRepairAttemptId,
+  type ArtifactScopedRepairIssue,
+  type ArtifactScopedRepairStage,
+  type GenerationConstraintSet,
+  type GenerationRun,
+} from "@/game-spec";
 
-export const ARTIFACT_SCOPED_MECHANIC_REPAIR_VERSION =
-  "artifact_scoped_mechanic_repair/v1";
-
-export const ARTIFACT_SCOPED_REPAIR_STAGES = [
-  "contract",
-  "source",
-  "finalGameSpec",
-] as const;
-
-export type ArtifactScopedRepairStage =
-  (typeof ARTIFACT_SCOPED_REPAIR_STAGES)[number];
-
-export type ArtifactScopedRepairIssue = Readonly<{
-  path: string;
-  code: string;
-  message: string;
-}>;
+export {
+  ARTIFACT_SCOPED_MECHANIC_REPAIR_VERSION,
+  ARTIFACT_SCOPED_REPAIR_STAGES,
+  artifactScopedRepairArtifactIdSchema,
+  artifactScopedRepairAttemptIdSchema,
+  type ArtifactScopedMechanicRepairReceipt,
+  type ArtifactScopedRepairArtifactId,
+  type ArtifactScopedRepairAttemptId,
+  type ArtifactScopedRepairIssue,
+  type ArtifactScopedRepairStage,
+} from "@/game-spec";
 
 export type ArtifactScopedRepairArtifact = Readonly<{
-  id: string;
+  id: ArtifactScopedRepairArtifactId;
   value: unknown;
 }>;
 
 export type ArtifactScopedRepairStageInput = Readonly<{
-  generationRunId: string;
+  generationRunId: GenerationRun["id"];
   stage: ArtifactScopedRepairStage;
   attemptNumber: number;
   kind: "initial" | "repair";
@@ -33,9 +42,9 @@ export type ArtifactScopedRepairStageInput = Readonly<{
   >;
   repair?: Readonly<{
     trigger: "stage_failure" | "upstream_invalidation";
-    failureAttemptId: string;
-    issues: readonly ArtifactScopedRepairIssue[];
-    invalidatedArtifactIds: readonly string[];
+    failureAttemptId: ArtifactScopedRepairAttemptId;
+    issues: ArtifactScopedRepairIssue[];
+    invalidatedArtifactIds: ArtifactScopedRepairArtifactId[];
   }>;
 }>;
 
@@ -63,46 +72,18 @@ export type ArtifactScopedRepairStageRunners = Readonly<
 
 type AttemptCounts = Record<ArtifactScopedRepairStage, number>;
 
-type AttemptReceipt = Readonly<{
-  id: string;
-  stage: ArtifactScopedRepairStage;
-  attemptNumber: number;
-  kind: "initial" | "repair";
-  status: "accepted" | "rejected";
-  durationMs: number;
-  inputArtifactIds: readonly string[];
-  artifactId?: string;
-  issues?: readonly ArtifactScopedRepairIssue[];
-  responsibleStage?: ArtifactScopedRepairStage;
-  repair?: NonNullable<ArtifactScopedRepairStageInput["repair"]>;
-}>;
-
-type ArtifactReceipt = {
-  artifactId: string;
-  stage: ArtifactScopedRepairStage;
-  attemptId: string;
-  status: "accepted" | "rejected" | "invalidated";
-  dependsOnArtifactIds: string[];
-  invalidatedByAttemptId?: string;
-};
-
-export type ArtifactScopedMechanicRepairReceipt = Readonly<{
-  schemaVersion: typeof ARTIFACT_SCOPED_MECHANIC_REPAIR_VERSION;
-  generationRunId: string;
-  status: "succeeded" | "repair_exhausted";
-  repairStatus: "not_needed" | "repaired" | "repair_exhausted";
-  durationMs: number;
-  maximumAttempts: Readonly<AttemptCounts>;
-  attemptCounts: Readonly<AttemptCounts>;
-  attempts: readonly AttemptReceipt[];
-  artifacts: readonly Readonly<ArtifactReceipt>[];
-  exhausted?: Readonly<{
-    stage: ArtifactScopedRepairStage;
-    maximumAttempts: number;
-    failureAttemptId: string;
-    issues: readonly ArtifactScopedRepairIssue[];
-  }>;
-}>;
+type AttemptReceipt = ArtifactScopedRepairAttemptReceipt;
+type ArtifactReceipt = ArtifactScopedRepairArtifactReceipt;
+type AttemptReceiptBase = Pick<
+  AttemptReceipt,
+  | "id"
+  | "stage"
+  | "attemptNumber"
+  | "kind"
+  | "durationMs"
+  | "inputArtifactIds"
+  | "repair"
+>;
 
 export type ArtifactScopedMechanicRepairResult =
   | Readonly<{
@@ -110,26 +91,32 @@ export type ArtifactScopedMechanicRepairResult =
       artifacts: Readonly<
         Record<ArtifactScopedRepairStage, ArtifactScopedRepairArtifact>
       >;
+      generationRun: GenerationRun;
       receipt: ArtifactScopedMechanicRepairReceipt;
     }>
   | Readonly<{
       status: "repair_exhausted";
+      generationRun: GenerationRun;
       receipt: ArtifactScopedMechanicRepairReceipt;
     }>;
 
 export type RunArtifactScopedMechanicRepairInput = Readonly<{
-  generationRunId: string;
+  generationRun: GenerationRun;
   constraintSet: GenerationConstraintSet;
   stageRunners: ArtifactScopedRepairStageRunners;
   now?: () => number;
+  completedAt?: () => string;
 }>;
 
 export async function runArtifactScopedMechanicRepair({
-  generationRunId,
+  generationRun,
   constraintSet,
   stageRunners,
   now = () => Date.now(),
+  completedAt = () => new Date().toISOString(),
 }: RunArtifactScopedMechanicRepairInput): Promise<ArtifactScopedMechanicRepairResult> {
+  const runningGenerationRun = parseRunningGenerationRun(generationRun);
+  const generationRunId = runningGenerationRun.id;
   const runStartedAt = now();
   const maximumAttempts = maximumAttemptsForConstraintSet(constraintSet);
   const attemptCounts: AttemptCounts = {
@@ -139,7 +126,7 @@ export async function runArtifactScopedMechanicRepair({
   };
   const attempts: AttemptReceipt[] = [];
   const artifacts: ArtifactReceipt[] = [];
-  const artifactIds = new Set<string>();
+  const artifactIds = new Set<ArtifactScopedRepairArtifactId>();
   const acceptedArtifacts: Partial<
     Record<ArtifactScopedRepairStage, ArtifactScopedRepairArtifact>
   > = {};
@@ -158,23 +145,29 @@ export async function runArtifactScopedMechanicRepair({
           `Repair stage "${stage}" exhausted without failure evidence.`
         );
       }
+      const receipt = createReceipt({
+        generationRunId,
+        status: "repair_exhausted",
+        durationMs: elapsedDuration(runStartedAt, now()),
+        maximumAttempts,
+        attemptCounts,
+        attempts,
+        artifacts,
+        exhausted: {
+          stage,
+          maximumAttempts: stageMaximumAttempts,
+          failureAttemptId: repair.failureAttemptId,
+          issues: repair.issues,
+        },
+      });
       return snapshot({
         status: "repair_exhausted",
-        receipt: createReceipt({
-          generationRunId,
-          status: "repair_exhausted",
-          durationMs: elapsedDuration(runStartedAt, now()),
-          maximumAttempts,
-          attemptCounts,
-          attempts,
-          artifacts,
-          exhausted: {
-            stage,
-            maximumAttempts: stageMaximumAttempts,
-            failureAttemptId: repair.failureAttemptId,
-            issues: repair.issues,
-          },
+        generationRun: finalizeGenerationRun({
+          generationRun: runningGenerationRun,
+          receipt,
+          completedAt: completedAt(),
         }),
+        receipt,
       });
     }
 
@@ -201,22 +194,19 @@ export async function runArtifactScopedMechanicRepair({
     });
     const result = snapshot(await stageRunners[stage](stageInput));
     const durationMs = elapsedDuration(attemptStartedAt, now());
+    const attemptReceiptBase = createAttemptReceiptBase({
+      attemptId,
+      stageInput,
+      durationMs,
+    });
 
     if (result.success) {
       claimArtifactId(result.data.artifact.id, artifactIds);
       acceptedArtifacts[stage] = result.data.artifact;
       attempts.push({
-        id: attemptId,
-        stage,
-        attemptNumber,
-        kind: attemptNumber === 1 ? "initial" : "repair",
+        ...attemptReceiptBase,
         status: "accepted",
-        durationMs,
-        inputArtifactIds: Object.values(upstreamArtifacts).map(
-          (artifact) => artifact.id
-        ),
         artifactId: result.data.artifact.id,
-        ...(stageInput.repair ? { repair: stageInput.repair } : {}),
       });
       artifacts.push({
         artifactId: result.data.artifact.id,
@@ -251,21 +241,13 @@ export async function runArtifactScopedMechanicRepair({
     }
 
     attempts.push({
-      id: attemptId,
-      stage,
-      attemptNumber,
-      kind: attemptNumber === 1 ? "initial" : "repair",
+      ...attemptReceiptBase,
       status: "rejected",
-      durationMs,
-      inputArtifactIds: Object.values(upstreamArtifacts).map(
-        (artifact) => artifact.id
-      ),
       ...(result.evidence.artifact
         ? { artifactId: result.evidence.artifact.id }
         : {}),
-      issues: result.evidence.issues,
+      issues: [...result.evidence.issues],
       responsibleStage: result.evidence.responsibleStage,
-      ...(stageInput.repair ? { repair: stageInput.repair } : {}),
     });
     if (result.evidence.artifact) {
       artifacts.push({
@@ -279,7 +261,7 @@ export async function runArtifactScopedMechanicRepair({
         ),
       });
     }
-    const invalidatedArtifactIds: string[] = [];
+    const invalidatedArtifactIds: ArtifactScopedRepairArtifactId[] = [];
     for (
       let dependentIndex = responsibleStageIndex;
       dependentIndex < ARTIFACT_SCOPED_REPAIR_STAGES.length;
@@ -305,7 +287,7 @@ export async function runArtifactScopedMechanicRepair({
     pendingRepairs[result.evidence.responsibleStage] = {
       trigger: "stage_failure",
       failureAttemptId: attemptId,
-      issues: result.evidence.issues,
+      issues: [...result.evidence.issues],
       invalidatedArtifactIds,
     };
     for (
@@ -327,22 +309,96 @@ export async function runArtifactScopedMechanicRepair({
     stageIndex = responsibleStageIndex;
   }
 
+  const receipt = createReceipt({
+    generationRunId,
+    status: "succeeded",
+    durationMs: elapsedDuration(runStartedAt, now()),
+    maximumAttempts,
+    attemptCounts,
+    attempts,
+    artifacts,
+  });
   return snapshot({
     status: "succeeded",
     artifacts: acceptedArtifacts as Record<
       ArtifactScopedRepairStage,
       ArtifactScopedRepairArtifact
     >,
-    receipt: createReceipt({
-      generationRunId,
-      status: "succeeded",
-      durationMs: elapsedDuration(runStartedAt, now()),
-      maximumAttempts,
-      attemptCounts,
-      attempts,
-      artifacts,
+    generationRun: finalizeGenerationRun({
+      generationRun: runningGenerationRun,
+      receipt,
+      completedAt: completedAt(),
     }),
+    receipt,
   });
+}
+
+function parseRunningGenerationRun(generationRun: GenerationRun): GenerationRun {
+  const parsedGenerationRun = generationRunSchema.parse(generationRun);
+
+  if (parsedGenerationRun.status !== "running") {
+    throw new TypeError(
+      `Artifact-scoped repair requires a running GenerationRun; received "${parsedGenerationRun.status}".`
+    );
+  }
+  if (parsedGenerationRun.artifactScopedRepair) {
+    throw new TypeError(
+      `GenerationRun "${parsedGenerationRun.id}" already contains artifact-scoped repair evidence.`
+    );
+  }
+
+  return snapshot(parsedGenerationRun);
+}
+
+function finalizeGenerationRun({
+  generationRun,
+  receipt,
+  completedAt,
+}: {
+  generationRun: GenerationRun;
+  receipt: ArtifactScopedMechanicRepairReceipt;
+  completedAt: string;
+}): GenerationRun {
+  const runningFields = { ...generationRun };
+  delete runningFields.artifactScopedRepair;
+  delete runningFields.completedAt;
+  delete runningFields.durationMs;
+  delete runningFields.failureClass;
+  delete runningFields.repairStatus;
+  delete runningFields.stage;
+  const completedAtMs = new Date(completedAt).getTime();
+  const startedAtMs = new Date(generationRun.startedAt).getTime();
+  const terminalOutcome = getArtifactScopedRepairGenerationRunOutcome(receipt);
+
+  return generationRunSchema.parse({
+    ...runningFields,
+    ...terminalOutcome,
+    completedAt,
+    durationMs: Math.max(0, completedAtMs - startedAtMs),
+    artifactScopedRepair: receipt,
+  });
+}
+
+function createAttemptReceiptBase({
+  attemptId,
+  stageInput,
+  durationMs,
+}: {
+  attemptId: ArtifactScopedRepairAttemptId;
+  stageInput: ArtifactScopedRepairStageInput;
+  durationMs: number;
+}): AttemptReceiptBase {
+  return {
+    id: attemptId,
+    stage: stageInput.stage,
+    attemptNumber: stageInput.attemptNumber,
+    kind: stageInput.kind,
+    durationMs,
+    inputArtifactIds: Object.values(stageInput.upstreamArtifacts).map(
+      (artifact) => artifact.id
+    ),
+    ...(stageInput.repair ? { repair: stageInput.repair } : {}),
+  };
 }
 
 function repairLimitForStage(
@@ -393,14 +449,19 @@ function directDependencyIdsForStage(
 }
 
 function createAttemptId(
-  generationRunId: string,
+  generationRunId: GenerationRun["id"],
   stage: ArtifactScopedRepairStage,
   attemptNumber: number
-) {
-  return `${generationRunId}_${stage}_${attemptNumber}`;
+): ArtifactScopedRepairAttemptId {
+  return artifactScopedRepairAttemptIdSchema.parse(
+    `${generationRunId}_${stage}_${attemptNumber}`
+  );
 }
 
-function claimArtifactId(artifactId: string, artifactIds: Set<string>) {
+function claimArtifactId(
+  artifactId: ArtifactScopedRepairArtifactId,
+  artifactIds: Set<ArtifactScopedRepairArtifactId>
+) {
   if (artifactId.length === 0) {
     throw new TypeError("Artifact IDs must not be empty.");
   }
@@ -422,7 +483,7 @@ function createReceipt({
   artifacts,
   exhausted,
 }: {
-  generationRunId: string;
+  generationRunId: GenerationRun["id"];
   status: ArtifactScopedMechanicRepairReceipt["status"];
   durationMs: number;
   maximumAttempts: AttemptCounts;

@@ -67,6 +67,26 @@ export {
 } from "./generation-run/generation-run-json-export";
 
 export {
+  ARTIFACT_SCOPED_MECHANIC_REPAIR_VERSION,
+  ARTIFACT_SCOPED_REPAIR_STAGES,
+  artifactScopedMechanicRepairReceiptSchema,
+  artifactScopedRepairArtifactReceiptSchema,
+  artifactScopedRepairArtifactIdSchema,
+  artifactScopedRepairAttemptReceiptSchema,
+  artifactScopedRepairAttemptIdSchema,
+  artifactScopedRepairStageSchema,
+  getArtifactScopedRepairGenerationRunOutcome,
+  type ArtifactScopedMechanicRepairReceipt,
+  type ArtifactScopedRepairArtifactReceipt,
+  type ArtifactScopedRepairArtifactId,
+  type ArtifactScopedRepairAttemptReceipt,
+  type ArtifactScopedRepairAttemptId,
+  type ArtifactScopedRepairGenerationRunOutcome,
+  type ArtifactScopedRepairIssue,
+  type ArtifactScopedRepairStage,
+} from "./generation-run/artifact-scoped-mechanic-repair-receipt";
+
+export {
   generationRunAttemptReceiptSchema,
   generationRunAttemptValidationSchema,
   generationRunCandidateSummarySchema,

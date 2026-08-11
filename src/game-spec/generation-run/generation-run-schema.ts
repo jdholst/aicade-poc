@@ -3,6 +3,10 @@ import { z } from "zod";
 import type { RuntimeKind } from "@/runtime/runtime-adapter";
 
 import { jsonValueSchema, stableIdSchema } from "../game-spec-schema";
+import {
+  artifactScopedMechanicRepairReceiptSchema,
+  getArtifactScopedRepairGenerationRunOutcome,
+} from "./artifact-scoped-mechanic-repair-receipt";
 
 const runtimeKindValues = [
   "canvas2d",
@@ -174,6 +178,7 @@ export const generationRunSchema = z
     failureClass: generationRunFailureClassSchema.optional(),
     cost: generationRunCostEstimateSchema.optional(),
     relationships: generationRunRelationshipsSchema.optional(),
+    artifactScopedRepair: artifactScopedMechanicRepairReceiptSchema.optional(),
     metadata: metadataSchema.optional(),
   })
   .strict()
@@ -227,7 +232,20 @@ export const generationRunSchema = z
         });
       }
 
-      if (!run.attempts.some((attempt) => attempt.status === "failed")) {
+      const hasArtifactScopedFailedAttempt =
+        run.artifactScopedRepair?.attempts.some(
+          (attempt) => attempt.status === "rejected"
+        ) ?? false;
+      const hasArtifactScopedSuccessfulRepair =
+        run.artifactScopedRepair?.attempts.some(
+          (attempt) =>
+            attempt.kind === "repair" && attempt.status === "accepted"
+        ) ?? false;
+
+      if (
+        !run.attempts.some((attempt) => attempt.status === "failed") &&
+        !hasArtifactScopedFailedAttempt
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["attempts"],
@@ -240,7 +258,8 @@ export const generationRunSchema = z
         !run.attempts.some(
           (attempt) =>
             attempt.kind === "repair" && attempt.status === "succeeded"
-        )
+        ) &&
+        !hasArtifactScopedSuccessfulRepair
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -258,6 +277,51 @@ export const generationRunSchema = z
         message:
           "Repair-exhausted GenerationRun receipts must end with failed status.",
       });
+    }
+
+    if (run.artifactScopedRepair) {
+      if (run.artifactScopedRepair.generationRunId !== run.id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["artifactScopedRepair", "generationRunId"],
+          message:
+            "Artifact-scoped repair evidence must belong to the same GenerationRun.",
+        });
+      }
+
+      const expectedOutcome = getArtifactScopedRepairGenerationRunOutcome(
+        run.artifactScopedRepair
+      );
+      if (run.repairStatus !== expectedOutcome.repairStatus) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["repairStatus"],
+          message:
+            "GenerationRun repairStatus must match its artifact-scoped repair receipt.",
+        });
+      }
+
+      if (run.status !== expectedOutcome.status) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["status"],
+          message:
+            "GenerationRun status must match its artifact-scoped repair receipt.",
+        });
+      }
+
+      if (
+        expectedOutcome.status === "failed" &&
+        (run.stage !== expectedOutcome.stage ||
+          run.failureClass !== expectedOutcome.failureClass)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["stage"],
+          message:
+            "Repair-exhausted GenerationRuns require the repair stage and repair-exhausted failure class.",
+        });
+      }
     }
 
     const seenAttemptIds = new Set<string>();
