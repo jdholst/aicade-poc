@@ -2140,6 +2140,30 @@ function createExecutionSource(input: {
   config: JsonValue;
   lifecycleInput?: JsonValue;
 }): string {
+  return createRuntimeCallbackSource(
+    input,
+    `const lifecycleInput = __sparklineFreezeJson(${JSON.stringify(input.lifecycleInput)});`
+  );
+}
+
+export function createGeneratedMechanicLifecycleCallbackSource(input: {
+  callback: GeneratedMechanicSourceArtifact["callbacks"][number];
+  contract: GeneratedMechanicContract;
+  grant: MechanicCapabilityGrant;
+  config: JsonValue;
+}): string {
+  return createRuntimeCallbackSource(input, "");
+}
+
+function createRuntimeCallbackSource(
+  input: {
+    callback: GeneratedMechanicSourceArtifact["callbacks"][number];
+    contract: GeneratedMechanicContract;
+    grant: MechanicCapabilityGrant;
+    config: JsonValue;
+  },
+  lifecycleInputDeclaration: string
+): string {
   const capabilityGroups = new Map<string, string[]>();
   for (const capability of input.grant.capabilities) {
     const [group, member] = capability.authoring.member.split(".");
@@ -2175,7 +2199,7 @@ const __sparklineFreezeJson = (value) => {
 const capabilities = Object.freeze({ ${capabilities} });
 const bindings = Object.freeze({ ${bindings} });
 const config = __sparklineFreezeJson(${JSON.stringify(input.config)});
-const lifecycleInput = __sparklineFreezeJson(${JSON.stringify(input.lifecycleInput)});
+${lifecycleInputDeclaration}
 ${input.callback.normalizedJavaScript}
 return await __sparklineGeneratedMechanicCallback();
 `.trim();

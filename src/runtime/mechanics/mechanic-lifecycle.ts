@@ -270,10 +270,9 @@ export async function createMechanicLifecycleServices({
       throw new Error(`Lifecycle callback "${callbackId}" is not declared.`);
     }
 
-    const callbackSource =
-      payload === undefined
-        ? callback.source
-        : `const lifecycleInput = ${serializeJson(payload)};\n${callback.source}`;
+    const callbackSource = `const lifecycleInput = ${
+      payload === undefined ? "undefined" : serializeJson(payload)
+    };\n${callback.source}`;
 
     let run: MechanicExecutionRealmRun | undefined;
     try {
