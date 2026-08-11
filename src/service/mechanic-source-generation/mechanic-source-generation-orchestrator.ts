@@ -32,6 +32,7 @@ import {
   buildAndExecuteGeneratedMechanicSource,
   type BuildAndExecuteGeneratedMechanicSourceInput,
   type BuildAndExecuteGeneratedMechanicSourceResult,
+  type GeneratedMechanicSourceCallbackKind,
 } from "./mechanic-source-generation-service";
 
 export const MECHANIC_SOURCE_GENERATION_TASK_ROUTE =
@@ -80,8 +81,11 @@ export type GenerateBuildAndExecuteMechanicSourceInput = Omit<
   realmAdapter: MechanicExecutionRealmAdapter;
   execution: Omit<
     BuildAndExecuteGeneratedMechanicSourceInput["execution"],
-    "resourceBudget"
-  >;
+    "callbackId" | "callbackKind" | "resourceBudget"
+  > &
+    Readonly<{
+      callbackKind: GeneratedMechanicSourceCallbackKind;
+    }>;
   model: OpenAIModelId;
   providerCredential: string;
   provider: MechanicSourceGenerationProvider;
@@ -297,7 +301,7 @@ function snapshotMechanicSourceInput(
     resourceBudget: snapshotJson(input.resourceBudget),
     execution: Object.freeze({
       id: input.execution.id,
-      callbackId: input.execution.callbackId,
+      callbackKind: input.execution.callbackKind,
       config: snapshotJson(input.execution.config),
       ...(input.execution.lifecycleInput !== undefined
         ? { lifecycleInput: snapshotJson(input.execution.lifecycleInput) }

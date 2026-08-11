@@ -31,7 +31,10 @@ import {
   type MechanicObjectBindingAuthority,
 } from "@/runtime/mechanics/mechanic-object-host";
 
-import { sourceFacingCapabilitySignature } from "./mechanic-source-generation-signatures";
+import {
+  sourceFacingCapabilityReference,
+  sourceFacingCapabilitySignature,
+} from "./mechanic-source-generation-signatures";
 
 export const GENERATED_MECHANIC_SOURCE_CANDIDATE_VERSION =
   "generated_mechanic_source_candidate/v1";
@@ -77,6 +80,9 @@ const generatedMechanicSourceCandidateSchema = z
 export type GeneratedMechanicSourceCandidate = z.infer<
   typeof generatedMechanicSourceCandidateSchema
 >;
+
+export type GeneratedMechanicSourceCallbackKind =
+  GeneratedMechanicSourceCandidate["callbacks"][number]["kind"];
 
 export type GeneratedMechanicSourceArtifact = Readonly<{
   schemaVersion: typeof GENERATED_MECHANIC_SOURCE_ARTIFACT_VERSION;
@@ -158,7 +164,6 @@ export type BuildAndExecuteGeneratedMechanicSourceInput = {
   realmAdapter: MechanicExecutionRealmAdapter;
   execution: {
     id: StableId;
-    callbackId: StableId;
     config: JsonValue;
     lifecycleInput?: JsonValue;
     bindings: readonly MechanicExecutionRealmBinding[];
@@ -166,7 +171,16 @@ export type BuildAndExecuteGeneratedMechanicSourceInput = {
     capabilityHost: MechanicExecutionRealmCapabilityHost;
     seed: number;
     resourceBudget: MechanicExecutionRealmResourceBudget;
-  };
+  } & (
+    | Readonly<{
+        callbackId: StableId;
+        callbackKind?: never;
+      }>
+    | Readonly<{
+        callbackKind: GeneratedMechanicSourceCallbackKind;
+        callbackId?: never;
+      }>
+  );
 };
 
 export type MechanicSourceBindingAuthority = MechanicObjectBindingAuthority;
@@ -283,15 +297,24 @@ export async function buildAndExecuteGeneratedMechanicSource({
   }
   const admittedConfig = structuredClone(parsedConfig.data);
 
-  const selectedCallback = compiledCallbacks.find(
-    (callback) => callback.id === execution.callbackId
+  const selectedCallback = compiledCallbacks.find((callback) =>
+    execution.callbackId !== undefined
+      ? callback.id === execution.callbackId
+      : callback.kind === execution.callbackKind
   );
   if (!selectedCallback) {
+    const requestedCallback =
+      execution.callbackId !== undefined
+        ? `callback "${execution.callbackId}"`
+        : `callback kind "${execution.callbackKind}"`;
     return fail("source_validation", "invalid_generated_mechanic_source", [
       {
-        path: "execution.callbackId",
+        path:
+          execution.callbackId !== undefined
+            ? "execution.callbackId"
+            : "execution.callbackKind",
         code: "callback_coverage_mismatch",
-        message: `Execution callback "${execution.callbackId}" is not present in the compiled artifact.`,
+        message: `Execution ${requestedCallback} is not present in the compiled artifact.`,
       },
     ]);
   }
@@ -1686,10 +1709,9 @@ function createTypeDeclarations(input: {
     .map((callback) => callback.id);
   const capabilityGroups = new Map<string, string[]>();
   for (const capability of grant.capabilities) {
-    const [group, member] = capability.authoring.member.split(".");
-    if (!group || !member) {
-      continue;
-    }
+    const { group, member } = sourceFacingCapabilityReference(
+      capability.authoring.member
+    );
     const signature = capabilitySignature({
       capability,
       contract,
@@ -2166,10 +2188,9 @@ function createRuntimeCallbackSource(
 ): string {
   const capabilityGroups = new Map<string, string[]>();
   for (const capability of input.grant.capabilities) {
-    const [group, member] = capability.authoring.member.split(".");
-    if (!group || !member) {
-      continue;
-    }
+    const { group, member } = sourceFacingCapabilityReference(
+      capability.authoring.member
+    );
     const members = capabilityGroups.get(group) ?? [];
     members.push(
       `${JSON.stringify(member)}: (...args) => realm.callCapability(${JSON.stringify(capability.id)}, ...args)`

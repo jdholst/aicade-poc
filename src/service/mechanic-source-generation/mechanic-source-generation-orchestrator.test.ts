@@ -219,6 +219,49 @@ describe("mechanic source generation admission", () => {
     expect(Object.isFrozen(providerInput?.contract)).toBe(true);
   });
 
+  it("executes a provider-selected callback by its validated lifecycle kind", async () => {
+    foundationTrust.available = true;
+    adapterTrust.authentic = true;
+    const provider = vi.fn<MechanicSourceGenerationProvider>(async () => ({
+      schemaVersion: "generated_mechanic_source_candidate/v1",
+      id: "generic_counter_source",
+      contractId: "generic_contract",
+      capabilityVersion: MECHANIC_CAPABILITY_VERSION,
+      callbacks: [
+        {
+          id: "install",
+          kind: "install",
+          source:
+            'const initialCount = config.initial_count; await capabilities.state.write("counter", initialCount);',
+        },
+        {
+          id: "activate",
+          kind: "logical_action",
+          source:
+            'if (typeof lifecycleInput === "string" && lifecycleInput === "activate") { await capabilities.state.write("counter", config.initial_count + 1); }',
+        },
+        {
+          id: "dispose",
+          kind: "dispose",
+          source: 'await capabilities.state.write("counter", 0);',
+        },
+      ],
+    }));
+    const { input } = createValidOrchestratorInput(provider);
+    const result = await generateBuildAndExecuteMechanicSource(input);
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        execution: {
+          callbackId: "install",
+          result: { outcome: "completed" },
+        },
+      },
+    });
+    expect(provider).toHaveBeenCalledOnce();
+  });
+
   it("revalidates the accepted contract before invoking the provider", async () => {
     foundationTrust.available = true;
     adapterTrust.authentic = true;
@@ -398,7 +441,7 @@ function createValidOrchestratorInput(
     realmAdapter,
     execution: {
       id: "execute_generic_source",
-      callbackId: "install_generic_source",
+      callbackKind: "install",
       config: { initial_count: 1 },
       bindings: [],
       capabilityHost: {

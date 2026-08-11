@@ -12,7 +12,10 @@ import {
   GENERATED_MECHANIC_SOURCE_CALLBACK_KINDS,
   GENERATED_MECHANIC_SOURCE_CANDIDATE_VERSION,
 } from "./mechanic-source-generation-service";
-import { sourceFacingCapabilitySignature } from "./mechanic-source-generation-signatures";
+import {
+  sourceFacingCapabilityReference,
+  sourceFacingCapabilitySignature,
+} from "./mechanic-source-generation-signatures";
 
 export type MechanicSourceGenerationGuidanceInput = {
   intent: MechanicIntent;
@@ -105,17 +108,22 @@ export function createMechanicSourceGenerationSystemPrompt({
   const acceptedSourceContract = createMechanicSourceGenerationContract(
     contract
   );
-  const capabilityDocumentation = grant.capabilities.map((capability) => ({
-    id: capability.id,
-    description: capability.description,
-    member: capability.authoring.member,
-    asyncSignature: sourceFacingCapabilitySignature(
-      capability.id,
-      capability.authoring.signature
-    ),
-    resourceCosts: capability.resourceCosts,
-    requiresOpaqueHandle: capability.requiresOpaqueHandle,
-  }));
+  const capabilityDocumentation = grant.capabilities.map((capability) => {
+    const reference = sourceFacingCapabilityReference(
+      capability.authoring.member
+    );
+    return {
+      id: capability.id,
+      description: capability.description,
+      expression: reference.expression,
+      asyncSignature: sourceFacingCapabilitySignature(
+        capability.id,
+        capability.authoring.signature
+      ),
+      resourceCosts: capability.resourceCosts,
+      requiresOpaqueHandle: capability.requiresOpaqueHandle,
+    };
+  });
   const sourceContextDocumentation = {
     config: contract.config,
     bindings: contract.bindings.map(
@@ -204,9 +212,9 @@ ${JSON.stringify(sourceCandidateSchemaDocumentation, null, 2)}
 Source rules:
 - Return callback bodies only in the strict candidate schema; do not return a persistent module, imports, exports, a game specification, or prose.
 - Declare exactly one callback for every lifecycle kind accepted by the contract, plus dispose. Include fixed_step only when the contract enables it. The trusted host owns lifecycle scheduling and fixed-step cadence; source candidates never choose timing metadata.
-- Callback bodies may reference only config, bindings, lifecycleInput, and the exact granted capability members documented above.
+- Callback bodies may reference only config, bindings, lifecycleInput, and the exact granted capabilities expressions documented above.
 - Input lifecycle payloads and emitted output payloads must match their contract-declared port schemas exactly.
-- Every granted capability must be used directly through its documented member, every capability call is asynchronous, and every call must be awaited.
+- Every granted capability must be called through its documented capabilities expression, every capability call is asynchronous, and every call must be awaited.
 - time.schedule callback IDs must name scheduled callbacks, and events.subscribe callback IDs must name gameplay_event callbacks.
 - Do not reference raw realm primitives, engine objects, ambient globals, dynamic evaluation, DOM, network, storage, workers, raw timers, ambient time, or ambient randomness.
 - Compose behavior from the supplied primitive capability surface. Do not rely on named profiles, source skeletons, algorithms, prompt branches, hidden helpers, handwritten fragments, or any material not supplied above.

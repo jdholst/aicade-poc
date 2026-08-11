@@ -50,7 +50,10 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(JSON.stringify(intent, null, 2));
     expect(prompt).toContain('"id": "generic_contract"');
     expect(prompt).toContain('"id": "state_write"');
-    expect(prompt).toContain('"member": "state.write"');
+    expect(prompt).toContain(
+      '"expression": "capabilities.state.write"'
+    );
+    expect(prompt).not.toContain('"member": "state.write"');
     expect(prompt).toContain(
       '"asyncSignature": "(stateId: MechanicStateId, value: JsonValue) => Promise<void>"'
     );
@@ -66,6 +69,9 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain("The trusted host owns lifecycle scheduling");
     expect(prompt).not.toContain('"fixedStep": {');
     expect(prompt).toContain("Return one candidate Generated Mechanic Source");
+    expect(prompt).toContain(
+      "Every granted capability must be called through its documented capabilities expression"
+    );
     expect(prompt).not.toContain("EVALUATOR_ONLY_SENTINEL");
     expect(prompt).not.toContain('"scenarios"');
     expect(prompt).not.toContain("install_value");
