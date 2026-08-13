@@ -147,9 +147,13 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
     capabilityVersion: MECHANIC_CAPABILITY_VERSION,
     behavior: {
       summary:
-        "Apply deterministic horizontal motion to the bound non-player probe and count fixed simulation steps.",
-      triggers: ["fixed_step"],
-      outcomes: ["probe_velocity_changed", "step_count_incremented"],
+        "Initialize deterministic horizontal motion on the bound non-player probe while leaving player actions unchanged.",
+      triggers: ["install", "logical_action"],
+      outcomes: [
+        "probe_velocity_initialized",
+        "private_state_initialized",
+        "player_action_preserved",
+      ],
     },
     config: {
       kind: "object",
@@ -176,12 +180,12 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
       },
     ],
     lifecycle: {
-      callbacks: ["install"],
-      fixedStep: true,
+      callbacks: ["install", "logical_action"],
+      fixedStep: false,
       dispose: true,
     },
     ports: [],
-    capabilities: ["state_read", "state_write", "object_motion_write"],
+    capabilities: ["state_write", "object_motion_write"],
     resourceExpectations: {
       maximumOwnedObjects: 0,
       maximumOperationsPerTick: 8,
@@ -204,12 +208,12 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
             value: CONFIG.initial_count,
           },
         ],
-        steps: [{ kind: "advance_time", milliseconds: 16 }],
+        steps: [{ kind: "dispatch_action", actionId: "move" }],
         observations: [
           {
             kind: "state_equals",
             stateId: "drift_step_count",
-            value: 1,
+            value: CONFIG.initial_count,
           },
           {
             kind: "binding_property",
@@ -238,35 +242,30 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
     intentId: INTENT_ID,
     capabilityVersion: MECHANIC_CAPABILITY_VERSION,
     grant: grant.data,
-    usedCapabilities: ["state_read", "state_write", "object_motion_write"],
+    usedCapabilities: ["state_write", "object_motion_write"],
     callbacks: [
       {
         id: "install_generated_player_drift",
         kind: "install",
-        sourceTypeScript:
-          'await capabilities.state.write("drift_step_count", config.initial_count); return { installed: true };',
-        normalizedJavaScript:
-          'const __sparklineGeneratedMechanicCallback = async () => { await capabilities.state.write("drift_step_count", config.initial_count); return { installed: true }; };',
-      },
-      {
-        id: "fixed_step_generated_player_drift",
-        kind: "fixed_step",
         sourceTypeScript: [
-          'const currentCount = await capabilities.state.read("drift_step_count");',
-          "const nextCount = typeof currentCount === \"number\" ? currentCount + 1 : config.initial_count + 1;",
-          'await capabilities.state.write("drift_step_count", nextCount);',
+          'await capabilities.state.write("drift_step_count", config.initial_count);',
           "await capabilities.objects.writeMotion(bindings.actor, { velocity: { x: config.drift_velocity_x, y: 0 } });",
-          "return { nextCount };",
+          "return { installed: true };",
         ].join(" "),
         normalizedJavaScript: [
           "const __sparklineGeneratedMechanicCallback = async () => {",
-          'const currentCount = await capabilities.state.read("drift_step_count");',
-          "const nextCount = typeof currentCount === \"number\" ? currentCount + 1 : config.initial_count + 1;",
-          'await capabilities.state.write("drift_step_count", nextCount);',
+          'await capabilities.state.write("drift_step_count", config.initial_count);',
           "await capabilities.objects.writeMotion(bindings.actor, { velocity: { x: config.drift_velocity_x, y: 0 } });",
-          "return { nextCount };",
+          "return { installed: true };",
           "};",
         ].join(" "),
+      },
+      {
+        id: "logical_action_generated_player_drift",
+        kind: "logical_action",
+        sourceTypeScript: "return null;",
+        normalizedJavaScript:
+          "const __sparklineGeneratedMechanicCallback = async () => null;",
       },
       {
         id: "dispose_generated_player_drift",
@@ -292,6 +291,7 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
     versionId: EXTENSION_VERSION_ID,
   });
   const referenceCatalog = {
+    action: gameSpec.controls.map(({ action }) => action),
     asset: gameSpec.assets.map(({ id }) => id),
     entity: gameSpec.entities.map(({ id }) => id),
     objective: gameSpec.objectives.map(({ id }) => id),

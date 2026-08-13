@@ -8,6 +8,13 @@ import {
   hasExactAcceptedArtifactScopedRepairLineage,
   prepareRestoredGeneratedMechanicProject,
 } from "@/game-spec";
+import {
+  validateGeneratedMechanicContract,
+} from "@/game-spec/mechanics/generated-mechanic-contract";
+import {
+  PHASE_9_GENERATION_CONSTRAINT_SET,
+} from "@/game-spec/mechanics/mechanic-generation-constraints";
+import { PHASE_9_MECHANIC_RESOURCE_BUDGET } from "@/runtime/mechanics/phase-9-mechanic-resource-policy";
 
 import { createGeneratedMechanicProjectFixture } from "./generated-mechanic-project-fixtures";
 
@@ -17,6 +24,17 @@ describe("generated mechanic project fixtures", () => {
     const parsed = gamePackSchema.safeParse(fixture.gamePack);
 
     expect(parsed.success).toBe(true);
+    expect(
+      validateGeneratedMechanicContract({
+        input: fixture.artifact.contract,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+        referenceCatalog: fixture.artifact.referenceCatalog,
+        resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
+      })
+    ).toEqual({
+      success: true,
+      data: fixture.artifact.contract,
+    });
     expect(
       prepareRestoredGeneratedMechanicProject({
         gamePack: fixture.gamePack,
@@ -59,7 +77,8 @@ describe("generated mechanic project fixtures", () => {
         versionId: artifact.versionId,
       })
     );
-    expect(artifact.runtimePolicy.fixedStepIntervalMilliseconds).toBe(16);
+    expect(artifact.runtimePolicy.fixedStepIntervalMilliseconds).toBeNull();
+    expect(artifact.contract.lifecycle.fixedStep).toBe(false);
     expect(motionProbe).toEqual({
       id: "entity_generated_motion_probe",
       name: "Generated Motion Probe",
@@ -122,15 +141,24 @@ describe("generated mechanic project fixtures", () => {
       })
     ).toBe(true);
 
-    const fixedStep = artifact.sourceArtifact.callbacks.find(
-      ({ kind }) => kind === "fixed_step"
+    expect(artifact.sourceArtifact.callbacks.map(({ kind }) => kind)).toEqual([
+      "install",
+      "logical_action",
+      "dispose",
+    ]);
+    const install = artifact.sourceArtifact.callbacks.find(
+      ({ kind }) => kind === "install"
     );
-    expect(fixedStep?.sourceTypeScript).toContain(
+    expect(install?.sourceTypeScript).toContain(
       'await capabilities.objects.writeMotion(bindings.actor'
     );
-    expect(fixedStep?.sourceTypeScript).toContain(
-      'await capabilities.state.write("drift_step_count", nextCount)'
+    expect(install?.sourceTypeScript).toContain(
+      'await capabilities.state.write("drift_step_count", config.initial_count)'
     );
+    const logicalAction = artifact.sourceArtifact.callbacks.find(
+      ({ kind }) => kind === "logical_action"
+    );
+    expect(logicalAction?.sourceTypeScript).toBe("return null;");
   });
 
   it("rejects a durable accepted artifact that the persisted host profile cannot restore", () => {
