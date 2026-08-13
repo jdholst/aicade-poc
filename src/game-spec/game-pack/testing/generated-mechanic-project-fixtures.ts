@@ -50,6 +50,7 @@ const BUILD_ID = "build_generated_player_drift_v1";
 const CHECKPOINT_ID = "checkpoint_generated_player_drift_v1";
 const ACTIVATION_EVIDENCE_ID =
   "evidence_generated_player_drift_activation";
+const MOTION_PROBE_ENTITY_ID = "entity_generated_motion_probe";
 const CONFIG = Object.freeze({
   drift_velocity_x: 24,
   initial_count: 0,
@@ -59,7 +60,7 @@ const BINDINGS = Object.freeze([
     id: "actor",
     referenceKind: "entity",
     cardinality: "one" as const,
-    objectIds: Object.freeze(["entity_player"]),
+    objectIds: Object.freeze([MOTION_PROBE_ENTITY_ID]),
   }),
 ]);
 
@@ -77,15 +78,59 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
   const gameSpec = parseTopDownGameSpec({
     ...crystalSpecChaseGameSpecFixtureInput,
     id: GAME_SPEC_ID,
-    title: "Generated Player Drift",
+    title: "Generated Motion Probe",
     currentIntentSummary:
-      "Drift the player at a fixed velocity while counting deterministic simulation steps.",
+      "Move a dedicated non-player probe at a fixed velocity while preserving built-in player input.",
+    template: {
+      ...crystalSpecChaseGameSpecFixtureInput.template,
+      config: {
+        scenes: crystalSpecChaseGameSpecFixtureInput.template.config.scenes.map(
+          (scene) => ({
+            ...scene,
+            layout: {
+              ...scene.layout,
+              obstacles: scene.layout.obstacles.filter(
+                ({ id }) => id !== "obstacle_crate"
+              ),
+              spawnZones: scene.layout.spawnZones.map((spawnZone) =>
+                spawnZone.id === "spawn_hazard"
+                  ? {
+                      ...spawnZone,
+                      entityIds: [MOTION_PROBE_ENTITY_ID],
+                    }
+                  : spawnZone
+              ),
+            },
+          })
+        ),
+      },
+    },
+    entities: crystalSpecChaseGameSpecFixtureInput.entities.map((entity) =>
+      entity.id === "entity_hazard"
+        ? {
+            ...entity,
+            id: MOTION_PROBE_ENTITY_ID,
+            name: "Generated Motion Probe",
+          }
+        : entity
+    ),
     mechanics: [
-      ...crystalSpecChaseGameSpecFixtureInput.mechanics,
+      ...crystalSpecChaseGameSpecFixtureInput.mechanics.map((mechanic) =>
+        mechanic.type === "hazard_contact"
+          ? {
+              ...mechanic,
+              entityIds: mechanic.entityIds.map((entityId) =>
+                entityId === "entity_hazard"
+                  ? MOTION_PROBE_ENTITY_ID
+                  : entityId
+              ),
+            }
+          : mechanic
+      ),
       {
         id: MECHANIC_ID,
         type: MECHANIC_TYPE,
-        entityIds: ["entity_player"],
+        entityIds: [MOTION_PROBE_ENTITY_ID],
         sceneIds: ["scene_arena"],
         config: CONFIG,
       },
@@ -102,9 +147,9 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
     capabilityVersion: MECHANIC_CAPABILITY_VERSION,
     behavior: {
       summary:
-        "Apply a deterministic horizontal drift to the bound player and count fixed simulation steps.",
+        "Apply deterministic horizontal motion to the bound non-player probe and count fixed simulation steps.",
       triggers: ["fixed_step"],
-      outcomes: ["player_velocity_changed", "step_count_incremented"],
+      outcomes: ["probe_velocity_changed", "step_count_incremented"],
     },
     config: {
       kind: "object",
@@ -345,7 +390,7 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
     completedAt: CREATED_AT,
     durationMs: 9000,
     request: {
-      summary: "Generate a generic player drift and counter mechanic.",
+      summary: "Generate a generic non-player motion and counter mechanic.",
     },
     runtimeKind: "phaser",
     templateId: gameSpec.template.id,
@@ -360,7 +405,7 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
         model: "fixture_model",
         taskRoute: "generated_mechanic_pipeline",
         requestSummary:
-          "Generate a deterministic horizontal player drift with a private step counter.",
+          "Generate deterministic horizontal probe motion with a private step counter.",
         startedAt: "2026-08-11T11:59:51.000Z",
         completedAt: CREATED_AT,
         durationMs: 9000,
@@ -368,7 +413,7 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
         candidate: {
           kind: "validated_spec",
           gameSpecId: gameSpec.id,
-          summary: "Compiled player-drift mechanic accepted.",
+          summary: "Compiled non-player motion mechanic accepted.",
         },
       },
     ],
@@ -407,7 +452,7 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
   const gamePack = parseGamePack({
     schemaVersion: "game-pack/v1",
     id: GAME_PACK_ID,
-    title: "Generated Player Drift",
+    title: "Generated Motion Probe",
     createdAt: CREATED_AT,
     updatedAt: ACCEPTED_AT,
     runtimeKind: "phaser",
@@ -434,9 +479,9 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
       {
         id: CHECKPOINT_ID,
         createdAt: ACCEPTED_AT,
-        label: "Generated player drift",
+        label: "Generated motion probe",
         summary:
-          "Accepted deterministic player-drift mechanic and private step counter.",
+          "Accepted deterministic non-player motion mechanic and private step counter.",
         gameSpecId: gameSpec.id,
         buildId: BUILD_ID,
         validationEvidenceIds: [ACTIVATION_EVIDENCE_ID],
@@ -451,7 +496,7 @@ export function createGeneratedMechanicProjectFixture(): GeneratedMechanicProjec
         status: "passed",
         durationMs: 1,
         message:
-          "Trusted template activated the exact generated player-drift dependency.",
+          "Trusted template activated the exact generated non-player motion dependency.",
         evidence: {
           acceptedAt: ACCEPTED_AT,
           artifactId: artifact.id,

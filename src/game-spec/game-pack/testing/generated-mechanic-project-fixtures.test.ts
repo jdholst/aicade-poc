@@ -12,7 +12,7 @@ import {
 import { createGeneratedMechanicProjectFixture } from "./generated-mechanic-project-fixtures";
 
 describe("generated mechanic project fixtures", () => {
-  it("builds one exact schema-valid and restorable player-drift project", () => {
+  it("builds one exact schema-valid project that moves a non-player probe", () => {
     const fixture = createGeneratedMechanicProjectFixture();
     const parsed = gamePackSchema.safeParse(fixture.gamePack);
 
@@ -31,6 +31,18 @@ describe("generated mechanic project fixtures", () => {
     });
 
     const artifact = fixture.artifact;
+    const generatedMechanic = fixture.gamePack.gameSpec.mechanics.find(
+      ({ id }) => id === artifact.mechanicId
+    );
+    const playerMovement = fixture.gamePack.gameSpec.mechanics.find(
+      ({ type }) => type === "player_movement"
+    );
+    const motionProbe = fixture.gamePack.gameSpec.entities.find(
+      ({ id }) => id === "entity_generated_motion_probe"
+    );
+    const qaArenaLayout = fixture.gamePack.gameSpec.template.config.scenes.find(
+      ({ id }) => id === "scene_arena"
+    )?.layout;
     const currentCheckpoint = fixture.gamePack.checkpoints.find(
       ({ id }) => id === fixture.gamePack.currentCheckpointId
     );
@@ -48,6 +60,26 @@ describe("generated mechanic project fixtures", () => {
       })
     );
     expect(artifact.runtimePolicy.fixedStepIntervalMilliseconds).toBe(16);
+    expect(motionProbe).toEqual({
+      id: "entity_generated_motion_probe",
+      name: "Generated Motion Probe",
+      role: "hazard",
+    });
+    expect(artifact.bindings).toEqual([
+      {
+        cardinality: "one",
+        id: "actor",
+        objectIds: ["entity_generated_motion_probe"],
+        referenceKind: "entity",
+      },
+    ]);
+    expect(generatedMechanic?.entityIds).toEqual([
+      "entity_generated_motion_probe",
+    ]);
+    expect(playerMovement?.entityIds).toEqual(["entity_player"]);
+    expect(qaArenaLayout?.obstacles.map(({ id }) => id)).not.toContain(
+      "obstacle_crate"
+    );
     expect(currentCheckpoint).toMatchObject({
       id: artifact.checkpointId,
       buildId: artifact.buildId,

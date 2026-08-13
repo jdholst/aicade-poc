@@ -44,9 +44,9 @@ describe("createTrustedGeneratedMechanicPhaserRoute", () => {
         dependency: harness.fixture.dependency,
         objects: [
           expect.objectContaining({
-            id: "entity_player",
-            kind: "player",
-            object: harness.playerHandle,
+            id: "entity_generated_motion_probe",
+            kind: "hazard",
+            object: harness.motionProbeHandle,
           }),
         ],
       })
@@ -106,11 +106,13 @@ describe("createTrustedGeneratedMechanicPhaserRoute", () => {
   });
 
   it("fails a missing accepted entity handle before session creation or game-ready", async () => {
-    const harness = createHarness({ missingPlayerHandle: true });
+    const harness = createHarness({ missingAcceptedEntityHandle: true });
 
     const route = createTrustedGeneratedMechanicPhaserRoute(harness.input);
 
-    await expect(route.ready).rejects.toThrow(/entity_player.*handle/i);
+    await expect(route.ready).rejects.toThrow(
+      /entity_generated_motion_probe.*handle/i
+    );
     expect(harness.createSession).not.toHaveBeenCalled();
     expect(harness.runtimeEvents).toContainEqual(
       expect.objectContaining({ type: "game-error" })
@@ -175,7 +177,7 @@ describe("createTrustedGeneratedMechanicPhaserRoute", () => {
 
 type HarnessOptions = Readonly<{
   foreignRuntimeIdentity?: boolean;
-  missingPlayerHandle?: boolean;
+  missingAcceptedEntityHandle?: boolean;
   mutateTemplate?: (
     template: ReturnType<typeof createTopDownPhaserTemplate>
   ) => ReturnType<typeof createTopDownPhaserTemplate>;
@@ -194,9 +196,9 @@ function createHarness(options: HarnessOptions = {}) {
   const claimedControllers: SesWorkerMechanicExecutionRealmController[] = [];
   const command: RuntimeCommand = { type: "game-pause", paused: true };
   const commandEvent = new MessageEvent("message", { data: command });
-  const playerHandle: TrustedTopDownPhaserMechanicObject = {
-    x: 160,
-    y: 270,
+  const motionProbeHandle: TrustedTopDownPhaserMechanicObject = {
+    x: 500,
+    y: 120,
     active: true,
     setPosition: vi.fn(),
     body: {
@@ -287,8 +289,9 @@ function createHarness(options: HarnessOptions = {}) {
           getEntityDefinition: (entityId: string) =>
             template.gameSpec.entities.find(({ id }) => id === entityId) ?? null,
           getEntityHandle: (entityId: string) =>
-            !options.missingPlayerHandle && entityId === "entity_player"
-              ? playerHandle
+            !options.missingAcceptedEntityHandle &&
+            entityId === "entity_generated_motion_probe"
+              ? motionProbeHandle
               : null,
         });
         retainedSession = requireRecord(retained);
@@ -331,7 +334,7 @@ function createHarness(options: HarnessOptions = {}) {
       return retainedSession;
     },
     loadedPaths,
-    playerHandle,
+    motionProbeHandle,
     runtimeEvents,
     runtimeGlobal,
     session,
