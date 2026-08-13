@@ -6,7 +6,7 @@ import type { JsonValue, StableId } from "@/game-spec/game-spec-schema";
 import {
   GENERATED_MECHANIC_SOURCE_ARTIFACT_VERSION,
   type GeneratedMechanicSourceArtifact,
-} from "@/service/mechanic-source-generation";
+} from "@/service/mechanic-source-generation/mechanic-source-generation-service";
 
 export const GENERATED_MECHANIC_EVALUATION_VERSION =
   "generated_mechanic_evaluation/v1";
@@ -117,10 +117,35 @@ export type GeneratedMechanicEvaluationResult = Readonly<{
         code: "nondeterministic_replay";
         message: string;
       }>;
-      replayScenarios?: readonly GeneratedMechanicScenarioEvaluationEvidence[];
+      replayScenarios: readonly GeneratedMechanicScenarioEvaluationEvidence[];
     }>;
   }>;
 }>;
+
+const issuedEvaluationReceipts = new WeakMap<
+  GeneratedMechanicEvaluationResult,
+  Readonly<{
+    contract: GeneratedMechanicContract;
+    sourceArtifact: GeneratedMechanicSourceArtifact;
+  }>
+>();
+
+export function isGeneratedMechanicEvaluationResultAuthentic({
+  contract,
+  evaluation,
+  sourceArtifact,
+}: Readonly<{
+  contract: GeneratedMechanicContract;
+  evaluation: GeneratedMechanicEvaluationResult;
+  sourceArtifact: GeneratedMechanicSourceArtifact;
+}>): boolean {
+  const receipt = issuedEvaluationReceipts.get(evaluation);
+  return (
+    receipt !== undefined &&
+    jsonEqual(receipt.contract, contract) &&
+    jsonEqual(receipt.sourceArtifact, sourceArtifact)
+  );
+}
 
 export type EvaluateGeneratedMechanicArtifactInput = Readonly<{
   fixtureId: StableId;
@@ -149,15 +174,19 @@ export async function evaluateGeneratedMechanicArtifact({
     admittedExternalObservations
   );
   if (admissionIssues.length > 0) {
-    return snapshotJson({
-      outcome: "failed",
-      evidence: {
-        schemaVersion: GENERATED_MECHANIC_EVALUATION_VERSION,
-        fixtureId,
-        contractId: admittedContract.id,
-        sourceArtifactId: admittedArtifact.id,
-        scenarios: [],
-        issues: admissionIssues,
+    return issueGeneratedMechanicEvaluationResult({
+      contract: admittedContract,
+      sourceArtifact: admittedArtifact,
+      result: {
+        outcome: "failed",
+        evidence: {
+          schemaVersion: GENERATED_MECHANIC_EVALUATION_VERSION,
+          fixtureId,
+          contractId: admittedContract.id,
+          sourceArtifactId: admittedArtifact.id,
+          scenarios: [],
+          issues: admissionIssues,
+        },
       },
     });
   }
@@ -180,34 +209,55 @@ export async function evaluateGeneratedMechanicArtifact({
   });
   const replayMatched = jsonEqual(firstScenarios, replayScenarios);
 
-  return snapshotJson({
-    outcome:
-      replayMatched &&
-      firstScenarios.every((scenario) => scenario.outcome === "passed")
-        ? "passed"
-        : "failed",
-    evidence: {
-      schemaVersion: GENERATED_MECHANIC_EVALUATION_VERSION,
-      fixtureId,
-      contractId: admittedContract.id,
-      sourceArtifactId: admittedArtifact.id,
-      scenarios: firstScenarios,
-      issues: [],
-      replay: {
-        matched: replayMatched,
-        ...(!replayMatched
-          ? {
-              issue: {
-                code: "nondeterministic_replay" as const,
-                message:
-                  "Identical mechanic evaluation inputs produced different observable evidence.",
-              },
-              replayScenarios,
-            }
-          : {}),
+  return issueGeneratedMechanicEvaluationResult({
+    contract: admittedContract,
+    sourceArtifact: admittedArtifact,
+    result: {
+      outcome:
+        replayMatched &&
+        firstScenarios.every((scenario) => scenario.outcome === "passed")
+          ? "passed"
+          : "failed",
+      evidence: {
+        schemaVersion: GENERATED_MECHANIC_EVALUATION_VERSION,
+        fixtureId,
+        contractId: admittedContract.id,
+        sourceArtifactId: admittedArtifact.id,
+        scenarios: firstScenarios,
+        issues: [],
+        replay: {
+          matched: replayMatched,
+          replayScenarios,
+          ...(!replayMatched
+            ? {
+                issue: {
+                  code: "nondeterministic_replay" as const,
+                  message:
+                    "Identical mechanic evaluation inputs produced different observable evidence.",
+                },
+              }
+            : {}),
+        },
       },
     },
   });
+}
+
+function issueGeneratedMechanicEvaluationResult({
+  contract,
+  result,
+  sourceArtifact,
+}: Readonly<{
+  contract: GeneratedMechanicContract;
+  result: GeneratedMechanicEvaluationResult;
+  sourceArtifact: GeneratedMechanicSourceArtifact;
+}>): GeneratedMechanicEvaluationResult {
+  const receipt = snapshotJson(result);
+  issuedEvaluationReceipts.set(receipt, {
+    contract: snapshotJson(contract),
+    sourceArtifact: snapshotJson(sourceArtifact),
+  });
+  return receipt;
 }
 
 function externalObservationAdmissionIssues(

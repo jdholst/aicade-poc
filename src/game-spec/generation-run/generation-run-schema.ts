@@ -152,6 +152,7 @@ export const generationRunRelationshipsSchema = z
   .object({
     gamePackId: stableIdSchema.optional(),
     gameSpecId: stableIdSchema.optional(),
+    acceptedGeneratedMechanicArtifactIds: z.array(stableIdSchema).optional(),
     buildIds: z.array(stableIdSchema).optional(),
     checkpointIds: z.array(stableIdSchema).optional(),
     validationEvidenceIds: z.array(stableIdSchema).optional(),

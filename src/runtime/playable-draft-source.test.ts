@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
+import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
 
 import { createPlayableDraftSource } from "./playable-draft-source";
@@ -162,6 +163,57 @@ describe("createPlayableDraftSource", () => {
         gameSpec: topDownPhaserTemplate.gameSpec,
         source: "restored-game-pack",
       },
+    });
+  });
+
+  it("restores the exact accepted generated mechanic as an out-of-band project dependency", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+
+    const source = createPlayableDraftSource({
+      generationSource: "phaser-ai",
+      restoredGamePack: fixture.gamePack,
+      runtimeMode: "phaser",
+    });
+
+    expect(source).toMatchObject({
+      type: "phaser",
+      source: "restored-game-pack",
+      generatedMechanicProject: {
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+      },
+      sourceKey: expect.stringContaining(fixture.artifact.id),
+      template: {
+        gameSpec: fixture.dependency.finalGameSpec.gameSpec,
+      },
+    });
+  });
+
+  it("does not let an accepted sidecar admit another unknown mechanic type", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const restoredGamePack = {
+      ...fixture.gamePack,
+      gameSpec: {
+        ...fixture.gamePack.gameSpec,
+        mechanics: [
+          ...fixture.gamePack.gameSpec.mechanics,
+          {
+            id: "mechanic_unaccepted_unknown",
+            type: "unaccepted_unknown",
+            config: {},
+          },
+        ],
+      },
+    };
+
+    expect(
+      createPlayableDraftSource({
+        generationSource: "phaser-ai",
+        restoredGamePack,
+        runtimeMode: "phaser",
+      })
+    ).toMatchObject({
+      type: "blocked",
     });
   });
 

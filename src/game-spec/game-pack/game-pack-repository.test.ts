@@ -75,6 +75,34 @@ describe("Game Pack repository", () => {
     await expect(repository.load(gamePack.id)).resolves.toEqual(nextGamePack);
   });
 
+  it("atomically swaps only the exact expected Game Pack snapshot", async () => {
+    const repository = createGamePackRepository(new MemoryGamePackStorage());
+    const original = createValidatedGamePackFixture();
+    const replacement = createValidatedGamePackFixture({
+      title: "Accepted generated mechanic",
+      updatedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
+    });
+    await repository.save(original);
+
+    await expect(
+      repository.compareAndSwap(original.id, original, replacement)
+    ).resolves.toBe(true);
+    await expect(repository.load(original.id)).resolves.toEqual(replacement);
+    await expect(
+      repository.compareAndSwap(original.id, original, null)
+    ).resolves.toBe(false);
+    await expect(repository.load(original.id)).resolves.toEqual(replacement);
+  });
+
+  it("deletes one persisted Game Pack through the repository boundary", async () => {
+    const repository = createGamePackRepository(new MemoryGamePackStorage());
+    const gamePack = createValidatedGamePackFixture();
+    await repository.save(gamePack);
+
+    await expect(repository.delete(gamePack.id)).resolves.toBeUndefined();
+    await expect(repository.load(gamePack.id)).resolves.toBeNull();
+  });
+
   it("preserves validation evidence, builds, checkpoints, failed attempts, and generation runs", async () => {
     const repository = createGamePackRepository(new MemoryGamePackStorage());
     const baseGamePack = createValidatedGamePackFixture();
@@ -214,9 +242,13 @@ describe("Game Pack repository", () => {
 
 class MemoryGamePackStorage implements GamePackStorageDriver {
   readonly records = new Map<string, StoredGamePackRecord>();
-  private readonly failOn?: "get" | "getAll" | "put";
+  private readonly failOn?: "delete" | "get" | "getAll" | "put";
 
-  constructor({ failOn }: { failOn?: "get" | "getAll" | "put" } = {}) {
+  constructor({
+    failOn,
+  }: {
+    failOn?: "delete" | "get" | "getAll" | "put";
+  } = {}) {
     this.failOn = failOn;
   }
 
@@ -244,6 +276,30 @@ class MemoryGamePackStorage implements GamePackStorageDriver {
     }
 
     return Array.from(this.records.values()).map(cloneRecord);
+  }
+
+  async compareAndSwap(
+    gamePackId: string,
+    expected: StoredGamePackRecord | null,
+    replacement: StoredGamePackRecord | null
+  ) {
+    const current = this.records.get(gamePackId) ?? null;
+    if (JSON.stringify(current) !== JSON.stringify(expected)) {
+      return false;
+    }
+    if (replacement) {
+      this.records.set(gamePackId, cloneRecord(replacement));
+    } else {
+      this.records.delete(gamePackId);
+    }
+    return true;
+  }
+
+  async delete(gamePackId: string) {
+    if (this.failOn === "delete") {
+      throw new Error("Injected delete failure.");
+    }
+    this.records.delete(gamePackId);
   }
 }
 

@@ -8,6 +8,11 @@ import {
   stableIdSchema,
 } from "../game-spec-schema";
 import { generationRunSchema } from "../generation-run/generation-run-schema";
+import { hasExactAcceptedArtifactScopedRepairLineage } from "../generation-run/artifact-scoped-mechanic-repair-receipt";
+import {
+  acceptedGeneratedMechanicArtifactSchema,
+  type AcceptedGeneratedMechanicArtifact,
+} from "../mechanics/generated-mechanic-project-artifact";
 
 const runtimeKindValues = ["canvas2d", "phaser"] as const satisfies readonly RuntimeKind[];
 
@@ -49,6 +54,7 @@ export const validationEvidenceSchema = z
     message: z.string().min(1).max(500).optional(),
     issues: z.array(validationIssueSchema).optional(),
     evidence: metadataSchema.optional(),
+    generatedMechanicArtifactIds: z.array(stableIdSchema).optional(),
   })
   .strict();
 
@@ -61,6 +67,7 @@ export const playableBuildSchema = z
     gameSpecId: stableIdSchema,
     checkpointId: stableIdSchema.optional(),
     validationEvidenceIds: z.array(stableIdSchema),
+    generatedMechanicArtifactIds: z.array(stableIdSchema).optional(),
     status: z.enum(["built", "validated", "failed"]),
     artifactMetadata: metadataSchema.optional(),
   })
@@ -75,6 +82,7 @@ export const versionCheckpointSchema = z
     gameSpecId: stableIdSchema,
     buildId: stableIdSchema.optional(),
     validationEvidenceIds: z.array(stableIdSchema),
+    generatedMechanicArtifactIds: z.array(stableIdSchema).optional(),
     restoredFromCheckpointId: stableIdSchema.optional(),
     metadata: metadataSchema.optional(),
   })
@@ -109,6 +117,9 @@ export const gamePackSchema = z
     validationEvidence: z.array(validationEvidenceSchema),
     failedAttempts: z.array(failedAttemptSchema),
     generationRuns: z.array(generationRunSchema),
+    acceptedGeneratedMechanicArtifacts: z
+      .array(acceptedGeneratedMechanicArtifactSchema)
+      .optional(),
     metadata: metadataSchema.optional(),
   })
   .strict()
@@ -123,6 +134,14 @@ export const gamePackSchema = z
     const failedAttemptIds = new Set(
       pack.failedAttempts.map((failedAttempt) => failedAttempt.id)
     );
+    const acceptedGeneratedMechanicArtifacts =
+      pack.acceptedGeneratedMechanicArtifacts ?? [];
+    const acceptedGeneratedMechanicArtifactIds = new Set(
+      acceptedGeneratedMechanicArtifacts.map((artifact) => artifact.id)
+    );
+    const generationRunsById = new Map(
+      pack.generationRuns.map((generationRun) => [generationRun.id, generationRun])
+    );
 
     addDuplicateIdIssues(
       pack.validationEvidence,
@@ -133,6 +152,11 @@ export const gamePackSchema = z
     addDuplicateIdIssues(pack.checkpoints, "checkpoints", ctx);
     addDuplicateIdIssues(pack.failedAttempts, "failedAttempts", ctx);
     addDuplicateIdIssues(pack.generationRuns, "generationRuns", ctx);
+    addDuplicateIdIssues(
+      acceptedGeneratedMechanicArtifacts,
+      "acceptedGeneratedMechanicArtifacts",
+      ctx
+    );
 
     if (
       pack.currentCheckpointId &&
@@ -166,6 +190,34 @@ export const gamePackSchema = z
         knownIds: validationEvidenceIds,
         message:
           "Build validationEvidenceIds must reference existing validation evidence.",
+      });
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: build.generatedMechanicArtifactIds ?? [],
+        pathPrefix: ["builds", buildIndex, "generatedMechanicArtifactIds"],
+        knownIds: acceptedGeneratedMechanicArtifactIds,
+        message:
+          "Build generatedMechanicArtifactIds must reference accepted generated mechanic artifacts.",
+      });
+      addDuplicateReferenceIdIssues({
+        ctx,
+        ids: build.generatedMechanicArtifactIds ?? [],
+        pathPrefix: ["builds", buildIndex, "generatedMechanicArtifactIds"],
+        message:
+          "Build generatedMechanicArtifactIds must identify each accepted artifact once.",
+      });
+      build.generatedMechanicArtifactIds?.forEach((artifactId) => {
+        const artifact = acceptedGeneratedMechanicArtifacts.find(
+          ({ id }) => id === artifactId
+        );
+        if (artifact && artifact.buildId !== build.id) {
+          addRelationshipIssue(ctx, {
+            path: ["builds", buildIndex, "generatedMechanicArtifactIds"],
+            message:
+              "Build generatedMechanicArtifactIds must link only artifacts whose buildId points back to this build.",
+          });
+        }
       });
     });
 
@@ -211,6 +263,55 @@ export const gamePackSchema = z
         message:
           "Checkpoint validationEvidenceIds must reference existing validation evidence.",
       });
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: checkpoint.generatedMechanicArtifactIds ?? [],
+        pathPrefix: [
+          "checkpoints",
+          checkpointIndex,
+          "generatedMechanicArtifactIds",
+        ],
+        knownIds: acceptedGeneratedMechanicArtifactIds,
+        message:
+          "Checkpoint generatedMechanicArtifactIds must reference accepted generated mechanic artifacts.",
+      });
+      addDuplicateReferenceIdIssues({
+        ctx,
+        ids: checkpoint.generatedMechanicArtifactIds ?? [],
+        pathPrefix: [
+          "checkpoints",
+          checkpointIndex,
+          "generatedMechanicArtifactIds",
+        ],
+        message:
+          "Checkpoint generatedMechanicArtifactIds must identify each accepted artifact once.",
+      });
+      checkpoint.generatedMechanicArtifactIds?.forEach((artifactId) => {
+        const artifact = acceptedGeneratedMechanicArtifacts.find(
+          ({ id }) => id === artifactId
+        );
+        const restoredSource = checkpoint.restoredFromCheckpointId
+          ? pack.checkpoints.find(
+              ({ id }) => id === checkpoint.restoredFromCheckpointId
+            )
+          : undefined;
+        if (
+          artifact &&
+          artifact.checkpointId !== checkpoint.id &&
+          !restoredSource?.generatedMechanicArtifactIds?.includes(artifact.id)
+        ) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "checkpoints",
+              checkpointIndex,
+              "generatedMechanicArtifactIds",
+            ],
+            message:
+              "Checkpoint generatedMechanicArtifactIds must link an artifact accepted on this checkpoint or inherited from the restored source checkpoint.",
+          });
+        }
+      });
     });
 
     pack.failedAttempts.forEach((failedAttempt, failedAttemptIndex) => {
@@ -246,11 +347,434 @@ export const gamePackSchema = z
       });
     });
 
+    pack.validationEvidence.forEach((evidence, evidenceIndex) => {
+      addMissingReferenceIssues({
+        ctx,
+        ids: evidence.generatedMechanicArtifactIds ?? [],
+        pathPrefix: [
+          "validationEvidence",
+          evidenceIndex,
+          "generatedMechanicArtifactIds",
+        ],
+        knownIds: acceptedGeneratedMechanicArtifactIds,
+        message:
+          "Validation evidence generatedMechanicArtifactIds must reference accepted generated mechanic artifacts.",
+      });
+      addDuplicateReferenceIdIssues({
+        ctx,
+        ids: evidence.generatedMechanicArtifactIds ?? [],
+        pathPrefix: [
+          "validationEvidence",
+          evidenceIndex,
+          "generatedMechanicArtifactIds",
+        ],
+        message:
+          "Validation evidence generatedMechanicArtifactIds must identify each accepted artifact once.",
+      });
+      evidence.generatedMechanicArtifactIds?.forEach((artifactId) => {
+        const artifact = acceptedGeneratedMechanicArtifacts.find(
+          ({ id }) => id === artifactId
+        );
+        if (artifact && !artifact.validationEvidenceIds.includes(evidence.id)) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "validationEvidence",
+              evidenceIndex,
+              "generatedMechanicArtifactIds",
+            ],
+            message:
+              "Validation evidence may link only accepted artifacts that point back to this evidence ID.",
+          });
+        }
+      });
+    });
+
+    acceptedGeneratedMechanicArtifacts.forEach((artifact, artifactIndex) => {
+      if (!jsonValuesEqual(artifact.finalGameSpec.gameSpec, pack.gameSpec)) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "finalGameSpec",
+            "gameSpec",
+          ],
+          message:
+            "Accepted generated mechanic artifact must retain the exact saved Final Game Spec snapshot.",
+        });
+      }
+      if (artifact.gameSpecId !== pack.gameSpec.id) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "gameSpecId",
+          ],
+          message:
+            "Accepted generated mechanic artifact gameSpecId must match the saved Game Spec ID.",
+        });
+      }
+      const mechanic = pack.gameSpec.mechanics.find(
+        ({ id }) => id === artifact.mechanicId
+      );
+      if (
+        !mechanic ||
+        mechanic.type !== artifact.mechanicType ||
+        !jsonValuesEqual(mechanic.config, artifact.config)
+      ) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "mechanicId",
+          ],
+          message:
+            "Accepted generated mechanic artifact must match the exact mechanic type and config in the saved Game Spec.",
+        });
+      }
+
+      const sourceGenerationRun = generationRunsById.get(
+        artifact.sourceGenerationRunId
+      );
+      if (!sourceGenerationRun) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "sourceGenerationRunId",
+          ],
+          message:
+            "Accepted generated mechanic artifact sourceGenerationRunId must reference a retained GenerationRun.",
+        });
+      } else {
+        if (
+          sourceGenerationRun.status !== "succeeded" ||
+          !sourceGenerationRun.mechanicIds?.includes(artifact.mechanicId) ||
+          !hasExactAcceptedArtifactScopedRepairLineage({
+            contractArtifactId: artifact.contract.id,
+            finalGameSpecArtifactId: artifact.finalGameSpecArtifactId,
+            generationRunId: sourceGenerationRun.id,
+            receipt: sourceGenerationRun.artifactScopedRepair,
+            sourceArtifactId: artifact.sourceArtifact.id,
+          })
+        ) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "acceptedGeneratedMechanicArtifacts",
+              artifactIndex,
+              "sourceGenerationRunId",
+            ],
+            message:
+              "Accepted generated mechanic artifact must come from the succeeded GenerationRun receipt for its exact mechanic and contract → source → Final Game Spec lineage.",
+          });
+        }
+        if (
+          !sourceGenerationRun.relationships?.acceptedGeneratedMechanicArtifactIds?.includes(
+            artifact.id
+          )
+        ) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              pack.generationRuns.indexOf(sourceGenerationRun),
+              "relationships",
+              "acceptedGeneratedMechanicArtifactIds",
+            ],
+            message:
+              "Accepted generated mechanic artifact must be linked from its source GenerationRun.",
+          });
+        }
+      }
+
+      const build = pack.builds.find(({ id }) => id === artifact.buildId);
+      const checkpoint = pack.checkpoints.find(
+        ({ id }) => id === artifact.checkpointId
+      );
+      if (!build) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "buildId",
+          ],
+          message:
+            "Accepted generated mechanic artifact buildId must reference an existing build.",
+        });
+      } else if (!build.generatedMechanicArtifactIds?.includes(artifact.id)) {
+        addRelationshipIssue(ctx, {
+          path: ["builds", pack.builds.indexOf(build), "generatedMechanicArtifactIds"],
+          message:
+            "Accepted generated mechanic artifact must be linked from its Playable Build.",
+        });
+      } else if (build.status !== "validated") {
+        addRelationshipIssue(ctx, {
+          path: ["builds", pack.builds.indexOf(build), "status"],
+          message:
+            "Accepted generated mechanic artifact must reference a validated Playable Build.",
+        });
+      }
+      if (!checkpoint) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "checkpointId",
+          ],
+          message:
+            "Accepted generated mechanic artifact checkpointId must reference an existing checkpoint.",
+        });
+      } else if (
+        !checkpoint.generatedMechanicArtifactIds?.includes(artifact.id)
+      ) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "checkpoints",
+            pack.checkpoints.indexOf(checkpoint),
+            "generatedMechanicArtifactIds",
+          ],
+          message:
+            "Accepted generated mechanic artifact must be linked from its Version Checkpoint.",
+        });
+      }
+      if (build && checkpoint && checkpoint.buildId !== build.id) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "checkpointId",
+          ],
+          message:
+            "Accepted generated mechanic artifact checkpoint must reference its exact Playable Build.",
+        });
+      }
+
+      const artifactEvidence = artifact.validationEvidenceIds.flatMap(
+        (evidenceId) => {
+          const evidence = pack.validationEvidence.find(
+            ({ id }) => id === evidenceId
+          );
+          return evidence ? [evidence] : [];
+        }
+      );
+      if (artifactEvidence.some(({ status }) => status !== "passed")) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "validationEvidenceIds",
+          ],
+          message:
+            "Accepted generated mechanic artifact may reference only passed validation evidence.",
+        });
+      }
+      const activationEvidence = artifactEvidence.find(
+        ({ checkId }) => checkId === "generated_mechanic_activation"
+      );
+      if (
+        !activationEvidence ||
+        activationEvidence.evidence?.artifactId !== artifact.id ||
+        activationEvidence.evidence?.extensionId !== artifact.extensionId ||
+        activationEvidence.evidence?.extensionVersionId !== artifact.versionId ||
+        activationEvidence.evidence?.finalGameSpecArtifactId !==
+          artifact.finalGameSpecArtifactId ||
+        activationEvidence.evidence?.mechanicId !== artifact.mechanicId ||
+        activationEvidence.evidence?.sourceArtifactId !==
+          artifact.sourceArtifact.id ||
+        activationEvidence.evidence?.capabilityVersion !==
+          artifact.contract.capabilityVersion ||
+        !jsonValuesEqual(
+          activationEvidence.evidence?.runtimePolicy,
+          artifact.runtimePolicy
+        )
+      ) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "acceptedGeneratedMechanicArtifacts",
+            artifactIndex,
+            "validationEvidenceIds",
+          ],
+          message:
+            "Accepted generated mechanic artifact requires exact passed runtime activation evidence.",
+        });
+      }
+      if (
+        build &&
+        artifact.validationEvidenceIds.some(
+          (evidenceId) => !build.validationEvidenceIds.includes(evidenceId)
+        )
+      ) {
+        addRelationshipIssue(ctx, {
+          path: ["builds", pack.builds.indexOf(build), "validationEvidenceIds"],
+          message:
+            "Accepted generated mechanic artifact evidence must belong to its exact Playable Build.",
+        });
+      }
+      if (
+        checkpoint &&
+        artifact.validationEvidenceIds.some(
+          (evidenceId) => !checkpoint.validationEvidenceIds.includes(evidenceId)
+        )
+      ) {
+        addRelationshipIssue(ctx, {
+          path: [
+            "checkpoints",
+            pack.checkpoints.indexOf(checkpoint),
+            "validationEvidenceIds",
+          ],
+          message:
+            "Accepted generated mechanic artifact evidence must belong to its exact Version Checkpoint.",
+        });
+      }
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: artifact.validationEvidenceIds,
+        pathPrefix: [
+          "acceptedGeneratedMechanicArtifacts",
+          artifactIndex,
+          "validationEvidenceIds",
+        ],
+        knownIds: validationEvidenceIds,
+        message:
+          "Accepted generated mechanic artifact validationEvidenceIds must reference existing validation evidence.",
+      });
+      addDuplicateReferenceIdIssues({
+        ctx,
+        ids: artifact.validationEvidenceIds,
+        pathPrefix: [
+          "acceptedGeneratedMechanicArtifacts",
+          artifactIndex,
+          "validationEvidenceIds",
+        ],
+        message:
+          "Accepted generated mechanic artifact validationEvidenceIds must identify each evidence record once.",
+      });
+      artifact.validationEvidenceIds.forEach((evidenceId) => {
+        const evidence = pack.validationEvidence.find(
+          ({ id }) => id === evidenceId
+        );
+        if (
+          evidence &&
+          !evidence.generatedMechanicArtifactIds?.includes(artifact.id)
+        ) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "validationEvidence",
+              pack.validationEvidence.indexOf(evidence),
+              "generatedMechanicArtifactIds",
+            ],
+            message:
+              "Accepted generated mechanic artifact evidence must link the exact artifact ID.",
+          });
+        }
+      });
+    });
+
     pack.generationRuns.forEach((generationRun, generationRunIndex) => {
       const relationships = generationRun.relationships;
 
       if (!relationships) {
         return;
+      }
+
+      const acceptedArtifactIds =
+        relationships.acceptedGeneratedMechanicArtifactIds ?? [];
+      if (acceptedArtifactIds.length > 0) {
+        if (relationships.gamePackId !== pack.id) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              generationRunIndex,
+              "relationships",
+              "gamePackId",
+            ],
+            message:
+              "A GenerationRun with accepted generated mechanic artifacts must identify this exact Game Pack.",
+          });
+        }
+        if (relationships.gameSpecId !== pack.gameSpec.id) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              generationRunIndex,
+              "relationships",
+              "gameSpecId",
+            ],
+            message:
+              "A GenerationRun with accepted generated mechanic artifacts must identify this exact Game Spec.",
+          });
+        }
+
+        const linkedArtifacts = acceptedArtifactIds.flatMap((artifactId) => {
+          const artifact = acceptedGeneratedMechanicArtifacts.find(
+            ({ id }) => id === artifactId
+          );
+          return artifact ? [artifact] : [];
+        });
+        const expectedBuildIds = linkedArtifacts.map(({ buildId }) => buildId);
+        const expectedCheckpointIds = linkedArtifacts.map(
+          ({ checkpointId }) => checkpointId
+        );
+        const expectedEvidenceIds = linkedArtifacts.flatMap(
+          ({ validationEvidenceIds: ids }) => ids
+        );
+        if (!sameReferenceIds(relationships.buildIds ?? [], expectedBuildIds)) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              generationRunIndex,
+              "relationships",
+              "buildIds",
+            ],
+            message:
+              "A GenerationRun with accepted generated mechanic artifacts may link only their exact Playable Builds.",
+          });
+        }
+        if (
+          !sameReferenceIds(
+            relationships.checkpointIds ?? [],
+            expectedCheckpointIds
+          )
+        ) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              generationRunIndex,
+              "relationships",
+              "checkpointIds",
+            ],
+            message:
+              "A GenerationRun with accepted generated mechanic artifacts may link only their exact Version Checkpoints.",
+          });
+        }
+        if (
+          !sameReferenceIds(
+            relationships.validationEvidenceIds ?? [],
+            expectedEvidenceIds
+          )
+        ) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              generationRunIndex,
+              "relationships",
+              "validationEvidenceIds",
+            ],
+            message:
+              "A GenerationRun with accepted generated mechanic artifacts may link only their exact validation evidence.",
+          });
+        }
+        if ((relationships.failedAttemptIds?.length ?? 0) > 0) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              generationRunIndex,
+              "relationships",
+              "failedAttemptIds",
+            ],
+            message:
+              "Accepted generated mechanic lineage must not claim unrelated failed attempts.",
+          });
+        }
       }
 
       if (relationships.gamePackId && relationships.gamePackId !== pack.id) {
@@ -292,6 +816,49 @@ export const gamePackSchema = z
         ],
         knownIds: buildIds,
         message: "GenerationRun buildIds must reference existing builds.",
+      });
+
+      addMissingReferenceIssues({
+        ctx,
+        ids: acceptedArtifactIds,
+        pathPrefix: [
+          "generationRuns",
+          generationRunIndex,
+          "relationships",
+          "acceptedGeneratedMechanicArtifactIds",
+        ],
+        knownIds: acceptedGeneratedMechanicArtifactIds,
+        message:
+          "GenerationRun acceptedGeneratedMechanicArtifactIds must reference accepted generated mechanic artifacts.",
+      });
+      addDuplicateReferenceIdIssues({
+        ctx,
+        ids: acceptedArtifactIds,
+        pathPrefix: [
+          "generationRuns",
+          generationRunIndex,
+          "relationships",
+          "acceptedGeneratedMechanicArtifactIds",
+        ],
+        message:
+          "GenerationRun acceptedGeneratedMechanicArtifactIds must identify each accepted artifact once.",
+      });
+      acceptedArtifactIds.forEach((artifactId) => {
+        const artifact = acceptedGeneratedMechanicArtifacts.find(
+          ({ id }) => id === artifactId
+        );
+        if (artifact && artifact.sourceGenerationRunId !== generationRun.id) {
+          addRelationshipIssue(ctx, {
+            path: [
+              "generationRuns",
+              generationRunIndex,
+              "relationships",
+              "acceptedGeneratedMechanicArtifactIds",
+            ],
+            message:
+              "GenerationRun may link only accepted artifacts whose sourceGenerationRunId points back to this run.",
+          });
+        }
       });
 
       addMissingReferenceIssues({
@@ -386,6 +953,29 @@ function addMissingReferenceIssues({
   });
 }
 
+function addDuplicateReferenceIdIssues({
+  ctx,
+  ids,
+  pathPrefix,
+  message,
+}: {
+  ctx: z.RefinementCtx;
+  ids: readonly string[];
+  pathPrefix: RelationshipPath;
+  message: string;
+}) {
+  const seenIds = new Set<string>();
+  ids.forEach((id, index) => {
+    if (seenIds.has(id)) {
+      addRelationshipIssue(ctx, {
+        path: [...pathPrefix, index],
+        message,
+      });
+    }
+    seenIds.add(id);
+  });
+}
+
 function addRelationshipIssue(
   ctx: z.RefinementCtx,
   issue: { path: RelationshipPath; message: string }
@@ -395,6 +985,37 @@ function addRelationshipIssue(
     path: issue.path,
     message: issue.message,
   });
+}
+
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  return stableJsonStringify(left) === stableJsonStringify(right);
+}
+
+function sameReferenceIds(
+  left: readonly string[],
+  right: readonly string[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .filter(([, child]) => child !== undefined)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(
+        ([key, child]) =>
+          `${JSON.stringify(key)}:${stableJsonStringify(child)}`
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
 }
 
 export function parseGamePack(input: unknown): GamePack {
@@ -412,4 +1033,5 @@ export type ValidationEvidence = z.infer<typeof validationEvidenceSchema>;
 export type PlayableBuild = z.infer<typeof playableBuildSchema>;
 export type VersionCheckpoint = z.infer<typeof versionCheckpointSchema>;
 export type FailedAttempt = z.infer<typeof failedAttemptSchema>;
+export type { AcceptedGeneratedMechanicArtifact };
 export type GamePack = z.infer<typeof gamePackSchema>;

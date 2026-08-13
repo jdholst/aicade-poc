@@ -1,6 +1,7 @@
 import type {
   GamePack,
   GameSpecValidationIssue,
+  PreparedRestoredGeneratedMechanicProject,
 } from "@/game-spec";
 import type {
   EditorGenerationSource,
@@ -25,6 +26,7 @@ export type EditorRuntimeHostViewModel =
   | {
       key: string;
       template: HandAuthoredPhaserTemplate;
+      generatedMechanicProject?: PreparedRestoredGeneratedMechanicProject;
       type: "phaser";
     }
   | {
@@ -58,6 +60,7 @@ export type EditorRuntimeTemplatePlan =
       runFirstPlayableChecksOnReady: true;
       sourceKey: string;
       template: HandAuthoredPhaserTemplate;
+      generatedMechanicProject?: PreparedRestoredGeneratedMechanicProject;
       type: "phaser-valid";
     };
 
@@ -118,6 +121,9 @@ export function createEditorRuntimeTemplatePlan({
       playableDraftSource.runFirstPlayableChecksOnReady,
     sourceKey: playableDraftSource.sourceKey,
     template: playableDraftSource.template,
+    ...(playableDraftSource.generatedMechanicProject
+      ? { generatedMechanicProject: playableDraftSource.generatedMechanicProject }
+      : {}),
     type: "phaser-valid",
   };
 }
@@ -133,6 +139,9 @@ export function createPhaserRuntimeHostViewModel({
     type: "phaser",
     key: `${runtimeTemplate.sourceKey}-${gameResetNonce}`,
     template: runtimeTemplate.template,
+    ...(runtimeTemplate.generatedMechanicProject
+      ? { generatedMechanicProject: runtimeTemplate.generatedMechanicProject }
+      : {}),
   };
 }
 

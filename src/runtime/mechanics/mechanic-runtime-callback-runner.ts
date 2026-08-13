@@ -10,6 +10,66 @@ export type RunMechanicRuntimeCallbacksInput = {
   afterCallback?(): void;
 };
 
+export type CompileAndRunMechanicRuntimeCallbackInput = {
+  source: string;
+  lifecycleContext?: unknown;
+  compile(source: string): unknown;
+  onStarted(): void;
+  onFinished(): void;
+};
+
+export type EvaluateMeteredMechanicRuntimeCallbackInput = {
+  source: string;
+  evaluate(source: string): Promise<unknown> | unknown;
+  onStarted(): void;
+  onFinished(): void;
+};
+
+/** Keeps generic callback parsing, compilation, and invocation inside the meter. */
+export async function evaluateMeteredMechanicRuntimeCallback({
+  source,
+  evaluate,
+  onStarted,
+  onFinished,
+}: EvaluateMeteredMechanicRuntimeCallbackInput): Promise<void> {
+  onStarted();
+  try {
+    await evaluate(`(async () => { ${source}\n})()`);
+  } finally {
+    onFinished();
+  }
+}
+
+/**
+ * Compiles trusted-admitted callback source before generated-work measurement
+ * begins. The caller's outer execution deadline still contains compilation;
+ * only invocation of the compiled generated callback is charged to the narrow
+ * callback budget.
+ */
+export async function compileAndRunMechanicRuntimeCallback({
+  source,
+  lifecycleContext,
+  compile,
+  onStarted,
+  onFinished,
+}: CompileAndRunMechanicRuntimeCallbackInput): Promise<void> {
+  const compiled = compile(
+    `(async (__sparklineLifecycleContext) => { ${source}\n})`
+  );
+  if (typeof compiled !== "function") {
+    throw new TypeError(
+      "Mechanic runtime callback source did not compile to a callable."
+    );
+  }
+
+  onStarted();
+  try {
+    await Reflect.apply(compiled, undefined, [lifecycleContext]);
+  } finally {
+    onFinished();
+  }
+}
+
 export async function runMechanicRuntimeCallbacks({
   mode,
   callbacks,

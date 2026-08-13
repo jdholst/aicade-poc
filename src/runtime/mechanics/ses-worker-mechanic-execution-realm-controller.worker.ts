@@ -57,8 +57,22 @@ type SharedActiveJob = {
   jobId: string;
   startedAt: number;
   callbackTimer?: ReturnType<typeof setTimeout>;
+  callbackBudget?: {
+    limit: number;
+    remainingMilliseconds: number;
+    activeStartedAt?: number;
+  };
   onMessage?: EventListener;
   pendingCapabilityCalls: Set<string>;
+};
+
+type RuntimeCapabilityRequestMessage = {
+  kind: "ses_runtime_capability_request";
+  jobId: string;
+  executionId: string;
+  callId: string;
+  capabilityId: string;
+  arguments: readonly SesWorkerRealmEncodedValue[];
 };
 
 type ConformanceActiveJob = SharedActiveJob & {
@@ -69,6 +83,8 @@ type ConformanceActiveJob = SharedActiveJob & {
 type RuntimeActiveJob = SharedActiveJob & {
   mode: "runtime";
   request: SesWorkerRealmExecute;
+  queuedCapabilityRequest?: RuntimeCapabilityRequestMessage;
+  suspendedCapabilityCallId?: string;
 };
 
 type ActiveJob = ConformanceActiveJob | RuntimeActiveJob;
@@ -86,6 +102,21 @@ type ExecutorMessage =
   | {
       kind: "ses_runtime_callback_finished";
       jobId: string;
+      activeMilliseconds: number;
+    }
+  | {
+      kind: "ses_runtime_callback_suspended";
+      jobId: string;
+      executionId: string;
+      callId: string;
+      activeMilliseconds: number;
+    }
+  | {
+      kind: "ses_runtime_callback_resumed";
+      jobId: string;
+      executionId: string;
+      callId: string;
+      activeMilliseconds: number;
     }
   | {
       kind: "ses_executor_result";
@@ -98,14 +129,7 @@ type ExecutorMessage =
       executionId: string;
       result: MechanicExecutionRealmExecutionResult;
     }
-  | {
-      kind: "ses_runtime_capability_request";
-      jobId: string;
-      executionId: string;
-      callId: string;
-      capabilityId: string;
-      arguments: readonly SesWorkerRealmEncodedValue[];
-    };
+  | RuntimeCapabilityRequestMessage;
 
 type RuntimeExecutorCapabilityResponse = {
   kind: "ses_runtime_capability_response";
@@ -385,7 +409,6 @@ async function terminateRuntime(request: SesWorkerRealmExecute): Promise<void> {
   if (matchingJob) {
     finishActiveJob(matchingJob, true);
   }
-  await ensureWarmExecutor();
   sendRuntimeResponse(request, {
     executionId: request.executionId,
     outcome: "terminated",
@@ -434,15 +457,24 @@ function listenForExecutorMessages(job: ActiveJob): void {
       return;
     }
     if (message.kind === "ses_runtime_callback_finished") {
-      if (job.callbackTimer !== undefined) {
-        clearTimeout(job.callbackTimer);
-        job.callbackTimer = undefined;
+      finishCallbackDeadline(job, message.activeMilliseconds);
+      return;
+    }
+    if (message.kind === "ses_runtime_callback_suspended") {
+      if (job.mode === "runtime") {
+        forwardYieldedRuntimeCapabilityRequest(job, message);
+      }
+      return;
+    }
+    if (message.kind === "ses_runtime_callback_resumed") {
+      if (job.mode === "runtime") {
+        resumeYieldedRuntimeCallback(job, message);
       }
       return;
     }
     if (message.kind === "ses_runtime_capability_request") {
       if (job.mode === "runtime") {
-        forwardRuntimeCapabilityRequest(job, message);
+        queueOrForwardRuntimeCapabilityRequest(job, message);
       }
       return;
     }
@@ -470,31 +502,103 @@ function listenForExecutorMessages(job: ActiveJob): void {
 function startCallbackDeadline(job: ActiveJob): void {
   if (job.callbackTimer !== undefined) {
     clearTimeout(job.callbackTimer);
+    job.callbackTimer = undefined;
   }
+  job.callbackBudget = undefined;
+  let limit: number | undefined;
   if (job.mode === "conformance") {
     const target = job.request.probe.resourceTarget;
     if (target?.dimension !== "callback_milliseconds") {
       return;
     }
-    const callbackTarget = {
-      dimension: "callback_milliseconds" as const,
-      limit: target.limit,
-    };
-    job.callbackTimer = setTimeout(
-      () => containSlowConformanceCallback(job, callbackTarget),
-      target.limit + 1
-    );
-    return;
+    limit = target.limit;
+  } else {
+    limit = runtimeState?.resourceBudget.maximumCallbackMilliseconds;
   }
-
-  const limit = runtimeState?.resourceBudget.maximumCallbackMilliseconds;
   if (limit === undefined) {
     return;
   }
+  job.callbackBudget = {
+    limit,
+    remainingMilliseconds: limit,
+  };
+  resumeCallbackDeadline(job);
+}
+
+function pauseCallbackDeadline(
+  job: ActiveJob,
+  activeMilliseconds?: number
+): boolean {
+  const budget = job.callbackBudget;
+  if (!budget || budget.activeStartedAt === undefined) {
+    return activeJob === job;
+  }
+  budget.remainingMilliseconds =
+    activeMilliseconds === undefined
+      ? budget.remainingMilliseconds -
+        (performance.now() - budget.activeStartedAt)
+      : budget.limit - activeMilliseconds;
+  budget.activeStartedAt = undefined;
+  if (job.callbackTimer !== undefined) {
+    clearTimeout(job.callbackTimer);
+    job.callbackTimer = undefined;
+  }
+  if (budget.remainingMilliseconds < 0) {
+    containSlowCallback(job, budget.limit);
+    return false;
+  }
+  return activeJob === job;
+}
+
+function resumeCallbackDeadline(job: ActiveJob): void {
+  const budget = job.callbackBudget;
+  if (
+    activeJob !== job ||
+    !budget ||
+    budget.activeStartedAt !== undefined
+  ) {
+    return;
+  }
+  if (budget.remainingMilliseconds < 0) {
+    containSlowCallback(job, budget.limit);
+    return;
+  }
+  budget.activeStartedAt = performance.now();
   job.callbackTimer = setTimeout(
-    () => containSlowRuntimeCallback(job, limit),
-    limit + 1
+    () => containSlowCallback(job, budget.limit),
+    Math.max(0, budget.remainingMilliseconds) + 1
   );
+}
+
+function finishCallbackDeadline(
+  job: ActiveJob,
+  activeMilliseconds?: number
+): void {
+  if (!pauseCallbackDeadline(job, activeMilliseconds)) {
+    return;
+  }
+  if (job.mode === "runtime" && job.queuedCapabilityRequest) {
+    const queued = job.queuedCapabilityRequest;
+    job.queuedCapabilityRequest = undefined;
+    sendCapabilityErrorToExecutor(
+      job,
+      queued.callId,
+      queued.capabilityId,
+      "capability_not_awaited"
+    );
+  }
+  job.callbackBudget = undefined;
+}
+
+function containSlowCallback(job: ActiveJob, limit: number): void {
+  if (job.mode === "conformance") {
+    containSlowConformanceCallback(job, {
+      dimension: "callback_milliseconds",
+      limit,
+    });
+    return;
+  }
+  containSlowRuntimeCallback(job, limit);
 }
 
 function containSlowConformanceCallback(
@@ -551,15 +655,17 @@ function containSlowRuntimeCallback(
   });
 }
 
-function forwardRuntimeCapabilityRequest(
+function queueOrForwardRuntimeCapabilityRequest(
   job: RuntimeActiveJob,
-  message: Extract<ExecutorMessage, { kind: "ses_runtime_capability_request" }>
+  message: RuntimeCapabilityRequestMessage
 ): void {
   const state = runtimeState;
   if (
     !state ||
     message.executionId !== job.request.executionId ||
-    job.pendingCapabilityCalls.has(message.callId)
+    job.pendingCapabilityCalls.has(message.callId) ||
+    job.queuedCapabilityRequest?.callId === message.callId ||
+    job.suspendedCapabilityCallId === message.callId
   ) {
     return;
   }
@@ -576,6 +682,91 @@ function forwardRuntimeCapabilityRequest(
     return;
   }
 
+  if (!job.callbackBudget) {
+    if (!forwardRuntimeCapabilityRequest(job, message)) {
+      sendCapabilityErrorToExecutor(
+        job,
+        message.callId,
+        message.capabilityId,
+        "capability_port_send_failed"
+      );
+    }
+    return;
+  }
+
+  if (
+    job.queuedCapabilityRequest ||
+    job.suspendedCapabilityCallId ||
+    job.pendingCapabilityCalls.size > 0
+  ) {
+    containOverlappingRuntimeCapabilityWaits(job);
+    return;
+  }
+
+  job.queuedCapabilityRequest = message;
+}
+
+function forwardYieldedRuntimeCapabilityRequest(
+  job: RuntimeActiveJob,
+  message: Extract<
+    ExecutorMessage,
+    { kind: "ses_runtime_callback_suspended" }
+  >
+): void {
+  const queued = job.queuedCapabilityRequest;
+  if (
+    !queued ||
+    queued.callId !== message.callId ||
+    message.executionId !== job.request.executionId ||
+    job.suspendedCapabilityCallId
+  ) {
+    return;
+  }
+  if (!pauseCallbackDeadline(job, message.activeMilliseconds)) {
+    return;
+  }
+  job.queuedCapabilityRequest = undefined;
+  job.suspendedCapabilityCallId = message.callId;
+  if (forwardRuntimeCapabilityRequest(job, queued)) {
+    return;
+  }
+  job.suspendedCapabilityCallId = undefined;
+  resumeCallbackDeadline(job);
+  sendCapabilityErrorToExecutor(
+    job,
+    queued.callId,
+    queued.capabilityId,
+    "capability_port_send_failed"
+  );
+}
+
+function resumeYieldedRuntimeCallback(
+  job: RuntimeActiveJob,
+  message: Extract<ExecutorMessage, { kind: "ses_runtime_callback_resumed" }>
+): void {
+  if (
+    job.suspendedCapabilityCallId !== message.callId ||
+    message.executionId !== job.request.executionId
+  ) {
+    return;
+  }
+  job.suspendedCapabilityCallId = undefined;
+  const budget = job.callbackBudget;
+  if (budget) {
+    budget.remainingMilliseconds = budget.limit - message.activeMilliseconds;
+  }
+  resumeCallbackDeadline(job);
+}
+
+function forwardRuntimeCapabilityRequest(
+  job: RuntimeActiveJob,
+  message: RuntimeCapabilityRequestMessage
+): boolean {
+  const state = runtimeState;
+  if (!state || activeJob !== job) {
+    return false;
+  }
+
   const request: SesWorkerRealmCapabilityRequest = {
     kind: "sparkline_mechanic_realm_capability_request",
     protocolVersion: SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
@@ -588,15 +779,24 @@ function forwardRuntimeCapabilityRequest(
   job.pendingCapabilityCalls.add(message.callId);
   try {
     state.capabilityPort.postMessage(request);
+    return true;
   } catch {
     job.pendingCapabilityCalls.delete(message.callId);
-    sendCapabilityErrorToExecutor(
-      job,
-      message.callId,
-      message.capabilityId,
-      "capability_port_send_failed"
-    );
+    return false;
   }
+}
+
+function containOverlappingRuntimeCapabilityWaits(
+  job: RuntimeActiveJob
+): void {
+  finishActiveJob(job, true);
+  sendRuntimeResponse(
+    job.request,
+    failedRuntimeResult(
+      job.request,
+      new Error("Generated callback requested overlapping capabilities.")
+    )
+  );
 }
 
 function forwardRuntimeCapabilityResponse(
@@ -668,11 +868,17 @@ function finishActiveJob(job: ActiveJob, kill: boolean): void {
   activeJob = undefined;
   if (job.callbackTimer !== undefined) {
     clearTimeout(job.callbackTimer);
+    job.callbackTimer = undefined;
   }
+  job.callbackBudget = undefined;
   if (job.onMessage) {
     job.slot.worker.removeEventListener("message", job.onMessage);
   }
   job.pendingCapabilityCalls.clear();
+  if (job.mode === "runtime") {
+    job.queuedCapabilityRequest = undefined;
+    job.suspendedCapabilityCallId = undefined;
+  }
   if (kill) {
     job.slot.worker.terminate();
     replenishExecutorPool();
@@ -742,11 +948,17 @@ function disposeController(): void {
     activeJob = undefined;
     if (job.callbackTimer !== undefined) {
       clearTimeout(job.callbackTimer);
+      job.callbackTimer = undefined;
     }
+    job.callbackBudget = undefined;
     if (job.onMessage) {
       job.slot.worker.removeEventListener("message", job.onMessage);
     }
     job.pendingCapabilityCalls.clear();
+    if (job.mode === "runtime") {
+      job.queuedCapabilityRequest = undefined;
+      job.suspendedCapabilityCallId = undefined;
+    }
     job.slot.worker.terminate();
   }
   for (const slot of idleSlots) {
@@ -1033,7 +1245,19 @@ function isRuntimeExecute(
     (value.action === "execute" || value.action === "terminate") &&
     isRecord(value.execution) &&
     value.execution.id === value.executionId &&
-    typeof value.execution.source === "string"
+    typeof value.execution.source === "string" &&
+    hasValidCallbackExecutionMode(value.execution)
+  );
+}
+
+function hasValidCallbackExecutionMode(execution: Record<string, unknown>): boolean {
+  if (execution.lifecycle === undefined) {
+    return true;
+  }
+  return (
+    isRecord(execution.lifecycle) &&
+    (execution.lifecycle.callbackExecutionMode === undefined ||
+      execution.lifecycle.callbackExecutionMode === "generated_admitted")
   );
 }
 
@@ -1082,10 +1306,34 @@ function isExecutorMessage(
     return value.mode === "conformance" || value.mode === "runtime";
   }
   if (
-    value.kind === "ses_callback_started" ||
-    value.kind === "ses_runtime_callback_finished"
+    value.kind === "ses_callback_started"
   ) {
     return true;
+  }
+  if (value.kind === "ses_runtime_callback_finished") {
+    return (
+      typeof value.activeMilliseconds === "number" &&
+      Number.isFinite(value.activeMilliseconds) &&
+      value.activeMilliseconds >= 0
+    );
+  }
+  if (value.kind === "ses_runtime_callback_suspended") {
+    return (
+      typeof value.executionId === "string" &&
+      typeof value.callId === "string" &&
+      typeof value.activeMilliseconds === "number" &&
+      Number.isFinite(value.activeMilliseconds) &&
+      value.activeMilliseconds >= 0
+    );
+  }
+  if (value.kind === "ses_runtime_callback_resumed") {
+    return (
+      typeof value.executionId === "string" &&
+      typeof value.callId === "string" &&
+      typeof value.activeMilliseconds === "number" &&
+      Number.isFinite(value.activeMilliseconds) &&
+      value.activeMilliseconds >= 0
+    );
   }
   if (value.kind === "ses_executor_result") {
     return isRecord(value.result);

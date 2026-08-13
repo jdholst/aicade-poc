@@ -838,14 +838,28 @@ describe("generated mechanic source stage", () => {
     expect(realmAdapter.executions).toHaveLength(0);
   });
 
-  it("rejects a direct capability call that is not awaited", async () => {
+  it.each([
+    {
+      source:
+        'capabilities.state.write("counter", config.initialCount);',
+      style: "a fire-and-forget call",
+    },
+    {
+      source:
+        'const pending = capabilities.state.write("counter", config.initialCount); await pending;',
+      style: "a stored capability promise",
+    },
+    {
+      source:
+        'await Promise.all([capabilities.state.write("counter", config.initialCount)]);',
+      style: "Promise.all indirection",
+    },
+  ])("rejects $style instead of a directly awaited capability call", async ({ source }) => {
     const realmAdapter = new RecordingRealmAdapter();
 
     const result = await buildAndExecuteGeneratedMechanicSource({
       ...createBuildInput(realmAdapter),
-      candidate: createCandidate(
-        'capabilities.state.write("counter", config.initialCount);'
-      ),
+      candidate: createCandidate(source),
     });
 
     expect(result).toEqual({

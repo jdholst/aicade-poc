@@ -348,6 +348,175 @@ describe("Contained generated mechanic runtime", () => {
     });
     expect(runtime.state).toBe("failed");
   });
+
+  it("contains an invalid simulation advancement rejection and retains JSON-safe evidence", async () => {
+    const lifecycle = createLifecycleStub({
+      executionId: "mechanic_install",
+      outcome: "completed",
+    });
+    vi.mocked(lifecycle.advanceSimulation).mockRejectedValue(
+      new TypeError("Simulation advancement must be a finite nonnegative number.")
+    );
+    const ownedObjects = createOwnedObjectCleanupStub(1);
+    const privateState = createPrivateStateCleanupStub(12);
+    const runtime = createContainedMechanicRuntime({
+      extensionId: "extension_seeded_hazard",
+      buildId: "build_seeded_hazard",
+      capabilityVersion: "mechanic_capability/v1",
+      seed: 1729,
+      resourceBudget: createResourceBudget(),
+      lifecycle,
+      ownedObjects,
+      privateState,
+    });
+    await runtime.install();
+
+    const failed = await runtime.advanceSimulation(Number.NaN);
+
+    expect(failed).toMatchObject({
+      outcome: "contained_failure",
+      results: [
+        {
+          executionId: "mechanic_runtime_operation_failure",
+          outcome: "failed",
+          diagnostic: {
+            stage: "realm_execution",
+            code: "mechanic_runtime_operation_failed",
+            message:
+              "Simulation advancement must be a finite nonnegative number.",
+          },
+        },
+      ],
+      evidence: {
+        callback: { id: "host_cleanup", kind: "host_cleanup" },
+        failure: {
+          kind: "exception",
+          code: "mechanic_runtime_operation_failed",
+          message:
+            "Simulation advancement must be a finite nonnegative number.",
+        },
+        reproduction: {
+          input: { elapsedMilliseconds: null },
+        },
+        cleanup: {
+          lifecycleDisposed: true,
+          registrationsRemoved: true,
+          ownedObjectsRemoved: true,
+          privateStateRemoved: true,
+          issues: [],
+        },
+        repair: {
+          artifact: "runtime_host",
+          issuePath: "cleanup",
+        },
+      },
+    });
+    expect(lifecycle.dispose).toHaveBeenCalledOnce();
+    expect(ownedObjects.dispose).toHaveBeenCalledOnce();
+    expect(privateState.dispose).toHaveBeenCalledOnce();
+    expect(runtime.state).toBe("failed");
+    expect(JSON.parse(JSON.stringify(runtime.failureEvidence))).toEqual(
+      runtime.failureEvidence
+    );
+  });
+
+  it.each([
+    {
+      label: "duplicate install",
+      reject: (lifecycle: MechanicLifecycleServices, error: Error) =>
+        vi.mocked(lifecycle.install).mockRejectedValueOnce(error),
+      invoke: (runtime: ReturnType<typeof createRuntime>) => runtime.install(),
+      callback: { id: "install_declared", kind: "install" },
+      input: null,
+    },
+    {
+      label: "logical action",
+      reject: (lifecycle: MechanicLifecycleServices, error: Error) =>
+        vi.mocked(lifecycle.dispatchLogicalAction).mockRejectedValueOnce(error),
+      invoke: (runtime: ReturnType<typeof createRuntime>) =>
+        runtime.dispatchLogicalAction("jump", { strength: 2 }),
+      callback: {
+        id: "logical_action_declared",
+        kind: "logical_action",
+      },
+      input: { actionId: "jump", payload: { strength: 2 } },
+    },
+    {
+      label: "gameplay event",
+      reject: (lifecycle: MechanicLifecycleServices, error: Error) =>
+        vi.mocked(lifecycle.dispatchGameplayEvent).mockRejectedValueOnce(error),
+      invoke: (runtime: ReturnType<typeof createRuntime>) =>
+        runtime.dispatchGameplayEvent("actor_hit", { damage: 1 }),
+      callback: {
+        id: "gameplay_event_declared",
+        kind: "gameplay_event",
+      },
+      input: { eventId: "actor_hit", payload: { damage: 1 } },
+    },
+    {
+      label: "simulation advancement",
+      reject: (lifecycle: MechanicLifecycleServices, error: Error) =>
+        vi.mocked(lifecycle.advanceSimulation).mockRejectedValueOnce(error),
+      invoke: (runtime: ReturnType<typeof createRuntime>) =>
+        runtime.advanceSimulation(-1),
+      callback: { id: "fixed_step_declared", kind: "fixed_step" },
+      input: { elapsedMilliseconds: -1 },
+    },
+  ] as const)(
+    "contains a rejected $label operation, cleans every resource, and never rejects",
+    async ({ label, reject, invoke, input }) => {
+      const lifecycle = createLifecycleStub({
+        executionId: "mechanic_install",
+        outcome: "completed",
+      });
+      const ownedObjects = createOwnedObjectCleanupStub(1);
+      const privateState = createPrivateStateCleanupStub(12);
+      const runtime = createContainedMechanicRuntime({
+        extensionId: "extension_seeded_hazard",
+        buildId: "build_seeded_hazard",
+        capabilityVersion: "mechanic_capability/v1",
+        seed: 1729,
+        resourceBudget: createResourceBudget(),
+        lifecycle,
+        ownedObjects,
+        privateState,
+      });
+      await runtime.install();
+      const error = new Error(`${label} lifecycle rejected`);
+      reject(lifecycle, error);
+
+      const result = await invoke(runtime);
+
+      expect(result).toMatchObject({
+        outcome: "contained_failure",
+        evidence: {
+          callback: { id: "host_cleanup", kind: "host_cleanup" },
+          failure: {
+            kind: "exception",
+            code: "mechanic_runtime_operation_failed",
+            message: error.message,
+          },
+          reproduction: { input },
+          cleanup: {
+            lifecycleDisposed: true,
+            registrationsRemoved: true,
+            ownedObjectsRemoved: true,
+            privateStateRemoved: true,
+            issues: [],
+          },
+          repair: {
+            artifact: "runtime_host",
+            issuePath: "cleanup",
+          },
+        },
+      });
+      expect(lifecycle.dispose).toHaveBeenCalledOnce();
+      expect(ownedObjects.dispose).toHaveBeenCalledOnce();
+      expect(privateState.dispose).toHaveBeenCalledOnce();
+      expect(runtime.state).toBe("failed");
+      expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    }
+  );
 });
 
 function createRuntime(

@@ -274,7 +274,22 @@ export function createContainedMechanicRuntime({
       }
 
       const reproducibleInput = snapshotJsonValue(input);
-      const results = Object.freeze([...(await execute())]);
+      let results: readonly MechanicExecutionRealmExecutionResult[];
+      try {
+        results = Object.freeze([...(await execute())]);
+      } catch (error) {
+        const failedResult = createOperationFailureResult(error);
+        const evidence = await containFailure(
+          failedResult,
+          HOST_CLEANUP_CONTEXT,
+          reproducibleInput
+        );
+        return Object.freeze({
+          outcome: "contained_failure",
+          results: Object.freeze([failedResult]),
+          evidence,
+        });
+      }
 
       const failedResult = results.find((result) => result.outcome !== "completed");
       if (failedResult) {
@@ -509,6 +524,20 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function createOperationFailureResult(
+  error: unknown
+): MechanicExecutionRealmExecutionResult {
+  return Object.freeze({
+    executionId: "mechanic_runtime_operation_failure",
+    outcome: "failed",
+    diagnostic: Object.freeze({
+      stage: "realm_execution",
+      code: "mechanic_runtime_operation_failed",
+      message: errorMessage(error, "Mechanic runtime operation failed."),
+    }),
+  });
+}
+
 function snapshotJsonValue(
   value: JsonValue,
   ancestors = new WeakSet<object>()
@@ -516,10 +545,15 @@ function snapshotJsonValue(
   if (
     value === null ||
     typeof value === "string" ||
-    typeof value === "boolean" ||
-    typeof value === "number"
+    typeof value === "boolean"
   ) {
     return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return Object.is(value, -0) ? 0 : value;
   }
   if (ancestors.has(value)) {
     throw new TypeError("Mechanic callback evidence input must be acyclic JSON data.");

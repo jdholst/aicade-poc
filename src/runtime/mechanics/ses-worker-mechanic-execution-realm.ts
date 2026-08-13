@@ -329,6 +329,9 @@ function snapshotExecution(
     ...(lifecycle
       ? {
           lifecycle: Object.freeze({
+            ...(lifecycle.callbackExecutionMode === "generated_admitted"
+              ? { callbackExecutionMode: "generated_admitted" as const }
+              : {}),
             callbacks: Object.freeze(
               lifecycle.callbacks.map((callback) =>
                 Object.freeze({ id: callback.id, source: callback.source })

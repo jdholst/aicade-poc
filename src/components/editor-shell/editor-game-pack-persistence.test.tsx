@@ -115,6 +115,27 @@ class MemoryGamePackStorage implements GamePackStorageDriver {
 
     return Array.from(this.records.values()).map(cloneRecord);
   }
+
+  async compareAndSwap(
+    gamePackId: string,
+    expected: StoredGamePackRecord | null,
+    replacement: StoredGamePackRecord | null
+  ) {
+    const current = this.records.get(gamePackId) ?? null;
+    if (JSON.stringify(current) !== JSON.stringify(expected)) {
+      return false;
+    }
+    if (replacement) {
+      this.records.set(gamePackId, cloneRecord(replacement));
+    } else {
+      this.records.delete(gamePackId);
+    }
+    return true;
+  }
+
+  async delete(gamePackId: string) {
+    this.records.delete(gamePackId);
+  }
 }
 
 function cloneRecord(record: StoredGamePackRecord): StoredGamePackRecord {

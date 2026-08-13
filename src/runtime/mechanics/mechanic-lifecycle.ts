@@ -15,6 +15,7 @@ import {
   type MechanicExecutionRealmResourceBudget,
   type MechanicExecutionRealmRun,
 } from "./mechanic-execution-realm";
+import { isAuthenticGeneratedMechanicLifecycleProgram } from "./generated-mechanic-lifecycle-program";
 
 export const MECHANIC_LIFECYCLE_SERVICES_VERSION =
   "mechanic_lifecycle_services/v1";
@@ -149,6 +150,11 @@ export async function createMechanicLifecycleServices({
     id,
     source,
   }));
+  const callbackExecutionMode = isAuthenticGeneratedMechanicLifecycleProgram(
+    program
+  )
+    ? ("generated_admitted" as const)
+    : undefined;
   const scheduledCallbacks = new Map<StableId, ScheduledCallback>();
   const subscriptions = new Map<StableId, MechanicSubscription>();
   let lifecycleState: MechanicLifecycleState = "created";
@@ -280,6 +286,7 @@ export async function createMechanicLifecycleServices({
         id: executionId,
         source: program.source,
         lifecycle: {
+          ...(callbackExecutionMode ? { callbackExecutionMode } : {}),
           callbacks: callbackDefinitions.map((definition) =>
             definition.id === callbackId
               ? { ...definition, source: callbackSource }

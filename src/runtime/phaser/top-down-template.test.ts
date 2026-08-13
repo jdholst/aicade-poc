@@ -899,6 +899,329 @@ describe("top-down Phaser template", () => {
     );
   });
 
+  it("loads an externally hosted generated mechanic before ready and contains update failure through disposal", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_drift",
+      type: "generated_drift",
+      entityIds: ["entity_player"],
+      config: { speed: 12 },
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, dispatchWindowEvent, messages, runUpdate } =
+      createRuntimeHarness(generatedTemplate);
+    let finishInstall:
+      | ((session: {
+          identity: Record<string, unknown>;
+          advanceSimulation: (milliseconds: number) => Promise<void>;
+          dispatchLogicalAction: (actionId: string) => Promise<void>;
+          dispose: () => Promise<void>;
+        }) => void)
+      | undefined;
+    const advanceSimulation = vi.fn(async () => undefined);
+    const dispatchLogicalAction = vi.fn(async () => undefined);
+    const dispose = vi.fn(async () => undefined);
+    const install = vi.fn(
+      () =>
+        new Promise<{
+          identity: Record<string, unknown>;
+          advanceSimulation: (milliseconds: number) => Promise<void>;
+          dispatchLogicalAction: (actionId: string) => Promise<void>;
+          dispose: () => Promise<void>;
+        }>((resolve) => {
+          finishInstall = resolve;
+        })
+    );
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install,
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+
+    expect(install).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameSpec: generatedTemplate.gameSpec,
+        mechanic: generatedMechanic,
+        template: generatedTemplate,
+        getEntityDefinition: expect.any(Function),
+        getEntityHandle: expect.any(Function),
+      })
+    );
+    expect(messages).not.toContainEqual(
+      expect.objectContaining({ type: "game-ready" })
+    );
+    expect(messages).not.toContainEqual(
+      expect.objectContaining({
+        issue: expect.objectContaining({
+          mechanicId: generatedMechanic.id,
+        }),
+      })
+    );
+
+    const identity = {
+      artifactId: "extension_generated_drift_v1",
+      sourceArtifactId: "source_generated_drift_v1",
+    };
+    finishInstall?.({
+      identity,
+      advanceSimulation,
+      dispatchLogicalAction,
+      dispose,
+    });
+    await vi.waitFor(() => {
+      expect(messages.length).toBeGreaterThan(0);
+    });
+
+    const readyMessage = messages.find(({ type }) => type === "game-ready");
+    expect(
+      readyMessage
+        ? JSON.parse(JSON.stringify(readyMessage))
+        : readyMessage
+    ).toMatchObject({
+      type: "game-ready",
+      manifest: { generatedMechanic: identity },
+    });
+    runUpdate();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(advanceSimulation).toHaveBeenCalledWith(16);
+
+    dispatchWindowEvent("keydown", {
+      isTrusted: true,
+      key: "ArrowRight",
+      repeat: false,
+    });
+    await vi.waitFor(() => {
+      expect(dispatchLogicalAction).toHaveBeenCalledWith("move");
+    });
+    dispatchWindowEvent("keydown", {
+      isTrusted: false,
+      key: "ArrowLeft",
+      repeat: false,
+    });
+    dispatchWindowEvent("keydown", {
+      isTrusted: true,
+      key: "ArrowLeft",
+      repeat: true,
+    });
+    expect(dispatchLogicalAction).toHaveBeenCalledTimes(1);
+
+    advanceSimulation.mockRejectedValueOnce(new Error("Generated tick failed"));
+    runUpdate();
+    await vi.waitFor(() => {
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          message: "Generated mechanic update failed: Generated tick failed",
+          type: "game-error",
+        })
+      );
+    });
+    expect(dispose).toHaveBeenCalledTimes(1);
+
+    dispatchWindowEvent("beforeunload");
+    await Promise.resolve();
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches a trusted Game Spec control action without a fixed-step update", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_action",
+      type: "generated_action",
+      entityIds: ["entity_player"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, dispatchWindowEvent, messages } =
+      createRuntimeHarness(generatedTemplate);
+    const advanceSimulation = vi.fn(async () => undefined);
+    const dispatchLogicalAction = vi.fn(async () => undefined);
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install: vi.fn(async () => ({
+          identity: { artifactId: "extension_generated_action_v1" },
+          advanceSimulation,
+          dispatchLogicalAction,
+          dispose: vi.fn(async () => undefined),
+        })),
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    await vi.waitFor(() => {
+      expect(messages).toContainEqual(
+        expect.objectContaining({ type: "game-ready" })
+      );
+    });
+
+    dispatchWindowEvent("keydown", {
+      isTrusted: true,
+      key: "ArrowRight",
+      repeat: false,
+    });
+
+    await vi.waitFor(() => {
+      expect(dispatchLogicalAction).toHaveBeenCalledWith("move");
+    });
+    expect(advanceSimulation).not.toHaveBeenCalled();
+  });
+
+  it("serializes generated updates and accumulates elapsed time behind a fixed catch-up cap", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_clock",
+      type: "generated_clock",
+      entityIds: ["entity_player"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, dispatchWindowEvent, messages, runUpdate } =
+      createRuntimeHarness(generatedTemplate);
+    const finishAdvances: Array<() => void> = [];
+    let activeAdvances = 0;
+    let maximumConcurrentAdvances = 0;
+    const advanceSimulation = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          activeAdvances += 1;
+          maximumConcurrentAdvances = Math.max(
+            maximumConcurrentAdvances,
+            activeAdvances
+          );
+          finishAdvances.push(() => {
+            activeAdvances -= 1;
+            resolve();
+          });
+        })
+    );
+    const dispose = vi.fn(async () => undefined);
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install: () => ({
+          identity: {
+            artifactId: "extension_generated_clock_v1",
+            sourceArtifactId: "source_generated_clock_v1",
+          },
+          advanceSimulation,
+          dispatchLogicalAction: vi.fn(async () => undefined),
+          dispose,
+        }),
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    await vi.waitFor(() => {
+      expect(messages).toContainEqual(
+        expect.objectContaining({ type: "game-ready" })
+      );
+    });
+
+    runUpdate(11);
+    expect(advanceSimulation).toHaveBeenCalledTimes(1);
+    expect(advanceSimulation).toHaveBeenLastCalledWith(11);
+
+    runUpdate(0);
+    expect(advanceSimulation).toHaveBeenCalledTimes(1);
+
+    runUpdate(13);
+    runUpdate(17);
+    runUpdate(19);
+    expect(advanceSimulation).toHaveBeenCalledTimes(1);
+
+    finishAdvances.shift()?.();
+    await vi.waitFor(() => {
+      expect(advanceSimulation).toHaveBeenCalledTimes(2);
+    });
+    expect(advanceSimulation).toHaveBeenLastCalledWith(49);
+    expect(maximumConcurrentAdvances).toBe(1);
+
+    for (let frame = 0; frame < 10; frame += 1) {
+      runUpdate(15 + frame);
+    }
+    expect(advanceSimulation).toHaveBeenCalledTimes(2);
+
+    finishAdvances.shift()?.();
+    await vi.waitFor(() => {
+      expect(advanceSimulation).toHaveBeenCalledTimes(3);
+    });
+    expect(advanceSimulation).toHaveBeenLastCalledWith(128);
+    expect(maximumConcurrentAdvances).toBe(1);
+
+    finishAdvances.shift()?.();
+    dispatchWindowEvent("beforeunload");
+    await vi.waitFor(() => {
+      expect(dispose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("asks the generated host to tear down when the frame unloads during installation", () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_pending",
+      type: "generated_pending",
+      entityIds: ["entity_player"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, dispatchWindowEvent } =
+      createRuntimeHarness(generatedTemplate);
+    const disposeHost = vi.fn();
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install: () => new Promise(() => undefined),
+        dispose: disposeHost,
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    dispatchWindowEvent("beforeunload");
+
+    expect(disposeHost).toHaveBeenCalledTimes(1);
+  });
+
   it("reports mechanic update failures without throwing out of the frame loop", () => {
     const runtimeSource = loadTopDownRuntimeSource();
     const { context, messages, runUpdate } = createRuntimeHarness(
@@ -1201,12 +1524,12 @@ describe("top-down Phaser template", () => {
     const runtimeSource = loadTopDownRuntimeSource();
 
     expect(runtimeSource).toContain('window.addEventListener("message"');
-    expect(runtimeSource).toContain('event.data.type === "game-reload"');
-    expect(runtimeSource).toContain('event.data.type === "game-focus"');
-    expect(runtimeSource).toContain('event.data.type === "game-pause"');
-    expect(runtimeSource).toContain('event.data.type === "game-resize"');
+    expect(runtimeSource).toContain('command.type === "game-reload"');
+    expect(runtimeSource).toContain('command.type === "game-focus"');
+    expect(runtimeSource).toContain('command.type === "game-pause"');
+    expect(runtimeSource).toContain('command.type === "game-resize"');
     expect(runtimeSource).toContain(
-      'event.data.type === "game-run-first-playable-checks"'
+      'command.type === "game-run-first-playable-checks"'
     );
     expect(runtimeSource).toContain("function setPaused(nextIsPaused)");
     expect(runtimeSource).toContain("function applyHostViewport(nextViewport)");
@@ -1214,5 +1537,26 @@ describe("top-down Phaser template", () => {
     expect(runtimeSource).toContain("game.scene.pause");
     expect(runtimeSource).toContain("game.scene.resume");
     expect(runtimeSource).toContain("game.scale.resize");
+  });
+
+  it("routes generated-shell commands through the trusted command authorizer", () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const { context, dispatchWindowEvent } = createRuntimeHarness(
+      topDownPhaserTemplate
+    );
+    const reload = vi.fn();
+    context.location.reload = reload;
+    const authorize = vi.fn(() => null as { type: string } | null);
+    Object.assign(context.globalThis, {
+      __AICADE_RUNTIME_AUTHORIZE_COMMAND__: authorize,
+    });
+    runTopDownRuntime(runtimeSource, context);
+
+    dispatchWindowEvent("message", { data: { type: "game-reload" } });
+    expect(reload).not.toHaveBeenCalled();
+
+    authorize.mockReturnValue({ type: "game-reload" });
+    dispatchWindowEvent("message", { data: { wrapped: true } });
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

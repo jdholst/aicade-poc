@@ -15,7 +15,11 @@ import type {
   MechanicExecutionRealmResourceDimension,
 } from "@/runtime/mechanics/mechanic-execution-realm";
 import { isMechanicExecutionRealmResourceUsage } from "@/runtime/mechanics/mechanic-execution-realm";
-import { runMechanicRuntimeCallbacks } from "@/runtime/mechanics/mechanic-runtime-callback-runner";
+import {
+  compileAndRunMechanicRuntimeCallback,
+  evaluateMeteredMechanicRuntimeCallback,
+  runMechanicRuntimeCallbacks,
+} from "@/runtime/mechanics/mechanic-runtime-callback-runner";
 import {
   SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
   type SesWorkerRealmBindingDescriptor,
@@ -56,6 +60,17 @@ type RuntimeCapabilityResponseMessage = {
   response: SesWorkerRealmCapabilityResponse;
 };
 
+type RuntimeCallbackYieldTask = {
+  jobId: string;
+  executionId: string;
+  callId: string;
+};
+
+type RuntimeCapabilityYieldGate = {
+  suspend(): number | undefined;
+  resume(): number | undefined;
+};
+
 type ResourceCounters = Record<
   MechanicExecutionRealmResourceDimension,
   number
@@ -70,6 +85,7 @@ type HandleMetadata = {
 type PendingCapabilityCall = {
   jobId: string;
   executionId: string;
+  yieldGate: RuntimeCapabilityYieldGate;
   resolve(value: SesWorkerRealmEncodedValue): void;
   reject(error: Error): void;
 };
@@ -100,13 +116,14 @@ type MechanicExecutionKernelInput = {
   invokeCapability(
     capabilityId: string,
     args: readonly unknown[],
-    context: MechanicExecutionKernelContext
+    context: MechanicExecutionKernelContext,
+    yieldGate: RuntimeCapabilityYieldGate
   ): unknown | Promise<unknown>;
   createRealmBindings(
     context: MechanicExecutionKernelContext
   ): Readonly<Record<string, unknown>>;
   onCallbackStarted?(): void;
-  onCallbackFinished?(): void;
+  onCallbackFinished?(activeMilliseconds: number): void;
   inspectReturnedHandle?: boolean;
 };
 
@@ -117,6 +134,17 @@ type MechanicExecutionKernelResult = {
     MechanicExecutionRealmProbeResult["evidence"]["handleIsolation"]
   >;
   resourcesAfterCleanup: typeof noResources;
+};
+
+type RuntimeCallbackActivityMeter = {
+  start(): void;
+  suspend():
+    | {
+        activeMilliseconds: number;
+        resume(): void;
+      }
+    | undefined;
+  finish(): number;
 };
 
 const workerScope = globalThis as unknown as WorkerScope;
@@ -142,8 +170,26 @@ const noResources = Object.freeze({
   pendingTasks: 0,
 });
 const pendingCapabilityCalls = new Map<string, PendingCapabilityCall>();
+const runtimeCallbackYieldChannel = new MessageChannel();
+const generatedMechanicCallbackCompartment = createMechanicCompartment(
+  Object.freeze(Object.create(null))
+);
+const compiledGeneratedMechanicCallbacks = new Map<string, unknown>();
+const MAXIMUM_CACHED_GENERATED_MECHANIC_CALLBACKS = 64;
 let activeRuntimeJobId: string | undefined;
 let nextCapabilityCallId = 0;
+
+runtimeCallbackYieldChannel.port1.addEventListener("message", (event) => {
+  if (
+    !event.isTrusted ||
+    event.currentTarget !== runtimeCallbackYieldChannel.port1 ||
+    !isRuntimeCallbackYieldTask(event.data)
+  ) {
+    return;
+  }
+  acknowledgeRuntimeCallbackYield(event.data);
+});
+runtimeCallbackYieldChannel.port1.start();
 
 workerScope.addEventListener("message", (event) => {
   if (!event.isTrusted) {
@@ -380,13 +426,14 @@ async function runMechanicRuntimeInSesCompartment(
     capabilityGrant: input.capabilityGrant,
     seed: input.seed,
     resourceBudget: input.resourceBudget,
-    invokeCapability: (capabilityId, args, context) =>
+    invokeCapability: (capabilityId, args, context, yieldGate) =>
       requestRuntimeCapability(
         input,
         capabilityId,
         args.map((argument) =>
           encodeRuntimeCapabilityArgument(argument, context.handleMetadata)
-        )
+        ),
+        yieldGate
       ).then((value) =>
         decodeRuntimeCapabilityValue(
           value,
@@ -415,10 +462,11 @@ async function runMechanicRuntimeInSesCompartment(
         jobId: input.jobId,
       });
     },
-    onCallbackFinished: () => {
+    onCallbackFinished: (activeMilliseconds) => {
       workerScope.postMessage({
         kind: "ses_runtime_callback_finished",
         jobId: input.jobId,
+        activeMilliseconds,
       });
     },
   });
@@ -454,6 +502,7 @@ async function runMechanicExecutionKernel(
   const stateBytesById = new Map<unknown, number>();
   const capabilityCalls: string[] = [];
   const capabilityTasks: ObservedCapabilityTask[] = [];
+  const callbackActivity = createRuntimeCallbackActivityMeter();
   let pendingTaskCount = 0;
   let randomState = input.seed >>> 0;
   const context: MechanicExecutionKernelContext = {
@@ -508,9 +557,44 @@ async function runMechanicExecutionKernel(
           resolveTask(((value ^ (value >>> 14)) >>> 0) / 4_294_967_296);
           return task;
         }
-        Promise.resolve(
-          input.invokeCapability(capabilityId, args, context)
-        ).then(resolveTask, rejectTask);
+        let callbackSuspension:
+          | ReturnType<RuntimeCallbackActivityMeter["suspend"]>
+          | undefined;
+        const yieldGate: RuntimeCapabilityYieldGate = {
+          suspend() {
+            if (input.mode !== "runtime" || callbackSuspension) {
+              return undefined;
+            }
+            callbackSuspension = callbackActivity.suspend();
+            return callbackSuspension?.activeMilliseconds;
+          },
+          resume() {
+            const activeMilliseconds = callbackSuspension?.activeMilliseconds;
+            callbackSuspension?.resume();
+            callbackSuspension = undefined;
+            return activeMilliseconds;
+          },
+        };
+        let capabilityResult: unknown | Promise<unknown>;
+        try {
+          capabilityResult = input.invokeCapability(
+            capabilityId,
+            args,
+            context,
+            yieldGate
+          );
+        } catch (error) {
+          yieldGate.resume();
+          throw error;
+        }
+        Promise.resolve(capabilityResult).then(
+          (value) => {
+            resolveTask(value);
+          },
+          (error: unknown) => {
+            rejectTask(error);
+          }
+        );
       } catch (error) {
         rejectTask(error);
       }
@@ -543,7 +627,13 @@ async function runMechanicExecutionKernel(
 
     if (!executionFailed) {
       try {
-        await runRuntimeLifecycle(input, compartment, counters);
+        await runRuntimeLifecycle(
+          input,
+          compartment,
+          counters,
+          callbackActivity,
+          output
+        );
       } catch (error) {
         executionFailed = true;
         executionError = error;
@@ -567,7 +657,7 @@ async function runMechanicExecutionKernel(
     }
 
     return {
-      output,
+      output: input.lifecycle ? undefined : output,
       capabilityCalls: Object.freeze([...capabilityCalls]),
       handleIsolation: input.inspectReturnedHandle
         ? inspectReturnedOpaqueHandle(output, handleMetadata)
@@ -589,7 +679,9 @@ async function runMechanicExecutionKernel(
 async function runRuntimeLifecycle(
   input: MechanicExecutionKernelInput,
   compartment: Compartment,
-  counters: ResourceCounters
+  counters: ResourceCounters,
+  callbackActivity: RuntimeCallbackActivityMeter,
+  lifecycleContext: unknown
 ): Promise<void> {
   const lifecycle = input.lifecycle;
   if (!lifecycle) {
@@ -602,19 +694,33 @@ async function runRuntimeLifecycle(
     mode: input.mode,
     callbacks,
     invocations: lifecycle.invocations,
-    evaluate: async (callbackSource) => {
-      const callbackStartedAt = performance.now();
-      input.onCallbackStarted?.();
-      try {
-        await compartment.evaluate(`(async () => { ${callbackSource}\n})()`);
-      } finally {
-        const elapsed = performance.now() - callbackStartedAt;
+    evaluate: (callbackSource) => {
+      const onStarted = () => {
+        callbackActivity.start();
+        input.onCallbackStarted?.();
+      };
+      const onFinished = () => {
+        const elapsed = callbackActivity.finish();
         counters.callback_milliseconds = Math.max(
           counters.callback_milliseconds,
           elapsed
         );
-        input.onCallbackFinished?.();
-      }
+        input.onCallbackFinished?.(elapsed);
+      };
+      return lifecycle.callbackExecutionMode === "generated_admitted"
+        ? compileAndRunMechanicRuntimeCallback({
+            source: callbackSource,
+            lifecycleContext,
+            compile: compileReusableGeneratedMechanicCallback,
+            onStarted,
+            onFinished,
+          })
+        : evaluateMeteredMechanicRuntimeCallback({
+            source: callbackSource,
+            evaluate: (source) => compartment.evaluate(source),
+            onStarted,
+            onFinished,
+          });
     },
     onCallbackCompleted: () => {
       counters.consecutive_failures = 0;
@@ -640,6 +746,69 @@ async function runRuntimeLifecycle(
       enforceTarget(input.resourceTarget, counters);
     },
   });
+}
+
+function compileReusableGeneratedMechanicCallback(source: string): unknown {
+  if (compiledGeneratedMechanicCallbacks.has(source)) {
+    return compiledGeneratedMechanicCallbacks.get(source);
+  }
+  if (
+    compiledGeneratedMechanicCallbacks.size >=
+    MAXIMUM_CACHED_GENERATED_MECHANIC_CALLBACKS
+  ) {
+    compiledGeneratedMechanicCallbacks.clear();
+  }
+  const compiled = generatedMechanicCallbackCompartment.evaluate(source);
+  compiledGeneratedMechanicCallbacks.set(source, compiled);
+  return compiled;
+}
+
+function createRuntimeCallbackActivityMeter(): RuntimeCallbackActivityMeter {
+  let activeStartedAt: number | undefined;
+  let accumulatedMilliseconds = 0;
+  let running = false;
+
+  return {
+    start() {
+      if (running) {
+        throw new Error("Mechanic callback activity measurements cannot overlap.");
+      }
+      running = true;
+      accumulatedMilliseconds = 0;
+      activeStartedAt = performance.now();
+    },
+    suspend() {
+      if (!running || activeStartedAt === undefined) {
+        return undefined;
+      }
+      accumulatedMilliseconds += performance.now() - activeStartedAt;
+      activeStartedAt = undefined;
+      let resumed = false;
+      return {
+        activeMilliseconds: accumulatedMilliseconds,
+        resume() {
+          if (resumed || !running) {
+            return;
+          }
+          resumed = true;
+          activeStartedAt = performance.now();
+        },
+      };
+    },
+    finish() {
+      if (!running) {
+        throw new Error("Mechanic callback activity measurement was not started.");
+      }
+      if (activeStartedAt !== undefined) {
+        accumulatedMilliseconds += performance.now() - activeStartedAt;
+      }
+      const elapsed = accumulatedMilliseconds;
+      running = false;
+      activeStartedAt = undefined;
+      accumulatedMilliseconds = 0;
+      return elapsed;
+    },
+  };
 }
 
 function inspectReturnedOpaqueHandle(
@@ -822,7 +991,8 @@ function getRuntimeResourceLimit(
 function requestRuntimeCapability(
   input: ExecuteRuntimeMessage,
   capabilityId: string,
-  args: readonly SesWorkerRealmEncodedValue[]
+  args: readonly SesWorkerRealmEncodedValue[],
+  yieldGate: RuntimeCapabilityYieldGate
 ): Promise<SesWorkerRealmEncodedValue> {
   nextCapabilityCallId += 1;
   const callId = `call_${nextCapabilityCallId}`;
@@ -831,6 +1001,7 @@ function requestRuntimeCapability(
     pendingCapabilityCalls.set(key, {
       jobId: input.jobId,
       executionId: input.executionId,
+      yieldGate,
       resolve,
       reject,
     });
@@ -843,6 +1014,11 @@ function requestRuntimeCapability(
         capabilityId,
         arguments: args,
       });
+      runtimeCallbackYieldChannel.port2.postMessage({
+        jobId: input.jobId,
+        executionId: input.executionId,
+        callId,
+      } satisfies RuntimeCallbackYieldTask);
     } catch (error) {
       pendingCapabilityCalls.delete(key);
       reject(
@@ -851,6 +1027,32 @@ function requestRuntimeCapability(
           : new Error("Capability request dispatch failed.")
       );
     }
+  });
+}
+
+function acknowledgeRuntimeCallbackYield(
+  message: RuntimeCallbackYieldTask
+): void {
+  const pending = pendingCapabilityCalls.get(
+    capabilityCallKey(message.jobId, message.callId)
+  );
+  if (
+    !pending ||
+    activeRuntimeJobId !== message.jobId ||
+    pending.executionId !== message.executionId
+  ) {
+    return;
+  }
+  const activeMilliseconds = pending.yieldGate.suspend();
+  if (activeMilliseconds === undefined) {
+    return;
+  }
+  workerScope.postMessage({
+    kind: "ses_runtime_callback_suspended",
+    jobId: message.jobId,
+    executionId: message.executionId,
+    callId: message.callId,
+    activeMilliseconds,
   });
 }
 
@@ -869,6 +1071,16 @@ function settleRuntimeCapabilityResponse(
     return;
   }
   pendingCapabilityCalls.delete(key);
+  const activeMilliseconds = pending.yieldGate.resume();
+  if (activeMilliseconds !== undefined) {
+    workerScope.postMessage({
+      kind: "ses_runtime_callback_resumed",
+      jobId: message.jobId,
+      executionId: message.executionId,
+      callId: response.callId,
+      activeMilliseconds,
+    });
+  }
   if (response.success && response.value) {
     pending.resolve(response.value);
     return;
@@ -895,6 +1107,7 @@ function rejectPendingCallsForJob(jobId: string, error: Error): void {
   for (const [key, pending] of pendingCapabilityCalls) {
     if (pending.jobId === jobId) {
       pendingCapabilityCalls.delete(key);
+      pending.yieldGate.resume();
       pending.reject(error);
     }
   }
@@ -1155,12 +1368,24 @@ function isExecuteRuntimeMessage(
     isRecord(value.execution) &&
     value.execution.id === value.executionId &&
     typeof value.execution.source === "string" &&
+    hasValidCallbackExecutionMode(value.execution) &&
     isRecord(value.capabilityGrant) &&
     Array.isArray(value.capabilityGrant.capabilities) &&
     Array.isArray(value.bindings) &&
     typeof value.seed === "number" &&
     Number.isFinite(value.seed) &&
     isRecord(value.resourceBudget)
+  );
+}
+
+function hasValidCallbackExecutionMode(execution: Record<string, unknown>): boolean {
+  if (execution.lifecycle === undefined) {
+    return true;
+  }
+  return (
+    isRecord(execution.lifecycle) &&
+    (execution.lifecycle.callbackExecutionMode === undefined ||
+      execution.lifecycle.callbackExecutionMode === "generated_admitted")
   );
 }
 
@@ -1183,6 +1408,17 @@ function isRuntimeCapabilityResponseMessage(
       : isRecord(value.response.error) &&
         typeof value.response.error.code === "string" &&
         typeof value.response.error.message === "string")
+  );
+}
+
+function isRuntimeCallbackYieldTask(
+  value: unknown
+): value is RuntimeCallbackYieldTask {
+  return (
+    isRecord(value) &&
+    typeof value.jobId === "string" &&
+    typeof value.executionId === "string" &&
+    typeof value.callId === "string"
   );
 }
 

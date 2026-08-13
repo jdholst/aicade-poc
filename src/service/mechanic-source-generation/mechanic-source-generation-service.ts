@@ -3,21 +3,23 @@ import { z } from "zod";
 
 import {
   MECHANIC_CAPABILITY_VERSION,
-  getMechanicCapabilityVersion,
+  mechanicCapabilityGrantExactlyMatchesContract,
   validateMechanicCapabilityUsage,
-  type GeneratedMechanicContract,
-  type GeneratedMechanicReferenceCatalog,
   type MechanicCapabilityDefinition,
   type MechanicCapabilityGrant,
-  type MechanicConfigDslValue,
-} from "@/game-spec";
+} from "@/game-spec/mechanics/mechanic-capability-registry";
 import {
   jsonValueSchema,
   stableIdSchema,
   type JsonValue,
   type StableId,
 } from "@/game-spec/game-spec-schema";
-import { configDslValueMatches } from "@/game-spec/mechanics/generated-mechanic-contract";
+import {
+  configDslValueMatches,
+  type GeneratedMechanicContract,
+  type GeneratedMechanicReferenceCatalog,
+  type MechanicConfigDslValue,
+} from "@/game-spec/mechanics/generated-mechanic-contract";
 import {
   MECHANIC_EXECUTION_REALM_ADAPTER_VERSION,
   type MechanicExecutionRealmAdapter,
@@ -239,7 +241,7 @@ export async function buildAndExecuteGeneratedMechanicSource({
     );
   }
 
-  if (!grantExactlyMatchesContract(grant, contract)) {
+  if (!mechanicCapabilityGrantExactlyMatchesContract(grant, contract)) {
     return fail("source_validation", "invalid_generated_mechanic_source", [
       {
         path: "grant.capabilities",
@@ -733,59 +735,6 @@ function validateCandidateAgainstContract(
     }
   }
   return issues;
-}
-
-function grantExactlyMatchesContract(
-  grant: MechanicCapabilityGrant,
-  contract: GeneratedMechanicContract
-): boolean {
-  if (
-    grant.capabilityVersion !== contract.capabilityVersion ||
-    grant.capabilities.length !== contract.capabilities.length
-  ) {
-    return false;
-  }
-  const version = getMechanicCapabilityVersion(contract.capabilityVersion);
-  if (!version) {
-    return false;
-  }
-  const definitions: ReadonlyMap<string, MechanicCapabilityDefinition> = new Map(
-    version.capabilities.map((capability) => [capability.id, capability])
-  );
-  return grant.capabilities.every((capability, index) => {
-    const expectedId = contract.capabilities[index];
-    const definition = definitions.get(capability.id);
-    return (
-      capability.id === expectedId &&
-      definition !== undefined &&
-      capability.description === definition.description &&
-      capability.authoring.member === definition.authoring.member &&
-      capability.authoring.signature === definition.authoring.signature &&
-      capability.runtimeOperation === definition.runtimeOperation &&
-      sameStrings(capability.evaluation.actions, definition.evaluation.actions) &&
-      sameStrings(
-        capability.evaluation.observations,
-        definition.evaluation.observations
-      ) &&
-      sameStrings(
-        capability.evaluation.scenarioInputs ?? [],
-        definition.evaluation.scenarioInputs ?? []
-      ) &&
-      capability.resourceCosts.operationsPerTick ===
-        definition.resourceCosts.operationsPerTick &&
-      capability.resourceCosts.ownedObjects ===
-        definition.resourceCosts.ownedObjects &&
-      capability.resourceCosts.scheduledCallbacks ===
-        definition.resourceCosts.scheduledCallbacks &&
-      capability.resourceCosts.subscriptions ===
-        definition.resourceCosts.subscriptions &&
-      capability.resourceCosts.signalsPerTick ===
-        definition.resourceCosts.signalsPerTick &&
-      capability.requiresOpaqueHandle === definition.requiresOpaqueHandle &&
-      capability.justification.kind === "contract_declaration" &&
-      capability.justification.path === `capabilities.${index}`
-    );
-  });
 }
 
 function sameStrings(

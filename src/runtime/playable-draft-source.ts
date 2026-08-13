@@ -4,10 +4,12 @@ import type {
   GameSpec,
   GameSpecValidationIssue,
   GenerationRun,
+  PreparedRestoredGeneratedMechanicProject,
 } from "@/game-spec";
 import {
   GameSpecValidationError,
   parseTopDownGameSpec as parseSavedTopDownGameSpec,
+  prepareRestoredGeneratedMechanicProject,
   validateTopDownGameSpec,
 } from "@/game-spec";
 import {
@@ -74,6 +76,7 @@ export type PlayableDraftSource =
       source: PlayableDraftValidationSource["source"];
       sourceKey: string;
       template: HandAuthoredPhaserTemplate;
+      generatedMechanicProject?: PreparedRestoredGeneratedMechanicProject;
       validationSource: PlayableDraftValidationSource;
       readyPolicy: PlayableDraftReadyPolicy;
       persistencePolicy: PlayableDraftPersistencePolicy;
@@ -224,9 +227,39 @@ function createRestoredGamePackDraftSource(
   }
 
   try {
-    const gameSpec = validateTopDownGameSpec(
-      parseSavedTopDownGameSpec(gamePack.gameSpec)
-    );
+    const parsedGameSpec = parseSavedTopDownGameSpec(gamePack.gameSpec);
+    const generatedMechanicProjectResult =
+      gamePack.acceptedGeneratedMechanicArtifacts?.length
+        ? prepareRestoredGeneratedMechanicProject({
+            gamePack,
+            trustedPortContracts: [],
+          })
+        : null;
+    if (generatedMechanicProjectResult?.success === false) {
+      return {
+        type: "blocked",
+        issues: generatedMechanicProjectResult.issues.map(
+          ({ path, message }) => ({ path, message })
+        ),
+        message: generatedMechanicProjectResult.issues
+          .map(({ message }) => message)
+          .join(" "),
+      };
+    }
+    const generatedMechanicProject = generatedMechanicProjectResult?.success
+      ? generatedMechanicProjectResult.data
+      : undefined;
+    if (generatedMechanicProject) {
+      validateTopDownGameSpec({
+        ...parsedGameSpec,
+        mechanics: parsedGameSpec.mechanics.filter(
+          ({ id }) => id !== generatedMechanicProject.artifact.mechanicId
+        ),
+      });
+    } else {
+      validateTopDownGameSpec(parsedGameSpec);
+    }
+    const gameSpec = parsedGameSpec;
     const template = createTopDownPhaserTemplate(gameSpec);
 
     return {
@@ -237,8 +270,18 @@ function createRestoredGamePackDraftSource(
         gamePack.updatedAt,
         gamePack.builds.length,
         gamePack.checkpoints.length,
+        ...(generatedMechanicProject
+          ? [
+              generatedMechanicProject.artifact.id,
+              generatedMechanicProject.dependency.sourceArtifact.id,
+              createStableContentHash(
+                generatedMechanicProject.dependency.runtimePolicy
+              ),
+            ]
+          : []),
       ].join("-"),
       template,
+      ...(generatedMechanicProject ? { generatedMechanicProject } : {}),
       validationSource: {
         ...createValidationSource(template, "restored-game-pack"),
         gamePack,

@@ -1,8 +1,8 @@
-import type { GeneratedMechanicContract } from "@/game-spec";
-import type { JsonValue } from "@/game-spec/game-spec-schema";
+import {
+  createGeneratedMechanicLifecycleProgram,
+} from "@/runtime/mechanics/generated-mechanic-lifecycle-program";
 import {
   createMechanicLifecycleServices,
-  type MechanicLifecycleProgram,
 } from "@/runtime/mechanics/mechanic-lifecycle";
 import type {
   MechanicExecutionRealmAdapter,
@@ -11,11 +11,6 @@ import type {
   MechanicExecutionRealmExecutionResult,
   MechanicExecutionRealmResourceBudget,
 } from "@/runtime/mechanics/mechanic-execution-realm";
-import {
-  createGeneratedMechanicLifecycleCallbackSource,
-  type GeneratedMechanicSourceArtifact,
-} from "@/service/mechanic-source-generation";
-
 import type {
   CreateGeneratedMechanicEvaluationRuntimeInput,
   GeneratedMechanicEvaluationRuntime,
@@ -63,12 +58,12 @@ export function createGeneratedMechanicLifecycleEvaluationRuntimeFactory({
       | Awaited<ReturnType<typeof createMechanicLifecycleServices>>
       | undefined;
     try {
-      const program = createEvaluationLifecycleProgram(
-        input.contract,
-        input.artifact,
-        input.config,
-        fixture.fixedStepIntervalMilliseconds
-      );
+      const program = createGeneratedMechanicLifecycleProgram({
+        contract: input.contract,
+        sourceArtifact: input.artifact,
+        config: input.config,
+        fixedStepIntervalMilliseconds: fixture.fixedStepIntervalMilliseconds,
+      });
       lifecycle = await createMechanicLifecycleServices({
         createRealm: ({
           capabilityHost,
@@ -151,51 +146,6 @@ export function createGeneratedMechanicLifecycleEvaluationRuntimeFactory({
       },
     });
   };
-}
-
-function createEvaluationLifecycleProgram(
-  contract: GeneratedMechanicContract,
-  artifact: GeneratedMechanicSourceArtifact,
-  config: JsonValue,
-  fixedStepIntervalMilliseconds: number | undefined
-): MechanicLifecycleProgram {
-  const fixedStepCallback = artifact.callbacks.find(
-    (callback) => callback.kind === "fixed_step"
-  );
-  if (
-    fixedStepCallback &&
-    (!Number.isInteger(fixedStepIntervalMilliseconds) ||
-      (fixedStepIntervalMilliseconds ?? 0) <= 0)
-  ) {
-    throw new TypeError(
-      "A compiled fixed-step callback requires a positive integer fixture interval."
-    );
-  }
-  return Object.freeze({
-    source: "",
-    callbacks: Object.freeze(
-      artifact.callbacks.map((callback) =>
-        Object.freeze({
-          id: callback.id,
-          kind: callback.kind,
-          source: createGeneratedMechanicLifecycleCallbackSource({
-            callback,
-            contract,
-            grant: artifact.grant,
-            config,
-          }),
-        })
-      )
-    ),
-    ...(fixedStepCallback
-      ? {
-          fixedStep: Object.freeze({
-            callbackId: fixedStepCallback.id,
-            intervalMilliseconds: fixedStepIntervalMilliseconds!,
-          }),
-        }
-      : {}),
-  });
 }
 
 function requireAllCompleted(

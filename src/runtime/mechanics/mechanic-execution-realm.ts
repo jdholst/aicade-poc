@@ -123,6 +123,7 @@ export type MechanicExecutionRealmExecutionInput = {
   id: StableId;
   source: string;
   lifecycle?: {
+    callbackExecutionMode?: "generated_admitted";
     callbacks: ReadonlyArray<{ id: StableId; source: string }>;
     invocations: ReadonlyArray<{ callbackId: StableId; count: number }>;
   };

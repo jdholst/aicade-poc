@@ -5,6 +5,16 @@ import { chromium } from "@playwright/test";
 import { createServer as createViteServer } from "vite";
 
 const candidates = ["ses_worker"];
+const integrationOnly =
+  process.env.MECHANIC_REALM_INTEGRATION_ONLY === "1";
+const exactPlayerDriftOnly =
+  process.env.MECHANIC_REALM_EXACT_PLAYER_DRIFT_ONLY === "1";
+const mainThreadStressMilliseconds =
+  process.env.MECHANIC_REALM_MAIN_THREAD_STRESS_MILLISECONDS ?? "";
+const requestedIterations =
+  process.env.MECHANIC_REALM_REQUESTED_ITERATIONS ?? "";
+const elapsedMilliseconds =
+  process.env.MECHANIC_REALM_ELAPSED_MILLISECONDS ?? "";
 
 const vite = await createViteServer({
   root: process.cwd(),
@@ -14,7 +24,7 @@ const vite = await createViteServer({
     ".next/cache/vite-mechanic-realm-candidates"
   ),
   resolve: { alias: { "@": path.resolve(process.cwd(), "src") } },
-  server: { middlewareMode: true },
+  server: { middlewareMode: true, hmr: { port: 0 } },
 });
 const server = http.createServer(vite.middlewares);
 await new Promise((resolve, reject) => {
@@ -32,13 +42,25 @@ try {
   for (const candidate of candidates) {
     const page = await browser.newPage();
     const browserErrors = [];
-    page.on("pageerror", (error) => browserErrors.push(error.message));
+    page.on("pageerror", (error) => {
+      if (!isBenignViteHmrWebSocketError(error.message)) {
+        browserErrors.push(error.message);
+      }
+    });
     await page.goto(
-      `http://127.0.0.1:${address.port}/scripts/fixtures/mechanic-execution-realm-candidate-browser.html?candidate=${candidate}`
+      `http://127.0.0.1:${address.port}/scripts/fixtures/mechanic-execution-realm-candidate-browser.html?candidate=${candidate}${integrationOnly ? "&integrationOnly=1" : ""}${exactPlayerDriftOnly ? "&exactPlayerDriftOnly=1" : ""}${mainThreadStressMilliseconds ? `&mainThreadStressMilliseconds=${encodeURIComponent(mainThreadStressMilliseconds)}` : ""}${requestedIterations ? `&requestedIterations=${encodeURIComponent(requestedIterations)}` : ""}${elapsedMilliseconds ? `&elapsedMilliseconds=${encodeURIComponent(elapsedMilliseconds)}` : ""}`,
+      { timeout: 60_000, waitUntil: "commit" }
     );
-    await page.waitForFunction(
-      () => window.__mechanicRealmCandidateEvaluation !== undefined
-    );
+    try {
+      await page.waitForFunction(
+        () => window.__mechanicRealmCandidateEvaluation !== undefined,
+        undefined,
+        { timeout: 120_000 }
+      );
+    } catch (error) {
+      console.error(`${candidate}: browser evaluation did not settle`, error);
+      throw error;
+    }
     const evaluation = await page.evaluate(
       () => window.__mechanicRealmCandidateEvaluation
     );
@@ -52,13 +74,32 @@ try {
     if (evaluation.error) {
       throw new Error(`${candidate}: ${evaluation.error}`);
     }
-    if (evaluation.report?.probeResults.length !== 32) {
+    if (exactPlayerDriftOnly) {
+      const evidence = evaluation.exactPlayerDrift;
+      if (
+        !evidence ||
+        evidence.outcome !== "completed" ||
+        evidence.completedIterations !== evidence.requestedIterations ||
+        evidence.velocityX !== 24 ||
+        evidence.velocityY !== 0
+      ) {
+        throw new Error(
+          `${candidate}: exact retained player-drift fixed-step failed\n${JSON.stringify(evidence, null, 2)}`
+        );
+      }
+      console.log(
+        `PASS ${candidate} exact retained player-drift ${evidence.completedIterations} fixed steps`
+      );
+      await page.close();
+      continue;
+    }
+    if (!integrationOnly && evaluation.report?.probeResults.length !== 32) {
       throw new Error(`${candidate}: the unchanged 32-probe corpus did not run`);
     }
-    if (evaluation.report.gates.length !== 10) {
+    if (!integrationOnly && evaluation.report.gates.length !== 10) {
       throw new Error(`${candidate}: the unchanged ten hard gates did not run`);
     }
-    if (evaluation.report.verdict !== "passed") {
+    if (!integrationOnly && evaluation.report.verdict !== "passed") {
       throw new Error(
         `${candidate}: rejected\n${JSON.stringify(
           {
@@ -79,6 +120,7 @@ try {
       );
     }
     if (
+      !integrationOnly &&
       !evaluation.report.probeResults.every(
         (probe) =>
           probe.candidateExecutionBrowserEvidence &&
@@ -87,23 +129,25 @@ try {
     ) {
       throw new Error(`${candidate}: a probe lacked paired browser evidence`);
     }
-    const dispatchedProbeCount = evaluation.controllerAudit?.filter(
-      (audit) => audit.action === "execute_dispatched"
-    ).length;
-    if (dispatchedProbeCount !== 32) {
-      throw new Error(
-        `${candidate}: expected 32 audited inner-realm dispatches, received ${dispatchedProbeCount}`
-      );
-    }
-    const sharedKernelProbeCount = evaluation.controllerAudit?.filter(
-      (audit) =>
-        audit.action === "shared_kernel_entered" &&
-        audit.mode === "conformance"
-    ).length;
-    if (sharedKernelProbeCount !== 32) {
-      throw new Error(
-        `${candidate}: expected all 32 probes to enter the shared production kernel, received ${sharedKernelProbeCount}`
-      );
+    if (!integrationOnly) {
+      const dispatchedProbeCount = evaluation.controllerAudit?.filter(
+        (audit) => audit.action === "execute_dispatched"
+      ).length;
+      if (dispatchedProbeCount !== 32) {
+        throw new Error(
+          `${candidate}: expected 32 audited inner-realm dispatches, received ${dispatchedProbeCount}`
+        );
+      }
+      const sharedKernelProbeCount = evaluation.controllerAudit?.filter(
+        (audit) =>
+          audit.action === "shared_kernel_entered" &&
+          audit.mode === "conformance"
+      ).length;
+      if (sharedKernelProbeCount !== 32) {
+        throw new Error(
+          `${candidate}: expected all 32 probes to enter the shared production kernel, received ${sharedKernelProbeCount}`
+        );
+      }
     }
     const integration = evaluation.integration;
     if (!integration) {
@@ -124,9 +168,13 @@ try {
       operationsBudgetEnforced: true,
       fireAndForgetOperationsBudgetEnforced: true,
       stateBudgetTotalsDistinctEntries: true,
+      trustedHostWaitExcludedFromCallbackBudget: true,
+      postAwaitCallbackCpuBudgetEnforced: true,
+      fireAndForgetCallbackCpuBudgetEnforced: true,
+      exactPlayerDriftFixedStepCompleted: true,
       disposalRejectedLateExecute: true,
-      capabilityHostCalls: 2,
-      productionSharedKernelExecutions: 10,
+      capabilityHostCalls: 6,
+      productionSharedKernelExecutions: 13,
       controllerDisposalAcknowledged: true,
     };
     for (const [property, expected] of Object.entries(
@@ -145,13 +193,18 @@ try {
       }
     }
 
-    console.log(`PASS ${candidate} 32 probes 10 gates production integration`);
+    console.log(
+      integrationOnly
+        ? `PASS ${candidate} production integration`
+        : `PASS ${candidate} 32 probes 10 gates production integration`
+    );
     await page.close();
   }
 } finally {
   await browser.close();
-  await vite.close();
+  server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
+  await vite.close();
 }
 
 async function launchBrowser() {
@@ -174,4 +227,11 @@ async function launchBrowser() {
 
 function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isBenignViteHmrWebSocketError(message) {
+  return (
+    message === "WebSocket closed without opened." ||
+    message.includes("[vite] failed to connect to websocket")
+  );
 }

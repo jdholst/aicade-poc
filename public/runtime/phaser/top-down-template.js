@@ -1,4 +1,8 @@
 (function () {
+  // Bound catch-up to eight 16 ms host steps so one delayed SES response
+  // cannot consume the full fixed per-tick execution budget.
+  const GENERATED_MECHANIC_MAX_PENDING_ELAPSED_MILLISECONDS = 128;
+
   function createRuntimeConfig(rawTemplate) {
     const template = rawTemplate || {};
     const gameSpec = template.gameSpec || {};
@@ -41,6 +45,7 @@
     return {
       activeMechanics,
       arena,
+      controls: Array.isArray(template.controls) ? template.controls : [],
       defaultPlayerEntityId: "entity_player",
       gameSpec,
       layout,
@@ -58,6 +63,8 @@
     return {
       activeScene: null,
       game: null,
+      generatedMechanicPendingElapsedMilliseconds: 0,
+      generatedMechanicUpdatePending: false,
       isPaused: false,
       playerHandle: null,
       renderedObjectCount: 0,
@@ -71,7 +78,15 @@
   }
 
   function notify(type, payload) {
-    parent.postMessage(Object.assign({ type }, payload || {}), "*");
+    const message = Object.assign({ type }, payload || {});
+    const trustedNotify = globalThis.__AICADE_RUNTIME_NOTIFY__;
+
+    if (typeof trustedNotify === "function") {
+      trustedNotify(message);
+      return;
+    }
+
+    parent.postMessage(message, "*");
   }
 
   function getErrorMessage(error) {
@@ -102,7 +117,20 @@
       });
     }
 
+    function reportFatalRuntimeFailure(message) {
+      notify("game-error", {
+        issue: {
+          type: "runtime-error",
+          severity: "error",
+          recoverable: false,
+          message,
+        },
+        message,
+      });
+    }
+
     return {
+      reportFatalRuntimeFailure,
       reportMechanicFailure,
     };
   }
@@ -565,6 +593,19 @@
     const reporter = dependencies.reporter;
     const runtimeState = dependencies.runtimeState;
     let installedMechanics = [];
+    let generatedMechanicSession = null;
+    let generatedMechanicDisposed = false;
+
+    function getGeneratedMechanicHost() {
+      const host = globalThis.__AICADE_GENERATED_MECHANIC_HOST__;
+
+      return host &&
+        typeof host === "object" &&
+        typeof host.mechanicId === "string" &&
+        typeof host.install === "function"
+        ? host
+        : null;
+    }
 
     function createRuntimeCursorKeys(scene) {
       const cursors = scene.input.keyboard.createCursorKeys();
@@ -686,6 +727,14 @@
         return null;
       }
 
+      const generatedHost = getGeneratedMechanicHost();
+      if (generatedHost && generatedHost.mechanicId === mechanic.id) {
+        return {
+          mechanic,
+          status: "externally-hosted",
+        };
+      }
+
       const installerKey = config.runtimeInstallerKeys[mechanic.type];
       const runtimeMechanicInstallers =
         globalThis.__AICADE_TOP_DOWN_MECHANICS__ || {};
@@ -748,6 +797,183 @@
       return installedMechanics;
     }
 
+    function installGeneratedMechanic() {
+      const generatedHost = getGeneratedMechanicHost();
+      if (!generatedHost) {
+        return null;
+      }
+      const mechanic = config.activeMechanics.find(function (candidate) {
+        return candidate && candidate.id === generatedHost.mechanicId;
+      });
+      if (!mechanic) {
+        return Promise.reject(
+          new Error(
+            'Generated mechanic host target "' +
+              generatedHost.mechanicId +
+              '" is not present in the active Game Spec.'
+          )
+        );
+      }
+
+      return Promise.resolve(
+        generatedHost.install({
+          gameSpec: config.gameSpec,
+          mechanic,
+          template: config.template,
+          getEntityDefinition: entityModule.findById,
+          getEntityHandle: entityModule.getEntityHandle,
+        })
+      ).then(function (session) {
+        if (
+          !session ||
+          typeof session !== "object" ||
+          !session.identity ||
+          typeof session.advanceSimulation !== "function" ||
+          typeof session.dispatchLogicalAction !== "function" ||
+          typeof session.dispose !== "function"
+        ) {
+          throw new Error(
+            "Generated mechanic host returned an invalid retained session."
+          );
+        }
+        if (generatedMechanicDisposed) {
+          return Promise.resolve(session.dispose()).then(function () {
+            throw new Error(
+              "Generated mechanic installation completed after frame disposal."
+            );
+          });
+        }
+        generatedMechanicSession = session;
+        generatedMechanicDisposed = false;
+        return session;
+      });
+    }
+
+    function drainGeneratedMechanicUpdates() {
+      if (
+        !generatedMechanicSession ||
+        runtimeState.generatedMechanicUpdatePending ||
+        runtimeState.generatedMechanicPendingElapsedMilliseconds <= 0
+      ) {
+        return;
+      }
+      const activeSession = generatedMechanicSession;
+      const elapsed =
+        runtimeState.generatedMechanicPendingElapsedMilliseconds;
+      runtimeState.generatedMechanicPendingElapsedMilliseconds = 0;
+      runtimeState.generatedMechanicUpdatePending = true;
+
+      Promise.resolve(activeSession.advanceSimulation(elapsed)).then(
+        function () {
+          runtimeState.generatedMechanicUpdatePending = false;
+          if (
+            generatedMechanicSession === activeSession &&
+            !generatedMechanicDisposed
+          ) {
+            drainGeneratedMechanicUpdates();
+          }
+        },
+        function (error) {
+          failGeneratedMechanicSession(activeSession, "update", error);
+        }
+      );
+    }
+
+    function failGeneratedMechanicSession(activeSession, phase, error) {
+      runtimeState.generatedMechanicUpdatePending = false;
+      runtimeState.generatedMechanicPendingElapsedMilliseconds = 0;
+      const failedSession =
+        generatedMechanicSession === activeSession ? activeSession : null;
+      generatedMechanicSession = null;
+      generatedMechanicDisposed = true;
+      if (failedSession) {
+        try {
+          Promise.resolve(failedSession.dispose()).catch(
+            function (disposeError) {
+              reporter.reportFatalRuntimeFailure(
+                "Generated mechanic disposal failed: " +
+                  getErrorMessage(disposeError)
+              );
+            }
+          );
+        } catch (disposeError) {
+          reporter.reportFatalRuntimeFailure(
+            "Generated mechanic disposal failed: " +
+              getErrorMessage(disposeError)
+          );
+        }
+      }
+      reporter.reportFatalRuntimeFailure(
+        "Generated mechanic " + phase + " failed: " + getErrorMessage(error)
+      );
+    }
+
+    function dispatchGeneratedLogicalAction(actionId) {
+      if (!generatedMechanicSession || generatedMechanicDisposed) {
+        return;
+      }
+      const activeSession = generatedMechanicSession;
+      Promise.resolve(activeSession.dispatchLogicalAction(actionId)).catch(
+        function (error) {
+          failGeneratedMechanicSession(activeSession, "logical action", error);
+        }
+      );
+    }
+
+    function updateGeneratedMechanic(elapsedMilliseconds) {
+      if (!generatedMechanicSession) {
+        return;
+      }
+      const elapsed =
+        typeof elapsedMilliseconds === "number" &&
+        Number.isFinite(elapsedMilliseconds) &&
+        elapsedMilliseconds >= 0
+          ? elapsedMilliseconds
+          : 16;
+      if (elapsed === 0) {
+        return;
+      }
+      runtimeState.generatedMechanicPendingElapsedMilliseconds = Math.min(
+        GENERATED_MECHANIC_MAX_PENDING_ELAPSED_MILLISECONDS,
+        runtimeState.generatedMechanicPendingElapsedMilliseconds + elapsed
+      );
+      drainGeneratedMechanicUpdates();
+    }
+
+    function disposeGeneratedMechanic() {
+      if (generatedMechanicDisposed) {
+        return;
+      }
+      generatedMechanicDisposed = true;
+      runtimeState.generatedMechanicPendingElapsedMilliseconds = 0;
+      if (!generatedMechanicSession) {
+        const generatedHost = getGeneratedMechanicHost();
+        if (generatedHost && typeof generatedHost.dispose === "function") {
+          try {
+            Promise.resolve(generatedHost.dispose()).catch(function (error) {
+              reporter.reportFatalRuntimeFailure(
+                "Generated mechanic host disposal failed: " +
+                  getErrorMessage(error)
+              );
+            });
+          } catch (error) {
+            reporter.reportFatalRuntimeFailure(
+              "Generated mechanic host disposal failed: " +
+                getErrorMessage(error)
+            );
+          }
+        }
+        return;
+      }
+      const session = generatedMechanicSession;
+      generatedMechanicSession = null;
+      Promise.resolve(session.dispose()).catch(function (error) {
+        reporter.reportFatalRuntimeFailure(
+          "Generated mechanic disposal failed: " + getErrorMessage(error)
+        );
+      });
+    }
+
     function updateInstalledMechanics() {
       installedMechanics.forEach(function (installed) {
         if (
@@ -787,8 +1013,12 @@
     }
 
     return {
+      disposeGeneratedMechanic,
       disposeInstalledMechanics,
+      dispatchGeneratedLogicalAction,
+      installGeneratedMechanic,
       installActiveMechanics,
+      updateGeneratedMechanic,
       updateInstalledMechanics,
     };
   }
@@ -1054,33 +1284,68 @@
 
     function registerHostCommandListeners() {
       window.addEventListener("message", function (event) {
-        if (event.data && event.data.type === "game-reload") {
+        const authorizeCommand =
+          globalThis.__AICADE_RUNTIME_AUTHORIZE_COMMAND__;
+        const command =
+          typeof authorizeCommand === "function"
+            ? authorizeCommand(event)
+            : event.data;
+
+        if (!command || typeof command !== "object") {
+          return;
+        }
+
+        if (command.type === "game-reload") {
           location.reload();
         }
 
-        if (event.data && event.data.type === "game-focus") {
+        if (command.type === "game-focus") {
           focusGameContainer();
         }
 
-        if (event.data && event.data.type === "game-pause") {
-          setPaused(Boolean(event.data.paused));
+        if (command.type === "game-pause") {
+          setPaused(Boolean(command.paused));
         }
 
-        if (event.data && event.data.type === "game-resize") {
-          applyHostViewport(event.data.viewport);
+        if (command.type === "game-resize") {
+          applyHostViewport(command.viewport);
         }
 
-        if (
-          event.data &&
-          event.data.type === "game-run-first-playable-checks"
-        ) {
+        if (command.type === "game-run-first-playable-checks") {
           runFirstPlayableChecks();
         }
+      });
+
+      window.addEventListener("keydown", function (event) {
+        if (
+          !event ||
+          event.isTrusted !== true ||
+          event.repeat === true ||
+          runtimeState.isPaused ||
+          typeof event.key !== "string"
+        ) {
+          return;
+        }
+        const dispatchedActionIds = new Set();
+        config.controls.forEach(function (control) {
+          if (
+            !control ||
+            typeof control.action !== "string" ||
+            !Array.isArray(control.keys) ||
+            !control.keys.includes(event.key) ||
+            dispatchedActionIds.has(control.action)
+          ) {
+            return;
+          }
+          dispatchedActionIds.add(control.action);
+          mechanicsModule.dispatchGeneratedLogicalAction(control.action);
+        });
       });
     }
 
     function registerTeardownListener() {
       window.addEventListener("beforeunload", function () {
+        mechanicsModule.disposeGeneratedMechanic();
         mechanicsModule.disposeInstalledMechanics();
 
         if (runtimeState.game) {
@@ -1158,17 +1423,37 @@
           });
         }
 
-        notify("game-ready", {
-          manifest: {
-            title:
-              config.gameSpec.title || config.template.title || "Top-Down Chase",
-            runtime: "phaser",
-          },
-          viewport: config.viewport,
-        });
+        const notifyReady = function (generatedSession) {
+          notify("game-ready", {
+            manifest: {
+              title:
+                config.gameSpec.title ||
+                config.template.title ||
+                "Top-Down Chase",
+              runtime: "phaser",
+              ...(generatedSession
+                ? { generatedMechanic: generatedSession.identity }
+                : {}),
+            },
+            viewport: config.viewport,
+          });
+        };
+        const generatedInstall =
+          modules.mechanicsModule.installGeneratedMechanic();
+        if (generatedInstall) {
+          generatedInstall.then(notifyReady, function (error) {
+            modules.reporter.reportFatalRuntimeFailure(
+              "Generated mechanic activation failed: " +
+                getErrorMessage(error)
+            );
+          });
+        } else {
+          notifyReady(null);
+        }
       },
-      update() {
+      update(_time, delta) {
         modules.mechanicsModule.updateInstalledMechanics();
+        modules.mechanicsModule.updateGeneratedMechanic(delta);
       },
     };
   }
@@ -1218,6 +1503,7 @@
         layoutModule,
         mechanicsModule,
         objectiveModule,
+        reporter,
       }),
     });
 

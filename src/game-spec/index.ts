@@ -27,6 +27,7 @@ export {
   validationEvidenceStageSchema,
   validationEvidenceStatusSchema,
   versionCheckpointSchema,
+  type AcceptedGeneratedMechanicArtifact,
   type FailedAttempt,
   type GamePack,
   type GamePackRuntimeKind,
@@ -36,6 +37,29 @@ export {
   type ValidationEvidenceStatus,
   type VersionCheckpoint,
 } from "./game-pack/game-pack-schema";
+
+export {
+  ACCEPTED_GENERATED_MECHANIC_ARTIFACT_VERSION,
+  GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
+  GENERATED_MECHANIC_FIXED_STEP_INTERVAL_MILLISECONDS,
+  GENERATED_MECHANIC_FINAL_GAME_SPEC_VERSION,
+  GENERATED_MECHANIC_RESOURCE_BUDGET_PROFILE_ID,
+  GENERATED_MECHANIC_RUNTIME_POLICY_VERSION,
+  PERSISTED_GENERATED_MECHANIC_SOURCE_ARTIFACT_VERSION,
+  TOP_DOWN_PHASER_GENERATED_MECHANIC_HOST_PROFILE_ID,
+  acceptedGeneratedMechanicArtifactSchema,
+  createGeneratedMechanicRuntimePolicy,
+  generatedMechanicFinalGameSpecExtensionSchema,
+  generatedMechanicFinalGameSpecSchema,
+  generatedMechanicProjectHostProfileIssues,
+  generatedMechanicRuntimePolicySchema,
+  persistedGeneratedMechanicSourceArtifactSchema,
+  type GeneratedMechanicFinalGameSpec,
+  type GeneratedMechanicFinalGameSpecExtension,
+  type GeneratedMechanicRuntimePolicy,
+  type GeneratedMechanicProjectHostProfileIssue,
+  type PersistedGeneratedMechanicSourceArtifact,
+} from "./mechanics/generated-mechanic-project-artifact";
 
 export {
   createGenerationRunRepository,
@@ -76,6 +100,7 @@ export {
   artifactScopedRepairAttemptIdSchema,
   artifactScopedRepairStageSchema,
   getArtifactScopedRepairGenerationRunOutcome,
+  hasExactAcceptedArtifactScopedRepairLineage,
   type ArtifactScopedMechanicRepairReceipt,
   type ArtifactScopedRepairArtifactReceipt,
   type ArtifactScopedRepairArtifactId,
@@ -162,6 +187,27 @@ export {
   type WriteFirstPlayableTerminalResultInput,
   type WriteFirstPlayableTerminalResultOutput,
 } from "./game-pack/first-playable-terminal-result";
+
+export {
+  GENERATED_MECHANIC_ACTIVATION_CHECK_ID,
+  completeGeneratedMechanicProjectHandoff,
+  prepareRestoredGeneratedMechanicProject,
+  restoreGeneratedMechanicProjectHandoff,
+  validateGeneratedMechanicFinalGameSpec,
+  type CompleteGeneratedMechanicProjectHandoffInput,
+  type GeneratedMechanicProjectActivation,
+  type GeneratedMechanicProjectBrowserResult,
+  type GeneratedMechanicProjectDependency,
+  type GeneratedMechanicProjectHandoffIssue,
+  type GeneratedMechanicProjectHandoffResult,
+  type GeneratedMechanicProjectRuntime,
+  type LoadedGeneratedMechanicProjectDependency,
+  type PreparedRestoredGeneratedMechanicProject,
+  type PrepareRestoredGeneratedMechanicProjectInput,
+  type PrepareRestoredGeneratedMechanicProjectResult,
+  type RestoreGeneratedMechanicProjectHandoffInput,
+  type RestoreGeneratedMechanicProjectHandoffResult,
+} from "./game-pack/generated-mechanic-project-handoff";
 
 export {
   createMechanicRuntimeBridge,
@@ -251,6 +297,7 @@ export {
   getMechanicCapabilityVersion,
   MECHANIC_CAPABILITY_VERSION,
   mechanicCapabilityRegistry,
+  mechanicCapabilityGrantExactlyMatchesContract,
   validateMechanicCapabilityUsage,
   type MechanicCapabilityConformanceRequirement,
   type MechanicCapabilityDefinition,

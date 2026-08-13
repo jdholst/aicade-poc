@@ -140,6 +140,9 @@ describe("evaluateGeneratedMechanicArtifact", () => {
       },
     });
     expect(createdArtifactIds).toEqual([artifact.id, artifact.id]);
+    expect(result.evidence.replay?.replayScenarios).toEqual(
+      result.evidence.scenarios
+    );
   });
 
   it("keeps a generated self-grading claim separate from an independent failing observation", async () => {

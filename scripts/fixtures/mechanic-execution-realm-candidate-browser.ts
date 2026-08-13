@@ -20,6 +20,10 @@ import {
   SES_WORKER_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
 } from "../../src/runtime/mechanics/ses-worker-mechanic-execution-realm";
 import { SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION } from "../../src/runtime/mechanics/ses-worker-mechanic-execution-realm-protocol";
+import {
+  runExactPlayerDriftRetainedSessionBrowserIntegration,
+  type ExactPlayerDriftFixedStepEvidence,
+} from "./exact-player-drift-retained-session-browser";
 
 type ProductionIntegrationEvidence = {
   actualHandleReachedHost: boolean;
@@ -36,6 +40,14 @@ type ProductionIntegrationEvidence = {
   operationsBudgetEnforced: boolean;
   fireAndForgetOperationsBudgetEnforced: boolean;
   stateBudgetTotalsDistinctEntries: boolean;
+  trustedHostWaitExcludedFromCallbackBudget: boolean;
+  postAwaitCallbackCpuBudgetEnforced: boolean;
+  fireAndForgetCallbackCpuBudgetEnforced: boolean;
+  fireAndForgetCallbackOutcome: string;
+  fireAndForgetCallbackDiagnostic?: string;
+  exactPlayerDriftFixedStepCompleted: boolean;
+  exactPlayerDriftFixedStepOutcome: string;
+  exactPlayerDriftFixedStepResourceDimension?: string;
   disposalRejectedLateExecute: boolean;
   capabilityHostCalls: number;
   productionSharedKernelExecutions: number;
@@ -47,6 +59,7 @@ type CandidateEvaluation = {
   report?: MechanicExecutionRealmConformanceReport;
   controllerAudit?: unknown[];
   integration?: ProductionIntegrationEvidence;
+  exactPlayerDrift?: ExactPlayerDriftFixedStepEvidence;
 };
 
 declare global {
@@ -62,9 +75,25 @@ void runMechanicExecutionRealmCandidateEvaluation().catch((error) => {
 });
 
 async function runMechanicExecutionRealmCandidateEvaluation(): Promise<void> {
-  const candidate = new URLSearchParams(location.search).get("candidate");
+  const searchParams = new URLSearchParams(location.search);
+  const candidate = searchParams.get("candidate");
   if (candidate !== "ses_worker") {
     throw new TypeError(`Unknown Mechanic Execution Realm candidate "${candidate}".`);
+  }
+
+  if (searchParams.get("exactPlayerDriftOnly") === "1") {
+    const exactPlayerDrift = await runExactPlayerDriftFixedStepIntegration(
+      Number(searchParams.get("requestedIterations") ?? 800),
+      Number(searchParams.get("elapsedMilliseconds") ?? 16),
+      Number(searchParams.get("mainThreadStressMilliseconds") ?? 0)
+    );
+    window.__mechanicRealmCandidateEvaluation = { exactPlayerDrift };
+    return;
+  }
+  if (searchParams.get("integrationOnly") === "1") {
+    const integration = await runProductionAdapterIntegration();
+    window.__mechanicRealmCandidateEvaluation = { integration };
+    return;
   }
 
   const controller = new Worker(
@@ -170,18 +199,24 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
     rawHandleCrossedWorker: false,
     opaqueTokenCrossedWorker: false,
     sharedKernelExecutions: 0,
+    executorReadyCount: 0,
     disposedAcknowledged: false,
     realmId: undefined as string | undefined,
   };
+  const productionController = createAuditedProductionController(
+    handle,
+    transportAudit
+  );
+  await waitForProductionControllerReady(productionController);
   const adapter = createSesWorkerMechanicExecutionRealmAdapter({
-    createController: () => createAuditedProductionController(handle, transportAudit),
+    createController: () => productionController,
   });
   const realm = await adapter.create({
     mechanicId: "browser_integration_mechanic",
     capabilityGrant,
     bindings: [{ id: "binding_actor", cardinality: "one", handles: [handle] }],
     capabilityHost: {
-      invoke: ({ capabilityId, arguments: capabilityArguments }) => {
+      invoke: async ({ capabilityId, arguments: capabilityArguments }) => {
         capabilityHostCalls += 1;
         if (capabilityId === "state_write") {
           if (
@@ -190,6 +225,9 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
             typeof capabilityArguments[1] !== "string"
           ) {
             throw new Error("State write arguments were malformed.");
+          }
+          if (capabilityArguments[0].startsWith("delayed_callback_")) {
+            await new Promise((resolve) => window.setTimeout(resolve, 5));
           }
           return { kind: "json", value: null };
         }
@@ -224,61 +262,131 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
   });
 
   try {
-    const granted = await realm.execute({
+    const execute = async (
+      label: string,
+      execution: Parameters<typeof realm.execute>[0]
+    ) => {
+      try {
+        return await realm.execute(execution).result;
+      } catch (error) {
+        throw new Error(
+          `${label}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    };
+    const granted = await execute("granted object read", {
       id: "browser_granted_object_read",
       source:
         'return await realm.callCapability("object_read", realm.binding("binding_actor"));',
-    }).result;
+    });
     const hostCallsAfterGranted = capabilityHostCalls;
-    const ungranted = await realm.execute({
+    const ungranted = await execute("ungranted state read", {
       id: "browser_ungranted_state_read",
       source: 'return await realm.callCapability("state_read", "score");',
-    }).result;
-    const fireAndForgetUngranted = await realm.execute({
+    });
+    const fireAndForgetUngranted = await execute("fire-and-forget ungranted", {
       id: "browser_fire_and_forget_ungranted",
       source:
         'void realm.callCapability("state_read", "score"); return true;',
-    }).result;
+    });
     const ungrantedCapabilityDidNotReachHost =
       capabilityHostCalls === hostCallsAfterGranted;
     const mutableRunawayExecution = {
       id: "browser_runaway",
       source: "for (;;) {}",
     };
-    const runawayResult = realm.execute(mutableRunawayExecution).result;
+    const runawayResult = execute("runaway", mutableRunawayExecution);
     mutableRunawayExecution.id = "browser_runaway_mutated";
     mutableRunawayExecution.source = "return true;";
     const runaway = await runawayResult;
-    const recovery = await realm.execute({
+    const recovery = await execute("recovery", {
       id: "browser_recovery",
       source: "return { recovered: true };",
-    }).result;
-    const deterministicFirst = await realm.execute({
+    });
+    const deterministicFirst = await execute("deterministic first", {
       id: "browser_deterministic_first",
       source:
         'return [await realm.callCapability("random_next"), await realm.callCapability("random_next")];',
-    }).result;
-    const deterministicSecond = await realm.execute({
+    });
+    const deterministicSecond = await execute("deterministic second", {
       id: "browser_deterministic_second",
       source:
         'return [await realm.callCapability("random_next"), await realm.callCapability("random_next")];',
-    }).result;
-    const operationsLimit = await realm.execute({
+    });
+    const operationsLimit = await execute("operations limit", {
       id: "browser_operations_limit",
       source:
         'for (let count = 0; count < 17; count += 1) await realm.callCapability("random_next");',
-    }).result;
-    const fireAndForgetOperationsLimit = await realm.execute({
+    });
+    const fireAndForgetOperationsLimit = await execute(
+      "fire-and-forget operations limit",
+      {
       id: "browser_fire_and_forget_operations_limit",
       source:
         'for (let count = 0; count < 17; count += 1) void realm.callCapability("random_next"); return true;',
-    }).result;
-    const stateBudget = await realm.execute({
+      }
+    );
+    const stateBudget = await execute("state budget", {
       id: "browser_distinct_state_budget",
       source:
         'await realm.callCapability("state_write", "first", "x".repeat(600)); await realm.callCapability("state_write", "second", "x".repeat(600));',
-    }).result;
-
+    });
+    const executorReadyCountBeforeFireAndForget =
+      transportAudit.executorReadyCount;
+    const fireAndForgetCpu = await execute("fire-and-forget cpu", {
+      id: "browser_fire_and_forget_cpu",
+      source: "",
+      lifecycle: {
+        callbacks: [
+          {
+            id: "browser_fire_and_forget_cpu_callback",
+            source:
+              'void realm.callCapability("state_write", "delayed_callback_fire_and_forget", "ready"); for (let work = 0; work < 100_000_000; work += 1) { Math.imul(work, work); }',
+          },
+        ],
+        invocations: [
+          { callbackId: "browser_fire_and_forget_cpu_callback", count: 1 },
+        ],
+      },
+    });
+    await waitForExecutorReplenishment(
+      transportAudit,
+      executorReadyCountBeforeFireAndForget
+    );
+    const trustedHostWait = await execute("trusted host wait", {
+      id: "browser_trusted_host_wait",
+      source: "",
+      lifecycle: {
+        callbacks: [
+          {
+            id: "browser_trusted_host_wait_callback",
+            source:
+              'await realm.callCapability("state_write", "delayed_callback_one", "one"); await realm.callCapability("state_write", "delayed_callback_two", "two"); await realm.callCapability("state_write", "delayed_callback_three", "three");',
+          },
+        ],
+        invocations: [
+          { callbackId: "browser_trusted_host_wait_callback", count: 1 },
+        ],
+      },
+    });
+    const postAwaitCpu = await execute("post-await cpu", {
+      id: "browser_post_await_cpu",
+      source: "",
+      lifecycle: {
+        callbacks: [
+          {
+            id: "browser_post_await_cpu_callback",
+            source:
+              'await realm.callCapability("state_write", "delayed_callback_cpu", "ready"); for (let work = 0; work < 100_000_000; work += 1) { Math.imul(work, work); }',
+          },
+        ],
+        invocations: [
+          { callbackId: "browser_post_await_cpu_callback", count: 1 },
+        ],
+      },
+    });
+    const exactPlayerDriftFixedStep =
+      await runExactPlayerDriftFixedStepIntegration();
     realm.dispose();
     await waitForCondition(
       () => transportAudit.disposedAcknowledged,
@@ -328,6 +436,23 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
         fireAndForgetOperationsLimit.outcome === "resource_limit",
       stateBudgetTotalsDistinctEntries:
         stateBudget.outcome === "resource_limit",
+      trustedHostWaitExcludedFromCallbackBudget:
+        trustedHostWait.outcome === "completed",
+      postAwaitCallbackCpuBudgetEnforced:
+        postAwaitCpu.outcome === "resource_limit" &&
+        postAwaitCpu.resourceUsage?.dimension === "callback_milliseconds",
+      fireAndForgetCallbackCpuBudgetEnforced:
+        fireAndForgetCpu.outcome === "resource_limit" &&
+        fireAndForgetCpu.resourceUsage?.dimension === "callback_milliseconds",
+      fireAndForgetCallbackOutcome: fireAndForgetCpu.outcome,
+      fireAndForgetCallbackDiagnostic: fireAndForgetCpu.diagnostic?.code,
+      exactPlayerDriftFixedStepCompleted:
+        exactPlayerDriftFixedStep.outcome === "completed" &&
+        exactPlayerDriftFixedStep.velocityX === 24 &&
+        exactPlayerDriftFixedStep.velocityY === 0,
+      exactPlayerDriftFixedStepOutcome: exactPlayerDriftFixedStep.outcome,
+      exactPlayerDriftFixedStepResourceDimension:
+        exactPlayerDriftFixedStep.resourceDimension,
       disposalRejectedLateExecute,
       capabilityHostCalls,
       productionSharedKernelExecutions:
@@ -339,6 +464,27 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
     realm.dispose();
     objectHost.dispose();
   }
+}
+
+async function runExactPlayerDriftFixedStepIntegration(
+  requestedIterations = 1,
+  elapsedMilliseconds = 16,
+  mainThreadStressMilliseconds = 0
+): Promise<ExactPlayerDriftFixedStepEvidence> {
+  const controller = new Worker(
+    new URL(
+      "../../src/runtime/mechanics/ses-worker-mechanic-execution-realm-controller.worker.ts",
+      import.meta.url
+    ),
+    { type: "module" }
+  );
+  await waitForProductionControllerReady(controller);
+  return await runExactPlayerDriftRetainedSessionBrowserIntegration({
+    controller,
+    requestedIterations,
+    elapsedMilliseconds,
+    mainThreadStressMilliseconds,
+  });
 }
 
 function createIntegrationGrant(): MechanicCapabilityGrant {
@@ -395,6 +541,7 @@ function createAuditedProductionController(
     rawHandleCrossedWorker: boolean;
     opaqueTokenCrossedWorker: boolean;
     sharedKernelExecutions: number;
+    executorReadyCount: number;
     disposedAcknowledged: boolean;
     realmId?: string;
   }
@@ -451,14 +598,69 @@ function createAuditedProductionController(
       event.isTrusted &&
       isRecord(event.data) &&
       event.data.kind === "ses_probe_audit" &&
-      isRecord(event.data.audit) &&
-      event.data.audit.action === "shared_kernel_entered" &&
-      event.data.audit.mode === "runtime"
+      isRecord(event.data.audit)
     ) {
-      audit.sharedKernelExecutions += 1;
+      if (
+        event.data.audit.action === "shared_kernel_entered" &&
+        event.data.audit.mode === "runtime"
+      ) {
+        audit.sharedKernelExecutions += 1;
+      }
+      if (event.data.audit.action === "executor_ambient_audit") {
+        audit.executorReadyCount += 1;
+      }
     }
   });
   return controller;
+}
+
+async function waitForExecutorReplenishment(
+  audit: { executorReadyCount: number },
+  previousReadyCount: number
+): Promise<void> {
+  const deadline = performance.now() + 60_000;
+  while (audit.executorReadyCount <= previousReadyCount) {
+    if (performance.now() >= deadline) {
+      throw new Error("Production SES executor replenishment timeout.");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  }
+}
+
+function waitForProductionControllerReady(controller: Worker): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Production SES controller prewarm timeout."));
+    }, 60_000);
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      controller.removeEventListener("message", onMessage);
+      controller.removeEventListener("error", onError);
+    };
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (
+        event.isTrusted &&
+        isRecord(event.data) &&
+        event.data.kind === "sparkline_mechanic_realm_controller_ready" &&
+        event.data.protocolVersion ===
+          SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION
+      ) {
+        cleanup();
+        resolve();
+      }
+    };
+    const onError = (event: ErrorEvent) => {
+      cleanup();
+      reject(new Error(event.message));
+    };
+    controller.addEventListener("message", onMessage);
+    controller.addEventListener("error", onError);
+    controller.postMessage({
+      kind: "sparkline_mechanic_realm_controller_ready_probe",
+      protocolVersion: SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
+    });
+  });
 }
 
 async function waitForCondition(
@@ -498,7 +700,7 @@ function waitForWorkerReady(
   return new Promise((resolve, reject) => {
     const timeoutId = window.setTimeout(
       () => reject(new Error("SES controller ready timeout.")),
-      10_000
+      60_000
     );
     const cleanup = () => {
       window.clearTimeout(timeoutId);

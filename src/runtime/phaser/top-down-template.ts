@@ -3,9 +3,9 @@ import {
   createMechanicRuntimeBridge,
   TOP_DOWN_PHASER_MECHANIC_SCOPE,
   topDownMechanicRegistry,
-  type GameSpecValidationIssue,
-  type TopDownGameSpec,
-} from "@/game-spec";
+} from "@/game-spec/mechanics/mechanic-registry";
+import type { TopDownGameSpec } from "@/game-spec/top-down-spec-schema";
+import type { GameSpecValidationIssue } from "@/game-spec/validation/validation-issue";
 
 import {
   getFirstValidTopDownGameSpecFixture,

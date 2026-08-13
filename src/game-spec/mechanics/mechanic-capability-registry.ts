@@ -358,6 +358,67 @@ export function createMechanicCapabilityGrant({
   };
 }
 
+export function mechanicCapabilityGrantExactlyMatchesContract(
+  grant: MechanicCapabilityGrant,
+  contract: Readonly<{
+    capabilityVersion: string;
+    capabilities: readonly StableId[];
+  }>
+): boolean {
+  if (
+    grant.capabilityVersion !== contract.capabilityVersion ||
+    grant.capabilities.length !== contract.capabilities.length
+  ) {
+    return false;
+  }
+
+  const version = getMechanicCapabilityVersion(contract.capabilityVersion);
+  if (!version) {
+    return false;
+  }
+  const definitions: ReadonlyMap<StableId, MechanicCapabilityDefinition> = new Map(
+    version.capabilities.map((capability) => [capability.id, capability])
+  );
+
+  return grant.capabilities.every((capability, index) => {
+    const expectedId = contract.capabilities[index];
+    const definition = definitions.get(capability.id);
+    return (
+      capability.id === expectedId &&
+      definition !== undefined &&
+      capability.description === definition.description &&
+      capability.authoring.member === definition.authoring.member &&
+      capability.authoring.signature === definition.authoring.signature &&
+      capability.runtimeOperation === definition.runtimeOperation &&
+      sameStringSequence(
+        capability.evaluation.actions,
+        definition.evaluation.actions
+      ) &&
+      sameStringSequence(
+        capability.evaluation.observations,
+        definition.evaluation.observations
+      ) &&
+      sameStringSequence(
+        capability.evaluation.scenarioInputs ?? [],
+        definition.evaluation.scenarioInputs ?? []
+      ) &&
+      capability.resourceCosts.operationsPerTick ===
+        definition.resourceCosts.operationsPerTick &&
+      capability.resourceCosts.ownedObjects ===
+        definition.resourceCosts.ownedObjects &&
+      capability.resourceCosts.scheduledCallbacks ===
+        definition.resourceCosts.scheduledCallbacks &&
+      capability.resourceCosts.subscriptions ===
+        definition.resourceCosts.subscriptions &&
+      capability.resourceCosts.signalsPerTick ===
+        definition.resourceCosts.signalsPerTick &&
+      capability.requiresOpaqueHandle === definition.requiresOpaqueHandle &&
+      capability.justification.kind === "contract_declaration" &&
+      capability.justification.path === `capabilities.${index}`
+    );
+  });
+}
+
 export function validateMechanicCapabilityUsage({
   grant,
   usedCapabilities,
@@ -406,4 +467,14 @@ export function validateMechanicCapabilityUsage({
       usedCapabilities,
     },
   };
+}
+
+function sameStringSequence(
+  left: readonly string[],
+  right: readonly string[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
