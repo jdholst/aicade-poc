@@ -27,7 +27,10 @@ import {
 export type UseEditorRuntimeSessionInput = {
   canvas: EditorGameCanvasSession;
   gamePackRepository?: GamePackRepository;
-  generationRunRepository?: Pick<GenerationRunRepository, "update"> | null;
+  generationRunRepository?: Pick<
+    GenerationRunRepository,
+    "fetch" | "list" | "update"
+  > | null;
   onGameStatusChange: EditorGameCanvasActions["onGameStatusChange"];
 };
 
@@ -51,6 +54,10 @@ export function useEditorRuntimeSession({
     loadState.status === "success" && loadState.source === "phaser-spec"
       ? canvas.activeGeneratedSpec
       : null;
+  const activeGamePack =
+    loadState.status === "success" && loadState.source === "phaser-game-pack"
+      ? loadState.gamePack
+      : null;
   const lastPersistedGamePackKeyRef = useRef<string | null>(null);
   const resolvedGenerationRunRepository = useMemo(
     () => generationRunRepository ?? getBrowserGenerationRunRepository(),
@@ -61,16 +68,18 @@ export function useEditorRuntimeSession({
     persistValidatedGamePack,
     restoredGamePack,
   } = useEditorGamePackPersistence({
+    generationRunRepository: resolvedGenerationRunRepository,
     repository: gamePackRepository,
   });
   const runtimeTemplate = useMemo(
     () =>
       createEditorRuntimeTemplatePlan({
+        activeGamePack,
         activeGeneratedSpec,
         generationSource: canvas.generationSource,
         restoredGamePack,
       }),
-    [activeGeneratedSpec, canvas.generationSource, restoredGamePack]
+    [activeGamePack, activeGeneratedSpec, canvas.generationSource, restoredGamePack]
   );
   const {
     firstPlayableGenerationRunId,
@@ -152,7 +161,7 @@ export function useEditorRuntimeSession({
 }
 
 function getBrowserGenerationRunRepository():
-  | Pick<GenerationRunRepository, "update">
+  | Pick<GenerationRunRepository, "fetch" | "list" | "update">
   | null {
   if (typeof globalThis.indexedDB === "undefined") {
     return null;

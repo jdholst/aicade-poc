@@ -224,6 +224,212 @@ describe("evaluateGeneratedMechanicArtifact", () => {
     });
   });
 
+  it("fails an inert mechanic against evaluator-authored referenced motion evidence", async () => {
+    const contract = createContract({
+      scenarios: [
+        {
+          id: "state_only_scenario",
+          seed: 4,
+          setup: [],
+          steps: [{ kind: "dispatch_action", actionId: "activate" }],
+          observations: [
+            { kind: "state_equals", stateId: "counter", value: 3 },
+          ],
+        },
+      ],
+    });
+
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "state_only_causal_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "state_only_effect_changed",
+          scenarioId: "state_only_scenario",
+          observation: {
+            kind: "referenced_entity_motion_changed",
+            bindingIds: ["actor"],
+            actionId: "activate",
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => ({
+        sourceArtifactId: artifact.id,
+        hasBinding: () => true,
+        readDeclaredState: () => 3,
+        readBindingProperty: (_bindingId, property) =>
+          property === "position" ? { x: 0, y: 0 } : { x: 0, y: 0 },
+        countOwnedObjects: () => 0,
+        readEmittedOutputs: () => [],
+        install: async () => undefined,
+        receiveInput: async () => undefined,
+        dispatchAction: async () => undefined,
+        advanceTime: async () => undefined,
+        dispose: async () => undefined,
+      }),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "failed",
+      evidence: {
+        scenarios: [
+          {
+            externalObservations: [
+              {
+                id: "state_only_effect_changed",
+                kind: "referenced_entity_motion_changed",
+                passed: false,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("does not credit install or fixed-step motion before the exact logical action", async () => {
+    const contract = createContract({
+      scenarios: [
+        {
+          id: "causal_action_scenario",
+          seed: 4,
+          setup: [],
+          steps: [
+            { kind: "advance_time", milliseconds: 16 },
+            { kind: "dispatch_action", actionId: "activate" },
+          ],
+          observations: [
+            { kind: "state_equals", stateId: "counter", value: 3 },
+          ],
+        },
+      ],
+    });
+
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "causal_action_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "exact_action_motion",
+          scenarioId: "causal_action_scenario",
+          observation: {
+            kind: "referenced_entity_motion_changed",
+            bindingIds: ["actor"],
+            actionId: "activate",
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => {
+        let velocity = 0;
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: () => true,
+          readDeclaredState: () => 3,
+          readBindingProperty: (_bindingId, property) =>
+            property === "position"
+              ? { x: 0, y: 0 }
+              : { x: velocity, y: 0 },
+          countOwnedObjects: () => 0,
+          readEmittedOutputs: () => [],
+          install: async () => {
+            velocity = 10;
+          },
+          receiveInput: async () => undefined,
+          dispatchAction: async () => undefined,
+          advanceTime: async () => {
+            velocity = 20;
+          },
+          dispose: async () => undefined,
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "failed",
+      evidence: {
+        scenarios: [
+          {
+            externalObservations: [
+              {
+                id: "exact_action_motion",
+                passed: false,
+                actual: {
+                  before: [
+                    {
+                      bindingId: "actor",
+                      velocity: { x: 20, y: 0 },
+                    },
+                  ],
+                  after: [
+                    {
+                      bindingId: "actor",
+                      velocity: { x: 20, y: 0 },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects a substituted action in evaluator-authored evidence before runtime creation", async () => {
+    let runtimeCreated = false;
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "substituted_action_fixture",
+      contract: createContract({
+        scenarios: [
+          {
+            id: "substituted_action_scenario",
+            seed: 4,
+            setup: [],
+            steps: [{ kind: "dispatch_action", actionId: "activate" }],
+            observations: [
+              { kind: "state_equals", stateId: "counter", value: 3 },
+            ],
+          },
+        ],
+      }),
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "substituted_action_motion",
+          scenarioId: "substituted_action_scenario",
+          observation: {
+            kind: "referenced_entity_motion_changed",
+            bindingIds: ["actor"],
+            actionId: "substituted_action",
+          },
+        },
+      ],
+      createRuntime: async () => {
+        runtimeCreated = true;
+        throw new Error("A substituted action plan must not create a runtime.");
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "failed",
+      evidence: {
+        scenarios: [],
+        issues: [
+          {
+            path: "externalObservations.0.observation.actionId",
+            code: "external_plan_mismatch",
+          },
+        ],
+      },
+    });
+    expect(runtimeCreated).toBe(false);
+  });
+
   it("fails closed when the same fixture, seed, actions, and clock produce different evidence", async () => {
     const contract = createContract({
       scenarios: [

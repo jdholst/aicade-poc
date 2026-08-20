@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GeneratedMechanicContract } from "@/game-spec";
 import {
@@ -11,6 +12,7 @@ import {
   generationRunSchema,
   PHASE_9_GENERATION_CONSTRAINT_SET,
   prepareRestoredGeneratedMechanicProject,
+  reconcileGeneratedMechanicAcceptanceTransactions,
   recordFirstPlayableRuntimeEvidence,
   recordFirstPlayableRuntimeStatus,
   startFirstPlayableValidation,
@@ -18,13 +20,17 @@ import {
   type FirstPlayableValidationAttempt,
   type GamePackStorageDriver,
   type GenerationRunStorageDriver,
+  type PreparedGeneratedMechanicRuntimeProject,
   type StoredGamePackRecord,
   type StoredGenerationRunRecord,
+  withGeneratedMechanicAcceptanceLock,
+  writeGeneratedMechanicHandoffPendingReceipt,
 } from "@/game-spec";
 import { crystalSpecChaseGameSpecFixtureInput } from "@/runtime/phaser/fixtures/crystal-spec-chase";
 import { createGeneratedMechanicProjectRuntime } from "@/runtime/mechanics/generated-mechanic-project-runtime";
 import { evaluateGeneratedMechanicArtifact } from "@/service/mechanic-evaluation/mechanic-evaluation";
 import type { GeneratedMechanicSourceArtifact } from "@/service/mechanic-source-generation";
+import { useEditorGamePackPersistence } from "@/components/editor-shell/editor-game-pack-persistence";
 
 import {
   completeGeneratedMechanicProjectHandoff,
@@ -33,6 +39,16 @@ import {
 } from "./generated-mechanic-project-handoff";
 
 describe("generated mechanic project handoff", () => {
+  let browserLockManager: MemoryBrowserLockManager;
+
+  beforeEach(() => {
+    browserLockManager = new MemoryBrowserLockManager();
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: browserLockManager,
+    });
+  });
+
   it("persists one accepted artifact after exact runtime and first-playable proof", async () => {
     const contract = createContract();
     const sourceArtifact = createSourceArtifact();
@@ -167,7 +183,10 @@ describe("generated mechanic project handoff", () => {
       trustedPortContracts: [],
     });
 
-    expect(result.outcome).toBe("accepted");
+    if (result.outcome !== "accepted") {
+      throw new Error(JSON.stringify(result.evidence));
+    }
+    expect(result).toMatchObject({ outcome: "accepted" });
     expect(events).toEqual([
       `load:${sourceArtifact.id}`,
       `install:${sourceArtifact.id}`,
@@ -255,6 +274,507 @@ describe("generated mechanic project handoff", () => {
     });
   });
 
+  it("loads an honest transient candidate and creates accepted identity only after browser proof", async () => {
+    const context = await createHandoffTestContext();
+    const events: string[] = [];
+    let loadedProject:
+      | Parameters<
+          Parameters<typeof createGeneratedMechanicProjectRuntime>[0]["loadProjectDependency"]
+        >[0]
+      | undefined;
+    const runtime = createGeneratedMechanicProjectRuntime({
+      async loadProjectDependency(project) {
+        events.push("load_candidate");
+        loadedProject = project;
+        expect(project).toHaveProperty("runtimeCandidate");
+        expect(project).not.toHaveProperty("artifact");
+        if (!("runtimeCandidate" in project)) {
+          throw new Error("Expected a transient runtime candidate project.");
+        }
+        expect(project.runtimeCandidate.executableArtifact).not.toHaveProperty(
+          "acceptedAt"
+        );
+        expect(project.runtimeCandidate.executableArtifact).not.toHaveProperty(
+          "checkpointId"
+        );
+        return { sourceArtifactId: project.dependency.sourceArtifact.id };
+      },
+      async installTrustedTemplate({ loadedResource }) {
+        events.push("install_candidate");
+        return loadedResource;
+      },
+      async runFirstPlayableBrowserChecks({ gamePack }) {
+        events.push("browser_candidate");
+        expect(context.gamePackStorage.records.size).toBe(0);
+        return createPassedFirstPlayableAttempt(gamePack);
+      },
+      async disposeProjectDependency() {
+        events.push("dispose_candidate");
+      },
+    });
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      runtime,
+    });
+
+    if (result.outcome !== "accepted") {
+      throw new Error(JSON.stringify(result.evidence));
+    }
+    expect(result).toMatchObject({ outcome: "accepted" });
+    expect(loadedProject).toBeDefined();
+    expect(events).toEqual([
+      "load_candidate",
+      "install_candidate",
+      "browser_candidate",
+      "dispose_candidate",
+    ]);
+  });
+
+  it("commits pending, links the external GenerationRun, then returns only finalized lineage", async () => {
+    const context = await createHandoffTestContext();
+    const persistenceEvents: string[] = [];
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const transaction = input[2]?.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          typeof transaction.status === "string"
+        ) {
+          persistenceEvents.push(`game-pack:${transaction.status}`);
+        }
+        return context.gamePackRepository.compareAndSwap(...input);
+      }
+    );
+    const update = vi.fn(
+      async (
+        ...input: Parameters<typeof context.generationRunRepository.update>
+      ) => {
+        const updated = await context.generationRunRepository.update(...input);
+        const transaction = updated.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          typeof transaction.status === "string"
+        ) {
+          persistenceEvents.push(`generation-run:${transaction.status}`);
+        }
+        return updated;
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "accepted",
+      gamePack: {
+        metadata: {
+          generatedMechanicAcceptanceTransaction: {
+            status: "finalized",
+          },
+        },
+      },
+    });
+    expect(persistenceEvents).toEqual([
+      "game-pack:pending",
+      "generation-run:pending",
+      "game-pack:finalized",
+      "generation-run:finalized",
+    ]);
+    if (result.outcome === "accepted") {
+      expect(result.generationRun).toEqual(
+        result.gamePack.generationRuns.find(
+          ({ id }) => id === result.generationRun.id
+        )
+      );
+      expect(result.generationRun).toMatchObject({
+        metadata: {
+          generatedMechanicAcceptanceTransaction: { status: "finalized" },
+        },
+      });
+    }
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toEqual(
+      result.outcome === "accepted" ? result.gamePack : undefined
+    );
+  });
+
+  it("fails persistence closed when the browser cross-realm lock is unavailable", async () => {
+    const context = await createHandoffTestContext();
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: undefined,
+    });
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [
+          expect.objectContaining({ code: "acceptance_lock_unavailable" }),
+        ],
+      },
+    });
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
+  });
+
+  it("rejects a cloned cross-realm lock receipt before accepted persistence", async () => {
+    const context = await createHandoffTestContext();
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      acceptanceLockReceipt: {
+        schemaVersion: "generated_mechanic_acceptance_lock_receipt/v1",
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [
+          expect.objectContaining({ code: "acceptance_lock_receipt_invalid" }),
+        ],
+      },
+    });
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
+  it("does not return accepted when cancellation wins during finalization", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const rollbackEvents: string[] = [];
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const committed = await context.gamePackRepository.compareAndSwap(
+          ...input
+        );
+        const transaction = input[2]?.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          transaction.status === "finalized"
+        ) {
+          controller.abort("cancelled");
+          throw new Error("Finalizing compare-and-swap threw after its write.");
+        }
+        if (input[2] === null && input[1]?.metadata) {
+          rollbackEvents.push("game-pack:rollback");
+        }
+        return committed;
+      }
+    );
+    const update = vi.fn(
+      async (
+        ...input: Parameters<typeof context.generationRunRepository.update>
+      ) => {
+        if (update.mock.calls.length > 1) {
+          rollbackEvents.push("generation-run:rollback");
+        }
+        return context.generationRunRepository.update(...input);
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(compareAndSwap).toHaveBeenCalledTimes(4);
+    expect(rollbackEvents).toEqual([
+      "game-pack:rollback",
+      "generation-run:rollback",
+      "game-pack:rollback",
+    ]);
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
+  });
+
+  it("treats confirmed recovery-journal deletion as the acceptance commit point", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const pendingGamePackId =
+      `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`;
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const committed = await context.gamePackRepository.compareAndSwap(
+          ...input
+        );
+        if (
+          committed &&
+          input[0] === pendingGamePackId &&
+          input[1] !== null &&
+          input[2] === null
+        ) {
+          controller.abort("late cancellation after acceptance commit");
+        }
+        return committed;
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(result.outcome).toBe("accepted");
+    expect(compareAndSwap).toHaveBeenCalledTimes(3);
+    await expect(
+      context.gamePackRepository.load(pendingGamePackId)
+    ).resolves.toBeNull();
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toEqual(result.outcome === "accepted" ? result.gamePack : null);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(
+      result.outcome === "accepted" ? result.generationRun : null
+    );
+  });
+
+  it("compensates cancellation during a failed journal deletion when the journal remains", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const pendingGamePackId =
+      `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`;
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        if (
+          input[0] === pendingGamePackId &&
+          input[1] !== null &&
+          input[2] === null &&
+          !controller.signal.aborted
+        ) {
+          controller.abort("cancelled during journal deletion");
+          return false;
+        }
+        return context.gamePackRepository.compareAndSwap(...input);
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
+  });
+
+  it("lets cancellation win when it arrives during the final durable-state recheck", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const fetch = vi.fn(async (generationRunId: string) => {
+      const generationRun = await context.generationRunRepository.fetch(
+        generationRunId
+      );
+      if (fetch.mock.calls.length === 2) {
+        controller.abort("cancelled during the final durable-state recheck");
+      }
+      return generationRun;
+    });
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      generationRunRepository: {
+        fetch,
+        update: context.generationRunRepository.update.bind(
+          context.generationRunRepository
+        ),
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
+  });
+
+  it("reports durable acceptance when abort compensation loses to an accepted canonical edit", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    let concurrentCanonicalGamePack:
+      | NonNullable<
+          Awaited<ReturnType<typeof context.gamePackRepository.load>>
+        >
+      | undefined;
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const committed = await context.gamePackRepository.compareAndSwap(
+          ...input
+        );
+        const transaction = input[2]?.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          transaction.status === "finalized"
+        ) {
+          const canonical = await context.gamePackRepository.load(
+            context.gamePack.id
+          );
+          if (!canonical) {
+            throw new Error("Expected the durable accepted canonical Game Pack.");
+          }
+          concurrentCanonicalGamePack = parseGamePack({
+            ...canonical,
+            title: "Accepted concurrent canonical edit",
+          });
+          await context.gamePackRepository.save(concurrentCanonicalGamePack);
+          controller.abort("cancelled");
+          throw new Error("Canonical driver threw after accepted edit.");
+        }
+        return committed;
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "accepted",
+      gamePack: { title: "Accepted concurrent canonical edit" },
+      generationRun: {
+        metadata: {
+          generatedMechanicAcceptanceTransaction: { status: "finalized" },
+        },
+      },
+    });
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toEqual(concurrentCanonicalGamePack);
+  });
+
+  it("does not perform accepted persistence when the transient candidate fails browser proof", async () => {
+    const context = await createHandoffTestContext();
+    const compareAndSwap = vi.spyOn(
+      context.input.gamePackRepository,
+      "compareAndSwap"
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      runtime: createPassingRuntime([], {
+        firstPlayableAttempt: createFailedFirstPlayableAttempt(context.gamePack),
+      }),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "first_playable" },
+    });
+    expect(compareAndSwap).not.toHaveBeenCalled();
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
   it("stops at Final Game Spec preflight without loading or persisting a mismatched artifact", async () => {
     const context = await createHandoffTestContext();
     const loadProjectDependency = vi.fn();
@@ -290,6 +810,43 @@ describe("generated mechanic project handoff", () => {
       context.generationRun.id
     );
     expect(unchangedRun).not.toHaveProperty("relationships");
+  });
+
+  it("returns structured persistence evidence when GenerationRun preflight fetch throws", async () => {
+    const context = await createHandoffTestContext();
+    const runtimeEvents: string[] = [];
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      generationRunRepository: {
+        async fetch() {
+          throw new Error("GenerationRun storage is unavailable.");
+        },
+        update: context.generationRunRepository.update.bind(
+          context.generationRunRepository
+        ),
+      },
+      runtime: createPassingRuntime(runtimeEvents),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [
+          expect.objectContaining({
+            path: "generationRunId",
+            code: "generation_run_fetch_failed",
+            message: "GenerationRun storage is unavailable.",
+          }),
+        ],
+      },
+    });
+    expect(runtimeEvents).toEqual([]);
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
   });
 
   it("rejects a same-ID Game Pack whose Game Spec diverges from the Final Game Spec", async () => {
@@ -868,6 +1425,48 @@ describe("generated mechanic project handoff", () => {
     expect(context.gamePackStorage.records.size).toBe(0);
   });
 
+  it("rejects an issued receipt when the accepted Final Game Spec substitutes evaluated config", async () => {
+    const context = await createHandoffTestContext();
+    const events: string[] = [];
+    const substitutedGameSpec = {
+      ...context.input.finalGameSpec.gameSpec,
+      mechanics: context.input.finalGameSpec.gameSpec.mechanics.map(
+        (mechanic) =>
+          mechanic.id === context.input.finalGameSpec.extension.mechanicId
+            ? { ...mechanic, config: { initial_count: 4 } }
+            : mechanic
+      ),
+    };
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePack: {
+        ...context.input.gamePack,
+        gameSpec: substitutedGameSpec,
+      },
+      finalGameSpec: {
+        ...context.input.finalGameSpec,
+        extension: {
+          ...context.input.finalGameSpec.extension,
+          config: { initial_count: 4 },
+        },
+        gameSpec: substitutedGameSpec,
+      },
+      runtime: createPassingRuntime(events),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "deterministic_evaluation",
+        issues: [
+          expect.objectContaining({ code: "untrusted_evaluation_receipt" }),
+        ],
+      },
+    });
+    expect(events).toEqual([]);
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
   it("rejects deterministic evaluation that does not retain its replay scenarios", async () => {
     const context = await createHandoffTestContext();
     const events: string[] = [];
@@ -1091,6 +1690,538 @@ describe("generated mechanic project handoff", () => {
     expect(context.gamePackStorage.records.size).toBe(0);
   });
 
+  it("mints live acceptance time only after first-playable browser proof", async () => {
+    const context = await createHandoffTestContext();
+    const events: string[] = [];
+    const { acceptedAt: _acceptedAt, ...inputWithoutAcceptedAt } = context.input;
+    void _acceptedAt;
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...inputWithoutAcceptedAt,
+      createAcceptedAt: () => {
+        events.push("mint-accepted-at");
+        return "2026-08-11T12:00:10.000Z";
+      },
+      runtime: createPassingRuntime(events),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "accepted",
+      artifact: { acceptedAt: "2026-08-11T12:00:10.000Z" },
+    });
+    expect(events).toEqual([
+      `load:${context.sourceArtifact.id}`,
+      `install:${context.sourceArtifact.id}`,
+      `browser:${context.sourceArtifact.id}`,
+      "mint-accepted-at",
+      `dispose:${context.sourceArtifact.id}`,
+    ]);
+  });
+
+  it("rejects cancellation before runtime activation without durable writes", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    controller.abort();
+    const loadProjectDependency = vi.fn();
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      signal: controller.signal,
+      runtime: {
+        loadProjectDependency,
+        installTrustedTemplate: vi.fn(),
+        runFirstPlayableBrowserChecks: vi.fn(),
+        disposeProjectDependency: vi.fn(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "preflight",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(loadProjectDependency).not.toHaveBeenCalled();
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
+  it("rejects cancellation observed during browser proof before persistence", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const events: string[] = [];
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      signal: controller.signal,
+      runtime: createPassingRuntime(events, {
+        onBrowserCheck: () => controller.abort(),
+      }),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "first_playable",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(events.at(-1)).toBe(`dispose:${context.sourceArtifact.id}`);
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
+  it.each([
+    {
+      name: "runtime dependency loading",
+      stage: "runtime_activation" as const,
+      runtimeOptions: (controller: AbortController) => ({
+        loadError: new Error("load aborted"),
+        onLoadProject: () => controller.abort(),
+      }),
+    },
+    {
+      name: "trusted template installation",
+      stage: "runtime_activation" as const,
+      runtimeOptions: (controller: AbortController) => ({
+        installError: new Error("install aborted"),
+        onInstall: () => controller.abort(),
+      }),
+    },
+    {
+      name: "first-playable browser proof",
+      stage: "first_playable" as const,
+      runtimeOptions: (controller: AbortController) => ({
+        browserError: new Error("browser proof aborted"),
+        onBrowserCheck: () => controller.abort(),
+      }),
+    },
+  ])(
+    "classifies an abort-driven $name exception as generation cancellation",
+    async ({ runtimeOptions, stage }) => {
+      const context = await createHandoffTestContext();
+      const controller = new AbortController();
+      const events: string[] = [];
+
+      const result = await completeGeneratedMechanicProjectHandoff({
+        ...context.input,
+        signal: controller.signal,
+        runtime: createPassingRuntime(events, runtimeOptions(controller)),
+      });
+
+      expect(result).toMatchObject({
+        outcome: "rejected",
+        evidence: {
+          stage,
+          issues: [expect.objectContaining({ code: "generation_cancelled" })],
+        },
+      });
+      expect(result).not.toMatchObject({
+        evidence: {
+          issues: [
+            expect.objectContaining({
+              code: expect.stringMatching(
+                /runtime_dependency_load_failed|runtime_activation_failed|first_playable_checks_failed/
+              ),
+            }),
+          ],
+        },
+      });
+      expect(events.at(-1)).toMatch(/^dispose:/);
+      expect(context.gamePackStorage.records.size).toBe(0);
+    }
+  );
+
+  it("rejects cancellation during the durable preflight read before compare-and-swap", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const compareAndSwap = vi.fn(
+      context.gamePackRepository.compareAndSwap.bind(
+        context.gamePackRepository
+      )
+    );
+    const load = vi.fn(async (gamePackId: string) => {
+      const restored = await context.gamePackRepository.load(gamePackId);
+      controller.abort();
+      return restored;
+    });
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: { compareAndSwap, load },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(compareAndSwap).not.toHaveBeenCalled();
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
+  it("classifies an abort-driven durable preflight exception as cancellation", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const compareAndSwap = vi.fn();
+    const load = vi.fn(async () => {
+      controller.abort("cancelled");
+      throw new Error("durable read aborted");
+    });
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: { compareAndSwap, load },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(result).not.toMatchObject({
+      evidence: {
+        issues: [
+          expect.objectContaining({ code: "game_pack_commit_preflight_failed" }),
+        ],
+      },
+    });
+    expect(compareAndSwap).not.toHaveBeenCalled();
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
+  it("rolls back acceptance when cancellation arrives during compare-and-swap", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const compareAndSwap = vi.fn(
+      async (...input: Parameters<typeof context.gamePackRepository.compareAndSwap>) => {
+        const committed = await context.gamePackRepository.compareAndSwap(...input);
+        if (compareAndSwap.mock.calls.length === 1) {
+          controller.abort();
+        }
+        return committed;
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(compareAndSwap).toHaveBeenCalledTimes(2);
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
+  it("rolls back acceptance when cancellation arrives during durable restore", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const compareAndSwap = vi.fn(
+      context.gamePackRepository.compareAndSwap.bind(
+        context.gamePackRepository
+      )
+    );
+    const load = vi.fn(async (gamePackId: string) => {
+      const restored = await context.gamePackRepository.load(gamePackId);
+      if (load.mock.calls.length === 3) {
+        controller.abort();
+      }
+      return restored;
+    });
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: { compareAndSwap, load },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(compareAndSwap).toHaveBeenCalledTimes(2);
+    expect(context.gamePackStorage.records.size).toBe(0);
+  });
+
+  it("rejects a post-CAS restore whose current checkpoint no longer carries the accepted lineage", async () => {
+    const context = await createHandoffTestContext();
+    let concurrentGamePack:
+      | Awaited<ReturnType<typeof context.gamePackRepository.load>>
+      | undefined;
+    const load = vi.fn(async (gamePackId: string) => {
+      const restored = await context.gamePackRepository.load(gamePackId);
+      if (load.mock.calls.length !== 3 || !restored) {
+        return restored;
+      }
+      const advanced = restoreGamePackCheckpoint({
+        gamePack: restored,
+        restoredAt: "2026-08-11T12:00:11.000Z",
+        sourceCheckpointId: restored.currentCheckpointId!,
+      });
+      concurrentGamePack = parseGamePack({
+        ...advanced,
+        checkpoints: advanced.checkpoints.map((checkpoint) => {
+          if (checkpoint.id !== advanced.currentCheckpointId) {
+            return checkpoint;
+          }
+          const {
+            generatedMechanicArtifactIds: ignoredArtifactIds,
+            ...checkpointWithoutArtifact
+          } = checkpoint;
+          void ignoredArtifactIds;
+          return checkpointWithoutArtifact;
+        }),
+      });
+      await context.gamePackRepository.save(concurrentGamePack);
+      return concurrentGamePack;
+    });
+    const update = vi.fn(
+      context.generationRunRepository.update.bind(
+        context.generationRunRepository
+      )
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap: context.gamePackRepository.compareAndSwap.bind(
+          context.gamePackRepository
+        ),
+        load,
+      },
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "accepted_artifact_restore_mismatch",
+          }),
+        ]),
+      },
+    });
+    expect(update).not.toHaveBeenCalled();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.not.toHaveProperty("relationships");
+    await expect(
+      context.gamePackRepository.load(concurrentGamePack?.id ?? "missing")
+    ).resolves.toEqual(concurrentGamePack);
+  });
+
+  it("rolls back both durable records when cancellation arrives during GenerationRun linkage", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const compareAndSwap = vi.fn(
+      context.gamePackRepository.compareAndSwap.bind(
+        context.gamePackRepository
+      )
+    );
+    const update = vi.fn(
+      async (...input: Parameters<typeof context.generationRunRepository.update>) => {
+        const updated = await context.generationRunRepository.update(...input);
+        if (update.mock.calls.length === 1) {
+          controller.abort();
+        }
+        return updated;
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(compareAndSwap).toHaveBeenCalledTimes(2);
+    expect(context.gamePackStorage.records.size).toBe(0);
+    expect(
+      await context.generationRunRepository.fetch(context.generationRun.id)
+    ).toEqual(context.generationRun);
+  });
+
+  it("lets cancellation win when abort arrives during final linkage before journal deletion", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const compareAndSwap = vi.fn(
+      context.gamePackRepository.compareAndSwap.bind(
+        context.gamePackRepository
+      )
+    );
+    const update = vi.fn(
+      async (...input: Parameters<typeof context.generationRunRepository.update>) => {
+        const updated = await context.generationRunRepository.update(...input);
+        if (update.mock.calls.length === 2) {
+          controller.abort();
+        }
+        return updated;
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(update).toHaveBeenCalledTimes(3);
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
+  });
+
+  it("does not erase a cancellation that wins before GenerationRun lineage linkage", async () => {
+    const context = await createHandoffTestContext();
+    const controller = new AbortController();
+    const compareAndSwap = vi.fn(
+      context.gamePackRepository.compareAndSwap.bind(
+        context.gamePackRepository
+      )
+    );
+    const update = vi.fn(
+      async (...input: Parameters<typeof context.generationRunRepository.update>) => {
+        if (update.mock.calls.length === 1) {
+          await context.generationRunRepository.update(
+            context.generationRun.id,
+            (current) => ({
+              ...current,
+              status: "cancelled",
+              completedAt: "2026-08-11T12:00:11.000Z",
+              durationMs: 20_000,
+              stage: "cancellation",
+              failureClass: "cancellation",
+              metadata: {
+                ...(current.metadata ?? {}),
+                generatedMechanicOutcome: {
+                  status: "rejected",
+                  stage: "continuation",
+                  issues: [
+                    {
+                      path: "context.signal",
+                      code: "generation_cancelled",
+                      message: "The creator cancelled generated continuation.",
+                    },
+                  ],
+                },
+              },
+            })
+          );
+          controller.abort("cancelled");
+          throw new Error("GenerationRun linkage lost cancellation ownership.");
+        }
+        return context.generationRunRepository.update(...input);
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      signal: controller.signal,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [expect.objectContaining({ code: "generation_cancelled" })],
+      },
+    });
+    expect(compareAndSwap).toHaveBeenCalledTimes(2);
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      status: "cancelled",
+      stage: "cancellation",
+      failureClass: "cancellation",
+      metadata: {
+        generatedMechanicOutcome: {
+          stage: "continuation",
+          issues: [expect.objectContaining({ code: "generation_cancelled" })],
+        },
+      },
+    });
+  });
+
   it("rejects reuse of an immutable accepted extension version before runtime work", async () => {
     const context = await createHandoffTestContext();
     const accepted = await completeGeneratedMechanicProjectHandoff({
@@ -1253,6 +2384,972 @@ describe("generated mechanic project handoff", () => {
     ).resolves.toEqual(secondAcceptance.gamePack);
   });
 
+  it("keeps the last finalized Game Pack available and retryable if a later pending write driver throws", async () => {
+    const context = await createHandoffTestContext();
+    const firstAcceptance = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      runtime: createPassingRuntime([]),
+    });
+    expect(firstAcceptance.outcome).toBe("accepted");
+    if (firstAcceptance.outcome !== "accepted") {
+      return;
+    }
+    const versionTwo = await createVersionTwoHandoffInput(context);
+    let pendingGamePackId: string | undefined;
+    let canonicalDuringPendingWrite: GamePack | null | undefined;
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const committed = await context.gamePackRepository.compareAndSwap(
+          ...input
+        );
+        const transaction = input[2]?.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          transaction.status === "pending"
+        ) {
+          pendingGamePackId = input[0];
+          canonicalDuringPendingWrite = await context.gamePackRepository.load(
+            firstAcceptance.gamePack.id
+          );
+          throw new Error("Simulated process crash after the pending write.");
+        }
+        return committed;
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      ...versionTwo,
+      gamePack: firstAcceptance.gamePack,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "persistence" },
+    });
+    expect(pendingGamePackId).not.toBe(firstAcceptance.gamePack.id);
+    expect(canonicalDuringPendingWrite).toEqual(firstAcceptance.gamePack);
+    await expect(
+      context.gamePackRepository.load(firstAcceptance.gamePack.id)
+    ).resolves.toEqual(firstAcceptance.gamePack);
+    await expect(
+      context.gamePackRepository.load(pendingGamePackId ?? "missing")
+    ).resolves.toBeNull();
+
+    const retry = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      ...versionTwo,
+      gamePack: firstAcceptance.gamePack,
+      runtime: createPassingRuntime([]),
+    });
+    expect(retry.outcome).toBe("accepted");
+  });
+
+  it("resumes an exact staging-only crash record on the next handoff retry", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+
+    await context.gamePackRepository.delete(captured.accepted.gamePack.id);
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => context.generationRun
+    );
+    await context.gamePackRepository.save(captured.pendingGamePack);
+
+    const retry = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(retry.outcome).toBe("accepted");
+    await expect(
+      context.gamePackRepository.load(captured.pendingGamePack.id)
+    ).resolves.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(
+      retry.outcome === "accepted" ? retry.generationRun : undefined
+    );
+  });
+
+  it("serializes reconciliation against a live cross-realm acceptance advance", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await withGeneratedMechanicAcceptanceLock({
+      operation: (acceptanceLockReceipt) =>
+        completeAndCaptureAcceptanceTransaction(
+          context,
+          acceptanceLockReceipt
+        ),
+    });
+    await context.gamePackRepository.delete(captured.accepted.gamePack.id);
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => context.generationRun
+    );
+    await context.gamePackRepository.save(captured.pendingGamePack);
+
+    let releaseJournalDelete!: () => void;
+    const journalDeleteReleased = new Promise<void>((resolve) => {
+      releaseJournalDelete = resolve;
+    });
+    let reportJournalDelete!: () => void;
+    const journalDeleteStarted = new Promise<void>((resolve) => {
+      reportJournalDelete = resolve;
+    });
+    let interceptedJournalDelete = false;
+    const reconciliation = reconcileGeneratedMechanicAcceptanceTransactions({
+      gamePackRepository: {
+        async compareAndSwap(...input) {
+          if (
+            !interceptedJournalDelete &&
+            input[0] === captured.pendingGamePack.id &&
+            input[1] !== null &&
+            input[2] === null
+          ) {
+            interceptedJournalDelete = true;
+            reportJournalDelete();
+            await journalDeleteReleased;
+          }
+          return context.gamePackRepository.compareAndSwap(...input);
+        },
+        list: context.gamePackRepository.list.bind(
+          context.gamePackRepository
+        ),
+        load: context.gamePackRepository.load.bind(
+          context.gamePackRepository
+        ),
+      },
+      generationRunRepository: context.generationRunRepository,
+    });
+    await journalDeleteStarted;
+
+    let reportLiveEntry!: () => void;
+    const liveEntry = new Promise<void>((resolve) => {
+      reportLiveEntry = resolve;
+    });
+    const liveAdvance = browserLockManager.request(
+      "sparkline:generated-mechanic-acceptance:global",
+      { mode: "exclusive" },
+      async () => {
+        reportLiveEntry();
+        const currentJournal = await context.gamePackRepository.load(
+          captured.pendingGamePack.id
+        );
+        if (!currentJournal) {
+          expect(
+            await context.gamePackRepository.compareAndSwap(
+              captured.pendingGamePack.id,
+              null,
+              captured.pendingGamePack
+            )
+          ).toBe(true);
+        }
+        await context.generationRunRepository.update(
+          context.generationRun.id,
+          (current) => {
+            expect(current).toEqual(context.generationRun);
+            return captured.pendingGenerationRun;
+          }
+        );
+      }
+    );
+    const liveEnteredBeforeDelete = await Promise.race([
+      liveEntry.then(() => true),
+      new Promise<false>((resolve) => {
+        setTimeout(() => resolve(false), 20);
+      }),
+    ]);
+    releaseJournalDelete();
+
+    const [reconciliationResult] = await Promise.all([
+      reconciliation,
+      liveAdvance,
+    ]);
+    expect(liveEnteredBeforeDelete).toBe(false);
+    expect(reconciliationResult.issues).toEqual([]);
+    await expect(
+      context.gamePackRepository.load(captured.pendingGamePack.id)
+    ).resolves.toEqual(captured.pendingGamePack);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(captured.pendingGenerationRun);
+  });
+
+  it("holds startup discovery and restore selection against a newly staged live acceptance", async () => {
+    const context = await createHandoffTestContext();
+    const initialGamePacks = await context.gamePackRepository.list();
+    let releaseInitialScan!: () => void;
+    const initialScanReleased = new Promise<void>((resolve) => {
+      releaseInitialScan = resolve;
+    });
+    let reportInitialScan!: () => void;
+    const initialScanStarted = new Promise<void>((resolve) => {
+      reportInitialScan = resolve;
+    });
+    let listCallCount = 0;
+    const startupGamePackRepository = {
+      ...context.gamePackRepository,
+      async list() {
+        listCallCount += 1;
+        if (listCallCount === 1) {
+          reportInitialScan();
+          await initialScanReleased;
+          return initialGamePacks;
+        }
+        return context.gamePackRepository.list();
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: context.generationRunRepository,
+        repository: startupGamePackRepository,
+      })
+    );
+    await initialScanStarted;
+
+    let releaseFinalGenerationRunLink!: () => void;
+    const finalGenerationRunLinkReleased = new Promise<void>((resolve) => {
+      releaseFinalGenerationRunLink = resolve;
+    });
+    let reportCanonicalFinalizedExternalPending!: () => void;
+    const canonicalFinalizedExternalPending = new Promise<void>((resolve) => {
+      reportCanonicalFinalizedExternalPending = resolve;
+    });
+    let generationRunUpdateCount = 0;
+    const liveAcceptance = completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        async update(generationRunId, updater) {
+          generationRunUpdateCount += 1;
+          if (generationRunUpdateCount === 2) {
+            reportCanonicalFinalizedExternalPending();
+            await finalGenerationRunLinkReleased;
+          }
+          return context.generationRunRepository.update(
+            generationRunId,
+            updater
+          );
+        },
+      },
+      runtime: createPassingRuntime([]),
+    });
+    const liveAdvancedBeforeInitialScanReleased = await Promise.race([
+      canonicalFinalizedExternalPending.then(() => true),
+      new Promise<false>((resolve) => {
+        setTimeout(() => resolve(false), 20);
+      }),
+    ]);
+
+    releaseInitialScan();
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("loaded");
+    });
+    if (!liveAdvancedBeforeInitialScanReleased) {
+      await canonicalFinalizedExternalPending;
+    }
+
+    expect(result.current.restoredGamePack).toBeNull();
+    releaseFinalGenerationRunLink();
+    await expect(liveAcceptance).resolves.toMatchObject({
+      outcome: "accepted",
+    });
+  });
+
+  it("keeps the recovery journal when startup cannot acquire a cross-realm lock", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+    await context.gamePackRepository.delete(captured.accepted.gamePack.id);
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => context.generationRun
+    );
+    await context.gamePackRepository.save(captured.pendingGamePack);
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: undefined,
+    });
+
+    const reconciliation =
+      await reconcileGeneratedMechanicAcceptanceTransactions({
+        gamePackRepository: context.gamePackRepository,
+        generationRunRepository: context.generationRunRepository,
+      });
+
+    expect(reconciliation.issues).toEqual([
+      expect.objectContaining({ code: "acceptance_lock_unavailable" }),
+    ]);
+    await expect(
+      context.gamePackRepository.load(captured.pendingGamePack.id)
+    ).resolves.toEqual(captured.pendingGamePack);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
+  });
+
+  it("fails closed an interrupted handoff receipt that has no acceptance journal", async () => {
+    const context = await createHandoffTestContext();
+    const interruptedGenerationRun = writeGeneratedMechanicHandoffPendingReceipt(
+      context.generationRun,
+      {
+        intentArtifactId: "intent_generated_counter",
+        contractArtifactId: context.contract.id,
+        sourceArtifactId: context.sourceArtifact.id,
+        finalGameSpecArtifactId: context.finalGameSpec.id,
+      }
+    );
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => interruptedGenerationRun
+    );
+
+    const reconciliation =
+      await reconcileGeneratedMechanicAcceptanceTransactions({
+        gamePackRepository: context.gamePackRepository,
+        generationRunRepository: context.generationRunRepository,
+      });
+
+    expect(reconciliation.issues).toEqual([]);
+    expect(reconciliation.restorableGamePack).toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      status: "failed",
+      stage: "artifact-build",
+      failureClass: "build-failure",
+      metadata: {
+        generatedMechanicOutcome: {
+          status: "rejected",
+          stage: "persistence",
+          issues: [
+            {
+              path: "generationRun.metadata.generatedMechanicHandoff",
+              code: "generated_mechanic_handoff_interrupted",
+            },
+          ],
+        },
+      },
+    });
+    const persisted = await context.generationRunRepository.fetch(
+      context.generationRun.id
+    );
+    expect(persisted?.metadata).not.toHaveProperty(
+      "generatedMechanicHandoff"
+    );
+  });
+
+  it("terminalizes a pending handoff receipt after its staging-only journal is cleared", async () => {
+    const context = await createHandoffTestContext();
+    const interruptedGenerationRun = writeGeneratedMechanicHandoffPendingReceipt(
+      context.generationRun,
+      {
+        intentArtifactId: "intent_generated_counter",
+        contractArtifactId: context.contract.id,
+        sourceArtifactId: context.sourceArtifact.id,
+        finalGameSpecArtifactId: context.finalGameSpec.id,
+      }
+    );
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => interruptedGenerationRun
+    );
+    const captured = await withGeneratedMechanicAcceptanceLock({
+      operation: (acceptanceLockReceipt) =>
+        completeAndCaptureAcceptanceTransaction(
+          context,
+          acceptanceLockReceipt
+        ),
+    });
+    await context.gamePackRepository.delete(captured.accepted.gamePack.id);
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => interruptedGenerationRun
+    );
+    await context.gamePackRepository.save(captured.pendingGamePack);
+
+    const reconciliation =
+      await reconcileGeneratedMechanicAcceptanceTransactions({
+        gamePackRepository: context.gamePackRepository,
+        generationRunRepository: context.generationRunRepository,
+      });
+
+    expect(reconciliation.issues).toEqual([]);
+    expect(reconciliation.reconciledPendingGamePackIds).toContain(
+      captured.pendingGamePack.id
+    );
+    await expect(
+      context.gamePackRepository.load(captured.pendingGamePack.id)
+    ).resolves.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      status: "failed",
+      metadata: {
+        generatedMechanicOutcome: {
+          stage: "persistence",
+          issues: [
+            expect.objectContaining({
+              code: "generated_mechanic_handoff_interrupted",
+            }),
+          ],
+        },
+      },
+    });
+  });
+
+  it("reconciles canonical-finalized external-pending lineage during normal editor refresh", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => captured.pendingGenerationRun
+    );
+    await context.gamePackRepository.save(captured.pendingGamePack);
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: context.generationRunRepository,
+        repository: context.gamePackRepository,
+      })
+    );
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("loaded");
+    });
+
+    expect(result.current.restoredGamePack).toEqual(captured.accepted.gamePack);
+    await expect(
+      context.gamePackRepository.load(captured.pendingGamePack.id)
+    ).resolves.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(captured.accepted.generationRun);
+  });
+
+  it("fails editor refresh closed when finalized canonical lineage cannot reconcile externally", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+
+    await context.generationRunRepository.update(
+      context.generationRun.id,
+      () => captured.pendingGenerationRun
+    );
+    await context.gamePackRepository.save(captured.pendingGamePack);
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: {
+          fetch: context.generationRunRepository.fetch.bind(
+            context.generationRunRepository
+          ),
+          list: context.generationRunRepository.list.bind(
+            context.generationRunRepository
+          ),
+          async update() {
+            throw new Error("External GenerationRun storage is unavailable.");
+          },
+        },
+        repository: context.gamePackRepository,
+      })
+    );
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("error");
+    });
+
+    expect(result.current.restoredGamePack).toBeNull();
+    expect(result.current.storageError).toMatchObject({
+      name: "EditorGamePackAcceptanceRecoveryError",
+      issues: [
+        expect.objectContaining({
+          code: "pending_acceptance_reconciliation_failed",
+        }),
+      ],
+    });
+    await expect(
+      context.gamePackRepository.load(captured.accepted.gamePack.id)
+    ).resolves.toEqual(captured.accepted.gamePack);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(captured.pendingGenerationRun);
+  });
+
+  it("does not report acceptance until the isolated recovery journal is durably removed", async () => {
+    const context = await createHandoffTestContext();
+    const pendingGamePackId =
+      `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`;
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        if (
+          input[0] === pendingGamePackId &&
+          input[1] !== null &&
+          input[2] === null
+        ) {
+          return false;
+        }
+        return context.gamePackRepository.compareAndSwap(...input);
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [
+          expect.objectContaining({
+            code: "accepted_artifact_recovery_pending",
+          }),
+        ],
+      },
+    });
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toMatchObject({
+      metadata: {
+        generatedMechanicAcceptanceTransaction: { status: "finalized" },
+      },
+    });
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      metadata: {
+        generatedMechanicAcceptanceTransaction: { status: "finalized" },
+      },
+    });
+    await expect(
+      context.gamePackRepository.load(pendingGamePackId)
+    ).resolves.not.toBeNull();
+  });
+
+  it("keeps the recovery journal when the canonical Game Pack is overwritten before final cleanup", async () => {
+    const context = await createHandoffTestContext();
+    const previousGamePack = gamePackSchema.parse(
+      JSON.parse(JSON.stringify(context.gamePack))
+    );
+    await context.gamePackRepository.save(previousGamePack);
+    const pendingGamePackId =
+      `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`;
+    let generationRunUpdateCount = 0;
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePack: previousGamePack,
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        async update(generationRunId, updater) {
+          generationRunUpdateCount += 1;
+          const updated = await context.generationRunRepository.update(
+            generationRunId,
+            updater
+          );
+          if (generationRunUpdateCount === 2) {
+            await context.gamePackRepository.save(previousGamePack);
+          }
+          return updated;
+        },
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: [
+          expect.objectContaining({
+            code: "accepted_artifact_recovery_pending",
+          }),
+        ],
+      },
+    });
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toEqual(previousGamePack);
+    await expect(
+      context.gamePackRepository.load(pendingGamePackId)
+    ).resolves.not.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      metadata: {
+        generatedMechanicAcceptanceTransaction: { status: "finalized" },
+      },
+    });
+  });
+
+  it("cleans an exact historical acceptance journal after a newer acceptance replaces the canonical marker", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+    await context.gamePackRepository.save(captured.pendingGamePack);
+
+    const versionTwo = await createVersionTwoHandoffInput(context);
+    const secondAcceptance = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      ...versionTwo,
+      gamePack: captured.accepted.gamePack,
+      runtime: createPassingRuntime([]),
+    });
+    expect(secondAcceptance.outcome).toBe("accepted");
+    if (secondAcceptance.outcome !== "accepted") {
+      return;
+    }
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: context.generationRunRepository,
+        repository: context.gamePackRepository,
+      })
+    );
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("loaded");
+    });
+
+    expect(result.current.restoredGamePack).toEqual(secondAcceptance.gamePack);
+    await expect(
+      context.gamePackRepository.load(captured.pendingGamePack.id)
+    ).resolves.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(captured.accepted.generationRun);
+  });
+
+  it("rolls back a losing same-artifact transaction under a foreign canonical winner", async () => {
+    const winningContext = await createHandoffTestContext();
+    const losingContext = await createHandoffTestContext();
+    const winner = await completeAndCaptureAcceptanceTransaction(
+      winningContext
+    );
+    const loser = await completeAndCaptureAcceptanceTransaction(losingContext);
+
+    await losingContext.generationRunRepository.update(
+      losingContext.generationRun.id,
+      () => loser.pendingGenerationRun
+    );
+    await winningContext.gamePackRepository.save(loser.pendingGamePack);
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: losingContext.generationRunRepository,
+        repository: winningContext.gamePackRepository,
+      })
+    );
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("loaded");
+    });
+
+    expect(result.current.restoredGamePack).toEqual(winner.accepted.gamePack);
+    await expect(
+      winningContext.gamePackRepository.load(loser.pendingGamePack.id)
+    ).resolves.toBeNull();
+    await expect(
+      losingContext.generationRunRepository.fetch(losingContext.generationRun.id)
+    ).resolves.toEqual(losingContext.generationRun);
+    await expect(
+      winningContext.gamePackRepository.load(winner.accepted.gamePack.id)
+    ).resolves.toEqual(winner.accepted.gamePack);
+  });
+
+  it("accepts an exact final GenerationRun when refresh reconciliation wins the final linkage race", async () => {
+    const context = await createHandoffTestContext();
+    let updateCount = 0;
+    const update = vi.fn(
+      async (
+        generationRunId: string,
+        updater: Parameters<typeof context.generationRunRepository.update>[1]
+      ) => {
+        updateCount += 1;
+        if (updateCount === 2) {
+          await context.generationRunRepository.update(
+            generationRunId,
+            updater
+          );
+        }
+        return context.generationRunRepository.update(
+          generationRunId,
+          updater
+        );
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result.outcome).toBe("accepted");
+    expect(updateCount).toBe(2);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      metadata: {
+        generatedMechanicAcceptanceTransaction: { status: "finalized" },
+      },
+      relationships: {
+        gamePackId: context.gamePack.id,
+      },
+    });
+  });
+
+  it("keeps a recovery journal when external lineage changes during final cleanup", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+    await context.gamePackRepository.save(captured.pendingGamePack);
+    let fetchCount = 0;
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: {
+          async fetch(generationRunId) {
+            fetchCount += 1;
+            if (fetchCount === 2) {
+              await context.generationRunRepository.update(
+                generationRunId,
+                (current) => ({
+                  ...current,
+                  metadata: {
+                    ...(current.metadata ?? {}),
+                    concurrentCleanupMutation: true,
+                  },
+                })
+              );
+            }
+            return context.generationRunRepository.fetch(generationRunId);
+          },
+          update: context.generationRunRepository.update.bind(
+            context.generationRunRepository
+          ),
+        },
+        repository: context.gamePackRepository,
+      })
+    );
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("error");
+    });
+
+    expect(fetchCount).toBeGreaterThanOrEqual(2);
+    await expect(
+      context.gamePackRepository.load(captured.pendingGamePack.id)
+    ).resolves.toEqual(captured.pendingGamePack);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      metadata: { concurrentCleanupMutation: true },
+    });
+  });
+
+  it("rejects linkage when the external GenerationRun changed after preflight", async () => {
+    const context = await createHandoffTestContext();
+    const update = vi.fn(
+      async (
+        generationRunId: string,
+        updater: Parameters<typeof context.generationRunRepository.update>[1]
+      ) => {
+        await context.generationRunRepository.update(
+          generationRunId,
+          (current) => ({
+            ...current,
+            metadata: {
+              ...(current.metadata ?? {}),
+              concurrentSucceededMutation: true,
+            },
+          })
+        );
+        return context.generationRunRepository.update(
+          generationRunId,
+          updater
+        );
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: "stale_generation_run_snapshot" }),
+        ]),
+      },
+    });
+    await expect(
+      context.gamePackRepository.load(
+        `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`
+      )
+    ).resolves.not.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      metadata: { concurrentSucceededMutation: true },
+    });
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.not.toHaveProperty("relationships");
+  });
+
+  it("rolls back the canonical Game Pack but retains the recovery journal when external rollback cannot be verified", async () => {
+    const context = await createHandoffTestContext();
+    let handoffUpdateCount = 0;
+    const update = vi.fn(
+      async (
+        generationRunId: string,
+        updater: Parameters<typeof context.generationRunRepository.update>[1]
+      ) => {
+        handoffUpdateCount += 1;
+        if (handoffUpdateCount === 2) {
+          await context.generationRunRepository.update(
+            generationRunId,
+            (current) => ({
+              ...current,
+              metadata: {
+                ...(current.metadata ?? {}),
+                concurrentSucceededMutation: true,
+              },
+            })
+          );
+        }
+        return context.generationRunRepository.update(
+          generationRunId,
+          updater
+        );
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        update,
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "persistence",
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: "stale_generation_run_snapshot" }),
+        ]),
+      },
+    });
+    expect(update).toHaveBeenCalledTimes(2);
+    await expect(
+      context.gamePackRepository.load(
+        `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`
+      )
+    ).resolves.not.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      metadata: {
+        concurrentSucceededMutation: true,
+        generatedMechanicAcceptanceTransaction: { status: "pending" },
+      },
+    });
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.not.toHaveProperty("relationships");
+  });
+
+  it("keeps external lineage pending until the canonical Game Pack finalizes", async () => {
+    const context = await createHandoffTestContext();
+    let generationRunDuringFinalize:
+      | Awaited<ReturnType<typeof context.generationRunRepository.fetch>>
+      | undefined;
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const transaction = input[2]?.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          transaction.status === "finalized"
+        ) {
+          generationRunDuringFinalize =
+            await context.generationRunRepository.fetch(
+              context.generationRun.id
+            );
+          throw new Error(
+            "Simulated process crash before canonical finalization."
+          );
+        }
+        return context.gamePackRepository.compareAndSwap(...input);
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "persistence" },
+    });
+    expect(generationRunDuringFinalize).toMatchObject({
+      metadata: {
+        generatedMechanicAcceptanceTransaction: { status: "pending" },
+      },
+    });
+    expect(generationRunDuringFinalize).not.toHaveProperty("relationships");
+  });
+
   it("rejects a stale Game Pack snapshot instead of erasing a concurrently accepted version", async () => {
     const context = await createHandoffTestContext();
     const firstAcceptance = await completeGeneratedMechanicProjectHandoff({
@@ -1320,6 +3417,59 @@ describe("generated mechanic project handoff", () => {
     await expect(
       context.gamePackRepository.load(context.gamePack.id)
     ).resolves.toEqual(durableAfterFirstAcceptance);
+  });
+
+  it("rolls back the pending GenerationRun when canonical CAS definitively loses", async () => {
+    const context = await createHandoffTestContext();
+    const concurrentCanonicalGamePack = parseGamePack({
+      ...context.gamePack,
+      title: "Concurrent canonical winner",
+    });
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const transaction = input[2]?.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          transaction.status === "finalized"
+        ) {
+          await context.gamePackRepository.save(concurrentCanonicalGamePack);
+          return false;
+        }
+        return context.gamePackRepository.compareAndSwap(...input);
+      }
+    );
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: {
+        compareAndSwap,
+        load: context.gamePackRepository.load.bind(context.gamePackRepository),
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "persistence" },
+    });
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toEqual(concurrentCanonicalGamePack);
+    await expect(
+      context.gamePackRepository.load(
+        `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`
+      )
+    ).resolves.toBeNull();
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
   });
 
   it("rejects browser success when the project runtime cannot clean up", async () => {
@@ -1416,9 +3566,127 @@ describe("generated mechanic project handoff", () => {
     ).resolves.toEqual(context.generationRun);
   });
 
+  it("returns the exact durable acceptance when a concurrent canonical edit blocks compensation", async () => {
+    const context = await createHandoffTestContext();
+    let concurrentCanonicalGamePack: GamePack | undefined;
+    let updateCount = 0;
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      generationRunRepository: {
+        fetch: context.generationRunRepository.fetch.bind(
+          context.generationRunRepository
+        ),
+        async update(generationRunId, updater) {
+          updateCount += 1;
+          const updated = await context.generationRunRepository.update(
+            generationRunId,
+            updater
+          );
+          if (updateCount !== 2) {
+            return updated;
+          }
+          const canonical = await context.gamePackRepository.load(
+            context.gamePack.id
+          );
+          if (!canonical) {
+            throw new Error("Expected the finalized canonical Game Pack.");
+          }
+          concurrentCanonicalGamePack = parseGamePack({
+            ...canonical,
+            title: "Concurrent canonical edit",
+          });
+          await context.gamePackRepository.save(concurrentCanonicalGamePack);
+          throw new Error(
+            "GenerationRun driver threw after final lineage linkage."
+          );
+        },
+      },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "accepted",
+      gamePack: { title: "Concurrent canonical edit" },
+      generationRun: {
+        metadata: {
+          generatedMechanicAcceptanceTransaction: { status: "finalized" },
+        },
+      },
+    });
+    expect(updateCount).toBe(2);
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toEqual(concurrentCanonicalGamePack);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toMatchObject({
+      metadata: {
+        generatedMechanicAcceptanceTransaction: { status: "finalized" },
+      },
+      relationships: {
+        gamePackId: context.gamePack.id,
+        acceptedGeneratedMechanicArtifactIds: [
+          context.finalGameSpec.extension.versionId,
+        ],
+      },
+    });
+  });
+
+  it("compensates a canonical CAS that writes before both the driver and confirmation load throw", async () => {
+    const context = await createHandoffTestContext();
+    let canonicalWriteThrew = false;
+    const compareAndSwap = vi.fn(
+      async (
+        ...input: Parameters<
+          typeof context.gamePackRepository.compareAndSwap
+        >
+      ) => {
+        const committed = await context.gamePackRepository.compareAndSwap(
+          ...input
+        );
+        const transaction = input[2]?.metadata?.
+          generatedMechanicAcceptanceTransaction;
+        if (
+          transaction &&
+          typeof transaction === "object" &&
+          !Array.isArray(transaction) &&
+          transaction.status === "finalized"
+        ) {
+          canonicalWriteThrew = true;
+          throw new Error("Canonical CAS driver threw after durable write.");
+        }
+        return committed;
+      }
+    );
+    const load = vi.fn(async (gamePackId: string) => {
+      if (canonicalWriteThrew && gamePackId === context.gamePack.id) {
+        canonicalWriteThrew = false;
+        throw new Error("Canonical confirmation load also failed.");
+      }
+      return context.gamePackRepository.load(gamePackId);
+    });
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      gamePackRepository: { compareAndSwap, load },
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "persistence" },
+    });
+    expect(context.gamePackStorage.records.size).toBe(0);
+    await expect(
+      context.generationRunRepository.fetch(context.generationRun.id)
+    ).resolves.toEqual(context.generationRun);
+  });
+
   it("does not overwrite a concurrent Game Pack write during compensation", async () => {
     const context = await createHandoffTestContext();
     let concurrentGamePack: GamePack | undefined;
+    const pendingGamePackId =
+      `pending_${context.gamePack.id}_${context.finalGameSpec.extension.versionId}`;
     const result = await completeGeneratedMechanicProjectHandoff({
       ...context.input,
       generationRunRepository: {
@@ -1431,7 +3699,7 @@ describe("generated mechanic project handoff", () => {
             updater
           );
           const accepted = await context.gamePackRepository.load(
-            context.gamePack.id
+            pendingGamePackId
           );
           if (!accepted) {
             throw new Error("Expected the accepted Game Pack before compensation.");
@@ -1462,8 +3730,11 @@ describe("generated mechanic project handoff", () => {
       },
     });
     await expect(
-      context.gamePackRepository.load(context.gamePack.id)
+      context.gamePackRepository.load(pendingGamePackId)
     ).resolves.toEqual(concurrentGamePack);
+    await expect(
+      context.gamePackRepository.load(context.gamePack.id)
+    ).resolves.toBeNull();
   });
 
   it("restores the exact checkpoint artifact and repeats load-before-install browser proof", async () => {
@@ -1476,10 +3747,15 @@ describe("generated mechanic project handoff", () => {
     expect(accepted.outcome).toBe("accepted");
 
     const restoreEvents: string[] = [];
+    let restoredProject: PreparedGeneratedMechanicRuntimeProject | undefined;
     const restored = await restoreGeneratedMechanicProjectHandoff({
       gamePackId: context.gamePack.id,
       gamePackRepository: context.gamePackRepository,
-      runtime: createPassingRuntime(restoreEvents),
+      runtime: createPassingRuntime(restoreEvents, {
+        onLoadProject(project) {
+          restoredProject = project;
+        },
+      }),
       trustedPortContracts: [],
     });
 
@@ -1503,6 +3779,166 @@ describe("generated mechanic project handoff", () => {
       `browser:${context.sourceArtifact.id}`,
       `dispose:${context.sourceArtifact.id}`,
     ]);
+    expect(restoredProject).toHaveProperty("artifact");
+    expect(restoredProject).not.toHaveProperty("runtimeCandidate");
+  });
+
+  it("refuses to restore a crash-window Game Pack while acceptance is pending", async () => {
+    const context = await createHandoffTestContext();
+    const accepted = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      runtime: createPassingRuntime([]),
+    });
+    expect(accepted.outcome).toBe("accepted");
+    if (accepted.outcome !== "accepted") {
+      return;
+    }
+    const pendingGamePack = parseGamePack({
+      ...accepted.gamePack,
+      metadata: {
+        ...(accepted.gamePack.metadata ?? {}),
+        generatedMechanicAcceptanceTransaction: {
+          schemaVersion: "generated_mechanic_acceptance_transaction/v1",
+          status: "pending",
+          generationRunId: context.generationRun.id,
+          artifactId: accepted.artifact.id,
+          buildId: accepted.artifact.buildId,
+          checkpointId: accepted.artifact.checkpointId,
+        },
+      },
+    });
+    await context.gamePackRepository.save(pendingGamePack);
+    const events: string[] = [];
+
+    const restored = await restoreGeneratedMechanicProjectHandoff({
+      gamePackId: context.gamePack.id,
+      gamePackRepository: context.gamePackRepository,
+      runtime: createPassingRuntime(events),
+      trustedPortContracts: [],
+    });
+
+    expect(restored).toMatchObject({
+      outcome: "rejected",
+      evidence: {
+        stage: "preflight",
+        issues: [
+          expect.objectContaining({
+            code: "acceptance_transaction_pending",
+          }),
+        ],
+      },
+    });
+    expect(events).toEqual([]);
+  });
+
+  it("fails restore and editor recovery closed for a staging journal whose transaction marker is missing", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+    const {
+      generatedMechanicAcceptanceTransaction: ignoredTransaction,
+      ...journalMetadata
+    } = captured.pendingGamePack.metadata ?? {};
+    void ignoredTransaction;
+    const malformedJournal = parseGamePack({
+      ...captured.pendingGamePack,
+      metadata: journalMetadata,
+    });
+    await context.gamePackRepository.save(malformedJournal);
+
+    expect(
+      prepareRestoredGeneratedMechanicProject({
+        gamePack: malformedJournal,
+        trustedPortContracts: [],
+      })
+    ).toMatchObject({
+      success: false,
+      issues: [
+        expect.objectContaining({ code: "invalid_acceptance_transaction" }),
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: context.generationRunRepository,
+        repository: context.gamePackRepository,
+      })
+    );
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("error");
+    });
+
+    expect(result.current.restoredGamePack).toBeNull();
+    expect(result.current.storageError).toMatchObject({
+      name: "EditorGamePackAcceptanceRecoveryError",
+      issues: [
+        expect.objectContaining({
+          code: "pending_acceptance_reconciliation_failed",
+        }),
+      ],
+    });
+    await expect(
+      context.gamePackRepository.load(malformedJournal.id)
+    ).resolves.toEqual(malformedJournal);
+  });
+
+  it("fails restore and editor recovery closed when a staging journal claims to be finalized", async () => {
+    const context = await createHandoffTestContext();
+    const captured = await completeAndCaptureAcceptanceTransaction(context);
+    const transaction = captured.pendingGamePack.metadata?.
+      generatedMechanicAcceptanceTransaction;
+    if (
+      !transaction ||
+      typeof transaction !== "object" ||
+      Array.isArray(transaction)
+    ) {
+      throw new Error("Expected a captured pending acceptance transaction.");
+    }
+    const malformedJournal = parseGamePack({
+      ...captured.pendingGamePack,
+      metadata: {
+        ...(captured.pendingGamePack.metadata ?? {}),
+        generatedMechanicAcceptanceTransaction: {
+          ...transaction,
+          status: "finalized",
+        },
+      },
+    });
+    await context.gamePackRepository.save(malformedJournal);
+
+    expect(
+      prepareRestoredGeneratedMechanicProject({
+        gamePack: malformedJournal,
+        trustedPortContracts: [],
+      })
+    ).toMatchObject({
+      success: false,
+      issues: [
+        expect.objectContaining({ code: "invalid_acceptance_transaction" }),
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      useEditorGamePackPersistence({
+        generationRunRepository: context.generationRunRepository,
+        repository: context.gamePackRepository,
+      })
+    );
+    await waitFor(() => {
+      expect(result.current.loadStatus).toBe("error");
+    });
+
+    expect(result.current.restoredGamePack).toBeNull();
+    expect(result.current.storageError).toMatchObject({
+      name: "EditorGamePackAcceptanceRecoveryError",
+      issues: [
+        expect.objectContaining({
+          code: "pending_acceptance_reconciliation_failed",
+        }),
+      ],
+    });
+    await expect(
+      context.gamePackRepository.load(malformedJournal.id)
+    ).resolves.toEqual(malformedJournal);
   });
 
   it("prepares the exact current-checkpoint artifact and dependency for restore", async () => {
@@ -1534,6 +3970,51 @@ describe("generated mechanic project handoff", () => {
           trustedPortContracts: [],
         },
       },
+    });
+  });
+
+  it("rejects a current-checkpoint artifact whose build and evidence lineage is not exact", async () => {
+    const context = await createHandoffTestContext();
+    const accepted = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      runtime: createPassingRuntime([]),
+    });
+    expect(accepted.outcome).toBe("accepted");
+    if (accepted.outcome !== "accepted") {
+      return;
+    }
+    const brokenLineageGamePack = {
+      ...accepted.gamePack,
+      builds: accepted.gamePack.builds.map((build) =>
+        build.id === accepted.artifact.buildId
+          ? { ...build, generatedMechanicArtifactIds: [] }
+          : build
+      ),
+      checkpoints: accepted.gamePack.checkpoints.map((checkpoint) =>
+        checkpoint.id === accepted.gamePack.currentCheckpointId
+          ? { ...checkpoint, validationEvidenceIds: [] }
+          : checkpoint
+      ),
+      validationEvidence: accepted.gamePack.validationEvidence.map(
+        (evidence) =>
+          accepted.artifact.validationEvidenceIds.includes(evidence.id)
+            ? { ...evidence, generatedMechanicArtifactIds: [] }
+            : evidence
+      ),
+    };
+
+    expect(
+      prepareRestoredGeneratedMechanicProject({
+        gamePack: brokenLineageGamePack,
+        trustedPortContracts: [],
+      })
+    ).toEqual({
+      success: false,
+      issues: [
+        expect.objectContaining({
+          code: "accepted_artifact_lineage_mismatch",
+        }),
+      ],
     });
   });
 
@@ -1903,6 +4384,17 @@ function createContract(): GeneratedMechanicContract {
     id: "contract_generated_counter",
     intentId: "intent_generated_counter",
     capabilityVersion: "mechanic_capability/v1",
+    intentLineage: {
+      actors: ["player"],
+      targets: [],
+      behaviors: ["increment_counter"],
+      stateChanges: ["counter_changed"],
+      temporalRules: [],
+      spatialRules: [],
+      constraints: [],
+      connections: [{ direction: "input", port: "move" }],
+      references: [{ kind: "entity", id: "entity_player" }],
+    },
     behavior: {
       summary: "Increment private state for a bound actor.",
       triggers: ["install"],
@@ -1936,7 +4428,7 @@ function createContract(): GeneratedMechanicContract {
       dispose: true,
     },
     ports: [],
-    capabilities: ["state_read", "state_write"],
+    capabilities: ["state_read", "state_write", "object_motion_write"],
     resourceExpectations: {
       maximumOwnedObjects: 0,
       maximumOperationsPerTick: 8,
@@ -1980,7 +4472,7 @@ function createSourceArtifact(): GeneratedMechanicSourceArtifact {
     intentId: "intent_generated_counter",
     capabilityVersion: "mechanic_capability/v1",
     grant: grant.data,
-    usedCapabilities: ["state_read", "state_write"],
+    usedCapabilities: ["state_read", "state_write", "object_motion_write"],
     callbacks: [
       {
         id: "install_generated_counter",
@@ -2000,6 +4492,7 @@ function createSourceArtifact(): GeneratedMechanicSourceArtifact {
           "const __sparklineGeneratedMechanicCallback = async () => {",
           'const current = await capabilities.state.read("counter");',
           'await capabilities.state.write("counter", current + 1);',
+          'await capabilities.object.motion.write(bindings.actor, { velocity: { x: 4, y: 0 } });',
           "};",
         ].join("\n"),
       },
@@ -2041,27 +4534,28 @@ async function createIssuedPassedEvaluation({
         id: "external_counter_observation",
         scenarioId: "scenario_generated_counter",
         observation: {
-          kind: "binding_property",
-          bindingId: "actor",
-          property: "counter",
-          operator: "equals",
-          value: 4,
+          kind: "referenced_entity_motion_changed",
+          bindingIds: ["actor"],
+          actionId: "move",
         },
       },
     ],
     createRuntime: async ({ artifact }) => {
       let count = 3;
+      let velocity = { x: 0, y: 0 };
       return {
         sourceArtifactId: artifact.id,
         hasBinding: (bindingId) => bindingId === "actor",
         readDeclaredState: () => count,
-        readBindingProperty: () => count,
+        readBindingProperty: (_bindingId, property) =>
+          property === "position" ? { x: 0, y: 0 } : velocity,
         countOwnedObjects: () => 0,
         readEmittedOutputs: () => [],
         install: async () => undefined,
         receiveInput: async () => undefined,
         dispatchAction: async () => {
           count += 1;
+          velocity = { x: 4, y: 0 };
         },
         advanceTime: async () => undefined,
         dispose: async () => undefined,
@@ -2414,21 +4908,151 @@ async function createHandoffTestContext() {
   };
 }
 
+async function createVersionTwoHandoffInput(
+  context: Awaited<ReturnType<typeof createHandoffTestContext>>
+) {
+  const sourceArtifact: GeneratedMechanicSourceArtifact = {
+    ...context.sourceArtifact,
+    id: "source_generated_counter_v2",
+  };
+  const finalGameSpec = {
+    ...context.finalGameSpec,
+    id: "final_game_spec_generated_counter_v2",
+    extension: {
+      ...context.finalGameSpec.extension,
+      versionId: "extension_generated_counter_v2",
+      sourceArtifactId: sourceArtifact.id,
+    },
+  };
+  const generationRun = generationRunSchema.parse({
+    ...context.generationRun,
+    id: "generation_run_generated_counter_v2",
+    createdAt: "2026-08-11T12:00:11.000Z",
+    startedAt: "2026-08-11T12:00:12.000Z",
+    completedAt: "2026-08-11T12:00:20.000Z",
+    artifactScopedRepair: createVersionedArtifactRepairReceipt({
+      finalGameSpecArtifactId: finalGameSpec.id,
+      generationRunId: "generation_run_generated_counter_v2",
+      sourceArtifactId: sourceArtifact.id,
+    }),
+  });
+  await context.generationRunRepository.create(generationRun);
+
+  return {
+    acceptedAt: "2026-08-11T12:00:30.000Z",
+    deterministicEvaluation: await createIssuedPassedEvaluation({
+      contract: context.contract,
+      sourceArtifact,
+    }),
+    finalGameSpec,
+    generationRunId: generationRun.id,
+    sourceArtifact,
+  };
+}
+
+async function completeAndCaptureAcceptanceTransaction(
+  context: Awaited<ReturnType<typeof createHandoffTestContext>>,
+  acceptanceLockReceipt?: Parameters<
+    typeof completeGeneratedMechanicProjectHandoff
+  >[0]["acceptanceLockReceipt"]
+) {
+  let pendingGamePack:
+    | NonNullable<
+        Awaited<ReturnType<typeof context.gamePackRepository.load>>
+      >
+    | undefined;
+  let pendingGenerationRun:
+    | NonNullable<
+        Awaited<ReturnType<typeof context.generationRunRepository.fetch>>
+      >
+    | undefined;
+  const compareAndSwap = vi.fn(
+    async (
+      ...input: Parameters<typeof context.gamePackRepository.compareAndSwap>
+    ) => {
+      const transaction = input[2]?.metadata?.
+        generatedMechanicAcceptanceTransaction;
+      if (
+        input[2] &&
+        transaction &&
+        typeof transaction === "object" &&
+        !Array.isArray(transaction) &&
+        transaction.status === "pending"
+      ) {
+        pendingGamePack = input[2];
+      }
+      return context.gamePackRepository.compareAndSwap(...input);
+    }
+  );
+  const update = vi.fn(
+    async (
+      ...input: Parameters<typeof context.generationRunRepository.update>
+    ) => {
+      const updated = await context.generationRunRepository.update(...input);
+      const transaction = updated.metadata?.
+        generatedMechanicAcceptanceTransaction;
+      if (
+        transaction &&
+        typeof transaction === "object" &&
+        !Array.isArray(transaction) &&
+        transaction.status === "pending"
+      ) {
+        pendingGenerationRun = updated;
+      }
+      return updated;
+    }
+  );
+  const accepted = await completeGeneratedMechanicProjectHandoff({
+    ...context.input,
+    ...(acceptanceLockReceipt ? { acceptanceLockReceipt } : {}),
+    gamePackRepository: {
+      compareAndSwap,
+      load: context.gamePackRepository.load.bind(context.gamePackRepository),
+    },
+    generationRunRepository: {
+      fetch: context.generationRunRepository.fetch.bind(
+        context.generationRunRepository
+      ),
+      update,
+    },
+    runtime: createPassingRuntime([]),
+  });
+  if (
+    accepted.outcome !== "accepted" ||
+    !pendingGamePack ||
+    !pendingGenerationRun
+  ) {
+    throw new Error("Expected to capture a complete acceptance transaction.");
+  }
+  return { accepted, pendingGamePack, pendingGenerationRun };
+}
+
 function createPassingRuntime(
   events: string[],
   options: Readonly<{
+    browserError?: Error;
     cleanupError?: Error;
     firstPlayableAttempt?: FirstPlayableValidationAttempt;
     installError?: Error;
+    loadError?: Error;
+    onBrowserCheck?: () => void;
+    onInstall?: () => void;
+    onLoadProject?: (project: PreparedGeneratedMechanicRuntimeProject) => void;
   }> = {}
 ): Parameters<typeof completeGeneratedMechanicProjectHandoff>[0]["runtime"] {
   return createGeneratedMechanicProjectRuntime({
-    async loadProjectDependency(dependency) {
+    async loadProjectDependency(project) {
+      const { dependency } = project;
+      options.onLoadProject?.(project);
       events.push(`load:${dependency.sourceArtifact.id}`);
+      if (options.loadError) {
+        throw options.loadError;
+      }
       return { sourceArtifactId: dependency.sourceArtifact.id };
     },
     async installTrustedTemplate({ loadedResource }) {
       events.push(`install:${loadedResource.sourceArtifactId}`);
+      options.onInstall?.();
       if (options.installError) {
         throw options.installError;
       }
@@ -2436,6 +5060,10 @@ function createPassingRuntime(
     },
     async runFirstPlayableBrowserChecks({ activeResource, gamePack }) {
       events.push(`browser:${activeResource.sourceArtifactId}`);
+      options.onBrowserCheck?.();
+      if (options.browserError) {
+        throw options.browserError;
+      }
       return (
         options.firstPlayableAttempt ?? createPassedFirstPlayableAttempt(gamePack)
       );
@@ -2453,6 +5081,33 @@ function createPassingRuntime(
       }
     },
   });
+}
+
+class MemoryBrowserLockManager {
+  private readonly tails = new Map<string, Promise<void>>();
+
+  async request<T>(
+    name: string,
+    _options: Readonly<{ mode: "exclusive"; signal?: AbortSignal }>,
+    callback: () => Promise<T>
+  ): Promise<T> {
+    const previous = this.tails.get(name) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => current);
+    this.tails.set(name, tail);
+    await previous;
+    try {
+      return await callback();
+    } finally {
+      release();
+      if (this.tails.get(name) === tail) {
+        this.tails.delete(name);
+      }
+    }
+  }
 }
 
 class MemoryGamePackStorage implements GamePackStorageDriver {

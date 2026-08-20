@@ -2,6 +2,7 @@ import {
   createMechanicCapabilityGrant,
   validateGeneratedMechanicContract,
   type AdmittedGeneratedMechanicRequest,
+  type ArtifactScopedRepairAttemptReceipt,
   type GeneratedMechanicContract,
   type GeneratedMechanicContractValidationResult,
   type GeneratedMechanicReferenceCatalog,
@@ -9,11 +10,21 @@ import {
   type MechanicCapabilityGrant,
   type MechanicCapabilityGrantResult,
   type MechanicIntent,
+  type GenerationRun,
 } from "@/game-spec";
 import type { OpenAIModelId } from "@/utils/openai-utils";
 
 export const MECHANIC_CONTRACT_GENERATION_TASK_ROUTE =
   "mechanic_contract_generation.primary";
+
+export type MechanicContractGenerationAttempt = Readonly<{
+  generationRunId: GenerationRun["id"];
+  stage: "contract";
+  attemptNumber: ArtifactScopedRepairAttemptReceipt["attemptNumber"];
+  kind: ArtifactScopedRepairAttemptReceipt["kind"];
+  candidateArtifactId: GeneratedMechanicContract["id"];
+  repair?: ArtifactScopedRepairAttemptReceipt["repair"];
+}>;
 
 export type MechanicContractGenerationProviderInput = {
   intent: MechanicIntent;
@@ -24,6 +35,7 @@ export type MechanicContractGenerationProviderInput = {
   model: OpenAIModelId;
   providerCredential: string;
   taskRoute: typeof MECHANIC_CONTRACT_GENERATION_TASK_ROUTE;
+  generationAttempt?: MechanicContractGenerationAttempt;
   signal?: AbortSignal;
 };
 
@@ -212,8 +224,13 @@ export async function generateMechanicContract({
     };
   }
 
+  const trustedContract = withTrustedIntentLineage(
+    contractValidation.data,
+    intent
+  );
+
   const grantResult = createMechanicCapabilityGrant({
-    contract: contractValidation.data,
+    contract: trustedContract,
     constraintSet,
   });
 
@@ -221,11 +238,155 @@ export async function generateMechanicContract({
     return grantResult;
   }
 
+  const intentLineageIssues = generatedContractIntentLineageIssues(
+    intent,
+    trustedContract
+  );
+  if (intentLineageIssues.length > 0) {
+    return {
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: intentLineageIssues,
+      },
+    };
+  }
+
   return {
     success: true,
     data: {
-      contract: contractValidation.data,
+      contract: trustedContract,
       grant: grantResult.data,
     },
   };
+}
+
+function withTrustedIntentLineage(
+  contract: GeneratedMechanicContract,
+  intent: MechanicIntent
+): GeneratedMechanicContract {
+  return deepFreeze({
+    ...contract,
+    intentLineage: {
+      actors: [...intent.actors],
+      targets: [...intent.targets],
+      behaviors: [...intent.behaviors],
+      stateChanges: [...intent.stateChanges],
+      temporalRules: [...intent.temporalRules],
+      spatialRules: [...intent.spatialRules],
+      constraints: [...intent.constraints],
+      connections: intent.connections.map((connection) => ({ ...connection })),
+      references: intent.references.map((reference) => ({ ...reference })),
+    },
+  });
+}
+
+function deepFreeze<Value>(value: Value): Value {
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) {
+      deepFreeze(child);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function generatedContractIntentLineageIssues(
+  intent: MechanicIntent,
+  contract: GeneratedMechanicContract
+): ContractValidationEvidence["issues"] {
+  const issues: ContractValidationEvidence["issues"] = [];
+  appendMissingIntentValues({
+    accepted: intent.requiredCapabilities,
+    actual: contract.capabilities,
+    code: "contradiction",
+    path: "capabilities",
+    label: "required capability",
+    issues,
+  });
+  appendMissingIntentValues({
+    accepted: intent.triggers,
+    actual: contract.behavior.triggers,
+    code: "contradiction",
+    path: "behavior.triggers",
+    label: "accepted trigger",
+    issues,
+  });
+  appendMissingIntentValues({
+    accepted: intent.outcomes,
+    actual: contract.behavior.outcomes,
+    code: "contradiction",
+    path: "behavior.outcomes",
+    label: "accepted outcome",
+    issues,
+  });
+  const boundEntityIds = new Set(
+    contract.bindings.flatMap((binding) =>
+      binding.referenceKind === "entity" ? binding.objectIds : []
+    )
+  );
+  for (const reference of intent.references) {
+    if (reference.kind === "entity" && !boundEntityIds.has(reference.id)) {
+      issues.push({
+        path: "bindings",
+        code: "contradiction",
+        message: `Generated mechanic contract must bind routed entity reference "${reference.id}" from the accepted intent.`,
+      });
+    }
+  }
+  const configuredFields = new Map(
+    contract.config.kind === "object"
+      ? contract.config.fields.map((field) => [field.key, field] as const)
+      : []
+  );
+  for (const configuration of intent.configuration) {
+    const field = configuredFields.get(configuration.key);
+    if (!field) {
+      issues.push({
+        path: "config",
+        code: "contradiction",
+        message: `Generated mechanic contract must declare routed configuration key "${configuration.key}" from the accepted intent.`,
+      });
+      continue;
+    }
+    const declaredDefault =
+      "default" in field.value ? field.value.default : undefined;
+    if (!Object.is(declaredDefault, configuration.value)) {
+      issues.push({
+        path: `config.fields.${configuration.key}.value.default`,
+        code: "contradiction",
+        message: `Generated mechanic contract configuration "${configuration.key}" must materialize the exact accepted value ${JSON.stringify(configuration.value)} as its default.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+function appendMissingIntentValues({
+  accepted,
+  actual,
+  code,
+  path,
+  label,
+  issues,
+}: Readonly<{
+  accepted: readonly string[];
+  actual: readonly string[];
+  code: ContractValidationEvidence["issues"][number]["code"];
+  path: string;
+  label: string;
+  issues: ContractValidationEvidence["issues"];
+}>): void {
+  const actualValues = new Set(actual);
+  for (const value of accepted) {
+    if (!actualValues.has(value)) {
+      issues.push({
+        path,
+        code,
+        message: `Generated mechanic contract must retain ${label} "${value}" from the accepted intent.`,
+      });
+    }
+  }
 }

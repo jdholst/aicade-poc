@@ -199,14 +199,28 @@ export function createOpenAiMechanicSourceProvider({
       );
     }
 
+    let candidate: unknown;
     try {
-      return JSON.parse(functionCall.arguments) as Record<string, unknown>;
+      candidate = JSON.parse(functionCall.arguments) as unknown;
     } catch {
       throw createMechanicSourceProviderError(
         "invalid_provider_output",
         "OpenAI returned invalid JSON for Generated Mechanic Source."
       );
     }
+
+    if (
+      input.generationAttempt &&
+      (!isRecord(candidate) ||
+        candidate.id !== input.generationAttempt.candidateArtifactId)
+    ) {
+      throw createMechanicSourceProviderError(
+        "invalid_provider_output",
+        `OpenAI Generated Mechanic Source did not use the required attempt candidate ID "${input.generationAttempt.candidateArtifactId}".`
+      );
+    }
+
+    return candidate;
   };
 }
 
@@ -225,4 +239,8 @@ async function readOpenAIResponsePayload(
     }
     return {};
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

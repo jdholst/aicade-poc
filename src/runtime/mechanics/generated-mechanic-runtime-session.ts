@@ -5,10 +5,13 @@ import {
   GENERATED_MECHANIC_FIXED_STEP_INTERVAL_MILLISECONDS,
   GENERATED_MECHANIC_RESOURCE_BUDGET_PROFILE_ID,
   TOP_DOWN_PHASER_GENERATED_MECHANIC_HOST_PROFILE_ID,
-  acceptedGeneratedMechanicArtifactSchema,
   createGeneratedMechanicRuntimePolicy,
   generatedMechanicFinalGameSpecSchema,
+  generatedMechanicRuntimeCandidateSchema,
+  projectAcceptedGeneratedMechanicRuntimeCandidate,
   type AcceptedGeneratedMechanicArtifact,
+  type GeneratedMechanicExecutableArtifact,
+  type GeneratedMechanicRuntimeCandidate,
   type GeneratedMechanicRuntimePolicy,
 } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
 import {
@@ -71,6 +74,7 @@ export type GeneratedMechanicRuntimeSessionIdentity = Readonly<{
   contractId: StableId;
   sourceArtifactId: StableId;
   capabilityVersion: string;
+  runtimeExecutionId: StableId;
   buildId: StableId;
   runtimePolicy: Readonly<GeneratedMechanicRuntimePolicy>;
 }>;
@@ -94,30 +98,32 @@ export type GeneratedMechanicRuntimeSession = Readonly<{
   dispose(): Promise<ContainedMechanicRuntimeStep>;
 }>;
 
-export type CreateGeneratedMechanicRuntimeSessionInput = Readonly<{
-  artifact: AcceptedGeneratedMechanicArtifact;
+type CreateGeneratedMechanicRuntimeSessionCommonInput = Readonly<{
   dependency: GeneratedMechanicProjectDependency;
   realmAdapter: MechanicExecutionRealmAdapter;
   objects: readonly TrustedTopDownPhaserMechanicObjectRegistration[];
 }>;
 
-export async function createGeneratedMechanicRuntimeSession({
-  artifact: artifactInput,
-  dependency,
-  realmAdapter,
-  objects,
-}: CreateGeneratedMechanicRuntimeSessionInput): Promise<GeneratedMechanicRuntimeSession> {
-  rejectUnsupportedRuntimeFeatures(artifactInput, dependency);
-
-  const parsedArtifact = acceptedGeneratedMechanicArtifactSchema.safeParse(
-    artifactInput
-  );
-  if (!parsedArtifact.success) {
-    throw new TypeError(
-      `Generated runtime session requires a valid accepted artifact: ${parsedArtifact.error.issues[0]?.message ?? "validation failed"}`
+export type CreateGeneratedMechanicRuntimeSessionInput =
+  CreateGeneratedMechanicRuntimeSessionCommonInput &
+    (
+      | Readonly<{
+          artifact: AcceptedGeneratedMechanicArtifact;
+          runtimeCandidate?: never;
+        }>
+      | Readonly<{
+          artifact?: never;
+          runtimeCandidate: GeneratedMechanicRuntimeCandidate;
+        }>
     );
-  }
-  const artifact = parsedArtifact.data;
+
+export async function createGeneratedMechanicRuntimeSession(
+  input: CreateGeneratedMechanicRuntimeSessionInput
+): Promise<GeneratedMechanicRuntimeSession> {
+  const { dependency, realmAdapter, objects } = input;
+  const runtimeCandidate = normalizeRuntimeCandidate(input);
+  const artifact = runtimeCandidate.executableArtifact;
+  rejectUnsupportedRuntimeFeatures(artifact, dependency);
   validateExactDependency(artifact, dependency);
   validateRuntimePolicy(artifact, dependency, realmAdapter);
   validateResourceExpectations(artifact);
@@ -193,14 +199,14 @@ export async function createGeneratedMechanicRuntimeSession({
     });
     const runtime = createPhase9ContainedMechanicRuntime({
       extensionId: artifact.extensionId,
-      buildId: artifact.buildId,
+      buildId: runtimeCandidate.runtimeExecutionId,
       capabilityVersion: artifact.contract.capabilityVersion,
       seed: artifact.runtimePolicy.seed,
       lifecycle,
       ownedObjects: objectHost,
       privateState,
     });
-    return createRetainedSession(artifact, runtime);
+    return createRetainedSession(runtimeCandidate, runtime);
   } catch (error) {
     return await disposeFailedComposition(
       lifecycle,
@@ -211,10 +217,34 @@ export async function createGeneratedMechanicRuntimeSession({
   }
 }
 
+function normalizeRuntimeCandidate(
+  input: CreateGeneratedMechanicRuntimeSessionInput
+): GeneratedMechanicRuntimeCandidate {
+  if (input.runtimeCandidate) {
+    const parsed = generatedMechanicRuntimeCandidateSchema.safeParse(
+      input.runtimeCandidate
+    );
+    if (!parsed.success) {
+      throw new TypeError(
+        `Generated runtime session requires a valid generated mechanic runtime candidate: ${parsed.error.issues[0]?.message ?? "validation failed"}`
+      );
+    }
+    return parsed.data;
+  }
+  try {
+    return projectAcceptedGeneratedMechanicRuntimeCandidate(input.artifact);
+  } catch (error) {
+    throw new TypeError(
+      `Generated runtime session requires a valid accepted artifact: ${error instanceof Error ? error.message : "validation failed"}`
+    );
+  }
+}
+
 function createRetainedSession(
-  artifact: AcceptedGeneratedMechanicArtifact,
+  runtimeCandidate: GeneratedMechanicRuntimeCandidate,
   runtime: ContainedMechanicRuntime
 ): GeneratedMechanicRuntimeSession {
+  const artifact = runtimeCandidate.executableArtifact;
   const admittedActionIds = new Set(artifact.referenceCatalog.action ?? []);
   const identity = Object.freeze({
     schemaVersion: GENERATED_MECHANIC_RUNTIME_SESSION_VERSION,
@@ -228,7 +258,8 @@ function createRetainedSession(
     contractId: artifact.contract.id,
     sourceArtifactId: artifact.sourceArtifact.id,
     capabilityVersion: artifact.contract.capabilityVersion,
-    buildId: artifact.buildId,
+    runtimeExecutionId: runtimeCandidate.runtimeExecutionId,
+    buildId: runtimeCandidate.runtimeExecutionId,
     runtimePolicy: freezeRuntimePolicy(artifact.runtimePolicy),
   });
   return Object.freeze({
@@ -258,7 +289,7 @@ function createRetainedSession(
 }
 
 function rejectUnsupportedRuntimeFeatures(
-  artifact: AcceptedGeneratedMechanicArtifact,
+  artifact: GeneratedMechanicExecutableArtifact,
   dependency: GeneratedMechanicProjectDependency
 ): void {
   if (
@@ -284,7 +315,7 @@ function rejectUnsupportedRuntimeFeatures(
 }
 
 function validateExactDependency(
-  artifact: AcceptedGeneratedMechanicArtifact,
+  artifact: GeneratedMechanicExecutableArtifact,
   dependency: GeneratedMechanicProjectDependency
 ): void {
   const parsedFinalGameSpec = generatedMechanicFinalGameSpecSchema.safeParse(
@@ -297,26 +328,31 @@ function validateExactDependency(
   }
   if (!jsonEqual(dependency.contract, artifact.contract)) {
     throw new Error(
-      "Generated runtime session dependency contract does not exactly match the accepted artifact."
+      "Generated runtime session dependency contract does not exactly match the executable artifact."
     );
   }
   if (!jsonEqual(dependency.sourceArtifact, artifact.sourceArtifact)) {
     throw new Error(
-      "Generated runtime session dependency source does not exactly match the accepted artifact."
+      "Generated runtime session dependency source does not exactly match the executable artifact."
     );
   }
   if (!jsonEqual(dependency.referenceCatalog, artifact.referenceCatalog)) {
     throw new Error(
-      "Generated runtime session dependency references do not exactly match the accepted artifact."
+      "Generated runtime session dependency references do not exactly match the executable artifact."
     );
   }
   if (!jsonEqual(dependency.runtimePolicy, artifact.runtimePolicy)) {
     throw new Error(
-      "Generated runtime session dependency policy does not exactly match the accepted artifact."
+      "Generated runtime session dependency policy does not exactly match the executable artifact."
     );
   }
 
   const finalGameSpec = parsedFinalGameSpec.data;
+  if (!jsonEqual(finalGameSpec, artifact.finalGameSpec)) {
+    throw new Error(
+      "Generated runtime session dependency does not contain the exact Final Game Spec from the executable artifact."
+    );
+  }
   const expectedExtension = {
     id: artifact.extensionId,
     versionId: artifact.versionId,
@@ -334,7 +370,7 @@ function validateExactDependency(
     !jsonEqual(finalGameSpec.extension, expectedExtension)
   ) {
     throw new Error(
-      "Generated runtime session Final Game Spec identity does not exactly match the accepted artifact."
+      "Generated runtime session Final Game Spec identity does not exactly match the executable artifact."
     );
   }
   const installedMechanics = finalGameSpec.gameSpec.mechanics.filter(
@@ -346,13 +382,13 @@ function validateExactDependency(
     !jsonEqual(installedMechanics[0]?.config, artifact.config)
   ) {
     throw new Error(
-      "Generated runtime session requires the exact accepted mechanic in the Final Game Spec."
+      "Generated runtime session requires the exact executable mechanic in the Final Game Spec."
     );
   }
 }
 
 function validateRuntimePolicy(
-  artifact: AcceptedGeneratedMechanicArtifact,
+  artifact: GeneratedMechanicExecutableArtifact,
   dependency: GeneratedMechanicProjectDependency,
   realmAdapter: MechanicExecutionRealmAdapter
 ): void {
@@ -392,13 +428,13 @@ function validateRuntimePolicy(
     realmAdapter.id !== artifact.runtimePolicy.executionRealmCandidateId
   ) {
     throw new Error(
-      "Generated runtime session realm adapter does not match the accepted execution candidate."
+      "Generated runtime session realm adapter does not match the generated execution candidate."
     );
   }
 }
 
 function validateResourceExpectations(
-  artifact: AcceptedGeneratedMechanicArtifact
+  artifact: GeneratedMechanicExecutableArtifact
 ): void {
   const expectations = artifact.contract.resourceExpectations;
   const budget = PHASE_9_MECHANIC_RESOURCE_BUDGET;
@@ -445,7 +481,7 @@ function validateResourceExpectations(
 }
 
 function validateBoundObjects(
-  artifact: AcceptedGeneratedMechanicArtifact,
+  artifact: GeneratedMechanicExecutableArtifact,
   dependency: GeneratedMechanicProjectDependency,
   objects: readonly TrustedTopDownPhaserMechanicObjectRegistration[]
 ): void {
@@ -494,7 +530,7 @@ function validateBoundObjects(
   );
   if (missing.length > 0 || foreign.length > 0) {
     throw new Error(
-      `Generated runtime session object registrations must exactly match accepted bindings (missing: ${missing.join(", ") || "none"}; foreign: ${foreign.join(", ") || "none"}).`
+      `Generated runtime session object registrations must exactly match executable bindings (missing: ${missing.join(", ") || "none"}; foreign: ${foreign.join(", ") || "none"}).`
     );
   }
 }

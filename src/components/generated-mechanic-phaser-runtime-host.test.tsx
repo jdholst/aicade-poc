@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SANDBOX_BOOT_TIMEOUT_MS } from "@/constants";
 import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
+import { projectAcceptedGeneratedMechanicRuntimeCandidate } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
 import type { GeneratedMechanicPhaserParentSession } from "@/runtime/phaser/generated-mechanic-phaser-host-protocol";
+import { createGeneratedMechanicPhaserRuntimeController } from "@/runtime/phaser/generated-mechanic-phaser-runtime-controller";
 import { createTopDownPhaserTemplate } from "@/runtime/phaser/top-down-template";
 
 const brokerMocks = vi.hoisted(() => ({
@@ -262,6 +264,170 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
       type: "game-pause",
       paused: false,
     });
+  });
+
+  it("exposes the extracted imperative lifecycle and a correlated first-playable result", async () => {
+    const statuses: unknown[] = [];
+    const initialEvidence: unknown[] = [];
+    const updatedEvidence: unknown[] = [];
+    const mount = document.createElement("div");
+    document.body.append(mount);
+    const controller = createGeneratedMechanicPhaserRuntimeController({
+      mount,
+      template,
+      generatedMechanicProject: project,
+      options: {
+        isPaused: false,
+        onStatusChange: (status) => statuses.push(status),
+        onValidationEvidence: (evidence) => initialEvidence.push(evidence),
+      },
+    });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+    const iframeFocus = vi
+      .spyOn(iframe, "focus")
+      .mockImplementation(() => undefined);
+    vi.spyOn(iframe.contentWindow as Window, "focus").mockImplementation(
+      () => undefined
+    );
+    const firstPlayable = controller.runFirstPlayableChecks();
+
+    controller.setPaused(true);
+    controller.updateOptions({
+      onValidationEvidence: (evidence) => updatedEvidence.push(evidence),
+    });
+    fireEvent.load(iframe);
+    await act(async () => {
+      await broker.ready;
+    });
+    dispatchHostMessage(iframe, { kind: "ack" });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: { type: "game-ready" },
+    });
+
+    expect(session.postRuntimeCommand).toHaveBeenNthCalledWith(1, {
+      type: "game-pause",
+      paused: true,
+    });
+    expect(session.postRuntimeCommand).toHaveBeenNthCalledWith(2, {
+      type: "game-run-first-playable-checks",
+    });
+    controller.focusGame();
+    expect(iframeFocus).toHaveBeenCalledOnce();
+    expect(session.postRuntimeCommand).toHaveBeenCalledWith({
+      type: "game-focus",
+    });
+
+    const evidence = [
+      {
+        checkId: "nonblank_render",
+        status: "passed",
+        evidence: { renderedObjectCount: 3 },
+      },
+      {
+        checkId: "player_visible",
+        status: "passed",
+        evidence: { playerVisible: true },
+      },
+      {
+        checkId: "input_response",
+        status: "passed",
+        evidence: { inputObserved: true },
+      },
+    ] as const;
+    for (const item of evidence) {
+      dispatchHostMessage(iframe, {
+        kind: "runtime",
+        event: {
+          type: "game-validation-evidence",
+          data: item,
+        },
+      });
+    }
+
+    await expect(firstPlayable).resolves.toEqual({
+      status: "passed",
+      evidence,
+    });
+    expect(initialEvidence).toEqual([]);
+    expect(updatedEvidence).toEqual(evidence);
+    expect(statuses).toEqual([{ state: "loading" }, { state: "ready" }]);
+
+    controller.dispose();
+    controller.dispose();
+    expect(iframe).not.toBeInTheDocument();
+    expect(broker.dispose).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when an authenticated ready runtime omits first-playable evidence", async () => {
+    vi.useFakeTimers();
+    const statuses: unknown[] = [];
+    const mount = document.createElement("div");
+    document.body.append(mount);
+    const controller = createGeneratedMechanicPhaserRuntimeController({
+      mount,
+      template,
+      generatedMechanicProject: project,
+      options: { onStatusChange: (status) => statuses.push(status) },
+    });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+    const firstPlayable = controller.runFirstPlayableChecks();
+    const rejected = expect(firstPlayable).rejects.toThrow(
+      /first-playable evidence before its deadline/i
+    );
+
+    fireEvent.load(iframe);
+    await act(async () => {
+      await broker.ready;
+    });
+    dispatchHostMessage(iframe, { kind: "ack" });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: { type: "game-ready" },
+    });
+    act(() => vi.advanceTimersByTime(SANDBOX_BOOT_TIMEOUT_MS));
+
+    await rejected;
+    expect(statuses.at(-1)).toEqual({
+      state: "error",
+      message:
+        "The generated mechanic runtime did not return first-playable evidence before its deadline.",
+    });
+    expect(iframe).not.toBeInTheDocument();
+    expect(broker.dispose).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("forwards a pre-acceptance runtime candidate unchanged and rejects unfinished checks on disposal", async () => {
+    const mount = document.createElement("div");
+    document.body.append(mount);
+    const candidateProject = Object.freeze({
+      runtimeCandidate: projectAcceptedGeneratedMechanicRuntimeCandidate(
+        fixture.artifact
+      ),
+      dependency: fixture.dependency,
+    });
+    const controller = createGeneratedMechanicPhaserRuntimeController({
+      mount,
+      template,
+      generatedMechanicProject: candidateProject,
+    });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+
+    fireEvent.load(iframe);
+    expect(protocolMocks.createParentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ project: candidateProject })
+    );
+
+    const firstPlayable = controller.runFirstPlayableChecks();
+    controller.dispose();
+    await expect(firstPlayable).rejects.toThrow(
+      /disposed before first-playable checks completed/i
+    );
+    expect(iframe).not.toBeInTheDocument();
+    expect(broker.dispose).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
   });
 
   it("preserves warning and validation evidence semantics for authenticated envelopes", async () => {

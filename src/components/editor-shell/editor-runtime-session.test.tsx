@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createGamePackRepository,
@@ -9,6 +9,7 @@ import {
   type StoredGamePackRecord,
 } from "@/game-spec";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
+import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
 import {
   createGenerationRunTestRepository,
   createRunningPhaserSpecGenerationRun,
@@ -18,6 +19,72 @@ import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
 import { useEditorRuntimeSession } from "./editor-runtime-session";
 
 describe("useEditorRuntimeSession", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: {
+        async request<T>(
+          _name: string,
+          _options: Readonly<{ mode: "exclusive"; signal?: AbortSignal }>,
+          callback: () => Promise<T>
+        ) {
+          return callback();
+        },
+      },
+    });
+  });
+
+  it("mounts a freshly accepted generated-mechanic pack without a second persistence write", async () => {
+    const storage = new MemoryGamePackStorage();
+    const repository = createGamePackRepository(storage);
+    const fixture = createGeneratedMechanicProjectFixture();
+    const canvas: EditorGameCanvasSession = {
+      ...createIdlePhaserAiCanvas(),
+      loadState: {
+        generationRunId: fixture.artifact.sourceGenerationRunId,
+        gamePack: fixture.gamePack,
+        source: "phaser-game-pack",
+        status: "success",
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useEditorRuntimeSession({
+        canvas,
+        gamePackRepository: repository,
+        onGameStatusChange: vi.fn(),
+      })
+    );
+
+    await waitFor(() => {
+      expect(result.current.runtimeTemplate).toMatchObject({
+        type: "phaser-valid",
+        persistencePolicy: "do-not-persist",
+        firstPlayableValidationSource: {
+          gamePack: fixture.gamePack,
+          source: "accepted-game-pack",
+        },
+      });
+    });
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+    await act(async () => Promise.resolve());
+    expect(storage.putCalls).toBe(0);
+  });
+
   it("persists and restores a generated Phaser draft only after first-playable validation passes", async () => {
     const storage = new MemoryGamePackStorage();
     const repository = createGamePackRepository(storage);

@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createGamePackRepository,
@@ -108,6 +108,13 @@ function createCanvasSession(
 }
 
 describe("EditorGameCanvas", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: new MemoryBrowserLockManager(),
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.doUnmock("@/runtime/phaser");
@@ -972,6 +979,33 @@ describe("EditorGameCanvas", () => {
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });
 });
+
+class MemoryBrowserLockManager {
+  private readonly tails = new Map<string, Promise<void>>();
+
+  async request<T>(
+    name: string,
+    _options: Readonly<{ mode: "exclusive"; signal?: AbortSignal }>,
+    callback: () => Promise<T>
+  ): Promise<T> {
+    const previous = this.tails.get(name) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => current);
+    this.tails.set(name, tail);
+    await previous;
+    try {
+      return await callback();
+    } finally {
+      release();
+      if (this.tails.get(name) === tail) {
+        this.tails.delete(name);
+      }
+    }
+  }
+}
 
 function dispatchValidationEvidence(
   iframe: HTMLIFrameElement,

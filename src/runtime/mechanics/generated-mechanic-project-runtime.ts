@@ -5,6 +5,7 @@ import type {
   GeneratedMechanicProjectActivation,
   GeneratedMechanicProjectBrowserResult,
   GeneratedMechanicProjectDependency,
+  PreparedGeneratedMechanicRuntimeProject,
   GeneratedMechanicProjectRuntime,
   LoadedGeneratedMechanicProjectDependency,
 } from "@/game-spec";
@@ -14,7 +15,7 @@ export type GeneratedMechanicProjectRuntimeHost<
   ActiveResource = unknown,
 > = Readonly<{
   loadProjectDependency(
-    dependency: GeneratedMechanicProjectDependency
+    project: PreparedGeneratedMechanicRuntimeProject
   ): Promise<LoadedResource>;
   installTrustedTemplate(input: Readonly<{
     dependency: GeneratedMechanicProjectDependency;
@@ -53,9 +54,11 @@ export function createGeneratedMechanicProjectRuntime<
 
   const runtime: GeneratedMechanicProjectRuntime = Object.freeze({
     async loadProjectDependency(dependency) {
-      const admittedDependency = snapshot(dependency);
-      const loadedResource = await host.loadProjectDependency(admittedDependency);
+      const admittedProject = snapshot(dependency);
+      const admittedDependency = admittedProject.dependency;
+      const loadedResource = await host.loadProjectDependency(admittedProject);
       const loadedDependency = Object.freeze({
+        project: admittedProject,
         dependency: admittedDependency,
         ...createIdentity(admittedDependency),
       });
@@ -81,6 +84,7 @@ export function createGeneratedMechanicProjectRuntime<
         loadedResource: loadedResourceBox.value,
       });
       const activation = Object.freeze({
+        project: loadedDependency.project,
         dependency: loadedDependency.dependency,
         extensionId: loadedDependency.extensionId,
         extensionVersionId: loadedDependency.extensionVersionId,

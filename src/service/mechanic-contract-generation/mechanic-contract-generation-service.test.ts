@@ -243,6 +243,200 @@ describe("generateMechanicContract", () => {
     });
   });
 
+  it("rejects a same-ID contract that drops required intent semantics", async () => {
+    const result = await generateMechanicContract({
+      intent,
+      admittedRequest: {
+        resolution,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        behavior: {
+          summary: "Perform an unrelated motion effect.",
+          triggers: ["install"],
+          outcomes: ["unrelated_motion"],
+        },
+        capabilities: ["object_motion_write"],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "contradiction",
+            message: expect.stringContaining("state_write"),
+          }),
+          expect.objectContaining({
+            code: "contradiction",
+            message: expect.stringContaining("logical_action"),
+          }),
+          expect.objectContaining({
+            code: "contradiction",
+            message: expect.stringContaining("enabled_state_observable"),
+          }),
+        ]),
+      },
+    });
+  });
+
+  it("rejects a same-ID contract that drops routed entity and config lineage", async () => {
+    const routedIntent: MechanicIntent = {
+      ...intent,
+      references: [{ kind: "entity", id: "entity_player" }],
+      configuration: [{ key: "strength", value: 2 }],
+    };
+    const result = await generateMechanicContract({
+      intent: routedIntent,
+      admittedRequest: {
+        resolution: { ...resolution, intentId: routedIntent.id },
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      referenceCatalog: {
+        ...validationContext.referenceCatalog,
+        entity: ["entity_player"],
+      },
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => candidate,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "contradiction",
+            message: expect.stringContaining("entity_player"),
+          }),
+          expect.objectContaining({
+            code: "contradiction",
+            message: expect.stringContaining("strength"),
+          }),
+        ]),
+      },
+    });
+  });
+
+  it("rejects a same-key contract that substitutes the creator's configuration value", async () => {
+    const configuredIntent: MechanicIntent = {
+      ...intent,
+      configuration: [{ key: "strength", value: 2 }],
+    };
+    const result = await generateMechanicContract({
+      intent: configuredIntent,
+      admittedRequest: {
+        resolution: { ...resolution, intentId: configuredIntent.id },
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        config: {
+          kind: "object",
+          fields: [
+            {
+              key: "strength",
+              required: true,
+              value: {
+                kind: "number",
+                minimum: 0,
+                maximum: 100,
+                default: 99,
+              },
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          expect.objectContaining({
+            path: "config.fields.strength.value.default",
+            code: "contradiction",
+            message: expect.stringContaining("accepted value 2"),
+          }),
+        ],
+      },
+    });
+  });
+
+  it("stamps exact trusted semantic lineage and ignores provider-authored substitutions", async () => {
+    const semanticIntent: MechanicIntent = {
+      ...intent,
+      actors: ["player"],
+      targets: ["enemy"],
+      behaviors: ["toggle_private_state", "apply_pressure"],
+      stateChanges: ["enabled_changes", "pressure_changes"],
+      temporalRules: ["once_per_action"],
+      spatialRules: ["inside_arena"],
+      constraints: ["bounded_pressure"],
+      connections: [{ direction: "input", port: "toggle" }],
+      references: [{ kind: "scene", id: "scene_arena" }],
+    };
+
+    const result = await generateMechanicContract({
+      intent: semanticIntent,
+      admittedRequest: {
+        resolution,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        intentLineage: {
+          actors: ["substituted_actor"],
+          targets: [],
+          behaviors: ["unrelated_behavior"],
+          stateChanges: [],
+          temporalRules: [],
+          spatialRules: [],
+          constraints: [],
+          connections: [{ direction: "input", port: "substituted_action" }],
+          references: [{ kind: "entity", id: "substituted_entity" }],
+        },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        contract: {
+          intentLineage: {
+            actors: ["player"],
+            targets: ["enemy"],
+            behaviors: ["toggle_private_state", "apply_pressure"],
+            stateChanges: ["enabled_changes", "pressure_changes"],
+            temporalRules: ["once_per_action"],
+            spatialRules: ["inside_arena"],
+            constraints: ["bounded_pressure"],
+            connections: [{ direction: "input", port: "toggle" }],
+            references: [{ kind: "scene", id: "scene_arena" }],
+          },
+        },
+      },
+    });
+  });
+
   it("rejects mismatched admitted resolution evidence before calling the provider", async () => {
     let providerCallCount = 0;
     const mismatchedResolution = {

@@ -15,10 +15,13 @@ type MaybePromise<Value> = Value | Promise<Value>;
 
 type DeclaredObservation = BehaviorScenario["observations"][number];
 
-export type ExternalAcceptanceObservationAssertion = Exclude<
-  DeclaredObservation,
-  { kind: "state_equals" }
->;
+export type ExternalAcceptanceObservationAssertion =
+  | Exclude<DeclaredObservation, { kind: "state_equals" }>
+  | Readonly<{
+      kind: "referenced_entity_motion_changed";
+      bindingIds: readonly StableId[];
+      actionId: StableId;
+    }>;
 
 export type ExternalAcceptanceObservation = Readonly<{
   id: StableId;
@@ -77,8 +80,14 @@ type ObservationEvidence = Readonly<{
   assertion: DeclaredObservation;
 }>;
 
-type ExternalObservationEvidence = Omit<ObservationEvidence, "source"> &
-  Readonly<{ id: StableId; source: "evaluator_authored" }>;
+type ExternalObservationEvidence = Readonly<{
+  id: StableId;
+  source: "evaluator_authored";
+  kind: ExternalAcceptanceObservationAssertion["kind"];
+  passed: boolean;
+  actual: JsonValue;
+  assertion: ExternalAcceptanceObservationAssertion;
+}>;
 
 export type GeneratedMechanicScenarioEvaluationEvidence = Readonly<{
   scenarioId: StableId;
@@ -108,7 +117,7 @@ export type GeneratedMechanicEvaluationResult = Readonly<{
     scenarios: readonly GeneratedMechanicScenarioEvaluationEvidence[];
     issues: readonly Readonly<{
       path: string;
-      code: "unknown_external_scenario";
+      code: "external_plan_mismatch" | "unknown_external_scenario";
       message: string;
     }>[];
     replay?: Readonly<{
@@ -126,16 +135,20 @@ const issuedEvaluationReceipts = new WeakMap<
   GeneratedMechanicEvaluationResult,
   Readonly<{
     contract: GeneratedMechanicContract;
+    config: JsonValue;
+    externalObservations: readonly ExternalAcceptanceObservation[];
     sourceArtifact: GeneratedMechanicSourceArtifact;
   }>
 >();
 
 export function isGeneratedMechanicEvaluationResultAuthentic({
   contract,
+  config,
   evaluation,
   sourceArtifact,
 }: Readonly<{
   contract: GeneratedMechanicContract;
+  config: JsonValue;
   evaluation: GeneratedMechanicEvaluationResult;
   sourceArtifact: GeneratedMechanicSourceArtifact;
 }>): boolean {
@@ -143,6 +156,12 @@ export function isGeneratedMechanicEvaluationResultAuthentic({
   return (
     receipt !== undefined &&
     jsonEqual(receipt.contract, contract) &&
+    jsonEqual(receipt.config, config) &&
+    hasExactExternalObservationCoverage(
+      receipt.contract,
+      receipt.externalObservations,
+      evaluation
+    ) &&
     jsonEqual(receipt.sourceArtifact, sourceArtifact)
   );
 }
@@ -176,6 +195,8 @@ export async function evaluateGeneratedMechanicArtifact({
   if (admissionIssues.length > 0) {
     return issueGeneratedMechanicEvaluationResult({
       contract: admittedContract,
+      config: admittedConfig,
+      externalObservations: admittedExternalObservations,
       sourceArtifact: admittedArtifact,
       result: {
         outcome: "failed",
@@ -211,6 +232,8 @@ export async function evaluateGeneratedMechanicArtifact({
 
   return issueGeneratedMechanicEvaluationResult({
     contract: admittedContract,
+    config: admittedConfig,
+    externalObservations: admittedExternalObservations,
     sourceArtifact: admittedArtifact,
     result: {
       outcome:
@@ -245,19 +268,53 @@ export async function evaluateGeneratedMechanicArtifact({
 
 function issueGeneratedMechanicEvaluationResult({
   contract,
+  config,
+  externalObservations,
   result,
   sourceArtifact,
 }: Readonly<{
   contract: GeneratedMechanicContract;
+  config: JsonValue;
+  externalObservations: readonly ExternalAcceptanceObservation[];
   result: GeneratedMechanicEvaluationResult;
   sourceArtifact: GeneratedMechanicSourceArtifact;
 }>): GeneratedMechanicEvaluationResult {
   const receipt = snapshotJson(result);
   issuedEvaluationReceipts.set(receipt, {
     contract: snapshotJson(contract),
+    config: snapshotJson(config),
+    externalObservations: snapshotJson(externalObservations),
     sourceArtifact: snapshotJson(sourceArtifact),
   });
   return receipt;
+}
+
+function hasExactExternalObservationCoverage(
+  contract: GeneratedMechanicContract,
+  externalObservations: readonly ExternalAcceptanceObservation[],
+  evaluation: GeneratedMechanicEvaluationResult
+): boolean {
+  if (externalObservations.length !== contract.scenarios.length) {
+    return false;
+  }
+  return contract.scenarios.every((scenario, index) => {
+    const expected = externalObservations[index];
+    const evidence = evaluation.evidence.scenarios[index];
+    const replayEvidence = evaluation.evidence.replay?.replayScenarios[index];
+    return (
+      expected !== undefined &&
+      expected.scenarioId === scenario.id &&
+      evidence?.scenarioId === scenario.id &&
+      evidence.externalObservations.length === 1 &&
+      replayEvidence?.scenarioId === scenario.id &&
+      replayEvidence.externalObservations.length === 1 &&
+      jsonEqual(evidence.externalObservations[0]?.assertion, expected.observation) &&
+      jsonEqual(
+        replayEvidence.externalObservations[0]?.assertion,
+        expected.observation
+      )
+    );
+  });
 }
 
 function externalObservationAdmissionIssues(
@@ -265,21 +322,70 @@ function externalObservationAdmissionIssues(
   externalObservations: readonly ExternalAcceptanceObservation[]
 ): readonly Readonly<{
   path: string;
-  code: "unknown_external_scenario";
+  code: "external_plan_mismatch" | "unknown_external_scenario";
   message: string;
 }>[] {
-  const scenarioIds = new Set(contract.scenarios.map((scenario) => scenario.id));
-  return externalObservations.flatMap((external, index) =>
-    scenarioIds.has(external.scenarioId)
-      ? []
-      : [
-          Object.freeze({
-            path: `externalObservations.${index}.scenarioId`,
-            code: "unknown_external_scenario" as const,
-            message: `External observation "${external.id}" targets unknown scenario "${external.scenarioId}".`,
-          }),
-        ]
+  const scenariosById = new Map(
+    contract.scenarios.map((scenario) => [scenario.id, scenario] as const)
   );
+  const contractBindingIds = new Set(
+    contract.bindings.map((binding) => binding.id)
+  );
+  const issues: Array<
+    Readonly<{
+      path: string;
+      code: "external_plan_mismatch" | "unknown_external_scenario";
+      message: string;
+    }>
+  > = [];
+  externalObservations.forEach((external, index) => {
+    const scenario = scenariosById.get(external.scenarioId);
+    if (!scenario) {
+      issues.push(
+        Object.freeze({
+          path: `externalObservations.${index}.scenarioId`,
+          code: "unknown_external_scenario" as const,
+          message: `External observation "${external.id}" targets unknown scenario "${external.scenarioId}".`,
+        })
+      );
+      return;
+    }
+    if (external.observation.kind !== "referenced_entity_motion_changed") {
+      return;
+    }
+    const scenarioActionIds = scenario.steps.flatMap((step) =>
+      step.kind === "dispatch_action" ? [step.actionId] : []
+    );
+    if (
+      scenarioActionIds.length !== 1 ||
+      scenarioActionIds[0] !== external.observation.actionId
+    ) {
+      issues.push(
+        Object.freeze({
+          path: `externalObservations.${index}.observation.actionId`,
+          code: "external_plan_mismatch" as const,
+          message: `External observation "${external.id}" must name the scenario's one exact dispatched action.`,
+        })
+      );
+    }
+    if (
+      external.observation.bindingIds.length === 0 ||
+      new Set(external.observation.bindingIds).size !==
+        external.observation.bindingIds.length ||
+      external.observation.bindingIds.some(
+        (bindingId) => !contractBindingIds.has(bindingId)
+      )
+    ) {
+      issues.push(
+        Object.freeze({
+          path: `externalObservations.${index}.observation.bindingIds`,
+          code: "external_plan_mismatch" as const,
+          message: `External observation "${external.id}" must name a nonempty, unique set of exact contract bindings.`,
+        })
+      );
+    }
+  });
+  return Object.freeze(issues);
 }
 
 async function runScenarios(input: {
@@ -312,6 +418,10 @@ async function runScenario(
   const steps: StepEvidence[] = [];
   const declaredObservations: ObservationEvidence[] = [];
   const externalObservationEvidence: ExternalObservationEvidence[] = [];
+  const causalExternalObservationEvidence = new Map<
+    StableId,
+    Omit<ExternalObservationEvidence, "id" | "source">
+  >();
   const issues: GeneratedMechanicScenarioEvaluationEvidence["issues"][number][] = [];
   let runtime: GeneratedMechanicEvaluationRuntime | undefined;
 
@@ -333,13 +443,39 @@ async function runScenario(
         message: `Evaluation runtime artifact "${runtime.sourceArtifactId}" does not match compiled artifact "${input.artifact.id}".`,
       });
     } else {
+      const activeRuntime = runtime;
       for (const setupEntry of scenario.setup) {
-        setup.push(await observeSetup(runtime, setupEntry));
+        setup.push(await observeSetup(activeRuntime, setupEntry));
       }
       if (setup.every((entry) => entry.passed)) {
-        await runtime.install();
+        await activeRuntime.install();
         for (const step of scenario.steps) {
-          await executeStep(runtime, step);
+          const causalObservations =
+            step.kind === "dispatch_action"
+              ? input.externalObservations.filter(
+                  (external) =>
+                    external.scenarioId === scenario.id &&
+                    external.observation.kind ===
+                      "referenced_entity_motion_changed" &&
+                    external.observation.actionId === step.actionId
+                )
+              : [];
+          const causalBaselines = await Promise.all(
+            causalObservations.map((external) =>
+              captureExternalBaseline(activeRuntime, external.observation)
+            )
+          );
+          await executeStep(activeRuntime, step);
+          for (const [index, external] of causalObservations.entries()) {
+            causalExternalObservationEvidence.set(
+              external.id,
+              await observeExternal(
+                activeRuntime,
+                external.observation,
+                causalBaselines[index]
+              )
+            );
+          }
           steps.push({
             kind: step.kind,
             status: "completed",
@@ -348,16 +484,30 @@ async function runScenario(
         }
         for (const observation of scenario.observations) {
           declaredObservations.push(
-            await observeDeclared(runtime, observation)
+            await observeDeclared(activeRuntime, observation)
           );
         }
         for (const external of input.externalObservations) {
           if (external.scenarioId !== scenario.id) {
             continue;
           }
+          const observed =
+            external.observation.kind ===
+            "referenced_entity_motion_changed"
+              ? causalExternalObservationEvidence.get(external.id)
+              : await observeExternal(
+                  activeRuntime,
+                  external.observation,
+                  undefined
+                );
+          if (!observed) {
+            throw new Error(
+              `External observation "${external.id}" was not captured at its exact action boundary.`
+            );
+          }
           externalObservationEvidence.push({
             id: external.id,
-            ...(await observeDeclared(runtime, external.observation)),
+            ...observed,
             source: "evaluator_authored",
           });
         }
@@ -469,6 +619,80 @@ async function observeDeclared(
       });
     }
   }
+}
+
+async function observeExternal(
+  runtime: GeneratedMechanicEvaluationRuntime,
+  observation: ExternalAcceptanceObservationAssertion,
+  baseline: JsonValue | undefined
+): Promise<Omit<ExternalObservationEvidence, "id" | "source">> {
+  if (observation.kind !== "referenced_entity_motion_changed") {
+    return observeExternalDeclared(runtime, observation);
+  }
+
+  const before = Array.isArray(baseline) ? baseline : [];
+  const after = await Promise.all(
+    observation.bindingIds.map(async (bindingId) => ({
+      bindingId,
+      position: await runtime.readBindingProperty(bindingId, "position"),
+      velocity: await runtime.readBindingProperty(bindingId, "velocity"),
+    }))
+  );
+  return snapshotJson({
+    kind: observation.kind,
+    passed:
+      before.length === after.length &&
+      observation.bindingIds.every((bindingId, index) => {
+        const beforeEntry = before[index];
+        const afterEntry = after[index];
+        return (
+          beforeEntry !== undefined &&
+          afterEntry !== undefined &&
+          typeof beforeEntry === "object" &&
+          beforeEntry !== null &&
+          !Array.isArray(beforeEntry) &&
+          beforeEntry.bindingId === bindingId &&
+          afterEntry.bindingId === bindingId &&
+          !jsonEqual(beforeEntry, afterEntry)
+        );
+      }),
+    actual: { before, after },
+    assertion: observation,
+  });
+}
+
+async function observeExternalDeclared(
+  runtime: GeneratedMechanicEvaluationRuntime,
+  observation: Exclude<
+    ExternalAcceptanceObservationAssertion,
+    { kind: "referenced_entity_motion_changed" }
+  >
+): Promise<Omit<ExternalObservationEvidence, "id" | "source">> {
+  const evidence = await observeDeclared(runtime, observation);
+  return snapshotJson({
+    kind: observation.kind,
+    passed: evidence.passed,
+    actual: evidence.actual,
+    assertion: observation,
+  });
+}
+
+async function captureExternalBaseline(
+  runtime: GeneratedMechanicEvaluationRuntime,
+  observation: ExternalAcceptanceObservationAssertion
+): Promise<JsonValue> {
+  if (observation.kind !== "referenced_entity_motion_changed") {
+    return null;
+  }
+  return snapshotJson(
+    await Promise.all(
+      observation.bindingIds.map(async (bindingId) => ({
+        bindingId,
+        position: await runtime.readBindingProperty(bindingId, "position"),
+        velocity: await runtime.readBindingProperty(bindingId, "velocity"),
+      }))
+    )
+  );
 }
 
 function observationEvidence(

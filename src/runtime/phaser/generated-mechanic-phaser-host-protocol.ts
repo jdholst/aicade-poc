@@ -1,4 +1,9 @@
-import type { PreparedRestoredGeneratedMechanicProject } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
+import type { PreparedGeneratedMechanicRuntimeProject } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
+import {
+  acceptedGeneratedMechanicArtifactSchema,
+  generatedMechanicRuntimeCandidateSchema,
+  type GeneratedMechanicExecutableArtifact,
+} from "@/game-spec/mechanics/generated-mechanic-project-artifact";
 import type {
   RuntimeCommand,
   RuntimeViewport,
@@ -25,7 +30,7 @@ export type GeneratedMechanicPhaserProjectBootstrap = Readonly<{
   nonce: string;
   sequence: 0;
   template: HandAuthoredPhaserTemplate;
-  project: PreparedRestoredGeneratedMechanicProject;
+  project: PreparedGeneratedMechanicRuntimeProject;
 }>;
 
 export type GeneratedMechanicPhaserBootstrapAcknowledgement = Readonly<{
@@ -34,6 +39,8 @@ export type GeneratedMechanicPhaserBootstrapAcknowledgement = Readonly<{
   sessionId: string;
   nonce: string;
   sequence: 0;
+  projectKind: "accepted" | "candidate";
+  runtimeExecutionId: string;
   artifactId: string;
   extensionId: string;
   extensionVersionId: string;
@@ -86,7 +93,7 @@ export type GeneratedMechanicPhaserProtocolTimers = Readonly<{
 
 export type GeneratedMechanicPhaserChildSession = Readonly<{
   getTemplate(): HandAuthoredPhaserTemplate;
-  getProject(): PreparedRestoredGeneratedMechanicProject;
+  getProject(): PreparedGeneratedMechanicRuntimeProject;
   postRuntimeEvent(candidate: unknown): void;
   consumeRuntimeCommand(event: MessageEvent<unknown>): RuntimeCommand | null;
   dispose(): void;
@@ -111,7 +118,7 @@ export type CreateGeneratedMechanicPhaserParentSessionInput = Readonly<{
   ownerWindow: GeneratedMechanicPhaserMessageWindow;
   iframeWindow: GeneratedMechanicPhaserMessageWindow;
   template: HandAuthoredPhaserTemplate;
-  project: PreparedRestoredGeneratedMechanicProject;
+  project: PreparedGeneratedMechanicRuntimeProject;
   sessionId: string;
   nonce: string;
 }>;
@@ -402,13 +409,16 @@ const templateKeys = [
   "title",
   "viewport",
 ] as const;
-const projectKeys = ["artifact", "dependency"] as const;
+const acceptedProjectKeys = ["artifact", "dependency"] as const;
+const candidateProjectKeys = ["runtimeCandidate", "dependency"] as const;
 const acknowledgementKeys = [
   "kind",
   "protocolVersion",
   "sessionId",
   "nonce",
   "sequence",
+  "projectKind",
+  "runtimeExecutionId",
   "artifactId",
   "extensionId",
   "extensionVersionId",
@@ -478,15 +488,21 @@ function isTemplateCandidate(
 
 function isPreparedProjectCandidate(
   value: unknown
-): value is PreparedRestoredGeneratedMechanicProject {
-  if (!hasExactOwnDataKeys(value, projectKeys)) {
+): value is PreparedGeneratedMechanicRuntimeProject {
+  if (
+    !hasExactOwnDataKeys(value, acceptedProjectKeys) &&
+    !hasExactOwnDataKeys(value, candidateProjectKeys)
+  ) {
     return false;
   }
   const project = value as Record<string, unknown>;
-  if (!isPlainRecord(project.artifact) || !isPlainRecord(project.dependency)) {
+  if (!isPlainRecord(project.dependency)) {
     return false;
   }
-  const artifact = project.artifact;
+  const artifact = executableArtifactForProjectCandidate(project);
+  if (!artifact) {
+    return false;
+  }
   const dependency = project.dependency;
   if (
     !isPlainRecord(dependency.contract) ||
@@ -545,13 +561,21 @@ function runtimePolicyMatches(
 function createAcknowledgement(
   bootstrap: GeneratedMechanicPhaserProjectBootstrap
 ): GeneratedMechanicPhaserBootstrapAcknowledgement {
-  const { artifact } = bootstrap.project;
+  const project = bootstrap.project;
+  const isCandidate = "runtimeCandidate" in project;
+  const artifact = isCandidate
+    ? project.runtimeCandidate.executableArtifact
+    : acceptedGeneratedMechanicArtifactSchema.parse(project.artifact);
   return Object.freeze({
     kind: BOOTSTRAP_ACKNOWLEDGEMENT_KIND,
     protocolVersion: GENERATED_MECHANIC_PHASER_HOST_PROTOCOL_VERSION,
     sessionId: bootstrap.sessionId,
     nonce: bootstrap.nonce,
     sequence: 0,
+    projectKind: isCandidate ? "candidate" : "accepted",
+    runtimeExecutionId: isCandidate
+      ? project.runtimeCandidate.runtimeExecutionId
+      : project.artifact.buildId,
     artifactId: artifact.id,
     extensionId: artifact.extensionId,
     extensionVersionId: artifact.versionId,
@@ -562,6 +586,41 @@ function createAcknowledgement(
     sourceArtifactId: artifact.sourceArtifact.id,
     capabilityVersion: artifact.contract.capabilityVersion,
   });
+}
+
+function executableArtifactForProjectCandidate(
+  project: Record<string, unknown>
+): GeneratedMechanicExecutableArtifact | null {
+  if (Object.prototype.hasOwnProperty.call(project, "runtimeCandidate")) {
+    const parsed = generatedMechanicRuntimeCandidateSchema.safeParse(
+      project.runtimeCandidate
+    );
+    return parsed.success ? parsed.data.executableArtifact : null;
+  }
+  const parsed = acceptedGeneratedMechanicArtifactSchema.safeParse(
+    project.artifact
+  );
+  if (!parsed.success) {
+    return null;
+  }
+  const artifact = parsed.data;
+  return {
+    schemaVersion: "generated_mechanic_executable_artifact/v1",
+    id: artifact.id,
+    extensionId: artifact.extensionId,
+    versionId: artifact.versionId,
+    finalGameSpecArtifactId: artifact.finalGameSpecArtifactId,
+    finalGameSpec: artifact.finalGameSpec,
+    gameSpecId: artifact.gameSpecId,
+    mechanicId: artifact.mechanicId,
+    mechanicType: artifact.mechanicType,
+    contract: artifact.contract,
+    sourceArtifact: artifact.sourceArtifact,
+    runtimePolicy: artifact.runtimePolicy,
+    config: artifact.config,
+    bindings: artifact.bindings,
+    referenceCatalog: artifact.referenceCatalog,
+  };
 }
 
 function isAcknowledgement(
@@ -576,6 +635,8 @@ function isAcknowledgement(
     acknowledgement.protocolVersion ===
       GENERATED_MECHANIC_PHASER_HOST_PROTOCOL_VERSION &&
     acknowledgement.sequence === 0 &&
+    (acknowledgement.projectKind === "accepted" ||
+      acknowledgement.projectKind === "candidate") &&
     acknowledgementKeys
       .filter(
         (key) =>

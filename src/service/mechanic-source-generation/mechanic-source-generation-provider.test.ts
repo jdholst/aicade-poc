@@ -16,7 +16,7 @@ describe("OpenAI mechanic source provider", () => {
   it("requests and returns one strict Generated Mechanic Source candidate", async () => {
     const candidate = {
       schemaVersion: "generated_mechanic_source_candidate/v1",
-      id: "generic_source_v1",
+      id: "generation_run_source_source_initial_1",
       contractId: "generic_contract",
       capabilityVersion: MECHANIC_CAPABILITY_VERSION,
       callbacks: [
@@ -46,7 +46,16 @@ describe("OpenAI mechanic source provider", () => {
     );
     const provider = createOpenAiMechanicSourceProvider({ fetchImpl });
 
-    const result = await provider(createProviderInput());
+    const result = await provider({
+      ...createProviderInput(),
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 1,
+        kind: "initial",
+        candidateArtifactId: "generation_run_source_source_initial_1",
+      },
+    });
 
     expect(result).toEqual(candidate);
     expect(generatedMechanicSourceJsonSchema.properties).not.toHaveProperty(
@@ -70,6 +79,60 @@ describe("OpenAI mechanic source provider", () => {
           parameters: generatedMechanicSourceJsonSchema,
         },
       ],
+    });
+    expect(body.instructions).toContain(
+      "Required top-level candidate artifact ID: generation_run_source_source_initial_1"
+    );
+  });
+
+  it("rejects a structured source candidate with a mismatched attempt candidate ID", async () => {
+    const provider = createOpenAiMechanicSourceProvider({
+      fetchImpl: async () =>
+        Response.json({
+          output: [
+            {
+              type: "function_call",
+              name: GENERATED_MECHANIC_SOURCE_TOOL,
+              arguments: JSON.stringify({
+                schemaVersion: "generated_mechanic_source_candidate/v1",
+                id: "reused_source_candidate",
+              }),
+            },
+          ],
+        }),
+    });
+
+    await expect(
+      provider({
+        ...createProviderInput(),
+        generationAttempt: {
+          generationRunId: "generation_run_source",
+          stage: "source",
+          attemptNumber: 2,
+          kind: "repair",
+          candidateArtifactId: "generation_run_source_source_repair_2",
+          repair: {
+            trigger: "upstream_invalidation",
+            failureAttemptId: "generation_run_source_contract_2",
+            issues: [],
+            invalidatedArtifactIds: [
+              "generation_run_source_source_initial_1",
+            ],
+          },
+        },
+      })
+    ).rejects.toMatchObject({
+      name: "MechanicSourceGenerationProviderError",
+      evidence: {
+        code: "invalid_provider_output",
+        issues: [
+          expect.objectContaining({
+            message: expect.stringContaining(
+              "did not use the required attempt candidate ID"
+            ),
+          }),
+        ],
+      },
     });
   });
 });

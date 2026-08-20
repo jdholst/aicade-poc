@@ -1,8 +1,10 @@
 import {
   acceptedGeneratedMechanicArtifactSchema,
-  type AcceptedGeneratedMechanicArtifact,
+  generatedMechanicRuntimeCandidateSchema,
+  projectAcceptedGeneratedMechanicExecutableArtifact,
+  type GeneratedMechanicExecutableArtifact,
 } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
-import type { PreparedRestoredGeneratedMechanicProject } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
+import type { PreparedGeneratedMechanicRuntimeProject } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
 import type {
   ContainedMechanicRuntimeStep,
   MechanicRuntimeFailureEvidence,
@@ -325,7 +327,8 @@ export function createTrustedGeneratedMechanicPhaserRoute({
 
       const template = authenticatedChild.getTemplate();
       const project = authenticatedChild.getProject();
-      const expectedMechanic = validateTrustedProject(template, project);
+      const trustedProject = validateTrustedProject(template, project);
+      const { artifact, expectedMechanic, runtimeExecutionId } = trustedProject;
       const trustedScriptPaths = validateTrustedScriptPaths(template);
       rejectExistingRuntimeGlobals(runtimeGlobal);
       runtimeGlobalsClaimed = true;
@@ -343,7 +346,7 @@ export function createTrustedGeneratedMechanicPhaserRoute({
       });
 
       const host = Object.freeze({
-        mechanicId: project.artifact.mechanicId,
+        mechanicId: artifact.mechanicId,
         async install(
           input: GeneratedMechanicInstallInput
         ): Promise<TopDownRetainedGeneratedMechanicSession> {
@@ -356,16 +359,25 @@ export function createTrustedGeneratedMechanicPhaserRoute({
           try {
             validateHostInstallInput(input, template, expectedMechanic);
             const objects = createExactBoundEntityRegistrations(
-              project.artifact,
+              artifact,
               template,
               input
             );
-            const createdSession = await dependencies.createRuntimeSession({
-              artifact: project.artifact,
-              dependency: project.dependency,
-              realmAdapter,
-              objects,
-            });
+            const createdSession = await dependencies.createRuntimeSession(
+              "runtimeCandidate" in project
+                ? {
+                    runtimeCandidate: project.runtimeCandidate,
+                    dependency: project.dependency,
+                    realmAdapter,
+                    objects,
+                  }
+                : {
+                    artifact: project.artifact,
+                    dependency: project.dependency,
+                    realmAdapter,
+                    objects,
+                  }
+            );
             runtimeSession = createdSession;
             if (abortController.signal.aborted) {
               await disposeRuntimeSession();
@@ -373,7 +385,11 @@ export function createTrustedGeneratedMechanicPhaserRoute({
                 "The generated mechanic session was created after runtime disposal."
               );
             }
-            validateRuntimeIdentity(createdSession.identity, project.artifact);
+            validateRuntimeIdentity(
+              createdSession.identity,
+              artifact,
+              runtimeExecutionId
+            );
             assertActive(abortController.signal);
             requireCompletedStep(await createdSession.install(), "install");
             if (!controllerClaimed) {
@@ -492,14 +508,38 @@ export function createTrustedGeneratedMechanicPhaserRoute({
 
 function validateTrustedProject(
   template: HandAuthoredPhaserTemplate,
-  project: PreparedRestoredGeneratedMechanicProject
-): HandAuthoredPhaserTemplate["gameSpec"]["mechanics"][number] {
-  const artifactResult = acceptedGeneratedMechanicArtifactSchema.safeParse(
-    project.artifact
-  );
-  if (!artifactResult.success) {
+  project: PreparedGeneratedMechanicRuntimeProject
+): Readonly<{
+  artifact: GeneratedMechanicExecutableArtifact;
+  expectedMechanic: HandAuthoredPhaserTemplate["gameSpec"]["mechanics"][number];
+  runtimeExecutionId: string;
+}> {
+  const candidateResult = "runtimeCandidate" in project
+    ? generatedMechanicRuntimeCandidateSchema.safeParse(project.runtimeCandidate)
+    : undefined;
+  const acceptedResult = "artifact" in project
+    ? acceptedGeneratedMechanicArtifactSchema.safeParse(project.artifact)
+    : undefined;
+  if (
+    (candidateResult && !candidateResult.success) ||
+    (acceptedResult && !acceptedResult.success) ||
+    (!candidateResult && !acceptedResult)
+  ) {
     throw new TypeError(
-      "The generated mechanic iframe requires a valid accepted artifact."
+      "The generated mechanic iframe requires a valid candidate or accepted artifact."
+    );
+  }
+  const artifact = candidateResult?.success
+    ? candidateResult.data.executableArtifact
+    : projectAcceptedGeneratedMechanicExecutableArtifact(
+        acceptedResult!.data
+      );
+  const runtimeExecutionId = candidateResult?.success
+    ? candidateResult.data.runtimeExecutionId
+    : acceptedResult!.data.buildId;
+  if (!jsonEqual(artifact.finalGameSpec, project.dependency.finalGameSpec)) {
+    throw new Error(
+      "The generated mechanic iframe dependency does not contain the exact Final Game Spec from the executable artifact."
     );
   }
   const canonicalTemplate = createTopDownPhaserTemplate(
@@ -510,7 +550,6 @@ function validateTrustedProject(
       "The generated mechanic iframe requires the exact canonical top-down template."
     );
   }
-  const artifact = project.artifact;
   const dependency = project.dependency;
   if (
     !jsonEqual(artifact.contract, dependency.contract) ||
@@ -519,7 +558,7 @@ function validateTrustedProject(
     !jsonEqual(artifact.runtimePolicy, dependency.runtimePolicy)
   ) {
     throw new Error(
-      "The generated mechanic iframe project dependency does not exactly match its accepted artifact."
+      "The generated mechanic iframe project dependency does not exactly match its executable artifact."
     );
   }
   if (
@@ -528,7 +567,7 @@ function validateTrustedProject(
     !jsonEqual(template.gameSpec, dependency.finalGameSpec.gameSpec)
   ) {
     throw new Error(
-      "The generated mechanic iframe Final Game Spec identity does not match its accepted artifact."
+      "The generated mechanic iframe Final Game Spec identity does not match its executable artifact."
     );
   }
   const mechanics = template.gameSpec.mechanics.filter(
@@ -540,10 +579,14 @@ function validateTrustedProject(
     !jsonEqual(mechanics[0]?.config, artifact.config)
   ) {
     throw new Error(
-      "The generated mechanic iframe requires the exact accepted mechanic."
+      "The generated mechanic iframe requires the exact executable mechanic."
     );
   }
-  return mechanics[0];
+  return Object.freeze({
+    artifact,
+    expectedMechanic: mechanics[0],
+    runtimeExecutionId,
+  });
 }
 
 function validateTrustedScriptPaths(
@@ -611,7 +654,7 @@ function validateHostInstallInput(
 }
 
 function createExactBoundEntityRegistrations(
-  artifact: AcceptedGeneratedMechanicArtifact,
+  artifact: GeneratedMechanicExecutableArtifact,
   template: HandAuthoredPhaserTemplate,
   input: GeneratedMechanicInstallInput
 ): readonly TrustedTopDownPhaserMechanicObjectRegistration[] {
@@ -657,7 +700,8 @@ function createExactBoundEntityRegistrations(
 
 function validateRuntimeIdentity(
   identity: GeneratedMechanicRuntimeSessionIdentity,
-  artifact: AcceptedGeneratedMechanicArtifact
+  artifact: GeneratedMechanicExecutableArtifact,
+  runtimeExecutionId: string
 ): void {
   if (
     identity.schemaVersion !== GENERATED_MECHANIC_RUNTIME_SESSION_VERSION ||
@@ -671,7 +715,8 @@ function validateRuntimeIdentity(
     identity.contractId !== artifact.contract.id ||
     identity.sourceArtifactId !== artifact.sourceArtifact.id ||
     identity.capabilityVersion !== artifact.contract.capabilityVersion ||
-    identity.buildId !== artifact.buildId ||
+    identity.runtimeExecutionId !== runtimeExecutionId ||
+    identity.buildId !== runtimeExecutionId ||
     !jsonEqual(identity.runtimePolicy, artifact.runtimePolicy)
   ) {
     throw new Error(

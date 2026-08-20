@@ -3,7 +3,7 @@ import type {
   EditorAIChatActions,
   EditorAIChatSession,
 } from "@/hooks/use-editor-session";
-import type { TopDownGameSpec } from "@/game-spec";
+import { parseTopDownGameSpec, type TopDownGameSpec } from "@/game-spec";
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
 
 type EditorAIChatProps = {
@@ -116,6 +116,40 @@ function createGeneratedProjectSummary(
       statusMessage,
       summaryItems: getSpecSummary(loadState.pack),
       transcript: loadState.pack.chatTranscript,
+    };
+  }
+
+  if (loadState.source === "phaser-game-pack") {
+    const gameSpec = parseTopDownGameSpec(loadState.gamePack.gameSpec);
+    const capabilities = Array.from(
+      new Set(
+        (loadState.gamePack.acceptedGeneratedMechanicArtifacts ?? []).flatMap(
+          ({ sourceArtifact }) =>
+            sourceArtifact.grant.capabilities.map(({ id }) => id)
+        )
+      )
+    );
+
+    return {
+      capabilities,
+      controls: gameSpec.controls,
+      detailPanels: [],
+      overviewMetrics: [
+        loadState.gamePack.runtimeKind,
+        gameSpec.schemaVersion,
+        gameSpec.template.id,
+        `${loadState.gamePack.acceptedGeneratedMechanicArtifacts?.length ?? 0} generated mechanic`,
+      ],
+      overviewSummary: gameSpec.currentIntentSummary,
+      statusMessage,
+      summaryItems: getTopDownSpecSummary(gameSpec),
+      transcript: [
+        { role: "user", text: submittedPrompt },
+        {
+          role: "assistant",
+          text: "Generated, evaluated, and accepted a playable mechanic project.",
+        },
+      ],
     };
   }
 

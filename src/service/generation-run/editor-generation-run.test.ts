@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  PHASE_9_GENERATION_CONSTRAINT_SET,
+  TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS,
+  createInitialGamePack,
+} from "@/game-spec";
 import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
 import { SpecGenerationClientError } from "@/service/spec-generation";
+import { createCreatorGenerationRouting } from "@/service/creator-generation/creator-generation-routing";
 
 import { startEditorGenerationRun } from "./editor-generation-run";
 import {
@@ -130,6 +136,536 @@ describe("startEditorGenerationRun", () => {
     });
   });
 
+  it("routes an admitted generated mechanic through the browser continuation and returns its accepted Game Pack", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const intent = {
+      id: "intent_generated_entry",
+      summary: "Dash the routed player after a logical action.",
+      triggers: ["logical_action"],
+      actors: ["player"],
+      targets: [],
+      behaviors: ["action_dash"],
+      ownedObjects: [],
+      stateChanges: ["player_velocity_changed"],
+      temporalRules: [],
+      spatialRules: [],
+      constraints: [],
+      configuration: [],
+      connections: [
+        { direction: "input" as const, port: spec.controls[0]!.action },
+      ],
+      references: [{ kind: "entity" as const, id: spec.entities[0].id }],
+      outcomes: ["player_velocity_changed"],
+      requiredCapabilities: ["object_motion_write"],
+      ambiguities: [],
+    };
+    const routing = createCreatorGenerationRouting({
+      availableCapabilities:
+        TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS,
+      baseGameSpec: spec,
+      generationRunId: "generation_run_generated_entry",
+      intent,
+    });
+    if (routing.kind !== "generated_mechanic") {
+      throw new Error(`Expected generated routing, received ${routing.kind}.`);
+    }
+    const gamePack = createInitialGamePack({
+      createdAt: "2026-06-10T12:00:05.000Z",
+      gameSpec: spec,
+      id: "game_pack_generated_entry",
+      runtimeKind: "phaser",
+    });
+    const continueGeneratedMechanicGeneration = vi.fn().mockResolvedValue({
+      outcome: "accepted",
+      value: { gamePack },
+    });
+    const requestPhaserSpecGeneration = vi.fn().mockResolvedValue({
+      metadata: {
+        attemptCount: 1,
+        generationRunId: "generation_run_generated_entry",
+        model: "gpt-5.4-mini",
+        taskRoute: "spec_generation.primary",
+      },
+      routing,
+      runtimeKind: "phaser",
+      spec,
+    });
+
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => "generation_run_generated_entry",
+      generationRunRepository: createGenerationRunTestRepository().repository,
+      generationSource: "phaser-ai",
+      request: { prompt: "make the player drift after collecting a crystal" },
+      requestPhaserSpecGeneration,
+    });
+
+    await expect(run.done).resolves.toEqual({
+      generationRunId: "generation_run_generated_entry",
+      status: "success",
+      source: "phaser-game-pack",
+      gamePack,
+    });
+    expect(continueGeneratedMechanicGeneration).toHaveBeenCalledTimes(1);
+    expect(continueGeneratedMechanicGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          prompt: "make the player drift after collecting a crystal",
+        }),
+        routing: expect.objectContaining({
+          kind: "generated_mechanic",
+          generationRunId: "generation_run_generated_entry",
+        }),
+      })
+    );
+  });
+
+  it("returns durable generated acceptance when abort races its committed handoff", async () => {
+    const generationRunId = "generation_run_abort_after_acceptance_commit";
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const intent = {
+      id: "intent_abort_after_acceptance_commit",
+      summary: "Dash the routed player after a logical action.",
+      triggers: ["logical_action"],
+      actors: ["player"],
+      targets: [],
+      behaviors: ["action_dash"],
+      ownedObjects: [],
+      stateChanges: ["player_velocity_changed"],
+      temporalRules: [],
+      spatialRules: [],
+      constraints: [],
+      configuration: [],
+      connections: [
+        { direction: "input" as const, port: spec.controls[0]!.action },
+      ],
+      references: [{ kind: "entity" as const, id: spec.entities[0].id }],
+      outcomes: ["player_velocity_changed"],
+      requiredCapabilities: ["object_motion_write"],
+      ambiguities: [],
+    };
+    const routing = createCreatorGenerationRouting({
+      availableCapabilities:
+        TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS,
+      baseGameSpec: spec,
+      generationRunId,
+      intent,
+    });
+    if (routing.kind !== "generated_mechanic") {
+      throw new Error(`Expected generated routing, received ${routing.kind}.`);
+    }
+    const gamePack = createInitialGamePack({
+      createdAt: "2026-06-10T12:00:05.000Z",
+      gameSpec: spec,
+      id: "game_pack_abort_after_acceptance_commit",
+      runtimeKind: "phaser",
+    });
+    const accepted = deferred<{ outcome: "accepted"; value: { gamePack: typeof gamePack } }>();
+    const acceptanceRecorded = deferred<void>();
+    const repository = createGenerationRunTestRepository().repository;
+    const continueGeneratedMechanicGeneration = vi.fn(async () => {
+      await repository.update(generationRunId, (generationRun) => ({
+        ...generationRun,
+        metadata: {
+          ...(generationRun.metadata ?? {}),
+          generatedMechanicAcceptanceTransaction: {
+            schemaVersion: "generated_mechanic_acceptance_transaction/v1",
+            status: "finalized",
+            transactionId: "acceptance_abort_after_commit",
+            generationRunId,
+            artifactId: "artifact_abort_after_commit",
+            buildId: "build_abort_after_commit",
+            checkpointId: "checkpoint_abort_after_commit",
+          },
+        },
+      }));
+      acceptanceRecorded.resolve();
+      return accepted.promise;
+    });
+    const requestPhaserSpecGeneration = vi.fn().mockResolvedValue({
+      metadata: {
+        attemptCount: 1,
+        generationRunId,
+        model: "gpt-5.4-mini",
+        taskRoute: "spec_generation.primary",
+      },
+      routing,
+      runtimeKind: "phaser",
+      spec,
+    });
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => generationRunId,
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      request: { prompt: "make the player dash after the action" },
+      requestPhaserSpecGeneration,
+    });
+    await acceptanceRecorded.promise;
+
+    run.abort();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    accepted.resolve({ outcome: "accepted", value: { gamePack } });
+
+    await expect(run.done).resolves.toEqual({
+      generationRunId,
+      status: "success",
+      source: "phaser-game-pack",
+      gamePack,
+    });
+  });
+
+  it("keeps the built-in path free of generated-mechanic continuation work", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const continueGeneratedMechanicGeneration = vi.fn();
+    const plan = {
+      metadata: {
+        attemptCount: 1,
+        generationRunId: "generation_run_builtin_entry",
+        model: "gpt-5.4-mini",
+        taskRoute: "spec_generation.primary",
+      },
+      routing: {
+        kind: "built_in" as const,
+        generationRunId: "generation_run_builtin_entry",
+        intentId: "intent_player_movement",
+        resolutionKind: "built_in" as const,
+      },
+      runtimeKind: "phaser" as const,
+      spec,
+    };
+
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => "generation_run_builtin_entry",
+      generationRunRepository: createGenerationRunTestRepository().repository,
+      generationSource: "phaser-ai",
+      request: { prompt: "make a top-down crystal chase" },
+      requestPhaserSpecGeneration: vi.fn().mockResolvedValue(plan),
+    });
+
+    await expect(run.done).resolves.toEqual({
+      generationRunId: "generation_run_builtin_entry",
+      status: "success",
+      source: "phaser-spec",
+      metadata: plan.metadata,
+      runtimeKind: "phaser",
+      spec,
+    });
+    expect(continueGeneratedMechanicGeneration).not.toHaveBeenCalled();
+  });
+
+  it("records exact unsupported routing evidence without starting generated work", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const { repository } = createGenerationRunTestRepository();
+    const continueGeneratedMechanicGeneration = vi.fn();
+    const issue = {
+      path: "intent.requiredCapabilities.0",
+      code: "missing_capability" as const,
+      message:
+        'The selected generated-mechanic host does not provide capability "object_create".',
+    };
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => "generation_run_capability_gap",
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      now: createDeterministicClock([
+        "2026-06-10T12:00:00.000Z",
+        "2026-06-10T12:00:03.000Z",
+        "2026-06-10T12:00:04.000Z",
+      ]),
+      request: { prompt: "spawn a new object" },
+      requestPhaserSpecGeneration: vi.fn().mockResolvedValue({
+        metadata: {
+          attemptCount: 1,
+          generationRunId: "generation_run_capability_gap",
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+        },
+        routing: {
+          kind: "capability_gap",
+          generationRunId: "generation_run_capability_gap",
+          intentId: "intent_capability_gap",
+          evidence: {
+            stage: "routing",
+            code: "capability_gap",
+            missingCapabilities: ["object_create"],
+            issues: [issue],
+          },
+        },
+        runtimeKind: "phaser",
+        spec,
+      }),
+    });
+
+    await expect(run.done).resolves.toMatchObject({
+      status: "error",
+      reason: "request-failed",
+      message: issue.message,
+    });
+    expect(continueGeneratedMechanicGeneration).not.toHaveBeenCalled();
+    await expect(
+      repository.fetch("generation_run_capability_gap")
+    ).resolves.toMatchObject({
+      status: "failed",
+      stage: "mechanic-validation",
+      failureClass: "unsupported-prompt-intent",
+      attempts: [
+        expect.objectContaining({
+          validation: {
+            stage: "mechanic-validation",
+            status: "failed",
+            issues: [issue],
+          },
+        }),
+      ],
+    });
+  });
+
+  it("does not overwrite terminal generated-mechanic failure evidence at the outer editor boundary", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const { repository } = createGenerationRunTestRepository();
+    const continueGeneratedMechanicGeneration = vi.fn(async () => {
+      await repository.update("generation_run_terminal_failure", (run) => ({
+        ...run,
+        status: "failed",
+        completedAt: "2026-06-10T12:00:09.000Z",
+        durationMs: 9000,
+        stage: "browser-check",
+        failureClass: "first-playable-failure",
+        metadata: {
+          generatedMechanicOutcome: {
+            status: "rejected",
+            stage: "first_playable",
+            issues: [
+              {
+                path: "firstPlayable",
+                code: "first_playable_not_passed",
+                message: "The generated mechanic browser proof failed.",
+              },
+            ],
+          },
+        },
+      }));
+      return {
+        outcome: "rejected" as const,
+        evidence: {
+          stage: "first_playable",
+          issues: [
+            {
+              path: "firstPlayable",
+              code: "first_playable_not_passed",
+              message: "The generated mechanic browser proof failed.",
+            },
+          ],
+        },
+      };
+    });
+    const routing = {
+      kind: "generated_mechanic" as const,
+      generationRunId: "generation_run_terminal_failure",
+      intent: {
+        id: "intent_terminal_failure",
+        summary: "Create a generated behavior.",
+        triggers: [],
+        actors: [],
+        targets: [],
+        behaviors: ["generated_behavior"],
+        ownedObjects: [],
+        stateChanges: [],
+        temporalRules: [],
+        spatialRules: [],
+        constraints: [],
+        configuration: [],
+        connections: [],
+        references: [],
+        outcomes: ["generated_outcome"],
+        requiredCapabilities: ["state_write"],
+        ambiguities: [],
+      },
+      admittedRequest: {
+        kind: "generated_mechanic_request" as const,
+        generationRunId: "generation_run_terminal_failure",
+        resolution: {
+          kind: "generated" as const,
+          intentId: "intent_terminal_failure",
+          requiredCapabilities: ["state_write"],
+        },
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+    };
+
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => "generation_run_terminal_failure",
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      now: createDeterministicClock([
+        "2026-06-10T12:00:00.000Z",
+        "2026-06-10T12:00:03.000Z",
+        "2026-06-10T12:00:10.000Z",
+      ]),
+      request: { prompt: "make a generated behavior" },
+      requestPhaserSpecGeneration: vi.fn().mockResolvedValue({
+        metadata: {
+          attemptCount: 1,
+          generationRunId: "generation_run_terminal_failure",
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+        },
+        routing,
+        runtimeKind: "phaser",
+        spec,
+      }),
+    });
+
+    await expect(run.done).resolves.toMatchObject({
+      status: "error",
+      message: "The generated mechanic browser proof failed.",
+      generatedMechanicFailure: {
+        stage: "first_playable",
+        issues: [
+          {
+            path: "firstPlayable",
+            code: "first_playable_not_passed",
+            message: "The generated mechanic browser proof failed.",
+          },
+        ],
+      },
+    });
+    await expect(
+      repository.fetch("generation_run_terminal_failure")
+    ).resolves.toMatchObject({
+      status: "failed",
+      stage: "browser-check",
+      failureClass: "first-playable-failure",
+      metadata: {
+        generatedMechanicOutcome: {
+          stage: "first_playable",
+          status: "rejected",
+        },
+      },
+    });
+  });
+
+  it("extends only an admitted generated-mechanic continuation beyond the built-in timeout", async () => {
+    vi.useFakeTimers();
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const repository = createGenerationRunTestRepository().repository;
+    const continueGeneratedMechanicGeneration = vi.fn(
+      () => new Promise<never>(() => undefined)
+    );
+    const routing = {
+      kind: "generated_mechanic" as const,
+      generationRunId: "generation_run_extended_timeout",
+      intent: {
+        id: "intent_extended_timeout",
+        summary: "Create a generated behavior.",
+        triggers: [],
+        actors: [],
+        targets: [],
+        behaviors: ["generated_behavior"],
+        ownedObjects: [],
+        stateChanges: [],
+        temporalRules: [],
+        spatialRules: [],
+        constraints: [],
+        configuration: [],
+        connections: [],
+        references: [],
+        outcomes: ["generated_outcome"],
+        requiredCapabilities: ["state_write"],
+        ambiguities: [],
+      },
+      admittedRequest: {
+        resolution: {
+          kind: "generated_mechanic" as const,
+          intentId: "intent_extended_timeout",
+          candidateBuiltInTypes: [],
+          assumptions: [],
+          coverage: {
+            coveredRequirements: [],
+            uncoveredRequirements: [],
+          },
+        },
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+    };
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => "generation_run_extended_timeout",
+      generatedMechanicTimeoutMs: 600,
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      request: { prompt: "make a generated behavior" },
+      requestPhaserSpecGeneration: vi.fn().mockResolvedValue({
+        metadata: {
+          attemptCount: 1,
+          generationRunId: "generation_run_extended_timeout",
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+        },
+        routing,
+        runtimeKind: "phaser",
+        spec,
+      }),
+      timeoutMs: 25,
+    });
+
+    await vi.advanceTimersByTimeAsync(25);
+    let settled = false;
+    void run.done.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(575);
+    await expect(run.done).resolves.toMatchObject({
+      status: "error",
+      reason: "timed-out",
+      message: expect.stringContaining("Generated mechanic creation"),
+    });
+    expect(continueGeneratedMechanicGeneration).toHaveBeenCalledTimes(1);
+    await expect(
+      repository.fetch("generation_run_extended_timeout")
+    ).resolves.toMatchObject({
+      status: "timed-out",
+      stage: "timeout",
+      failureClass: "timeout",
+      attempts: [
+        expect.objectContaining({
+          attemptNumber: 1,
+          status: "succeeded",
+          candidate: expect.objectContaining({
+            kind: "validated_spec",
+            gameSpecId: spec.id,
+          }),
+        }),
+        expect.objectContaining({
+          attemptNumber: 2,
+          status: "timed-out",
+          taskRoute: "generated_mechanic.continuation",
+          candidate: {
+            kind: "no_candidate",
+            summary:
+              "Generated mechanic continuation timed out before acceptance.",
+          },
+        }),
+      ],
+      metadata: {
+        generatedMechanicOutcome: {
+          status: "rejected",
+          stage: "continuation",
+          issues: [
+            expect.objectContaining({ code: "generation_cancelled" }),
+          ],
+        },
+      },
+    });
+  });
+
   it("keeps Phaser AI generation running when GenerationRun persistence is unavailable", async () => {
     const spec = getFirstValidTopDownGameSpecFixture();
     const repository = {
@@ -203,6 +739,7 @@ describe("startEditorGenerationRun", () => {
         "Generation took longer than two minutes. Please retry; the model may have stalled while creating or validating the game module.",
     });
     expect(observedSignal?.aborted).toBe(true);
+    expect(observedSignal?.reason).toBe("timed-out");
   });
 
   it("finalizes stalled Phaser AI generation receipts as timed out", async () => {
@@ -259,8 +796,12 @@ describe("startEditorGenerationRun", () => {
 
   it("finalizes explicitly aborted Phaser AI generation receipts as cancelled", async () => {
     const repository = createGenerationRunTestRepository().repository;
+    let observedSignal: AbortSignal | undefined;
     const requestPhaserSpecGeneration = vi.fn(
-      () => new Promise<never>(() => {})
+      (_request, signal?: AbortSignal) =>
+        new Promise<never>(() => {
+          observedSignal = signal;
+        })
     );
 
     const run = startEditorGenerationRun({
@@ -300,6 +841,7 @@ describe("startEditorGenerationRun", () => {
         }),
       ],
     });
+    expect(observedSignal?.reason).toBe("cancelled");
   });
 
   it("normalizes Spec Generation validation failures into display-ready error state", async () => {
@@ -630,3 +1172,13 @@ describe("startEditorGenerationRun", () => {
     });
   });
 });
+
+function deferred<Value>() {
+  let resolve!: (value: Value) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}

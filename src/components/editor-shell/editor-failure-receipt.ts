@@ -7,10 +7,12 @@ import type {
   SpecGenerationFailureStage,
   SpecGenerationValidationFailure,
 } from "@/service/spec-generation";
+import type { GeneratedMechanicGenerationFailureEvidence } from "@/service/generation-run";
 
 export type FailureReceiptStage =
   | ValidationEvidence["stage"]
-  | SpecGenerationFailureStage;
+  | SpecGenerationFailureStage
+  | GeneratedMechanicGenerationFailureEvidence["stage"];
 
 export type FailureReceiptViewModel = {
   checkId: string;
@@ -27,12 +29,32 @@ export type FailureReceiptSurfaceViewModel = {
 };
 
 export function createGenerationFailureReceiptSurface({
+  generatedMechanicFailure,
   message,
   validationFailure,
 }: {
+  generatedMechanicFailure?: GeneratedMechanicGenerationFailureEvidence;
   message: string;
   validationFailure?: SpecGenerationValidationFailure;
 }): FailureReceiptSurfaceViewModel {
+  if (generatedMechanicFailure) {
+    return {
+      debugReceipts: [
+        {
+          checkId: generatedMechanicFailure.stage,
+          evidenceJson: JSON.stringify(generatedMechanicFailure, null, 2),
+          issueMessages: generatedMechanicFailure.issues.map(
+            ({ message: issueMessage, path }) => `${path}: ${issueMessage}`
+          ),
+          message,
+          stage: generatedMechanicFailure.stage,
+          status: "failed",
+        },
+      ],
+      summary: message,
+    };
+  }
+
   if (validationFailure) {
     return createSpecGenerationValidationFailureReceiptSurface({
       message,

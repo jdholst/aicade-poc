@@ -71,7 +71,7 @@ describe("OpenAI mechanic contract provider", () => {
   it("requests only a structured Generated Mechanic Contract", async () => {
     const candidate = {
       schemaVersion: "generated-mechanic-contract/v1",
-      id: "generated_runtime_rule",
+      id: "generation_run_contract_contract_initial_1",
     };
     const requests: { input: RequestInfo | URL; init?: RequestInit }[] = [];
     const provider = createOpenAiMechanicContractProvider({
@@ -93,7 +93,19 @@ describe("OpenAI mechanic contract provider", () => {
       timeoutMs: 100,
     });
 
-    await expect(provider(providerInput)).resolves.toEqual(candidate);
+    await expect(
+      provider({
+        ...providerInput,
+        generationAttempt: {
+          generationRunId: "generation_run_contract",
+          stage: "contract",
+          attemptNumber: 1,
+          kind: "initial",
+          candidateArtifactId:
+            "generation_run_contract_contract_initial_1",
+        },
+      })
+    ).resolves.toEqual(candidate);
     expect(requests).toHaveLength(1);
     expect(String(requests[0].input)).toBe(
       "https://api.openai.com/v1/responses"
@@ -119,7 +131,14 @@ describe("OpenAI mechanic contract provider", () => {
         },
       ],
     });
+    expect(body.tools[0].parameters.properties).not.toHaveProperty(
+      "intentLineage"
+    );
+    expect(body.tools[0].parameters.required).not.toContain("intentLineage");
     expect(body.instructions).toContain(JSON.stringify(intent, null, 2));
+    expect(body.instructions).toContain(
+      "Required top-level candidate artifact ID: generation_run_contract_contract_initial_1"
+    );
     expect(body.instructions).not.toMatch(/projectile|hazard|proximity/i);
     expect(body.input).toEqual([
       {
@@ -132,6 +151,64 @@ describe("OpenAI mechanic contract provider", () => {
         ],
       },
     ]);
+  });
+
+  it("rejects a structured contract with a mismatched attempt candidate ID", async () => {
+    const provider = createOpenAiMechanicContractProvider({
+      fetchImpl: async () =>
+        Response.json({
+          output: [
+            {
+              type: "function_call",
+              name: "return_generated_mechanic_contract",
+              arguments: JSON.stringify({
+                schemaVersion: "generated-mechanic-contract/v1",
+                id: "reused_contract_candidate",
+              }),
+            },
+          ],
+        }),
+    });
+
+    await expect(
+      provider({
+        ...providerInput,
+        generationAttempt: {
+          generationRunId: "generation_run_contract",
+          stage: "contract",
+          attemptNumber: 2,
+          kind: "repair",
+          candidateArtifactId:
+            "generation_run_contract_contract_repair_2",
+          repair: {
+            trigger: "stage_failure",
+            failureAttemptId: "generation_run_contract_contract_1",
+            issues: [
+              {
+                path: "bindings",
+                code: "missing_entity_binding",
+                message: "Declare at least one entity binding.",
+              },
+            ],
+            invalidatedArtifactIds: [
+              "generation_run_contract_contract_initial_1",
+            ],
+          },
+        },
+      })
+    ).rejects.toMatchObject({
+      name: "MechanicContractGenerationProviderError",
+      evidence: {
+        code: "invalid_provider_output",
+        issues: [
+          expect.objectContaining({
+            message: expect.stringContaining(
+              "did not use the required attempt candidate ID"
+            ),
+          }),
+        ],
+      },
+    });
   });
 
   it("returns stage-specific evidence when the provider times out", async () => {

@@ -14,21 +14,21 @@ import {
 
 const intent: MechanicIntent = {
   id: "intent_runtime_rule",
-  summary: "Change a bound actor state after a logical input.",
+  summary: "Change a bound actor's motion after a logical input.",
   triggers: ["logical_action"],
   actors: ["player"],
   targets: [],
-  behaviors: ["change_actor_state"],
+  behaviors: ["change_actor_motion"],
   ownedObjects: [],
-  stateChanges: ["actor_state_changes"],
+  stateChanges: ["actor_motion_changes"],
   temporalRules: [],
   spatialRules: [],
   constraints: [],
   configuration: [],
   connections: [],
   references: [{ kind: "entity", id: "player_one" }],
-  outcomes: ["actor_state_observable"],
-  requiredCapabilities: ["object_read", "state_write"],
+  outcomes: ["actor_motion_observable"],
+  requiredCapabilities: ["object_read", "object_motion_write"],
   ambiguities: [],
 };
 
@@ -83,10 +83,78 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     expect(prompt).toContain('"id": "state_write"');
     expect(prompt).toContain('"kind": "stable_id"');
     expect(prompt).toContain('"resourceBudgetProfile": "phase_9_fixed_budget"');
+    expect(prompt).toContain(
+      '"requiredIndependentEffectCapability": "object_motion_write"'
+    );
+    expect(prompt).toContain('"requiredTrigger": "logical_action"');
+    expect(prompt).toContain(
+      '"routedActionConnection": "exactly one accepted intent input connection whose port is an exact active logical action"'
+    );
+    expect(prompt).toContain(
+      "causally change the motion of an exact intent-referenced entity"
+    );
+    expect(prompt).toContain(
+      "Private state may support the mechanic, but it is never independent acceptance evidence"
+    );
+    expect(prompt).not.toContain('"requiredObservableCapabilities"');
+    expect(prompt).not.toContain("motion or declared private state");
     expect(prompt).toContain("Return one candidate Generated Mechanic Contract");
     expect(prompt).not.toMatch(/projectile|hazard|proximity/i);
     expect(prompt).not.toContain("Final Game Spec JSON");
     expect(prompt).not.toContain("TypeScript source");
+  });
+
+  it("includes exact stage-failure feedback and requires the correlated attempt candidate ID", () => {
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_contract_1",
+      issues: [
+        {
+          path: "bindings",
+          code: "missing_entity_binding",
+          message: 'Expected entity binding "player_one" at bindings[0].',
+        },
+      ],
+      invalidatedArtifactIds: ["contract_candidate_initial_1"],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent,
+      resolution,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId:
+          "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "Required top-level candidate artifact ID: generation_run_contract_contract_repair_2"
+    );
+    expect(prompt).toContain(
+      "Correct every exact path, code, and message in the stage-failure feedback"
+    );
   });
 });
 

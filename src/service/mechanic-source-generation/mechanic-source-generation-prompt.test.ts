@@ -79,6 +79,54 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).not.toContain("External Acceptance Observations");
     expect(prompt).not.toContain("evaluator tests");
   });
+
+  it("includes exact upstream invalidation feedback and requires the correlated source candidate ID", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "upstream_invalidation" as const,
+      failureAttemptId: "generation_run_source_contract_2",
+      issues: [],
+      invalidatedArtifactIds: ["source_candidate_initial_1"],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(createGrant("state_write")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "Required top-level candidate artifact ID: generation_run_source_source_repair_2"
+    );
+    expect(prompt).toContain(
+      "Its issues array is intentionally empty; regenerate from the current accepted upstream inputs"
+    );
+  });
 });
 
 function createIntent(): MechanicIntent {

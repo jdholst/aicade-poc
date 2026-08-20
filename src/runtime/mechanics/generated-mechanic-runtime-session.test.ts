@@ -5,6 +5,9 @@ import type { GeneratedMechanicProjectDependency } from "@/game-spec/game-pack/g
 import {
   acceptedGeneratedMechanicArtifactSchema,
   createGeneratedMechanicRuntimePolicy,
+  generatedMechanicExecutableArtifactSchema,
+  generatedMechanicRuntimeCandidateSchema,
+  projectAcceptedGeneratedMechanicRuntimeCandidate,
   type AcceptedGeneratedMechanicArtifact,
 } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
 import type { GeneratedMechanicContract } from "@/game-spec/mechanics/generated-mechanic-contract";
@@ -62,6 +65,7 @@ describe("createGeneratedMechanicRuntimeSession", () => {
       contractId: "contract_generic_session",
       sourceArtifactId: "source_generic_session_v1",
       capabilityVersion: "mechanic_capability/v1",
+      runtimeExecutionId: "build_generic_session_v1",
       buildId: "build_generic_session_v1",
       runtimePolicy: fixture.artifact.runtimePolicy,
     });
@@ -113,6 +117,130 @@ describe("createGeneratedMechanicRuntimeSession", () => {
       )
     ).toBe(true);
   });
+
+  it("runs an honest transient executable candidate without accepted-project fields", async () => {
+    const fixture = createFixture();
+    const acceptedProjection =
+      projectAcceptedGeneratedMechanicRuntimeCandidate(fixture.artifact);
+    const runtimeCandidate = generatedMechanicRuntimeCandidateSchema.parse({
+      ...acceptedProjection,
+      runtimeExecutionId: "runtime_execution_generic_session_v1",
+    });
+    const adapter = new ScriptedRealmAdapter();
+
+    expect(runtimeCandidate.executableArtifact).not.toHaveProperty(
+      "acceptedAt"
+    );
+    expect(runtimeCandidate.executableArtifact).not.toHaveProperty(
+      "checkpointId"
+    );
+    expect(runtimeCandidate.executableArtifact).not.toHaveProperty(
+      "validationEvidenceIds"
+    );
+    expect(Object.isFrozen(acceptedProjection)).toBe(true);
+    expect(
+      generatedMechanicExecutableArtifactSchema.safeParse(
+        runtimeCandidate.executableArtifact
+      ).success
+    ).toBe(true);
+    expect(
+      generatedMechanicExecutableArtifactSchema.safeParse({
+        ...runtimeCandidate.executableArtifact,
+        checkpointId: fixture.artifact.checkpointId,
+      }).success
+    ).toBe(false);
+    expect(
+      generatedMechanicRuntimeCandidateSchema.safeParse({
+        ...runtimeCandidate,
+        acceptedAt: fixture.artifact.acceptedAt,
+      }).success
+    ).toBe(false);
+
+    const session = await createGeneratedMechanicRuntimeSession({
+      runtimeCandidate,
+      dependency: fixture.dependency,
+      realmAdapter: adapter,
+      objects: fixture.objects,
+    });
+
+    expect(session.identity).toMatchObject({
+      artifactId: fixture.artifact.id,
+      runtimeExecutionId: "runtime_execution_generic_session_v1",
+      buildId: "runtime_execution_generic_session_v1",
+    });
+    await expect(session.install()).resolves.toMatchObject({
+      outcome: "completed",
+    });
+    await expect(session.dispose()).resolves.toMatchObject({
+      outcome: "completed",
+    });
+  });
+
+  it("rejects a transient executable whose exact Final Game Spec lineage was substituted", async () => {
+    const fixture = createFixture();
+    const projected =
+      projectAcceptedGeneratedMechanicRuntimeCandidate(fixture.artifact);
+    const forgedCandidate = {
+      ...projected,
+      runtimeExecutionId: "runtime_execution_forged_v1",
+      executableArtifact: {
+        ...projected.executableArtifact,
+        sourceArtifact: {
+          ...projected.executableArtifact.sourceArtifact,
+          id: "source_foreign_v1",
+        },
+      },
+    };
+    const adapter = new ScriptedRealmAdapter();
+
+    await expect(
+      createGeneratedMechanicRuntimeSession({
+        runtimeCandidate: forgedCandidate as never,
+        dependency: fixture.dependency,
+        realmAdapter: adapter,
+        objects: fixture.objects,
+      })
+    ).rejects.toThrow("valid generated mechanic runtime candidate");
+    expect(adapter.createInputs).toHaveLength(0);
+  });
+
+  it.each(["entities", "controls", "objectives"] as const)(
+    "rejects a transient executable whose dependency keeps the same IDs and extension but changes %s",
+    async (field) => {
+      const fixture = createFixture();
+      const runtimeCandidate =
+        projectAcceptedGeneratedMechanicRuntimeCandidate(fixture.artifact);
+      const dependency = {
+        ...fixture.dependency,
+        finalGameSpec: divergeFinalGameSpec(
+          fixture.dependency.finalGameSpec,
+          field
+        ),
+      };
+      const adapter = new ScriptedRealmAdapter();
+
+      expect(dependency.finalGameSpec.id).toBe(
+        runtimeCandidate.executableArtifact.finalGameSpec.id
+      );
+      expect(dependency.finalGameSpec.gameSpec.id).toBe(
+        runtimeCandidate.executableArtifact.finalGameSpec.gameSpec.id
+      );
+      expect(dependency.finalGameSpec.extension).toEqual(
+        runtimeCandidate.executableArtifact.finalGameSpec.extension
+      );
+
+      await expect(
+        createGeneratedMechanicRuntimeSession({
+          runtimeCandidate,
+          dependency,
+          realmAdapter: adapter,
+          objects: fixture.objects,
+        })
+      ).rejects.toThrow(/exact Final Game Spec/i);
+      expect(adapter.createInputs).toHaveLength(0);
+      expect(adapter.executions).toHaveLength(0);
+    }
+  );
 
   it.each([
     {
@@ -253,7 +381,7 @@ describe("createGeneratedMechanicRuntimeSession", () => {
         objects: fixture.objects,
       })
     ).rejects.toThrow(
-      "Generated runtime session realm adapter does not match the accepted execution candidate."
+      "Generated runtime session realm adapter does not match the generated execution candidate."
     );
     expect(delegate.createInputs).toHaveLength(0);
   });
@@ -689,6 +817,53 @@ function createFixture() {
     },
   ];
   return { artifact, dependency, actor, objects };
+}
+
+function divergeFinalGameSpec(
+  finalGameSpec: GeneratedMechanicProjectDependency["finalGameSpec"],
+  field: "entities" | "controls" | "objectives"
+): GeneratedMechanicProjectDependency["finalGameSpec"] {
+  const gameSpec = finalGameSpec.gameSpec;
+  if (field === "entities") {
+    return {
+      ...finalGameSpec,
+      gameSpec: {
+        ...gameSpec,
+        entities: gameSpec.entities.map((entity, index) =>
+          index === 0
+            ? { ...entity, name: `${entity.name} substituted` }
+            : entity
+        ),
+      },
+    };
+  }
+  if (field === "controls") {
+    return {
+      ...finalGameSpec,
+      gameSpec: {
+        ...gameSpec,
+        controls: gameSpec.controls.map((control, index) =>
+          index === 0
+            ? { ...control, label: `${control.label} substituted` }
+            : control
+        ),
+      },
+    };
+  }
+  return {
+    ...finalGameSpec,
+    gameSpec: {
+      ...gameSpec,
+      objectives: gameSpec.objectives.map((objective, index) =>
+        index === 0
+          ? {
+              ...objective,
+              description: `${objective.description} Substituted.`,
+            }
+          : objective
+      ),
+    },
+  };
 }
 
 function createContract(): GeneratedMechanicContract {

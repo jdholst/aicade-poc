@@ -26,6 +26,7 @@ export function createGeneratedMechanicContractJsonSchema() {
   }) as MechanicContractJsonSchema;
 
   delete schema.$schema;
+  delete schema.properties?.intentLineage;
   normalizeStrictToolSchema(schema);
 
   return schema;

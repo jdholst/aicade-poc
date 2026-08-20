@@ -65,6 +65,7 @@ export type EditorRuntimeTemplatePlan =
     };
 
 type CreateEditorRuntimeTemplatePlanInput = {
+  activeGamePack?: GamePack | null;
   activeGeneratedSpec?: ActiveGeneratedSpecState | null;
   generationSource?: EditorGenerationSource;
   phaserTemplateState?: TopDownPhaserTemplateState;
@@ -73,6 +74,7 @@ type CreateEditorRuntimeTemplatePlanInput = {
 };
 
 export function createEditorRuntimeTemplatePlan({
+  activeGamePack = null,
   activeGeneratedSpec = null,
   generationSource,
   phaserTemplateState = getTopDownPhaserTemplateState(),
@@ -80,6 +82,7 @@ export function createEditorRuntimeTemplatePlan({
   runtimeMode = getEditorRuntimeMode(),
 }: CreateEditorRuntimeTemplatePlanInput = {}): EditorRuntimeTemplatePlan {
   const playableDraftSource = createPlayableDraftSource({
+    activeGamePack,
     generatedSpecDraft: activeGeneratedSpec,
     generationSource,
     phaserTemplateState,

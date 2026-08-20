@@ -48,7 +48,11 @@ export type PlayableDraftValidationSource = {
   generationRunId?: GenerationRun["id"];
   gameSpec: GameSpec;
   runtimeCandidate: FirstPlayableRuntimeCandidate;
-  source: "fixture" | "generated-spec" | "restored-game-pack";
+  source:
+    | "accepted-game-pack"
+    | "fixture"
+    | "generated-spec"
+    | "restored-game-pack";
   runtimeKind: Extract<RuntimeKind, "phaser">;
 };
 
@@ -84,6 +88,7 @@ export type PlayableDraftSource =
     };
 
 export type CreatePlayableDraftSourceInput = {
+  activeGamePack?: GamePack | null;
   generatedSpecDraft?: GeneratedPlayableDraftSpec | null;
   generationSource?: EditorGenerationSource;
   phaserTemplateState?: TopDownPhaserTemplateState;
@@ -92,6 +97,7 @@ export type CreatePlayableDraftSourceInput = {
 };
 
 export function createPlayableDraftSource({
+  activeGamePack = null,
   generatedSpecDraft = null,
   generationSource,
   phaserTemplateState = getTopDownPhaserTemplateState(),
@@ -105,6 +111,13 @@ export function createPlayableDraftSource({
     return {
       type: "canvas",
     };
+  }
+
+  if (activeGamePack) {
+    return createRestoredGamePackDraftSource(
+      activeGamePack,
+      "accepted-game-pack"
+    );
   }
 
   if (generatedSpecDraft) {
@@ -217,7 +230,11 @@ function stringifyStableValue(value: unknown): string {
 }
 
 function createRestoredGamePackDraftSource(
-  gamePack: GamePack
+  gamePack: GamePack,
+  source: Extract<
+    PlayableDraftValidationSource["source"],
+    "accepted-game-pack" | "restored-game-pack"
+  > = "restored-game-pack"
 ): PlayableDraftSource {
   if (gamePack.runtimeKind !== "phaser") {
     return createBlockedGameSpecSource(
@@ -264,8 +281,9 @@ function createRestoredGamePackDraftSource(
 
     return {
       type: "phaser",
-      source: "restored-game-pack",
+      source,
       sourceKey: [
+        source,
         template.id,
         gamePack.updatedAt,
         gamePack.builds.length,
@@ -283,11 +301,14 @@ function createRestoredGamePackDraftSource(
       template,
       ...(generatedMechanicProject ? { generatedMechanicProject } : {}),
       validationSource: {
-        ...createValidationSource(template, "restored-game-pack"),
+        ...createValidationSource(template, source),
         gamePack,
       },
       readyPolicy: "ready-on-runtime-ready",
-      persistencePolicy: "reuse-restored-game-pack",
+      persistencePolicy:
+        source === "accepted-game-pack"
+          ? "do-not-persist"
+          : "reuse-restored-game-pack",
       runFirstPlayableChecksOnReady: true,
     };
   } catch (error) {

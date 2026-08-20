@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { GeneratedMechanicProjectDependency } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
 import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
 import {
   GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
+  projectAcceptedGeneratedMechanicRuntimeCandidate,
   type AcceptedGeneratedMechanicArtifact,
 } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
 import type { MechanicExecutionRealmAdapter } from "@/runtime/mechanics/mechanic-execution-realm";
@@ -82,6 +84,51 @@ describe("createTrustedGeneratedMechanicPhaserRoute", () => {
     expect(document.querySelectorAll("script[data-aicade-generated-runtime]")).toHaveLength(0);
     expect(Reflect.ownKeys(harness.runtimeGlobal)).toEqual([]);
   });
+
+  it("boots the exact transient candidate without requiring accepted persistence fields", async () => {
+    const harness = createHarness({ runtimeCandidate: true });
+
+    const route = createTrustedGeneratedMechanicPhaserRoute(harness.input);
+    await route.ready;
+
+    expect(harness.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeCandidate: expect.objectContaining({
+          runtimeExecutionId: "runtime_execution_route_candidate_v1",
+          executableArtifact: expect.not.objectContaining({
+            acceptedAt: expect.anything(),
+            checkpointId: expect.anything(),
+          }),
+        }),
+        dependency: harness.fixture.dependency,
+      })
+    );
+    expect(harness.createSession.mock.calls[0]?.[0]).not.toHaveProperty(
+      "artifact"
+    );
+    await route.dispose();
+  });
+
+  it.each(["entities", "controls", "objectives"] as const)(
+    "rejects a transient candidate whose dependency preserves IDs and extension but changes %s",
+    async (field) => {
+      const harness = createHarness({
+        runtimeCandidate: true,
+        divergentCandidateFinalGameSpecField: field,
+      });
+
+      const route = createTrustedGeneratedMechanicPhaserRoute(harness.input);
+
+      await expect(route.ready).rejects.toThrow(/exact Final Game Spec/i);
+      expect(harness.createSession).not.toHaveBeenCalled();
+      expect(harness.loadedPaths).toEqual([]);
+      expect(harness.runtimeEvents).toContainEqual(
+        expect.objectContaining({ type: "game-error" })
+      );
+      expect(harness.terminateController).toHaveBeenCalledTimes(1);
+      expect(harness.disposeChild).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it("rejects a noncanonical script path before scripts or generated source can execute", async () => {
     const harness = createHarness({
@@ -176,8 +223,13 @@ describe("createTrustedGeneratedMechanicPhaserRoute", () => {
 });
 
 type HarnessOptions = Readonly<{
+  divergentCandidateFinalGameSpecField?:
+    | "entities"
+    | "controls"
+    | "objectives";
   foreignRuntimeIdentity?: boolean;
   missingAcceptedEntityHandle?: boolean;
+  runtimeCandidate?: boolean;
   mutateTemplate?: (
     template: ReturnType<typeof createTopDownPhaserTemplate>
   ) => ReturnType<typeof createTopDownPhaserTemplate>;
@@ -185,8 +237,26 @@ type HarnessOptions = Readonly<{
 
 function createHarness(options: HarnessOptions = {}) {
   const fixture = createGeneratedMechanicProjectFixture();
+  const projectedRuntimeCandidate =
+    projectAcceptedGeneratedMechanicRuntimeCandidate(fixture.artifact);
+  const runtimeCandidate = {
+    ...projectedRuntimeCandidate,
+    runtimeExecutionId: "runtime_execution_route_candidate_v1",
+  };
+  const dependency = options.divergentCandidateFinalGameSpecField
+    ? {
+        ...fixture.dependency,
+        finalGameSpec: divergeFinalGameSpec(
+          fixture.dependency.finalGameSpec,
+          options.divergentCandidateFinalGameSpecField
+        ),
+      }
+    : fixture.dependency;
+  const project = options.runtimeCandidate
+    ? { runtimeCandidate, dependency }
+    : fixture;
   const canonicalTemplate = createTopDownPhaserTemplate(
-    fixture.dependency.finalGameSpec.gameSpec
+    dependency.finalGameSpec.gameSpec
   );
   const template = options.mutateTemplate?.(canonicalTemplate) ?? canonicalTemplate;
   const runtimeGlobal: Record<string, unknown> = Object.create(null);
@@ -216,7 +286,7 @@ function createHarness(options: HarnessOptions = {}) {
   const disposeChild = vi.fn();
   const child: GeneratedMechanicPhaserChildSession = {
     getTemplate: () => template,
-    getProject: () => fixture,
+    getProject: () => project,
     postRuntimeEvent: (candidate) => runtimeEvents.push(candidate),
     consumeRuntimeCommand: () => command,
     dispose: disposeChild,
@@ -233,7 +303,12 @@ function createHarness(options: HarnessOptions = {}) {
   const disposeSession = vi.fn(
     async () => ({ outcome: "completed", results: [] }) as const
   );
-  const canonicalIdentity = createIdentity(fixture.artifact);
+  const canonicalIdentity = createIdentity(
+    fixture.artifact,
+    options.runtimeCandidate
+      ? runtimeCandidate.runtimeExecutionId
+      : fixture.artifact.buildId
+  );
   const identity = options.foreignRuntimeIdentity
     ? Object.freeze({
         ...canonicalIdentity,
@@ -342,7 +417,10 @@ function createHarness(options: HarnessOptions = {}) {
   };
 }
 
-function createIdentity(artifact: AcceptedGeneratedMechanicArtifact) {
+function createIdentity(
+  artifact: AcceptedGeneratedMechanicArtifact,
+  runtimeExecutionId: string
+) {
   return Object.freeze({
     schemaVersion: "generated_mechanic_runtime_session/v1" as const,
     artifactId: artifact.id,
@@ -355,9 +433,57 @@ function createIdentity(artifact: AcceptedGeneratedMechanicArtifact) {
     contractId: artifact.contract.id,
     sourceArtifactId: artifact.sourceArtifact.id,
     capabilityVersion: artifact.contract.capabilityVersion,
-    buildId: artifact.buildId,
+    runtimeExecutionId,
+    buildId: runtimeExecutionId,
     runtimePolicy: artifact.runtimePolicy,
   });
+}
+
+function divergeFinalGameSpec(
+  finalGameSpec: GeneratedMechanicProjectDependency["finalGameSpec"],
+  field: "entities" | "controls" | "objectives"
+): GeneratedMechanicProjectDependency["finalGameSpec"] {
+  const gameSpec = finalGameSpec.gameSpec;
+  if (field === "entities") {
+    return {
+      ...finalGameSpec,
+      gameSpec: {
+        ...gameSpec,
+        entities: gameSpec.entities.map((entity, index) =>
+          index === 0
+            ? { ...entity, name: `${entity.name} substituted` }
+            : entity
+        ),
+      },
+    };
+  }
+  if (field === "controls") {
+    return {
+      ...finalGameSpec,
+      gameSpec: {
+        ...gameSpec,
+        controls: gameSpec.controls.map((control, index) =>
+          index === 0
+            ? { ...control, label: `${control.label} substituted` }
+            : control
+        ),
+      },
+    };
+  }
+  return {
+    ...finalGameSpec,
+    gameSpec: {
+      ...gameSpec,
+      objectives: gameSpec.objectives.map((objective, index) =>
+        index === 0
+          ? {
+              ...objective,
+              description: `${objective.description} Substituted.`,
+            }
+          : objective
+      ),
+    },
+  };
 }
 
 function installerKeyForPath(path: string): string {

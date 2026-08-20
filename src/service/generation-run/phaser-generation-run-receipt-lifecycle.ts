@@ -1,4 +1,5 @@
 import {
+  clearGeneratedMechanicHandoffReceipt,
   type GenerationRun,
   type GenerationRunAttemptReceipt,
   type GenerationRunRepository,
@@ -11,14 +12,18 @@ import {
   type TopDownSpecGenerationClientResult,
 } from "@/service/spec-generation";
 import type { StarterProjectRequest } from "@/service/starter-project/starter-project-client";
+import { CreatorGenerationRoutingError } from "@/service/creator-generation/creator-game-generation-dispatcher";
 
 export type PhaserGenerationRunReceiptLifecycle = {
   generationRunId?: GenerationRun["id"];
   createInitialReceipt: () => Promise<void>;
   recordSpecGenerationFailure: (error: unknown) => Promise<void>;
   recordSpecGenerationInterruption: (
-    status: Extract<GenerationRun["status"], "cancelled" | "timed-out">
-  ) => Promise<void>;
+    status: Extract<GenerationRun["status"], "cancelled" | "timed-out">,
+    phase?: "generated_mechanic_continuation"
+  ) => Promise<
+    "recorded" | "preserved_acceptance" | "persistence_unavailable"
+  >;
   recordSpecGenerationSuccess: (
     result: TopDownSpecGenerationClientResult
   ) => Promise<void>;
@@ -79,19 +84,22 @@ export function createPhaserGenerationRunReceiptLifecycle({
       );
     },
 
-    async recordSpecGenerationInterruption(status) {
+    async recordSpecGenerationInterruption(status, phase) {
       if (!generationRunId || !repository) {
-        return;
+        return "persistence_unavailable";
       }
 
-      await persistGenerationRunReceipt(() =>
+      return (
+        (await persistGenerationRunReceipt(() =>
         recordInterruptedSpecGenerationAttempt({
           completedAt: now(),
           generationRunId,
           repository,
           request,
           status,
+          phase,
         })
+        )) ?? "persistence_unavailable"
       );
     },
 
@@ -112,13 +120,15 @@ export function createPhaserGenerationRunReceiptLifecycle({
     },
   };
 
-  async function persistGenerationRunReceipt(persist: () => Promise<void>) {
+  async function persistGenerationRunReceipt<Result>(
+    persist: () => Promise<Result>
+  ): Promise<Result | undefined> {
     if (isPersistenceDisabled) {
       return;
     }
 
     try {
-      await persist();
+      return await persist();
     } catch {
       isPersistenceDisabled = true;
     }
@@ -167,6 +177,10 @@ async function recordSuccessfulSpecGenerationAttempt({
   result: TopDownSpecGenerationClientResult;
 }) {
   await repository.update(generationRunId, (generationRun) => {
+    if (generationRun.status !== "running") {
+      return generationRun;
+    }
+
     const startedAt = generationRun.startedAt;
 
     return {
@@ -279,6 +293,10 @@ async function recordFailedSpecGenerationAttempt({
       : undefined;
 
   await repository.update(generationRunId, (generationRun) => {
+    if (generationRun.status !== "running") {
+      return generationRun;
+    }
+
     const startedAt = generationRun.startedAt;
     const stage = validationFailure
       ? toGenerationRunFailureStage(validationFailure.stage)
@@ -299,6 +317,8 @@ async function recordFailedSpecGenerationAttempt({
       stage,
       failureClass: hasRepairExhausted
         ? "repair-exhausted"
+        : error instanceof CreatorGenerationRoutingError
+          ? "unsupported-prompt-intent"
         : validationFailure
           ? "invalid-model-output"
           : "provider-request-failure",
@@ -320,51 +340,126 @@ async function recordInterruptedSpecGenerationAttempt({
   repository,
   request,
   status,
+  phase,
 }: {
   completedAt: string;
   generationRunId: GenerationRun["id"];
   repository: Pick<GenerationRunRepository, "update">;
   request: StarterProjectRequest;
   status: Extract<GenerationRun["status"], "cancelled" | "timed-out">;
-}) {
-  await repository.update(generationRunId, (generationRun) => {
-    if (generationRun.status !== "running") {
+  phase?: "generated_mechanic_continuation";
+}): Promise<"recorded" | "preserved_acceptance"> {
+  const updatedGenerationRun = await repository.update(
+    generationRunId,
+    (generationRun) => {
+    if (hasGeneratedMechanicAcceptanceTransaction(generationRun)) {
+      return generationRun;
+    }
+    const isGeneratedMechanicContinuation =
+      phase === "generated_mechanic_continuation";
+    const generationRunWithoutPendingHandoff =
+      isGeneratedMechanicContinuation
+        ? clearGeneratedMechanicHandoffReceipt(generationRun)
+        : generationRun;
+    const canInterruptGeneratedContinuation =
+      isGeneratedMechanicContinuation &&
+      generationRun.status === "succeeded" &&
+      !generationRun.relationships?.acceptedGeneratedMechanicArtifactIds?.length;
+    if (
+      generationRun.status !== "running" &&
+      !canInterruptGeneratedContinuation
+    ) {
       return generationRun;
     }
 
     const startedAt = generationRun.startedAt;
     const isTimeout = status === "timed-out";
+    const interruptionStartedAt = isGeneratedMechanicContinuation
+      ? generationRun.attempts.at(-1)?.completedAt ?? startedAt
+      : startedAt;
+
+    const interruptionAttempt: GenerationRunAttemptReceipt = {
+      id: isGeneratedMechanicContinuation
+        ? `${generationRunId}_generated_continuation_interruption`
+        : `${generationRunId}_attempt_1`,
+      attemptNumber: isGeneratedMechanicContinuation
+        ? Math.max(
+            0,
+            ...generationRun.attempts.map(({ attemptNumber }) => attemptNumber)
+          ) + 1
+        : 1,
+      kind: "initial",
+      status,
+      provider: "openai",
+      model: request.openAiModel ?? "unknown",
+      taskRoute: isGeneratedMechanicContinuation
+        ? "generated_mechanic.continuation"
+        : "spec_generation.primary",
+      requestSummary: summarizePrompt(request.prompt),
+      startedAt: interruptionStartedAt,
+      completedAt,
+      durationMs: getDurationMs(interruptionStartedAt, completedAt),
+      candidate: {
+        kind: "no_candidate",
+        summary: isGeneratedMechanicContinuation
+          ? isTimeout
+            ? "Generated mechanic continuation timed out before acceptance."
+            : "Generated mechanic continuation was cancelled before acceptance."
+          : isTimeout
+            ? "Spec Generation timed out before a candidate was returned."
+            : "Spec Generation was cancelled before a candidate was returned.",
+      },
+    };
 
     return {
-      ...generationRun,
+      ...generationRunWithoutPendingHandoff,
       status,
       completedAt,
       durationMs: getDurationMs(startedAt, completedAt),
       stage: isTimeout ? "timeout" : "cancellation",
       failureClass: isTimeout ? "timeout" : "cancellation",
-      attempts: [
-        {
-          id: `${generationRunId}_attempt_1`,
-          attemptNumber: 1,
-          kind: "initial",
-          status,
-          provider: "openai",
-          model: request.openAiModel ?? "unknown",
-          taskRoute: "spec_generation.primary",
-          requestSummary: summarizePrompt(request.prompt),
-          startedAt,
-          completedAt,
-          durationMs: getDurationMs(startedAt, completedAt),
-          candidate: {
-            kind: "no_candidate",
-            summary: isTimeout
-              ? "Spec Generation timed out before a candidate was returned."
-              : "Spec Generation was cancelled before a candidate was returned.",
-          },
-        },
-      ],
+      attempts: isGeneratedMechanicContinuation
+        ? [...generationRun.attempts, interruptionAttempt]
+        : [interruptionAttempt],
+      ...(isGeneratedMechanicContinuation
+        ? {
+            metadata: {
+              ...(generationRunWithoutPendingHandoff.metadata ?? {}),
+              generatedMechanicOutcome: {
+                status: "rejected" as const,
+                stage: "continuation" as const,
+                issues: [
+                  {
+                    path: "context.signal",
+                    code: "generation_cancelled",
+                    message: isTimeout
+                      ? "Generated mechanic continuation exceeded its browser deadline."
+                      : "The creator cancelled generated mechanic continuation.",
+                  },
+                ],
+              },
+            },
+          }
+        : {}),
     };
-  });
+    }
+  );
+  return hasGeneratedMechanicAcceptanceTransaction(updatedGenerationRun)
+    ? "preserved_acceptance"
+    : "recorded";
+}
+
+function hasGeneratedMechanicAcceptanceTransaction(
+  generationRun: GenerationRun
+): boolean {
+  const transaction =
+    generationRun.metadata?.generatedMechanicAcceptanceTransaction;
+  return (
+    transaction !== null &&
+    typeof transaction === "object" &&
+    !Array.isArray(transaction) &&
+    (transaction.status === "pending" || transaction.status === "finalized")
+  );
 }
 
 function createFailedSpecGenerationAttemptReceipts({

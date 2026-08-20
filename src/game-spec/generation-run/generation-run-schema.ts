@@ -26,6 +26,64 @@ const generationRunValidationIssueSchema = z
   })
   .strict();
 
+const generatedMechanicRejectedOutcomeSchema = z
+  .object({
+    status: z.literal("rejected"),
+    stage: z.enum([
+      "foundation",
+      "preflight",
+      "deterministic_evaluation",
+      "runtime_activation",
+      "first_playable",
+      "persistence",
+      "continuation",
+    ]),
+    issues: z
+      .array(
+        z
+          .object({
+            path: z.string().min(1),
+            code: stableIdSchema,
+            message: z.string().min(1),
+          })
+          .strict()
+      )
+      .min(1),
+    runtimeEvidence: jsonValueSchema.optional(),
+  })
+  .strict();
+
+const downstreamGeneratedMechanicFailureByStage = {
+  foundation: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  preflight: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  deterministic_evaluation: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  runtime_activation: {
+    stage: "runtime-boot",
+    failureClass: "build-failure",
+  },
+  first_playable: {
+    stage: "browser-check",
+    failureClass: "first-playable-failure",
+  },
+  persistence: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  continuation: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+} as const;
+
 export const generationRunOperationTypeSchema = z.enum([
   "generate",
   "edit",
@@ -224,12 +282,15 @@ export const generationRunSchema = z
     }
 
     if (run.repairStatus === "repaired") {
-      if (run.status !== "succeeded") {
+      if (
+        run.status !== "succeeded" &&
+        !isExactDownstreamGeneratedMechanicOutcome(run)
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["repairStatus"],
           message:
-            "Repaired GenerationRun receipts must end with succeeded status.",
+            "Repaired GenerationRun receipts must either succeed or retain an exact downstream generated-mechanic failure or interruption.",
         });
       }
 
@@ -302,7 +363,13 @@ export const generationRunSchema = z
         });
       }
 
-      if (run.status !== expectedOutcome.status) {
+      const preservesSuccessfulRepairBeforeDownstreamFailure =
+        expectedOutcome.status === "succeeded" &&
+        isExactDownstreamGeneratedMechanicOutcome(run);
+      if (
+        run.status !== expectedOutcome.status &&
+        !preservesSuccessfulRepairBeforeDownstreamFailure
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["status"],
@@ -351,6 +418,40 @@ export const generationRunSchema = z
       }
     });
   });
+
+function isExactDownstreamGeneratedMechanicOutcome(
+  run: Readonly<{
+    status: z.infer<typeof generationRunStatusSchema>;
+    stage?: z.infer<typeof generationRunFailureStageSchema>;
+    failureClass?: z.infer<typeof generationRunFailureClassSchema>;
+    metadata?: z.infer<typeof metadataSchema>;
+  }>
+): boolean {
+  const outcome = generatedMechanicRejectedOutcomeSchema.safeParse(
+    run.metadata?.generatedMechanicOutcome
+  );
+  if (!outcome.success) {
+    return false;
+  }
+  if (run.status === "cancelled" || run.status === "timed-out") {
+    const expectedInterruption =
+      run.status === "timed-out"
+        ? { stage: "timeout", failureClass: "timeout" }
+        : { stage: "cancellation", failureClass: "cancellation" };
+    return (
+      outcome.data.issues.some(({ code }) => code === "generation_cancelled") &&
+      run.stage === expectedInterruption.stage &&
+      run.failureClass === expectedInterruption.failureClass
+    );
+  }
+  if (run.status !== "failed") {
+    return false;
+  }
+  const expected = downstreamGeneratedMechanicFailureByStage[outcome.data.stage];
+  return (
+    run.stage === expected.stage && run.failureClass === expected.failureClass
+  );
+}
 
 export type GenerationRunOperationType = z.infer<
   typeof generationRunOperationTypeSchema

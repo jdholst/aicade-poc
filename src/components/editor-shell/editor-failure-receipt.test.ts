@@ -111,4 +111,54 @@ describe("createGenerationFailureReceiptSurface", () => {
       "invalidCandidate"
     );
   });
+
+  it("renders exact generated-mechanic stage evidence for developer inspection", () => {
+    const surface = createGenerationFailureReceiptSurface({
+      message: "The generated mechanic browser proof failed.",
+      generatedMechanicFailure: {
+        stage: "first_playable",
+        issues: [
+          {
+            path: "firstPlayable",
+            code: "first_playable_not_passed",
+            message: "The generated mechanic browser proof failed.",
+          },
+        ],
+        runtimeEvidence: { checkId: "input_response", passed: false },
+      },
+    });
+
+    expect(surface).toEqual({
+      debugReceipts: [
+        {
+          checkId: "first_playable",
+          evidenceJson: JSON.stringify(
+            {
+              stage: "first_playable",
+              issues: [
+                {
+                  path: "firstPlayable",
+                  code: "first_playable_not_passed",
+                  message: "The generated mechanic browser proof failed.",
+                },
+              ],
+              runtimeEvidence: {
+                checkId: "input_response",
+                passed: false,
+              },
+            },
+            null,
+            2
+          ),
+          issueMessages: [
+            "firstPlayable: The generated mechanic browser proof failed.",
+          ],
+          message: "The generated mechanic browser proof failed.",
+          stage: "first_playable",
+          status: "failed",
+        },
+      ],
+      summary: "The generated mechanic browser proof failed.",
+    });
+  });
 });

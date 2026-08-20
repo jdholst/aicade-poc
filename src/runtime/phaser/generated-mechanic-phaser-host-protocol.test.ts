@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeCommand } from "@/runtime/runtime-adapter";
 import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
+import { projectAcceptedGeneratedMechanicRuntimeCandidate } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
 
 import { createTopDownPhaserTemplate } from "./top-down-template";
 import {
@@ -144,6 +145,66 @@ describe("generated mechanic Phaser host protocol", () => {
       origin: "https://creator.sparkline.test",
     });
     expect(parentTarget.posts).toHaveLength(2);
+  });
+
+  it("acknowledges the exact transient candidate continuation identity", async () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const projected = projectAcceptedGeneratedMechanicRuntimeCandidate(
+      fixture.artifact
+    );
+    const project = {
+      runtimeCandidate: {
+        ...projected,
+        runtimeExecutionId: "runtime_execution_candidate_v1",
+      },
+      dependency: fixture.dependency,
+    } as const;
+    const template = createTopDownPhaserTemplate(
+      fixture.dependency.finalGameSpec.gameSpec
+    );
+    const parentOwner = new FakeMessageWindow();
+    const parentTarget = new FakeMessageWindow();
+    const childOwner = new FakeMessageWindow();
+    const childTarget = new FakeMessageWindow();
+    const parent = createGeneratedMechanicPhaserParentSession({
+      iframeWindow: childTarget,
+      nonce: "candidate_nonce",
+      ownerWindow: parentOwner,
+      project,
+      sessionId: "candidate_session",
+      template,
+    });
+    const childPromise = waitForGeneratedMechanicPhaserChildSession({
+      deadlineMilliseconds: 100,
+      expectedParent: parentTarget,
+      ownerWindow: childOwner,
+    });
+
+    parent.sendBootstrap();
+    childOwner.emit({
+      data: childTarget.posts[0]?.message,
+      source: parentTarget,
+      origin: "https://creator.sparkline.test",
+    });
+    const child = await childPromise;
+
+    expect(child.getProject()).toEqual(project);
+    expect(parentTarget.posts[0]?.message).toMatchObject({
+      projectKind: "candidate",
+      runtimeExecutionId: "runtime_execution_candidate_v1",
+      artifactId: fixture.artifact.id,
+      sourceArtifactId: fixture.artifact.sourceArtifact.id,
+    });
+    expect(
+      parent.consumeIframeMessage(
+        parentOwner.event({
+          data: parentTarget.posts[0]?.message,
+          source: childTarget,
+          origin: "null",
+        })
+      )
+    ).toBeNull();
+    expect(parent.isAcknowledged()).toBe(true);
   });
 
   it("rejects malformed or foreign project bootstraps and cleans up the waiter", async () => {

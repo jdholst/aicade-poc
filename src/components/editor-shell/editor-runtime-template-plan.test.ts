@@ -148,6 +148,28 @@ describe("createEditorRuntimeTemplatePlan", () => {
     });
   });
 
+  it("carries the current accepted Game Pack into the generated Phaser host", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const plan = createEditorRuntimeTemplatePlan({
+      activeGamePack: fixture.gamePack,
+      generationSource: "phaser-ai",
+      runtimeMode: "phaser",
+    });
+
+    expect(plan).toMatchObject({
+      type: "phaser-valid",
+      persistencePolicy: "do-not-persist",
+      firstPlayableValidationSource: {
+        gamePack: fixture.gamePack,
+        source: "accepted-game-pack",
+      },
+      generatedMechanicProject: {
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+      },
+    });
+  });
+
   it("resolves an active generated spec with pass-gated persistence metadata", () => {
     const plan = createEditorRuntimeTemplatePlan({
       activeGeneratedSpec: {

@@ -233,6 +233,40 @@ export const generatedMechanicContractSchema = z
     id: stableIdSchema,
     intentId: stableIdSchema,
     capabilityVersion: z.string().min(1).max(80),
+    intentLineage: z
+      .object({
+        actors: z.array(stableIdSchema),
+        targets: z.array(stableIdSchema),
+        behaviors: z.array(stableIdSchema),
+        stateChanges: z.array(stableIdSchema),
+        temporalRules: z.array(stableIdSchema),
+        spatialRules: z.array(stableIdSchema),
+        constraints: z.array(stableIdSchema),
+        connections: z.array(
+          z
+            .object({
+              direction: z.enum(["input", "output"]),
+              port: stableIdSchema,
+            })
+            .strict()
+        ),
+        references: z.array(
+          z
+            .object({
+              kind: z.enum([
+                "asset",
+                "entity",
+                "objective",
+                "region",
+                "scene",
+              ]),
+              id: stableIdSchema,
+            })
+            .strict()
+        ),
+      })
+      .strict()
+      .optional(),
     behavior: z
       .object({
         summary: nonEmptyTextSchema,

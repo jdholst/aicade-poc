@@ -16,6 +16,10 @@ export const PERSISTED_GENERATED_MECHANIC_SOURCE_ARTIFACT_VERSION =
   "generated_mechanic_source_artifact/v1" as const;
 export const GENERATED_MECHANIC_RUNTIME_POLICY_VERSION =
   "generated_mechanic_runtime_policy/v1" as const;
+export const GENERATED_MECHANIC_EXECUTABLE_ARTIFACT_VERSION =
+  "generated_mechanic_executable_artifact/v1" as const;
+export const GENERATED_MECHANIC_RUNTIME_CANDIDATE_VERSION =
+  "generated_mechanic_runtime_candidate/v1" as const;
 export const TOP_DOWN_PHASER_GENERATED_MECHANIC_HOST_PROFILE_ID =
   "top_down_phaser_generated_mechanic_host/v1" as const;
 export const GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID =
@@ -85,16 +89,19 @@ const generatedMechanicBindingSchema = z
   })
   .strict();
 
+export const TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS =
+  Object.freeze([
+    "object_read",
+    "object_motion_write",
+    "state_read",
+    "state_write",
+    "time_read",
+    "random_next",
+    "time_schedule",
+  ] as const);
+
 const TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITIES: ReadonlySet<string> =
-  new Set([
-  "object_read",
-  "object_motion_write",
-  "state_read",
-  "state_write",
-  "time_read",
-  "random_next",
-  "time_schedule",
-  ]);
+  new Set(TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS);
 
 export type GeneratedMechanicProjectHostProfileIssue = Readonly<{
   path: string;
@@ -373,6 +380,235 @@ export const acceptedGeneratedMechanicArtifactSchema = z
     });
   });
 
+export const generatedMechanicExecutableArtifactSchema = z
+  .object({
+    schemaVersion: z.literal(GENERATED_MECHANIC_EXECUTABLE_ARTIFACT_VERSION),
+    id: stableIdSchema,
+    extensionId: stableIdSchema,
+    versionId: stableIdSchema,
+    finalGameSpecArtifactId: stableIdSchema,
+    finalGameSpec: generatedMechanicFinalGameSpecSchema,
+    gameSpecId: stableIdSchema,
+    mechanicId: stableIdSchema,
+    mechanicType: stableIdSchema,
+    contract: generatedMechanicContractSchema,
+    sourceArtifact: persistedGeneratedMechanicSourceArtifactSchema,
+    runtimePolicy: generatedMechanicRuntimePolicySchema,
+    config: jsonValueSchema,
+    bindings: z.array(generatedMechanicBindingSchema),
+    referenceCatalog: generatedMechanicReferenceCatalogSchema,
+  })
+  .strict()
+  .superRefine((artifact, ctx) => {
+    for (const hostIssue of generatedMechanicProjectHostProfileIssues({
+      contract: artifact.contract,
+      finalGameSpec: artifact.finalGameSpec,
+      referenceCatalog: artifact.referenceCatalog,
+    })) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: hostIssue.path.split("."),
+        message: hostIssue.message,
+      });
+    }
+    if (artifact.id !== artifact.versionId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["id"],
+        message:
+          "Executable generated mechanic artifact ID must be its immutable extension version ID.",
+      });
+    }
+    const expectedExtension = {
+      id: artifact.extensionId,
+      versionId: artifact.versionId,
+      mechanicId: artifact.mechanicId,
+      mechanicType: artifact.mechanicType,
+      contractId: artifact.contract.id,
+      sourceArtifactId: artifact.sourceArtifact.id,
+      capabilityVersion: artifact.contract.capabilityVersion,
+      config: artifact.config,
+      bindings: artifact.bindings,
+    };
+    if (
+      artifact.finalGameSpec.id !== artifact.finalGameSpecArtifactId ||
+      artifact.finalGameSpec.gameSpec.id !== artifact.gameSpecId ||
+      JSON.stringify(artifact.finalGameSpec.extension) !==
+        JSON.stringify(expectedExtension)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["finalGameSpec"],
+        message:
+          "Executable artifact must retain its exact Final Game Spec and extension lineage.",
+      });
+    }
+    const installedMechanics = artifact.finalGameSpec.gameSpec.mechanics.filter(
+      ({ id }) => id === artifact.mechanicId
+    );
+    if (
+      installedMechanics.length !== 1 ||
+      installedMechanics[0]?.type !== artifact.mechanicType ||
+      JSON.stringify(installedMechanics[0]?.config) !==
+        JSON.stringify(artifact.config)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["finalGameSpec", "gameSpec", "mechanics"],
+        message:
+          "Executable artifact requires exactly one active mechanic matching its immutable identity and config.",
+      });
+    }
+    if (
+      artifact.sourceArtifact.contractId !== artifact.contract.id ||
+      artifact.sourceArtifact.intentId !== artifact.contract.intentId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceArtifact"],
+        message:
+          "Executable source artifact must retain the exact contract and intent lineage.",
+      });
+    }
+    if (
+      artifact.sourceArtifact.capabilityVersion !==
+        artifact.contract.capabilityVersion ||
+      artifact.sourceArtifact.grant.capabilityVersion !==
+        artifact.contract.capabilityVersion
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceArtifact", "capabilityVersion"],
+        message:
+          "Executable source artifact must use the contract capability version.",
+      });
+    }
+    const expectedRuntimePolicy = createGeneratedMechanicRuntimePolicy({
+      contract: artifact.contract,
+      versionId: artifact.versionId,
+    });
+    if (JSON.stringify(artifact.runtimePolicy) !== JSON.stringify(expectedRuntimePolicy)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["runtimePolicy"],
+        message:
+          "Executable artifact must retain the exact deterministic runtime policy for its immutable version.",
+      });
+    }
+    const contractCapabilityIds = [...artifact.contract.capabilities].sort();
+    const usedCapabilityIds = [...artifact.sourceArtifact.usedCapabilities].sort();
+    if (
+      !mechanicCapabilityGrantExactlyMatchesContract(
+        artifact.sourceArtifact.grant,
+        artifact.contract
+      ) ||
+      JSON.stringify(usedCapabilityIds) !== JSON.stringify(contractCapabilityIds)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceArtifact", "grant"],
+        message:
+          "Executable source artifact must retain the contract's exact least-authority capability grant and usage.",
+      });
+    }
+    const bindingsById = new Map(
+      artifact.bindings.map((binding) => [binding.id, binding])
+    );
+    if (
+      bindingsById.size !== artifact.bindings.length ||
+      artifact.bindings.length !== artifact.contract.bindings.length
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["bindings"],
+        message:
+          "Executable artifact must retain every contract binding exactly once.",
+      });
+    }
+    artifact.contract.bindings.forEach((contractBinding) => {
+      const binding = bindingsById.get(contractBinding.id);
+      if (
+        !binding ||
+        binding.referenceKind !== contractBinding.referenceKind ||
+        binding.cardinality !== contractBinding.cardinality ||
+        JSON.stringify(binding.objectIds) !==
+          JSON.stringify(contractBinding.objectIds)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["bindings", contractBinding.id],
+          message:
+            "Executable artifact binding must match its exact contract declaration.",
+        });
+        return;
+      }
+      const knownIds = Object.prototype.hasOwnProperty.call(
+        artifact.referenceCatalog,
+        binding.referenceKind
+      )
+        ? artifact.referenceCatalog[binding.referenceKind]
+        : undefined;
+      if (
+        !knownIds ||
+        binding.objectIds.some((objectId) => !knownIds.includes(objectId))
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["referenceCatalog", binding.referenceKind],
+          message:
+            "Executable artifact bindings must resolve through its trusted reference catalog.",
+        });
+      }
+    });
+  });
+
+export const generatedMechanicRuntimeCandidateSchema = z
+  .object({
+    schemaVersion: z.literal(GENERATED_MECHANIC_RUNTIME_CANDIDATE_VERSION),
+    runtimeExecutionId: stableIdSchema,
+    executableArtifact: generatedMechanicExecutableArtifactSchema,
+  })
+  .strict();
+
+export function projectAcceptedGeneratedMechanicExecutableArtifact(
+  artifactInput: AcceptedGeneratedMechanicArtifact
+): GeneratedMechanicExecutableArtifact {
+  const artifact = acceptedGeneratedMechanicArtifactSchema.parse(artifactInput);
+  return snapshotGeneratedMechanicArtifact(
+    generatedMechanicExecutableArtifactSchema.parse({
+      schemaVersion: GENERATED_MECHANIC_EXECUTABLE_ARTIFACT_VERSION,
+      id: artifact.id,
+      extensionId: artifact.extensionId,
+      versionId: artifact.versionId,
+      finalGameSpecArtifactId: artifact.finalGameSpecArtifactId,
+      finalGameSpec: artifact.finalGameSpec,
+      gameSpecId: artifact.gameSpecId,
+      mechanicId: artifact.mechanicId,
+      mechanicType: artifact.mechanicType,
+      contract: artifact.contract,
+      sourceArtifact: artifact.sourceArtifact,
+      runtimePolicy: artifact.runtimePolicy,
+      config: artifact.config,
+      bindings: artifact.bindings,
+      referenceCatalog: artifact.referenceCatalog,
+    })
+  );
+}
+
+export function projectAcceptedGeneratedMechanicRuntimeCandidate(
+  artifactInput: AcceptedGeneratedMechanicArtifact
+): GeneratedMechanicRuntimeCandidate {
+  const artifact = acceptedGeneratedMechanicArtifactSchema.parse(artifactInput);
+  return snapshotGeneratedMechanicArtifact(
+    generatedMechanicRuntimeCandidateSchema.parse({
+      schemaVersion: GENERATED_MECHANIC_RUNTIME_CANDIDATE_VERSION,
+      runtimeExecutionId: artifact.buildId,
+      executableArtifact:
+        projectAcceptedGeneratedMechanicExecutableArtifact(artifact),
+    })
+  );
+}
+
 export function generatedMechanicProjectHostProfileIssues({
   contract,
   finalGameSpec,
@@ -499,6 +735,26 @@ export type PersistedGeneratedMechanicSourceArtifact = z.infer<
 export type GeneratedMechanicRuntimePolicy = z.infer<
   typeof generatedMechanicRuntimePolicySchema
 >;
+export type GeneratedMechanicExecutableArtifact = z.infer<
+  typeof generatedMechanicExecutableArtifactSchema
+>;
+export type GeneratedMechanicRuntimeCandidate = z.infer<
+  typeof generatedMechanicRuntimeCandidateSchema
+>;
 export type AcceptedGeneratedMechanicArtifact = z.infer<
   typeof acceptedGeneratedMechanicArtifactSchema
 >;
+
+function snapshotGeneratedMechanicArtifact<Value>(value: Value): Value {
+  return deepFreezeGeneratedMechanicArtifact(
+    JSON.parse(JSON.stringify(value)) as Value
+  );
+}
+
+function deepFreezeGeneratedMechanicArtifact<Value>(value: Value): Value {
+  if (value !== null && typeof value === "object") {
+    Object.values(value).forEach(deepFreezeGeneratedMechanicArtifact);
+    Object.freeze(value);
+  }
+  return value;
+}

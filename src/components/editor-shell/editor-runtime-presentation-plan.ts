@@ -188,6 +188,7 @@ function createRuntimePrimarySurface({
 
   if (loadState.status === "error") {
     const failure = createGenerationFailureReceiptSurface({
+      generatedMechanicFailure: loadState.generatedMechanicFailure,
       message: loadState.message,
       validationFailure: loadState.validationFailure,
     });
