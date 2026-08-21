@@ -2014,6 +2014,7 @@ interface Math {
   abs(value: number): number;
   ceil(value: number): number;
   floor(value: number): number;
+  hypot(...values: readonly number[]): number;
   max(...values: readonly number[]): number;
   min(...values: readonly number[]): number;
   round(value: number): number;

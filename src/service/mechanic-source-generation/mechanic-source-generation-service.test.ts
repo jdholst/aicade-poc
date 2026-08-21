@@ -482,6 +482,20 @@ describe("generated mechanic source stage", () => {
     expect(realmAdapter.executions).toHaveLength(1);
   });
 
+  it("supports deterministic Math.hypot in the generated source surface", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter),
+      candidate: createCandidate(
+        'const magnitude = Math.hypot(3, 4); await capabilities.state.write("counter", magnitude);'
+      ),
+    });
+
+    expect(result).toMatchObject({ success: true });
+    expect(realmAdapter.executions).toHaveLength(1);
+  });
+
   it("narrows scheduled capability callback IDs to scheduled callbacks", async () => {
     const realmAdapter = new RecordingRealmAdapter();
     const contract = createContract({
