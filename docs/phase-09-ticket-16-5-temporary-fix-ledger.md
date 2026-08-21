@@ -265,6 +265,7 @@ This ledger records expedient fixes accepted to improve real-provider end-to-end
 The following changes address trusted infrastructure invariants and should remain even after the temporary entries above are replaced:
 
 - Worker-pool readiness, queued-execution cancellation, and containment recovery.
+- Separation of the Worker-enforced active-callback CPU budget from the bounded host/Worker runtime-transaction deadline; legitimate capability transport no longer consumes the conformance probe's 50 ms wall-clock allowance.
 - Fail-closed runtime and browser conformance checks.
 - Preservation of accepted generated-artifact lineage when first-playable evidence is appended.
 - Dispatch of the exact authenticated generated action during first-playable validation.

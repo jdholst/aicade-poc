@@ -27,6 +27,15 @@ export async function runExactPlayerDriftRetainedSessionBrowserIntegration({
   mainThreadStressMilliseconds?: number;
 }>): Promise<ExactPlayerDriftFixedStepEvidence> {
   const fixture = createGeneratedMechanicProjectFixture();
+  const boundObjectId = fixture.artifact.bindings[0]?.objectIds[0];
+  const boundEntity = fixture.gamePack.gameSpec.entities.find(
+    (entity) => entity.id === boundObjectId
+  );
+  if (!boundObjectId || !boundEntity) {
+    throw new Error(
+      "Exact player-drift browser integration requires one fixture-bound game entity."
+    );
+  }
   const velocity = { x: 0, y: 0 };
   const adapter = createSesWorkerMechanicExecutionRealmAdapter({
     createController: () => controller,
@@ -37,8 +46,8 @@ export async function runExactPlayerDriftRetainedSessionBrowserIntegration({
     realmAdapter: adapter,
     objects: [
       {
-        id: "entity_player",
-        kind: "player",
+        id: boundObjectId,
+        kind: boundEntity.role,
         object: {
           active: true,
           x: 156,

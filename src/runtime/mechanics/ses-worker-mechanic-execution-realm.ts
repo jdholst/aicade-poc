@@ -304,6 +304,7 @@ async function createSesWorkerRealm(
         controller,
         realmId,
         executionSnapshot,
+        runtimeExecutionRoundTripDeadlineMilliseconds(input.resourceBudget),
         pendingCancellations,
         () => {
           if (activeExecutionId === executionSnapshot.id) {
@@ -361,6 +362,7 @@ function createExecutionRun(
   controller: SesWorkerMechanicExecutionRealmController,
   realmId: StableId,
   execution: MechanicExecutionRealmExecutionInput,
+  executionRoundTripDeadlineMilliseconds: number,
   pendingCancellations: Set<(error: Error) => void>,
   revokeCapabilities: () => void,
   finishExecution: () => void,
@@ -463,7 +465,7 @@ function createExecutionRun(
         });
         deadlineId = setTimeout(
           requestTermination,
-          MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds
+          executionRoundTripDeadlineMilliseconds
         );
       } catch (error) {
         cancel(toError(error, "SES Worker realm execution send failed."));
@@ -479,6 +481,20 @@ function createExecutionRun(
       return result;
     },
   });
+}
+
+function runtimeExecutionRoundTripDeadlineMilliseconds(
+  resourceBudget: CreateMechanicExecutionRealmInput["resourceBudget"]
+): number {
+  // The controller enforces maximumCallbackMilliseconds against active code
+  // inside the executor. This outer deadline guards a stalled Worker/host
+  // transaction, so it must also allow for each admitted operation to cross
+  // the asynchronous capability channel without counting transport latency as
+  // generated callback CPU time.
+  return (
+    MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds *
+    (resourceBudget.maximumOperationsPerTick + 1)
+  );
 }
 
 async function answerCapabilityRequest(

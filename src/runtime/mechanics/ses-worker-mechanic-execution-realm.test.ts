@@ -534,12 +534,50 @@ describe("SES Worker Mechanic Execution Realm adapter", () => {
       });
 
       await vi.advanceTimersByTimeAsync(
-        MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds
+        MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds *
+          (MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.resourceBudget
+            .maximumOperationsPerTick +
+            1)
       );
 
       await expect(run.result).resolves.toEqual({
         executionId: "invalid_resource_evidence",
         outcome: "terminated",
+      });
+      realm.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not apply the 50 ms conformance probe deadline to runtime execution round trips", async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new FakeSesController();
+      controller.executionResultOverride = { outcome: "completed" };
+      controller.executionResponseDelayMilliseconds =
+        MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds +
+        1;
+      const adapter = createSesWorkerMechanicExecutionRealmAdapter({
+        createController: () => controller,
+      });
+      const realm = await adapter.create(
+        createEmptyRealmInput("mechanic_runtime_transport_delay")
+      );
+      const run = realm.execute({
+        id: "runtime_transport_delay",
+        source: "return null;",
+      });
+
+      await vi.advanceTimersByTimeAsync(
+        MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds
+      );
+
+      expect(controller.executionRequests).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(run.result).resolves.toMatchObject({
+        executionId: "runtime_transport_delay",
+        outcome: "completed",
       });
       realm.dispose();
     } finally {
@@ -621,6 +659,7 @@ class FakeSesController implements SesWorkerMechanicExecutionRealmController {
   deferReady = false;
   terminateOutcome: "completed" | "terminated" = "terminated";
   executionResultOverride?: Record<string, unknown>;
+  executionResponseDelayMilliseconds = 0;
   private readyProbeReceived = false;
   private capabilityPort?: MessagePort;
 
@@ -683,10 +722,16 @@ class FakeSesController implements SesWorkerMechanicExecutionRealmController {
         return;
       }
       if (this.executionResultOverride) {
-        this.emitExecutionResponse(realmId, executionId, "execute", {
-          executionId,
-          ...this.executionResultOverride,
-        });
+        const respond = () =>
+          this.emitExecutionResponse(realmId, executionId, "execute", {
+            executionId,
+            ...this.executionResultOverride,
+          });
+        if (this.executionResponseDelayMilliseconds > 0) {
+          setTimeout(respond, this.executionResponseDelayMilliseconds);
+        } else {
+          respond();
+        }
         return;
       }
       const execution = message.execution;
