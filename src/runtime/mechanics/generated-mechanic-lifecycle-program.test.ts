@@ -50,6 +50,7 @@ describe("createGeneratedMechanicLifecycleProgram", () => {
       [
         '"use sparkline generated mechanic callback/v1";',
         "const { capabilities, bindings, config } = __sparklineLifecycleContext;",
+        "const input = lifecycleInput;",
         SOURCE_ARTIFACT.callbacks[0]!.normalizedJavaScript,
         "return await __sparklineGeneratedMechanicCallback();",
       ].join("\n")

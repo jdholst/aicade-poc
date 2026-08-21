@@ -1500,7 +1500,9 @@
             !control ||
             typeof control.action !== "string" ||
             !Array.isArray(control.keys) ||
-            !control.keys.includes(event.key) ||
+            (!control.keys.includes(event.key) &&
+              (typeof event.code !== "string" ||
+                !control.keys.includes(event.code))) ||
             dispatchedActionIds.has(control.action)
           ) {
             return;

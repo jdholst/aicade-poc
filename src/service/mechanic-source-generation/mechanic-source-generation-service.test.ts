@@ -132,6 +132,42 @@ describe("generated mechanic source stage", () => {
     expect(realmAdapter.disposed).toBe(true);
   });
 
+  it("admits input as a typed readonly alias of lifecycleInput", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({
+      behavior: {
+        summary: "Update state after one logical action.",
+        triggers: ["logical_action"],
+        outcomes: ["counter_updated"],
+      },
+      lifecycle: {
+        callbacks: ["logical_action"],
+        fixedStep: false,
+        dispose: true,
+      },
+    });
+    const buildInput = createBuildInput(realmAdapter, contract);
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...buildInput,
+      candidate: createCandidate(
+        'if (input === "shoot") { await capabilities.state.write("counter", config.initialCount); }',
+        "logical_action"
+      ),
+      referenceCatalog: { action: ["shoot"] },
+      execution: {
+        ...buildInput.execution,
+        callbackId: "logical_action_generic_source",
+        lifecycleInput: "shoot",
+      },
+    });
+
+    expect(result).toMatchObject({ success: true });
+    expect(realmAdapter.executions[0]?.lifecycle.callbacks[0]?.source).toContain(
+      "const input = lifecycleInput;"
+    );
+  });
+
   it.each([
     {
       name: "missing",

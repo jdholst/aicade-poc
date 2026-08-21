@@ -40,6 +40,7 @@ export function createCreatorGenerationPlanningSystemPrompt({
       "every target must equal the role of an exact referenced gameSpec entity",
     requiredInputConnection:
       "exactly one input connection whose port is an exact active gameSpec control action ID",
+    preferredDistinctActionControlKey: "Space",
     independentAcceptanceEvidence:
       "causal motion change of the exact intent-referenced entity after the exact active logical action",
     privateStateIsIndependentAcceptanceEvidence: false,
@@ -75,7 +76,15 @@ Creator-generation planning envelope:
 - A generated-host intent must name object_motion_write only when the requested outcome truly includes independently visible motion of an exact entity reference. Do not invent motion or an entity reference merely to pass admission.
 - Every generated-host actor must equal the role of an exact entity reference from gameSpec; do not invent actor labels or unrelated references.
 - Every generated-host target must equal the role of an exact entity reference from gameSpec; do not invent generic target labels such as visible_target when the referenced entity's role is enemy, pickup, hazard, or another exact gameSpec role.
-- A generated-host intent must use exactly one input connection whose port is the exact active gameSpec control action ID that triggers the requested behavior. Do not invent an action ID or add output connections merely to pass admission.
+- A generated-host intent must use exactly one input connection whose port is the exact active gameSpec control action ID that triggers the requested behavior. Materialize a creator-requested action as a concrete control before referencing it; do not invent unrelated action IDs or add output connections merely to pass admission.
+- Before returning, run this generated-host alignment checklist for every material creator-controlled behavior that is not fully covered by a built-in:
+  1. If the creator requests a new player action such as shooting, add one active control to gameSpec first, using one admitted individual physical key. Prefer Space for a distinct button action and preserve the existing movement controls. This implements the creator request; it is not unrelated admission metadata.
+  2. Set mechanicIntent.triggers to exactly ["logical_action"].
+  3. Set mechanicIntent.connections to exactly one input connection using that same action ID from gameSpec.controls, with no output connection.
+  4. Copy every actor and target token from the exact role of an entity referenced by stable ID in mechanicIntent.references. If mechanicIntent.targets is non-empty, every target token must equal the role of one referenced gameSpec entity.
+  5. When a transient owned-object interaction needs an implicit observable target, infer a simple non-player target entity in gameSpec, then use its exact role and ID in mechanicIntent.targets and mechanicIntent.references. Never emit a generic target token without the matching entity reference.
+  6. If the behavior creates a transient object, put its stable archetype token in mechanicIntent.ownedObjects and include object_create, object_motion_write, and object_destroy in mechanicIntent.requiredCapabilities. Add spatial_query only when target interaction or owned-object rediscovery requires it. Also include every timing, spatial, cleanup, and observable-outcome requirement needed by the requested behavior.
+- Do not leave the requested action only in summary, behaviors, assumptions, or configuration. The active gameSpec control, canonical trigger, exact input connection, and exact stable references must agree in the same returned envelope.
 - Do not return source code, a Generated Mechanic Contract, routing policy, evaluation evidence, or a Game Pack.
 
 Current generated-host Mechanic Intent profile JSON:

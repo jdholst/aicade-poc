@@ -602,10 +602,18 @@ describe("editor generated-mechanic production integration", () => {
         artifactId: "source_editor_failure_inert_1",
         issues: [
           {
-            path: "evaluation.scenarios.scenario_editor_action_dash",
-            code: "deterministic_evaluation_failed",
+            path:
+              "evaluation.scenarios.scenario_editor_action_dash.declaredObservations.0",
+            code: "declared_observation_failed",
             message:
-              'Scenario "scenario_editor_action_dash" failed independent observable evaluation.',
+              'Model-declared observation 0 "binding_property" failed. Assertion: {"kind":"binding_property","bindingId":"actor","property":"velocity","operator":"not_equals","value":{"x":0,"y":0}}. Actual: {"x":0,"y":0}.',
+          },
+          {
+            path:
+              "evaluation.scenarios.scenario_editor_action_dash.externalObservations.0",
+            code: "external_observation_failed",
+            message:
+              'Evaluator-authored observation 0 "referenced_entity_motion_changed" failed. Assertion: {"kind":"referenced_entity_motion_changed","bindingIds":["actor"],"actionId":"move"}. Actual: {"before":[{"bindingId":"actor","position":{"x":80,"y":80},"velocity":{"x":0,"y":0}}],"after":[{"bindingId":"actor","position":{"x":80,"y":80},"velocity":{"x":0,"y":0}}]}.',
           },
         ],
       }),

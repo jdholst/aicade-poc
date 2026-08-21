@@ -91,9 +91,10 @@ describe("Spec Generation schema drift guards", () => {
       "ArrowDown",
       "ArrowLeft",
       "ArrowRight",
+      "Space",
     ]);
     expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(
-      "Use only individual physical control keys: ArrowUp, ArrowDown, ArrowLeft, ArrowRight"
+      "Use only individual physical control keys: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space"
     );
   });
 

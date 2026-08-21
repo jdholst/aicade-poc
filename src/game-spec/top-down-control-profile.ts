@@ -3,6 +3,7 @@ export const TOP_DOWN_BROWSER_CONTROL_KEYS = [
   "ArrowDown",
   "ArrowLeft",
   "ArrowRight",
+  "Space",
 ] as const;
 
 export const TOP_DOWN_BROWSER_CONTROL_KEYS_LABEL =

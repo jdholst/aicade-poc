@@ -948,6 +948,7 @@ const trustedSourceContextIdentifiers = new Set([
   "capabilities",
   "config",
   "lifecycleInput",
+  "input",
 ]);
 
 const allowedGeneratedSourceGlobals = new Set([
@@ -1718,6 +1719,7 @@ declare const lifecycleInput: ${lifecycleInputType(
     contract,
     referenceCatalog
   )};
+declare const input: typeof lifecycleInput;
 `;
 }
 
@@ -2176,6 +2178,7 @@ const capabilities = Object.freeze({ ${capabilities} });
 const bindings = Object.freeze({ ${bindings} });
 const config = __sparklineFreezeJson(${JSON.stringify(input.config)});
 ${lifecycleInputDeclaration}
+const input = lifecycleInput;
 ${input.callback.normalizedJavaScript}
 return await __sparklineGeneratedMechanicCallback();
 `.trim();

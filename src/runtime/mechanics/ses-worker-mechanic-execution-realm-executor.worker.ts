@@ -26,6 +26,7 @@ import {
   type SesWorkerRealmCapabilityResponse,
   type SesWorkerRealmEncodedValue,
 } from "@/runtime/mechanics/ses-worker-mechanic-execution-realm-protocol";
+import { containedErrorMessage } from "@/runtime/mechanics/ses-worker-mechanic-execution-realm-diagnostic";
 
 type WorkerScope = {
   addEventListener(
@@ -1307,10 +1308,10 @@ function runtimeDiagnostic(
   return {
     stage,
     code,
-    message:
-      error instanceof Error
-        ? error.message
-        : `SES Worker contained ${executionId}.`,
+    message: containedErrorMessage(
+      error,
+      "SES Worker contained generated mechanic execution."
+    ),
     repair: {
       artifact: "realm_candidate",
       issuePath: `execution.${executionId}`,

@@ -67,6 +67,79 @@ describe("createCreatorGenerationRouting", () => {
     });
   });
 
+  it("maps one action-specific logical trigger to the generated host lifecycle", () => {
+    const baseGameSpec = getFirstValidTopDownGameSpecFixture();
+    const gameSpec = {
+      ...baseGameSpec,
+      controls: [
+        ...baseGameSpec.controls,
+        {
+          id: "control_shoot",
+          action: "shoot_action",
+          label: "Shoot",
+          kind: "button" as const,
+          keys: ["ArrowRight"],
+        },
+      ],
+    };
+    const result = createCreatorGenerationRouting({
+      availableCapabilities: TOP_DOWN_CREATOR_GENERATION_HOST_CAPABILITY_IDS,
+      baseGameSpec: gameSpec,
+      generationRunId: "generation_run_action_extension",
+      intent: createIntent({
+        actors: ["player"],
+        behaviors: ["launch_transient_object"],
+        connections: [{ direction: "input", port: "shoot_action" }],
+        ownedObjects: ["transient_object"],
+        outcomes: ["transient_object_moves_visibly"],
+        references: [{ kind: "entity", id: "entity_player" }],
+        requiredCapabilities: [
+          "object_create",
+          "object_motion_write",
+          "spatial_query",
+          "object_destroy",
+        ],
+        triggers: ["logical_shoot_action"],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      kind: "generated_mechanic",
+      generationRunId: "generation_run_action_extension",
+      intent: {
+        triggers: ["logical_action"],
+        connections: [{ direction: "input", port: "shoot_action" }],
+      },
+    });
+  });
+
+  it("does not normalize multiple action-specific logical triggers", () => {
+    const result = createCreatorGenerationRouting({
+      availableCapabilities: ["object_motion_write"],
+      baseGameSpec: getFirstValidTopDownGameSpecFixture(),
+      generationRunId: "generation_run_ambiguous_actions",
+      intent: createIntent({
+        actors: ["player"],
+        behaviors: ["custom_action_effect"],
+        connections: [{ direction: "input", port: "move" }],
+        references: [{ kind: "entity", id: "entity_player" }],
+        requiredCapabilities: ["object_motion_write"],
+        triggers: ["logical_primary_action", "logical_secondary_action"],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      kind: "capability_gap",
+      evidence: {
+        issues: [
+          expect.objectContaining({
+            code: "unsupported_generated_host_trigger",
+          }),
+        ],
+      },
+    });
+  });
+
   it("admits one uncovered, capability-supported intent for generated work", () => {
     const intent = createIntent({
       actors: ["player"],

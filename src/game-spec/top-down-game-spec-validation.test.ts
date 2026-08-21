@@ -143,6 +143,30 @@ describe("Top-down Game Spec pre-runtime validation", () => {
     );
   });
 
+  it("accepts a distinct Space control for a generated player action", () => {
+    expect(
+      validateTopDownGameSpec({
+        ...validTopDownGameSpec,
+        controls: [
+          ...validTopDownGameSpec.controls,
+          {
+            id: "control_shoot",
+            action: "shoot_action",
+            label: "Shoot",
+            kind: "button",
+            keys: ["Space"],
+          },
+        ],
+      }).controls
+    ).toContainEqual({
+      id: "control_shoot",
+      action: "shoot_action",
+      label: "Shoot",
+      kind: "button",
+      keys: ["Space"],
+    });
+  });
+
   it("rejects aggregate control labels that the retained browser host cannot dispatch", () => {
     const issues = getValidationIssues({
       ...validTopDownGameSpec,
@@ -159,12 +183,12 @@ describe("Top-down Game Spec pre-runtime validation", () => {
       {
         path: "controls.control_move.keys.0",
         message:
-          'Unsupported physical key "WASD". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+          'Unsupported physical key "WASD". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space.',
       },
       {
         path: "controls.control_move.keys.1",
         message:
-          'Unsupported physical key "ARROW KEYS". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+          'Unsupported physical key "ARROW KEYS". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space.',
       },
     ]);
   });

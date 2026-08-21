@@ -107,6 +107,33 @@ describe("OpenAI creator-generation planning provider", () => {
     expect(requestBody.instructions).toContain(
       '"minimumDurationMilliseconds": 150'
     );
+    expect(requestBody.instructions).toContain(
+      "Before returning, run this generated-host alignment checklist for every material creator-controlled behavior that is not fully covered by a built-in"
+    );
+    expect(requestBody.instructions).toContain(
+      "If the creator requests a new player action such as shooting, add one active control to gameSpec first"
+    );
+    expect(requestBody.instructions).toContain(
+      "Set mechanicIntent.triggers to exactly [\"logical_action\"]"
+    );
+    expect(requestBody.instructions).toContain(
+      "Set mechanicIntent.connections to exactly one input connection using that same action ID"
+    );
+    expect(requestBody.instructions).toContain(
+      "Do not leave the requested action only in summary, behaviors, assumptions, or configuration"
+    );
+    expect(requestBody.instructions).toContain(
+      "When a transient owned-object interaction needs an implicit observable target"
+    );
+    expect(requestBody.instructions).toContain(
+      "If mechanicIntent.targets is non-empty, every target token must equal the role of one referenced gameSpec entity"
+    );
+    expect(requestBody.instructions).toContain(
+      "put its stable archetype token in mechanicIntent.ownedObjects"
+    );
+    expect(requestBody.instructions).toContain(
+      "object_create, object_motion_write, and object_destroy"
+    );
     expect(JSON.stringify(requestBody)).not.toContain("sk-secret");
   });
 

@@ -151,7 +151,13 @@ describe("creator-generation planning transport", () => {
     expect(
       creatorGenerationPlanJsonSchema.properties.gameSpec.properties.controls
         .items.properties.keys.items.enum
-    ).toEqual(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+    ).toEqual([
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "Space",
+    ]);
     expect(serialized).not.toContain('"additionalProperties":true');
     expect(serialized).not.toContain('"oneOf"');
   });

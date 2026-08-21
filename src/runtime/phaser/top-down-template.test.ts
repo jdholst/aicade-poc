@@ -1179,8 +1179,27 @@ describe("top-down Phaser template", () => {
     };
     const generatedTemplate = {
       ...topDownPhaserTemplate,
+      controls: [
+        ...topDownPhaserTemplate.controls,
+        {
+          action: "shoot_action",
+          label: "Shoot",
+          kind: "button" as const,
+          keys: ["Space"],
+        },
+      ],
       gameSpec: {
         ...topDownPhaserTemplate.gameSpec,
+        controls: [
+          ...topDownPhaserTemplate.gameSpec.controls,
+          {
+            id: "control_shoot",
+            action: "shoot_action",
+            label: "Shoot",
+            kind: "button" as const,
+            keys: ["Space"],
+          },
+        ],
         mechanics: [
           ...topDownPhaserTemplate.gameSpec.mechanics,
           generatedMechanic,
@@ -1218,6 +1237,15 @@ describe("top-down Phaser template", () => {
 
     await vi.waitFor(() => {
       expect(dispatchLogicalAction).toHaveBeenCalledWith("move");
+    });
+    dispatchWindowEvent("keydown", {
+      code: "Space",
+      isTrusted: true,
+      key: " ",
+      repeat: false,
+    });
+    await vi.waitFor(() => {
+      expect(dispatchLogicalAction).toHaveBeenCalledWith("shoot_action");
     });
     expect(advanceSimulation).not.toHaveBeenCalled();
   });

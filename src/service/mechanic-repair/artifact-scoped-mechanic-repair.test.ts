@@ -421,6 +421,71 @@ describe("runArtifactScopedMechanicRepair", () => {
     );
   });
 
+  it("retains upstream failure evidence when an invalidated stage has no attempts left", async () => {
+    const upstreamIssue: ArtifactScopedRepairIssue = {
+      path: "contract.callbacks.onAction",
+      code: "contract_source_mismatch",
+      message: "The final Game Spec exposed a contract mismatch.",
+    };
+    const source = vi.fn(async (input: ArtifactScopedRepairStageInput) =>
+      input.attemptNumber < 4
+        ? {
+            success: false as const,
+            evidence: {
+              responsibleStage: "source" as const,
+              issues: [sourceIssue],
+            },
+          }
+        : acceptedArtifact("source_v4")
+    );
+    const finalGameSpec = vi.fn(
+      async () => ({
+        success: false as const,
+        evidence: {
+          responsibleStage: "contract" as const,
+          issues: [upstreamIssue],
+        },
+      })
+    );
+
+    const result = await runArtifactScopedMechanicRepair({
+      generationRun: createRunningGenerationRun(
+        "generation_run_upstream_invalidation_exhausted"
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      completedAt: () => "2026-08-21T19:25:00.000Z",
+      stageRunners: {
+        contract: async (input) =>
+          acceptedArtifact(`contract_v${input.attemptNumber}`),
+        source,
+        finalGameSpec,
+      },
+    });
+
+    expect(source).toHaveBeenCalledTimes(4);
+    expect(finalGameSpec).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      status: "repair_exhausted",
+      receipt: {
+        exhausted: {
+          trigger: "upstream_invalidation",
+          stage: "source",
+          maximumAttempts: 4,
+          failureAttemptId:
+            "generation_run_upstream_invalidation_exhausted_finalGameSpec_1",
+          issues: [upstreamIssue],
+        },
+      },
+      generationRun: {
+        status: "failed",
+        failureClass: "repair-exhausted",
+      },
+    });
+    expect(generationRunSchema.parse(result.generationRun)).toEqual(
+      result.generationRun
+    );
+  });
+
   it("snapshots and freezes artifacts, repair evidence, and the completed receipt", async () => {
     const mutableIssue = {
       path: "callbacks.install",

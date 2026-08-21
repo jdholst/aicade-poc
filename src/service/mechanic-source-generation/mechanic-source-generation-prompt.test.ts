@@ -68,6 +68,22 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain("config");
     expect(prompt).toContain("bindings");
     expect(prompt).toContain("lifecycleInput");
+    expect(prompt).toContain(
+      `Exact callback-scope identifiers JSON:\n${JSON.stringify(
+        ["capabilities", "bindings", "config", "lifecycleInput", "input"],
+        null,
+        2
+      )}`
+    );
+    expect(prompt).toContain(
+      "input is a readonly compatibility alias for lifecycleInput"
+    );
+    expect(prompt).toContain(
+      "may callbacks pass an exact declared private-state ID to that documented method"
+    );
+    expect(prompt).toContain(
+      "read the current action, event, schedule, or fixed-step input only from lifecycleInput"
+    );
     expect(prompt).toContain('"logical_action": {');
     expect(prompt).toContain('"gameplay_event": {');
     expect(prompt).toContain('"inputPorts": [');
@@ -94,6 +110,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "Owned-object initial JSON may use bounded position, velocity, shape, dimensions, color, and immutable properties"
     );
     expect(prompt).toContain(
+      "Call capabilities.objects.destroy only with a mechanic-owned handle"
+    );
+    expect(prompt).toContain(
+      'Never destroy a binding handle or a handle returned by ownership "any" or "bound"'
+    );
+    expect(prompt).toContain(
       "There is no movementDirection, direction, or facing field"
     );
     expect(prompt).toContain(
@@ -103,6 +125,15 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain("Return one candidate Generated Mechanic Source");
     expect(prompt).toContain(
       "Every granted capability must be called through its documented capabilities expression"
+    );
+    expect(prompt).toContain(
+      "Before returning, verify that source contains at least one reachable awaited call to every exact granted capability expression"
+    );
+    expect(prompt).toContain(
+      "For object_motion_write, call capabilities.objects.writeMotion on the mechanic-owned handle"
+    );
+    expect(prompt).toContain(
+      "Initial velocity supplied only inside capabilities.objects.create does not count as object_motion_write use"
     );
     expect(prompt).toContain(
       "Each host lifecycle operation has a hard maximum of 16 capability-operation units"
@@ -175,6 +206,287 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "Its issues array is intentionally empty; regenerate from the current accepted upstream inputs"
+    );
+  });
+
+  it("turns unknown state and event names into exact callback-scope repair guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "callbacks.1.source",
+          code: "type_failure",
+          message: "Cannot find name 'state'.",
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(createGrant("state_write")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "For Cannot find name 'state', use only a granted capabilities.state method with an exact declared private-state ID"
+    );
+    expect(prompt).toContain(
+      "For Cannot find name 'event', use lifecycleInput or its readonly input alias"
+    );
+  });
+
+  it("turns JSON-value comparison failures into exact narrowing guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "callbacks.1.source",
+          code: "type_failure",
+          message:
+            "Operator '<' cannot be applied to types 'number' and 'string | number | boolean | { readonly [key: string]: JsonValue; } | readonly JsonValue[]'.",
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(createGrant("state_write")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "Object-observation properties and generic lifecycle payload values are JsonValue"
+    );
+    expect(prompt).toContain(
+      'narrow a JsonValue first with typeof value === "number"'
+    );
+    expect(prompt).toContain(
+      "For an operator type failure involving JsonValue, replace the invalid arithmetic or comparison"
+    );
+  });
+
+  it("turns absent capability-group failures into exact grant-compliance guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "callbacks.0.source",
+          code: "type_failure",
+          message:
+            "Property 'state' does not exist on type 'Readonly<{ readonly objects: Readonly<unknown>; }>'.",
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(createGrant("object_read")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "capabilities exposes exactly and only the groups and members rendered in the granted capability documentation"
+    );
+    expect(prompt).toContain(
+      "Private-state initial values are installed by the trusted host before the install callback"
+    );
+    expect(prompt).toContain(
+      "For Property 'state' does not exist on capabilities, remove every capabilities.state call"
+    );
+  });
+
+  it("turns non-owned destruction failures into exact ownership repair guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "scenarios.projectile_lifetime_cleanup",
+          code: "evaluation_failure",
+          message: "Only mechanic-owned objects can be destroyed through this host.",
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(
+        createGrant("object_create", "object_destroy", "spatial_query")
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "For Only mechanic-owned objects can be destroyed, replace every invalid destroy argument"
+    );
+    expect(prompt).toContain(
+      'ownership: "owned"'
+    );
+  });
+
+  it("turns unused motion grants into exact source-use repair guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "grant.capabilities.2",
+          code: "unused_capability",
+          message:
+            'Granted capability "object_motion_write" has no verified source use and would provide unjustified authority.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(
+        createGrant("object_create", "object_motion_write")
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "For an unused_capability failure, add a behaviorally necessary reachable awaited call to the exact documented expression"
+    );
+    expect(prompt).toContain(
+      "When object_motion_write is unused, call capabilities.objects.writeMotion"
     );
   });
 });

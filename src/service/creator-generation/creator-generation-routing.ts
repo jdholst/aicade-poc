@@ -192,15 +192,16 @@ export function createCreatorGenerationRouting({
 function normalizeGeneratedHostLifecycleIntent(
   intent: MechanicIntent
 ): MechanicIntent {
-  const supportedMovementAliasTriggers = new Set([
-    "install",
-    "logical_move_action",
-  ]);
+  const uniqueTriggers = new Set(intent.triggers);
+  const actionTriggers = intent.triggers.filter(
+    (trigger) => trigger !== "install"
+  );
+  const actionTrigger = actionTriggers[0];
   if (
-    !intent.triggers.includes("logical_move_action") ||
-    intent.triggers.some(
-      (trigger) => !supportedMovementAliasTriggers.has(trigger)
-    )
+    uniqueTriggers.size !== intent.triggers.length ||
+    actionTriggers.length !== 1 ||
+    actionTrigger === undefined ||
+    !/^logical_[a-z0-9]+(?:_[a-z0-9]+)*_action$/.test(actionTrigger)
   ) {
     return intent;
   }
@@ -208,7 +209,7 @@ function normalizeGeneratedHostLifecycleIntent(
   return freeze({
     ...intent,
     triggers: intent.triggers.map((trigger) =>
-      trigger === "logical_move_action" ? "logical_action" : trigger
+      trigger === actionTrigger ? "logical_action" : trigger
     ),
   });
 }

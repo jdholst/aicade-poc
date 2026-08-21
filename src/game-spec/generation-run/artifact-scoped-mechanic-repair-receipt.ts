@@ -136,6 +136,9 @@ export const artifactScopedMechanicRepairReceiptSchema = z
     artifacts: z.array(artifactScopedRepairArtifactReceiptSchema),
     exhausted: z
       .object({
+        trigger: z
+          .enum(["stage_failure", "upstream_invalidation"])
+          .optional(),
         stage: artifactScopedRepairStageSchema,
         maximumAttempts: z.number().int().positive(),
         failureAttemptId: artifactScopedRepairAttemptIdSchema,
@@ -453,10 +456,25 @@ export const artifactScopedMechanicRepairReceiptSchema = z
       const failureAttempt = attemptsById.get(
         receipt.exhausted.failureAttemptId
       );
+      const exhaustedStageIndex = ARTIFACT_SCOPED_REPAIR_STAGES.indexOf(
+        receipt.exhausted.stage
+      );
+      const responsibleStageIndex = failureAttempt?.responsibleStage
+        ? ARTIFACT_SCOPED_REPAIR_STAGES.indexOf(
+            failureAttempt.responsibleStage
+          )
+        : -1;
+      const exhaustionTrigger =
+        receipt.exhausted.trigger ?? "stage_failure";
+      const failureMatchesExhaustion =
+        exhaustionTrigger === "stage_failure"
+          ? failureAttempt?.responsibleStage === receipt.exhausted.stage
+          : responsibleStageIndex >= 0 &&
+            responsibleStageIndex < exhaustedStageIndex;
       if (
         !failureAttempt ||
         failureAttempt.status !== "rejected" ||
-        failureAttempt.responsibleStage !== receipt.exhausted.stage ||
+        !failureMatchesExhaustion ||
         receipt.exhausted.maximumAttempts !==
           receipt.maximumAttempts[receipt.exhausted.stage] ||
         receipt.attemptCounts[receipt.exhausted.stage] !==
@@ -468,7 +486,7 @@ export const artifactScopedMechanicRepairReceiptSchema = z
           code: z.ZodIssueCode.custom,
           path: ["exhausted"],
           message:
-            "Exhaustion evidence must exactly reference the rejected attempt that consumed the stage maximum.",
+            "Exhaustion evidence must exactly reference the rejected failure that consumed or invalidated the exhausted stage.",
         });
       }
     }

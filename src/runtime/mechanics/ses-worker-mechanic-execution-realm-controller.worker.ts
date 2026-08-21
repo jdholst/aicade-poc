@@ -1104,7 +1104,7 @@ function runtimeDiagnostic(
   return {
     stage,
     code,
-    message: message ?? `SES Worker contained ${executionId}.`,
+    message: message ?? "SES Worker contained generated mechanic execution.",
     repair: {
       artifact: "realm_candidate",
       issuePath: `execution.${executionId}`,

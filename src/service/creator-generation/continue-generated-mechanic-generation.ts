@@ -45,6 +45,7 @@ import {
 import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 
 import type { ContinueGeneratedMechanicGenerationInput } from "./creator-game-generation-dispatcher";
+import { createEvaluationObservationFailureMessage } from "./evaluation-repair-evidence";
 import {
   createBrowserRuntimeFoundation,
   type BrowserRuntimeFoundation,
@@ -705,10 +706,59 @@ function evaluationIssues(
     ...evaluation.evidence.issues,
   ];
   for (const scenario of evaluation.evidence.scenarios) {
+    const issueCountBeforeScenario = issues.length;
     issues.push(...scenario.issues);
+    scenario.setup.forEach((entry, index) => {
+      if (entry.passed) {
+        return;
+      }
+      issues.push({
+        path: `evaluation.scenarios.${scenario.scenarioId}.setup.${index}`,
+        code: "setup_observation_failed",
+        message: createEvaluationObservationFailureMessage({
+          label: "Scenario setup",
+          index,
+          kind: entry.kind,
+          assertion: entry.assertion,
+          actual: entry.actual,
+        }),
+      });
+    });
+    scenario.declaredObservations.forEach((entry, index) => {
+      if (entry.passed) {
+        return;
+      }
+      issues.push({
+        path: `evaluation.scenarios.${scenario.scenarioId}.declaredObservations.${index}`,
+        code: "declared_observation_failed",
+        message: createEvaluationObservationFailureMessage({
+          label: "Model-declared observation",
+          index,
+          kind: entry.kind,
+          assertion: entry.assertion,
+          actual: entry.actual,
+        }),
+      });
+    });
+    scenario.externalObservations.forEach((entry, index) => {
+      if (entry.passed) {
+        return;
+      }
+      issues.push({
+        path: `evaluation.scenarios.${scenario.scenarioId}.externalObservations.${index}`,
+        code: "external_observation_failed",
+        message: createEvaluationObservationFailureMessage({
+          label: "Evaluator-authored observation",
+          index,
+          kind: entry.kind,
+          assertion: entry.assertion,
+          actual: entry.actual,
+        }),
+      });
+    });
     if (
       scenario.outcome === "failed" &&
-      scenario.issues.length === 0
+      issues.length === issueCountBeforeScenario
     ) {
       issues.push({
         path: `evaluation.scenarios.${scenario.scenarioId}`,

@@ -761,7 +761,6 @@ function requiresTransientOwnedObjectLifecycle(
     [
       "object_create",
       "object_motion_write",
-      "spatial_query",
       "object_destroy",
     ].every(
       (capabilityId) =>

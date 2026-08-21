@@ -86,11 +86,58 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       `Exact accepted behavior outcome tokens JSON:\n${JSON.stringify(intent.outcomes, null, 2)}`
     );
+    expect(prompt).toContain("Exact required mechanic ports JSON:\n[]");
+    expect(prompt).toContain(
+      `Exact mandatory contract lifecycle callbacks JSON:\n${JSON.stringify(
+        ["install", "logical_action"],
+        null,
+        2
+      )}`
+    );
+    expect(prompt).toContain(
+      `Exact required contract binding references JSON:\n${JSON.stringify(
+        [
+          {
+            referenceKind: "entity",
+            referenceId: "player_one",
+            cardinality: "one",
+          },
+        ],
+        null,
+        2
+      )}`
+    );
     expect(prompt).toContain(
       "Copy every trigger and outcome token verbatim into behavior.triggers and behavior.outcomes"
     );
+    expect(prompt).toContain(
+      "Copy the exact empty ports array into contract.ports on every initial and repair attempt"
+    );
+    expect(prompt).toContain(
+      "Copy every exact mandatory lifecycle callback into contract.lifecycle.callbacks"
+    );
+    expect(prompt).toContain(
+      "Replace contract.bindings with exactly one binding for each entry in the exact required binding-reference manifest"
+    );
     expect(prompt).toContain('"id": "state_write"');
     expect(prompt).toContain('"kind": "stable_id"');
+    expect(prompt).toContain(
+      `Exact private-state value-type semantics JSON:\n${JSON.stringify(
+        {
+          boolean: "JSON boolean",
+          number: "finite JSON number",
+          integer:
+            "finite JSON number for which Number.isInteger(value) is true",
+          string: "JSON string",
+          stable_id: "non-empty stable ID string",
+        },
+        null,
+        2
+      )}`
+    );
+    expect(prompt).toContain(
+      "Every privateState initialValue and every scenario state setup or state_equals value must match"
+    );
     expect(prompt).toContain('"resourceBudgetProfile": "phase_9_fixed_budget"');
     expect(prompt).toContain(
       '"requiredIndependentEffectCapability": "object_motion_write"'
@@ -119,7 +166,10 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "observable owned-object creation, travel, routed-target interaction when applicable, and cleanup"
     );
     expect(prompt).toContain(
-      "does not require the full object_create, object_motion_write, spatial_query, and object_destroy lifecycle"
+      "If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
+    );
+    expect(prompt).toContain(
+      "does not require the transient object_create, object_motion_write, and object_destroy lifecycle"
     );
     expect(prompt).not.toContain("declare no mechanic-owned objects");
     expect(prompt).toContain(
@@ -184,6 +234,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "Correct every exact path, code, and message in the stage-failure feedback"
     );
+    expect(prompt).toContain(
+      "When binding admission fails, replace the entire contract.bindings array from the exact required binding-reference manifest"
+    );
+    expect(prompt).toContain(
+      "Do not add supporting, action, objective, asset, region, owned-object, duplicate, or otherwise non-routed bindings"
+    );
   });
 
   it("tells contract repair to remove a source-proven unused capability grant", () => {
@@ -237,6 +293,173 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "Never add a meaningless capability call merely to make an unused grant appear used"
+    );
+  });
+
+  it("tells host-admission repair to remove unsupported mechanic ports", () => {
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_contract_1",
+      issues: [
+        {
+          path: "contract.ports",
+          code: "unsupported_runtime_ports",
+          message:
+            "The retained top-down generated-mechanic host does not admit mechanic ports.",
+        },
+      ],
+      invalidatedArtifactIds: ["contract_candidate_initial_1"],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent,
+      resolution,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId:
+          "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "When host admission reports unsupported_runtime_ports, set contract.ports to [] exactly"
+    );
+    expect(prompt).toContain(
+      "Remove scenario observations, capability declarations, and lifecycle behavior that exist only to use those ports"
+    );
+  });
+
+  it("tells lifecycle repair to restore the exact mandatory callback manifest", () => {
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_contract_1",
+      issues: [
+        {
+          path: "lifecycle.callbacks",
+          code: "contradiction",
+          message:
+            'Generated mechanics must declare the "install" lifecycle callback.',
+        },
+      ],
+      invalidatedArtifactIds: ["contract_candidate_initial_1"],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent,
+      resolution,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId:
+          "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "When lifecycle.callbacks is invalid, replace it with a list that begins with every exact mandatory lifecycle callback"
+    );
+    expect(prompt).toContain(
+      "Never remove install during repair"
+    );
+  });
+
+  it("tells invalid private-state repair to use one exact compatible value type everywhere", () => {
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_contract_1",
+      issues: [
+        {
+          path: "privateState.0.initialValue",
+          code: "invalid_value",
+          message:
+            'Private state "last_shot_time" initial value does not match declared type "integer".',
+        },
+        {
+          path: "scenarios.0.setup.1.value",
+          code: "invalid_value",
+          message:
+            'Scenario state value does not match the declared type for "last_shot_time".',
+        },
+      ],
+      invalidatedArtifactIds: ["contract_candidate_initial_1"],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent,
+      resolution,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId:
+          "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "When invalid_value affects privateState or a scenario state value, replace every incompatible declaration, setup, and state_equals value"
+    );
+    expect(prompt).toContain(
+      "For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker"
     );
   });
 });

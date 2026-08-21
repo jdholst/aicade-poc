@@ -132,12 +132,12 @@ describe("Spec Generation service contract", () => {
               {
                 path: "controls.control_move.keys.0",
                 message:
-                  'Unsupported physical key "WASD". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+                  'Unsupported physical key "WASD". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space.',
               },
               {
                 path: "controls.control_move.keys.1",
                 message:
-                  'Unsupported physical key "ARROW KEYS". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+                  'Unsupported physical key "ARROW KEYS". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space.',
               },
             ],
           },

@@ -88,6 +88,7 @@ export function createGeneratedMechanicLifecycleProgram({
         source: [
           GENERATED_MECHANIC_CALLBACK_SOURCE_MARKER,
           "const { capabilities, bindings, config } = __sparklineLifecycleContext;",
+          "const input = lifecycleInput;",
           callback.normalizedJavaScript,
           "return await __sparklineGeneratedMechanicCallback();",
         ].join("\n"),

@@ -145,6 +145,19 @@ export async function runArtifactScopedMechanicRepair({
           `Repair stage "${stage}" exhausted without failure evidence.`
         );
       }
+      const failureAttempt = attempts.find(
+        (attempt) => attempt.id === repair.failureAttemptId
+      );
+      if (
+        !failureAttempt ||
+        failureAttempt.status !== "rejected" ||
+        !failureAttempt.issues ||
+        failureAttempt.issues.length === 0
+      ) {
+        throw new TypeError(
+          `Repair stage "${stage}" exhausted without exact rejected-attempt issues.`
+        );
+      }
       const receipt = createReceipt({
         generationRunId,
         status: "repair_exhausted",
@@ -154,10 +167,11 @@ export async function runArtifactScopedMechanicRepair({
         attempts,
         artifacts,
         exhausted: {
+          trigger: repair.trigger,
           stage,
           maximumAttempts: stageMaximumAttempts,
           failureAttemptId: repair.failureAttemptId,
-          issues: repair.issues,
+          issues: [...failureAttempt.issues],
         },
       });
       return snapshot({

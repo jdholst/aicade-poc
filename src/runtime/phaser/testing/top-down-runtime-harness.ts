@@ -54,6 +54,7 @@ export type RuntimeHarnessContext = {
 };
 
 export type RuntimeHarnessWindowEvent = {
+  code?: string;
   data?: unknown;
   isTrusted?: boolean;
   key?: string;

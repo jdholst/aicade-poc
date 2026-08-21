@@ -390,6 +390,51 @@ describe("generated mechanic browser evaluation fixture", () => {
     ]);
   });
 
+  it("authors owned-object lifecycle proof for transient create-move-destroy behavior without spatial queries", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      ownedObjects: ["projectile"],
+      requiredCapabilities: [
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      ownedObjects: [
+        { id: "projectile", objectKind: "projectile", maximumInstances: 2 },
+      ],
+      capabilities: [
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_after_action",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_after_action",
+          archetypeIds: ["projectile"],
+          actionId: "move",
+        },
+      },
+    ]);
+  });
+
   it("rejects private-state mutation as independent gameplay evidence", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const contract: GeneratedMechanicContract = {
