@@ -24,6 +24,22 @@
           return;
         }
 
+        const currentVelocity = player.body && player.body.velocity;
+        const currentSpeed =
+          currentVelocity &&
+          typeof currentVelocity.x === "number" &&
+          Number.isFinite(currentVelocity.x) &&
+          typeof currentVelocity.y === "number" &&
+          Number.isFinite(currentVelocity.y)
+            ? Math.sqrt(
+                currentVelocity.x * currentVelocity.x +
+                  currentVelocity.y * currentVelocity.y
+              )
+            : 0;
+        if (currentSpeed > configuredSpeed) {
+          return;
+        }
+
         const direction = { x: 0, y: 0 };
 
         if (cursors.left.isDown) {

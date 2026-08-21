@@ -70,7 +70,7 @@ describe("createContinueGeneratedMechanicGeneration", () => {
       services: {
         generationRunRepository,
         gamePackRepository,
-        createFoundation: async () => createFailedFoundation(),
+        createFoundation: async () => createFailedConformanceFoundation(),
         createContractProvider,
         createSourceProvider,
         completeHandoff,
@@ -94,11 +94,12 @@ describe("createContinueGeneratedMechanicGeneration", () => {
         stage: "foundation",
         issues: [
           {
-            path: "foundation.containment",
-            code: "foundation_containment_failed",
-            message: "The deliberate containment probe failed.",
+            path: "foundation.realm_conformance.escape_resistance",
+            code: "escape_observed",
+            message: "The candidate exposed forbidden authority.",
           },
         ],
+        runtimeEvidence: createFailedConformanceFoundation().gateResult,
       },
     });
     expect(createContractProvider).not.toHaveBeenCalled();
@@ -115,7 +116,7 @@ describe("createContinueGeneratedMechanicGeneration", () => {
           status: "rejected",
           stage: "foundation",
           issues: [
-            expect.objectContaining({ code: "foundation_containment_failed" }),
+            expect.objectContaining({ code: "escape_observed" }),
           ],
         },
       },
@@ -235,6 +236,7 @@ describe("createContinueGeneratedMechanicGeneration", () => {
               "Generated mechanic rejection evidence could not be persisted to its GenerationRun receipt.",
           },
         ],
+        runtimeEvidence: createFailedFoundation().gateResult,
       },
     });
     expect(update).toHaveBeenCalledTimes(1);
@@ -404,6 +406,108 @@ describe("createContinueGeneratedMechanicGeneration", () => {
       },
     });
     expect(gamePackRepository.compareAndSwap).not.toHaveBeenCalled();
+  });
+
+  it("routes a source-proven unused capability back to contract repair", async () => {
+    const fixture = createInputFixture();
+    const { repository: generationRunRepository } =
+      createGenerationRunTestRepository();
+    await generationRunRepository.create(
+      generationRunSchema.parse({
+        id: GENERATION_RUN_ID,
+        operationType: "generate",
+        status: "running",
+        createdAt: CREATED_AT,
+        startedAt: CREATED_AT,
+        request: { summary: fixture.input.context.requestSummary },
+        runtimeKind: "phaser",
+        attempts: [],
+      })
+    );
+    const issue = {
+      path: "grant.capabilities.2",
+      code: "unused_capability" as const,
+      message:
+        'Granted capability "time_read" has no verified source use and would provide unjustified authority.',
+    };
+    const generateContract: typeof generateMechanicContract = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          contract: fixture.project.dependency.contract,
+          grant: fixture.project.dependency.sourceArtifact.grant,
+        },
+      })
+    );
+    const generateSource: typeof generateBuildAndExecuteMechanicSource = vi.fn(
+      async () => ({
+        success: false,
+        evidence: {
+          stage: "capability_usage_validation",
+          code: "invalid_mechanic_capability_usage",
+          issues: [issue],
+        },
+      })
+    );
+    const runPipeline = vi.fn(async ({ dependencies }) => {
+      const foundation = await dependencies.runFoundation();
+      if (!foundation.success) {
+        throw new Error("Expected the passing foundation fixture.");
+      }
+      const contract = await dependencies.runContract({
+        attemptNumber: 1,
+        kind: "initial",
+      });
+      if (!contract.success) {
+        throw new Error("Expected the accepted contract fixture.");
+      }
+      const source = await dependencies.runSourceAndEvaluation({
+        attemptNumber: 1,
+        foundation: foundation.data,
+        contract: contract.data.value,
+        kind: "initial",
+      });
+      expect(source).toEqual({
+        success: false,
+        evidence: {
+          responsibleStage: "contract",
+          issues: [issue],
+        },
+      });
+      return {
+        outcome: "rejected" as const,
+        evidence: {
+          stage: "repair_exhausted" as const,
+          issues: [issue],
+        },
+      };
+    });
+    const completeHandoff = vi.fn();
+    const continueGeneration = createContinueGeneratedMechanicGeneration({
+      services: {
+        generationRunRepository,
+        gamePackRepository: {
+          compareAndSwap: vi.fn(),
+          load: vi.fn(),
+        },
+        createFoundation: async () => createPassedFoundation(),
+        createContractProvider: vi.fn(() => vi.fn()),
+        createSourceProvider: vi.fn(() => vi.fn()),
+        generateContract,
+        generateSource,
+        completeHandoff,
+        runPipeline,
+      },
+    });
+
+    await expect(continueGeneration(fixture.input)).resolves.toEqual({
+      outcome: "rejected",
+      evidence: {
+        stage: "repair_exhausted",
+        issues: [issue],
+      },
+    });
+    expect(completeHandoff).not.toHaveBeenCalled();
   });
 
   it("cannot overwrite a terminal cancellation with a late repair result", async () => {
@@ -1022,6 +1126,50 @@ function createFailedFoundation(): BrowserRuntimeFoundation {
       terminalResult: {
         code: "runtime_contract_foundation_gate_failed",
         failedBoundary: "containment",
+      },
+    },
+    realmAdapter: createSesWorkerMechanicExecutionRealmAdapter(),
+  };
+}
+
+function createFailedConformanceFoundation(): BrowserRuntimeFoundation {
+  return {
+    gateResult: {
+      schemaVersion: "runtime_contract_foundation_gate/v1",
+      status: "failed",
+      sourceGenerationAvailable: false,
+      checks: [
+        {
+          boundary: "realm_conformance",
+          status: "failed",
+          code: "realm_conformance_rejected",
+          message:
+            "Mechanic Execution Realm conformance did not pass every hard gate.",
+          details: {
+            schemaVersion: "mechanic_execution_realm_failure_report/v1",
+            suiteVersion: "mechanic_execution_realm_conformance/v3",
+            capabilityVersion: "mechanic_capability/v1",
+            candidateId: "ses_worker",
+            verdict: "rejected",
+            failedGates: [
+              {
+                id: "escape_resistance",
+                probeIds: ["escape_probe"],
+                failures: [
+                  {
+                    code: "escape_observed",
+                    message: "The candidate exposed forbidden authority.",
+                  },
+                ],
+                probeResults: [],
+              },
+            ],
+          },
+        },
+      ],
+      terminalResult: {
+        code: "runtime_contract_foundation_gate_failed",
+        failedBoundary: "realm_conformance",
       },
     },
     realmAdapter: createSesWorkerMechanicExecutionRealmAdapter(),

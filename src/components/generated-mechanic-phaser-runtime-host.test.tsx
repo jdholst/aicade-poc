@@ -243,6 +243,7 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
     });
     expect(session.postRuntimeCommand).toHaveBeenCalledWith({
       type: "game-run-first-playable-checks",
+      actionId: "move",
     });
 
     act(() => hostRef.current?.focusGame());
@@ -311,6 +312,7 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
     });
     expect(session.postRuntimeCommand).toHaveBeenNthCalledWith(2, {
       type: "game-run-first-playable-checks",
+      actionId: "move",
     });
     controller.focusGame();
     expect(iframeFocus).toHaveBeenCalledOnce();
@@ -332,7 +334,11 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
       {
         checkId: "input_response",
         status: "passed",
-        evidence: { inputObserved: true },
+        evidence: {
+          inputObserved: true,
+          generatedActionId: "move",
+          generatedActionDispatched: true,
+        },
       },
     ] as const;
     for (const item of evidence) {
@@ -358,6 +364,76 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
     expect(iframe).not.toBeInTheDocument();
     expect(broker.dispose).toHaveBeenCalledOnce();
     expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("rejects legacy input evidence that did not execute the generated action", async () => {
+    const observedEvidence: unknown[] = [];
+    const mount = document.createElement("div");
+    document.body.append(mount);
+    const controller = createGeneratedMechanicPhaserRuntimeController({
+      mount,
+      template,
+      generatedMechanicProject: project,
+      options: {
+        onValidationEvidence: (evidence) => observedEvidence.push(evidence),
+      },
+    });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+    const firstPlayable = controller.runFirstPlayableChecks();
+    fireEvent.load(iframe);
+    await act(async () => {
+      await broker.ready;
+    });
+    dispatchHostMessage(iframe, { kind: "ack" });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: { type: "game-ready" },
+    });
+    for (const item of [
+      {
+        checkId: "nonblank_render",
+        status: "passed",
+        evidence: { renderedObjectCount: 3 },
+      },
+      {
+        checkId: "player_visible",
+        status: "passed",
+        evidence: { playerVisible: true },
+      },
+      {
+        checkId: "input_response",
+        status: "passed",
+        evidence: { inputObserved: true },
+      },
+    ]) {
+      dispatchHostMessage(iframe, {
+        kind: "runtime",
+        event: { type: "game-validation-evidence", data: item },
+      });
+    }
+
+    await expect(firstPlayable).resolves.toMatchObject({
+      status: "failed",
+      evidence: [
+        { checkId: "nonblank_render", status: "passed" },
+        { checkId: "player_visible", status: "passed" },
+        {
+          checkId: "input_response",
+          status: "failed",
+          issues: [
+            {
+              code: "generated_action_probe_not_authenticated",
+              path: "runtime.generatedMechanic.action",
+            },
+          ],
+        },
+      ],
+    });
+    expect(observedEvidence.at(-1)).toMatchObject({
+      checkId: "input_response",
+      status: "failed",
+    });
+    controller.dispose();
   });
 
   it("fails closed when an authenticated ready runtime omits first-playable evidence", async () => {
@@ -485,6 +561,44 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
         mechanicId: fixture.artifact.mechanicId,
       }),
     });
+  });
+
+  it("does not replace an authenticated mechanic failure with Worker-close noise", async () => {
+    const statuses: unknown[] = [];
+    renderHost({ onStatusChange: (status) => statuses.push(status) });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+    fireEvent.load(iframe);
+    await act(async () => {
+      await broker.ready;
+    });
+    dispatchHostMessage(iframe, { kind: "ack" });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: { type: "game-ready" },
+    });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: {
+        type: "game-error",
+        message:
+          'Mechanic private state "dash_ends_at" requires an integer value.',
+        issue: {
+          type: "runtime-error",
+          severity: "error",
+          recoverable: false,
+          message:
+            'Mechanic private state "dash_ends_at" requires an integer value.',
+        },
+      },
+    });
+    expect(statuses.at(-1)).toEqual({
+      state: "error",
+      message:
+        'Mechanic private state "dash_ends_at" requires an integer value.',
+    });
+    expect(iframe).not.toBeInTheDocument();
+    expect(broker.dispose).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
   });
 
   it("fails closed on a second load, route mutation, sandbox mutation, or stale frame", async () => {

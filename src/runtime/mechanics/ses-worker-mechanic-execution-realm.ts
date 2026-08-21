@@ -98,6 +98,12 @@ export function createSesWorkerMechanicExecutionRealmController(): Worker {
   );
 }
 
+export function waitForSesWorkerMechanicExecutionRealmControllerReady(
+  controller: SesWorkerMechanicExecutionRealmController
+): Promise<void> {
+  return waitForControllerReady(controller);
+}
+
 function snapshotRealmInput(
   input: CreateMechanicExecutionRealmInput
 ): CreateMechanicExecutionRealmInput {

@@ -62,6 +62,7 @@ export type GeneratedMechanicPipelineFoundationResult<Foundation> =
       evidence: Readonly<{
         stage: "foundation";
         issues: readonly ArtifactScopedRepairIssue[];
+        runtimeEvidence?: unknown;
       }>;
     }>;
 

@@ -1,4 +1,5 @@
 import http from "node:http";
+import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 import { createServer as createViteServer } from "vite";
@@ -49,6 +50,9 @@ const preparationCleanupModes = new Set([
 ]);
 
 const vite = await createViteServer({
+  configFile: fileURLToPath(
+    new URL("../vitest.config.mts", import.meta.url)
+  ),
   root: process.cwd(),
   appType: "spa",
   server: { middlewareMode: true },

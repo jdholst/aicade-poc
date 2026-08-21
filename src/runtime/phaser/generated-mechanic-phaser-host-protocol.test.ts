@@ -364,6 +364,49 @@ describe("generated mechanic Phaser host protocol", () => {
     ).toEqual(focus);
   });
 
+  it("preserves the exact generated action on first-playable commands", async () => {
+    const setup = await createProtocolHarness();
+    const command: RuntimeCommand = {
+      type: "game-run-first-playable-checks",
+      actionId: "move",
+    };
+
+    setup.parent.postRuntimeCommand(command);
+    const commandEnvelope = setup.childTarget.posts[1]?.message;
+
+    expect(
+      setup.child.consumeRuntimeCommand(
+        setup.childOwner.event({
+          data: commandEnvelope,
+          source: setup.parentTarget,
+          origin: setup.parentOrigin,
+        })
+      )
+    ).toEqual(command);
+
+    const malformedSetup = await createProtocolHarness();
+    malformedSetup.parent.postRuntimeCommand({
+      type: "game-run-first-playable-checks",
+    });
+    const malformedEnvelope = requireRecord(
+      malformedSetup.childTarget.posts[1]?.message
+    );
+    expect(
+      malformedSetup.child.consumeRuntimeCommand(
+        malformedSetup.childOwner.event({
+          data: cloneRecord(malformedEnvelope, {
+            command: {
+              type: "game-run-first-playable-checks",
+              actionId: " ",
+            },
+          }),
+          source: malformedSetup.parentTarget,
+          origin: malformedSetup.parentOrigin,
+        })
+      )
+    ).toBeNull();
+  });
+
   it("requires the exact artifact acknowledgement before commands", async () => {
     const setup = await createProtocolHarness({ acknowledge: false });
     const acknowledgement = setup.parentTarget.posts[0]?.message;

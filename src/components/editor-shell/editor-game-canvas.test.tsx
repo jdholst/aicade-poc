@@ -941,6 +941,78 @@ describe("EditorGameCanvas", () => {
     expect(onRegenerate).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the failed Mechanic Execution Realm conformance report", () => {
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          loadState: {
+            status: "error",
+            message:
+              "Mechanic Execution Realm conformance did not pass every hard gate.",
+            generatedMechanicFailure: {
+              stage: "foundation",
+              issues: [
+                {
+                  path: "foundation.realm_conformance.escape_resistance",
+                  code: "escape_observed",
+                  message: "The candidate exposed forbidden authority.",
+                },
+              ],
+              runtimeEvidence: {
+                schemaVersion: "runtime_contract_foundation_gate/v1",
+                status: "failed",
+                sourceGenerationAvailable: false,
+                checks: [
+                  {
+                    boundary: "realm_conformance",
+                    status: "failed",
+                    code: "realm_conformance_rejected",
+                    message:
+                      "Mechanic Execution Realm conformance did not pass every hard gate.",
+                    details: {
+                      schemaVersion:
+                        "mechanic_execution_realm_failure_report/v1",
+                      failedGates: [
+                        {
+                          id: "escape_resistance",
+                          probeIds: ["escape_probe"],
+                          failures: [
+                            {
+                              code: "escape_observed",
+                              message:
+                                "The candidate exposed forbidden authority.",
+                            },
+                          ],
+                          probeResults: [],
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        "The secure mechanic runtime could not be verified. Review 1 failed conformance check below."
+      )
+    ).toBeVisible();
+    expect(screen.getByText("Escape resistance")).toBeVisible();
+    expect(
+      screen.getByText("The candidate exposed forbidden authority.")
+    ).toBeVisible();
+    expect(
+      screen.getByRole("group", { name: "Raw evidence JSON" })
+    ).not.toHaveAttribute("open");
+    expect(screen.getByText(/mechanic_execution_realm_failure_report/)).toBeInTheDocument();
+    expect(screen.getByText(/escape_probe/)).toBeInTheDocument();
+  });
+
   it("shows Phaser Game Spec validation errors without crashing the editor", async () => {
     vi.resetModules();
     vi.doMock("@/runtime/phaser", () => ({

@@ -924,7 +924,8 @@ function validateRealmConformance(
     failBoundary(
       "realm_conformance",
       "realm_conformance_rejected",
-      "Mechanic Execution Realm conformance did not pass every hard gate."
+      "Mechanic Execution Realm conformance did not pass every hard gate.",
+      createRealmConformanceFailureReport(trustedReport)
     );
   }
   return Object.freeze({
@@ -933,6 +934,36 @@ function validateRealmConformance(
     verdict: "passed",
     gateIds: Object.freeze([...REQUIRED_REALM_CONFORMANCE_GATES]),
   });
+}
+
+function createRealmConformanceFailureReport(
+  report: MechanicExecutionRealmConformanceReport
+): unknown {
+  const probeResultsById = new Map(
+    report.probeResults.map((probeResult) => [
+      probeResult.probeId,
+      probeResult,
+    ])
+  );
+
+  return {
+    schemaVersion: "mechanic_execution_realm_failure_report/v1",
+    suiteVersion: report.suiteVersion,
+    capabilityVersion: report.capabilityVersion,
+    candidateId: report.candidateId,
+    verdict: report.verdict,
+    failedGates: report.gates
+      .filter(({ status }) => status === "failed")
+      .map((gate) => ({
+        id: gate.id,
+        probeIds: gate.probeIds,
+        failures: gate.failures,
+        probeResults: gate.probeIds.flatMap((probeId) => {
+          const probeResult = probeResultsById.get(probeId);
+          return probeResult ? [probeResult] : [];
+        }),
+      })),
+  };
 }
 
 async function runFoundationCycle({

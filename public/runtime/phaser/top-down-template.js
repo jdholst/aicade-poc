@@ -857,10 +857,15 @@
       ) {
         return;
       }
-      const activeSession = generatedMechanicSession;
-      const elapsed =
+      const pendingElapsed =
         runtimeState.generatedMechanicPendingElapsedMilliseconds;
-      runtimeState.generatedMechanicPendingElapsedMilliseconds = 0;
+      const elapsed = Math.floor(pendingElapsed);
+      if (elapsed <= 0) {
+        return;
+      }
+      const activeSession = generatedMechanicSession;
+      runtimeState.generatedMechanicPendingElapsedMilliseconds =
+        pendingElapsed - elapsed;
       runtimeState.generatedMechanicUpdatePending = true;
 
       Promise.resolve(activeSession.advanceSimulation(elapsed)).then(
@@ -910,13 +915,25 @@
 
     function dispatchGeneratedLogicalAction(actionId) {
       if (!generatedMechanicSession || generatedMechanicDisposed) {
+        return Promise.resolve(false);
+      }
+      return Promise.resolve(
+        generatedMechanicSession.dispatchLogicalAction(actionId)
+      ).then(
+        function () {
+          return true;
+        }
+      );
+    }
+
+    function reportGeneratedLogicalActionFailure(error) {
+      if (!generatedMechanicSession || generatedMechanicDisposed) {
         return;
       }
-      const activeSession = generatedMechanicSession;
-      Promise.resolve(activeSession.dispatchLogicalAction(actionId)).catch(
-        function (error) {
-          failGeneratedMechanicSession(activeSession, "logical action", error);
-        }
+      failGeneratedMechanicSession(
+        generatedMechanicSession,
+        "logical action",
+        error
       );
     }
 
@@ -1018,6 +1035,7 @@
       dispatchGeneratedLogicalAction,
       installGeneratedMechanic,
       installActiveMechanics,
+      reportGeneratedLogicalActionFailure,
       updateGeneratedMechanic,
       updateInstalledMechanics,
     };
@@ -1150,7 +1168,7 @@
       };
     }
 
-    function runFirstPlayableChecks() {
+    function runFirstPlayableChecks(generatedActionId) {
       const renderedObjectCount = runtimeState.renderedObjectCount;
       const player = runtimeState.playerHandle;
       const playerHasFinitePosition =
@@ -1214,13 +1232,63 @@
             ]
       );
 
-      emitValidationEvidence(
-        "input_response",
-        inputResponse.status,
-        inputResponse.message,
-        inputResponse.evidence,
-        inputResponse.issues
-      );
+      if (typeof generatedActionId !== "string" || !generatedActionId) {
+        emitValidationEvidence(
+          "input_response",
+          inputResponse.status,
+          inputResponse.message,
+          inputResponse.evidence,
+          inputResponse.issues
+        );
+        return;
+      }
+
+      void mechanicsModule
+        .dispatchGeneratedLogicalAction(generatedActionId)
+        .then(
+          function (dispatched) {
+            emitValidationEvidence(
+              "input_response",
+              dispatched ? inputResponse.status : "failed",
+              dispatched
+                ? inputResponse.message
+                : "Runtime could not dispatch the generated mechanic action.",
+              Object.assign({}, inputResponse.evidence, {
+                generatedActionId,
+                generatedActionDispatched: dispatched,
+              }),
+              dispatched
+                ? inputResponse.issues
+                : [
+                    {
+                      code: "generated_action_probe_unavailable",
+                      path: "runtime.generatedMechanic.action",
+                      message:
+                        "Expected the generated mechanic session to accept the routed action.",
+                    },
+                  ]
+            );
+          },
+          function (error) {
+            emitValidationEvidence(
+              "input_response",
+              "failed",
+              "Generated mechanic action failed during first-playable validation.",
+              Object.assign({}, inputResponse.evidence, {
+                generatedActionId,
+                generatedActionDispatched: false,
+              }),
+              [
+                {
+                  code: "generated_action_probe_failed",
+                  path: "runtime.generatedMechanic.action",
+                  message: getErrorMessage(error),
+                },
+              ]
+            );
+            mechanicsModule.reportGeneratedLogicalActionFailure(error);
+          }
+        );
     }
 
     function applyHostViewport(nextViewport) {
@@ -1312,7 +1380,7 @@
         }
 
         if (command.type === "game-run-first-playable-checks") {
-          runFirstPlayableChecks();
+          runFirstPlayableChecks(command.actionId);
         }
       });
 
@@ -1338,7 +1406,11 @@
             return;
           }
           dispatchedActionIds.add(control.action);
-          mechanicsModule.dispatchGeneratedLogicalAction(control.action);
+          void mechanicsModule
+            .dispatchGeneratedLogicalAction(control.action)
+            .catch(function (error) {
+              mechanicsModule.reportGeneratedLogicalActionFailure(error);
+            });
         });
       });
     }

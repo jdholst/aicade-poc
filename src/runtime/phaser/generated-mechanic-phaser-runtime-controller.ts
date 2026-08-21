@@ -28,6 +28,60 @@ const FIRST_PLAYABLE_CHECK_IDS = [
   "input_response",
 ] as const satisfies readonly RuntimeValidationEvidenceCheckId[];
 
+function findExactGeneratedActionId(
+  project: PreparedGeneratedMechanicRuntimeProject
+): string | undefined {
+  const scenarioActionIds = project.dependency.contract.scenarios.map(
+    (scenario) =>
+      scenario.steps.flatMap((step) =>
+        step.kind === "dispatch_action" ? [step.actionId] : []
+      )
+  );
+  const firstActionId = scenarioActionIds[0]?.[0];
+  return firstActionId &&
+    scenarioActionIds.length > 0 &&
+    scenarioActionIds.every(
+      (actionIds) => actionIds.length === 1 && actionIds[0] === firstActionId
+    )
+    ? firstActionId
+    : undefined;
+}
+
+function authenticateGeneratedInputEvidence(
+  evidence: RuntimeValidationEvidence,
+  expectedActionId: string | undefined
+): RuntimeValidationEvidence {
+  if (evidence.checkId !== "input_response" || evidence.status !== "passed") {
+    return evidence;
+  }
+  if (
+    expectedActionId &&
+    evidence.evidence?.generatedActionId === expectedActionId &&
+    evidence.evidence.generatedActionDispatched === true
+  ) {
+    return evidence;
+  }
+  return {
+    checkId: "input_response",
+    status: "failed",
+    message:
+      "First-playable input evidence did not authenticate the exact generated action.",
+    issues: [
+      {
+        code: "generated_action_probe_not_authenticated",
+        path: "runtime.generatedMechanic.action",
+        message:
+          "The runtime must dispatch the exact accepted generated action before input-response evidence can pass.",
+      },
+    ],
+    evidence: {
+      ...evidence.evidence,
+      expectedGeneratedActionId: expectedActionId,
+      generatedActionDispatched: false,
+    },
+  };
+}
+
 export type GeneratedMechanicPhaserRuntimeControllerOptions = Readonly<{
   isPaused: boolean;
   focusOnReadyKey: number;
@@ -86,6 +140,9 @@ export function createGeneratedMechanicPhaserRuntimeController({
     );
   }
   const browserWindow: Window & typeof globalThis = ownerWindow;
+  const firstPlayableActionId = findExactGeneratedActionId(
+    generatedMechanicProject
+  );
 
   let options: GeneratedMechanicPhaserRuntimeControllerOptions = {
     isPaused: false,
@@ -318,8 +375,12 @@ export function createGeneratedMechanicPhaserRuntimeController({
       return;
     }
     if (runtimeEvent.type === "game-validation-evidence") {
-      options.onValidationEvidence?.(runtimeEvent.evidence);
-      settleFirstPlayableEvidence(runtimeEvent.evidence);
+      const authenticatedEvidence = authenticateGeneratedInputEvidence(
+        runtimeEvent.evidence,
+        firstPlayableActionId
+      );
+      options.onValidationEvidence?.(authenticatedEvidence);
+      settleFirstPlayableEvidence(authenticatedEvidence);
       return;
     }
     const runtimeStatus = createRuntimeHostStatusFromEvent(runtimeEvent);
@@ -359,10 +420,7 @@ export function createGeneratedMechanicPhaserRuntimeController({
     if (runtimeStatus.state === "loading") {
       return;
     }
-    settled = true;
-    clearBootDeadline();
-    rejectFirstPlayable(runtimeStatus.message);
-    options.onStatusChange?.(runtimeStatus);
+    failClosed(runtimeStatus.message);
   };
   const enableRuntimeEventsIfReady = () => {
     if (
@@ -502,7 +560,18 @@ export function createGeneratedMechanicPhaserRuntimeController({
     if (!request || request.commandSent || !commandsReady) {
       return;
     }
-    if (postCommand({ type: "game-run-first-playable-checks" })) {
+    if (!firstPlayableActionId) {
+      failClosed(
+        "The generated mechanic runtime project did not retain one exact logical action for first-playable validation."
+      );
+      return;
+    }
+    if (
+      postCommand({
+        type: "game-run-first-playable-checks",
+        actionId: firstPlayableActionId,
+      })
+    ) {
       request.commandSent = true;
       clearFirstPlayableDeadline();
       firstPlayableDeadlineTimeoutId = browserWindow.setTimeout(() => {

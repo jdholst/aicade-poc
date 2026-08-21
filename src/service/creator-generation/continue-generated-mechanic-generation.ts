@@ -227,6 +227,7 @@ export function createContinueGeneratedMechanicGeneration({
           evidence: {
             stage: "foundation",
             issues: foundationIssues(foundation),
+            runtimeEvidence: foundation.gateResult,
           },
         };
       },
@@ -603,10 +604,15 @@ function sourceFailure(
     { success: false }
   >
 ) {
+  const unusedGrantIsContractOwned = generated.evidence.issues.some(
+    ({ code }) => code === "unused_capability"
+  );
   return {
     success: false as const,
     evidence: {
-      responsibleStage: "source" as const,
+      responsibleStage: unusedGrantIsContractOwned
+        ? ("contract" as const)
+        : ("source" as const),
       issues: generated.evidence.issues,
     },
   };
@@ -618,6 +624,14 @@ function foundationIssues(
   const failedChecks = foundation.gateResult.checks.filter(
     ({ status }) => status === "failed"
   );
+  const conformanceIssues = failedChecks.flatMap((check) =>
+    createRealmConformanceIssues(check)
+  );
+  if (conformanceIssues.length > 0) {
+    return Object.freeze(
+      conformanceIssues.map((issue) => Object.freeze(issue))
+    );
+  }
   if (failedChecks.length === 0) {
     return Object.freeze([
       Object.freeze({
@@ -637,6 +651,51 @@ function foundationIssues(
       })
     )
   );
+}
+
+function createRealmConformanceIssues(
+  check: BrowserRuntimeFoundation["gateResult"]["checks"][number]
+): ArtifactScopedRepairIssue[] {
+  if (
+    check.boundary !== "realm_conformance" ||
+    !isRecord(check.details) ||
+    check.details.schemaVersion !==
+      "mechanic_execution_realm_failure_report/v1" ||
+    !Array.isArray(check.details.failedGates)
+  ) {
+    return [];
+  }
+
+  return check.details.failedGates.flatMap((gate) => {
+    if (
+      !isRecord(gate) ||
+      typeof gate.id !== "string" ||
+      !Array.isArray(gate.failures)
+    ) {
+      return [];
+    }
+
+    return gate.failures.flatMap((failure) => {
+      if (
+        !isRecord(failure) ||
+        typeof failure.code !== "string" ||
+        typeof failure.message !== "string"
+      ) {
+        return [];
+      }
+      return [
+        {
+          path: `foundation.realm_conformance.${gate.id}`,
+          code: failure.code,
+          message: failure.message,
+        },
+      ];
+    });
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function evaluationIssues(

@@ -1,4 +1,5 @@
 import type { PreparedGeneratedMechanicRuntimeProject } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
+import { stableIdSchema } from "@/game-spec/game-spec-schema";
 import {
   acceptedGeneratedMechanicArtifactSchema,
   generatedMechanicRuntimeCandidateSchema,
@@ -698,10 +699,24 @@ function parseRuntimeCommand(value: unknown): RuntimeCommand | null {
     return null;
   }
   const type = ownDataValue(value, "type");
+  if (type === "game-run-first-playable-checks") {
+    if (hasExactOwnDataKeys(value, ["type"])) {
+      return Object.freeze({ type });
+    }
+    if (
+      hasExactOwnDataKeys(value, ["type", "actionId"]) &&
+      stableIdSchema.safeParse(ownDataValue(value, "actionId")).success
+    ) {
+      return Object.freeze({
+        type,
+        actionId: ownDataValue(value, "actionId") as string,
+      });
+    }
+    return null;
+  }
   if (
     (type === "game-focus" ||
-      type === "game-reload" ||
-      type === "game-run-first-playable-checks") &&
+      type === "game-reload") &&
     hasExactOwnDataKeys(value, ["type"])
   ) {
     return Object.freeze({ type });

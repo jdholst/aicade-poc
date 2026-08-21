@@ -1,8 +1,89 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createBrowserRuntimeFoundation } from "./browser-runtime-foundation";
+import { MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION } from "@/game-spec";
+
+import {
+  createBrowserRuntimeFoundation,
+  createMechanicConformanceRuntimeDocument,
+  installMechanicConformanceRuntimeHeartbeat,
+} from "./browser-runtime-foundation";
 
 describe("createBrowserRuntimeFoundation", () => {
+  it("uses a self-contained opaque runtime document with no Next.js chunk dependency", () => {
+    const runtimeDocument = createMechanicConformanceRuntimeDocument();
+
+    expect(runtimeDocument).toContain("<!doctype html>");
+    expect(runtimeDocument).toContain(
+      MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION
+    );
+    expect(runtimeDocument).not.toContain("/_next/");
+    expect(runtimeDocument).not.toContain("src=");
+    expect(runtimeDocument).not.toContain("/runtime/mechanic-conformance");
+  });
+
+  it("pins heartbeat replies to the trusted parent origin from initialization", () => {
+    let messageListener: ((event: MessageEvent<unknown>) => void) | undefined;
+    const expectedParent = { postMessage: vi.fn() };
+    const runtimeWindow = {
+      parent: expectedParent,
+      addEventListener: vi.fn(
+        (_type: string, listener: (event: MessageEvent<unknown>) => void) => {
+          messageListener = listener;
+        }
+      ),
+      removeEventListener: vi.fn(),
+    } as unknown as Window;
+    const dispose = installMechanicConformanceRuntimeHeartbeat(
+      runtimeWindow,
+      MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION
+    );
+    if (!messageListener) {
+      throw new Error("Expected the heartbeat message listener to be installed.");
+    }
+
+    messageListener({
+      data: {
+        kind: "sparkline_mechanic_conformance_runtime_initialize",
+        protocolVersion:
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+        sessionId: "session_1",
+        runtimeId: "runtime_1",
+      },
+      origin: "https://trusted.example",
+      source: expectedParent,
+    } as unknown as MessageEvent<unknown>);
+    messageListener({
+      data: {
+        kind: "sparkline_mechanic_conformance_runtime_heartbeat_challenge",
+        protocolVersion:
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+        probeId: "deterministic_replay_a",
+        nonce: "nonce_1",
+      },
+      origin: "https://trusted.example",
+      source: expectedParent,
+    } as unknown as MessageEvent<unknown>);
+
+    expect(expectedParent.postMessage).toHaveBeenCalledWith(
+      {
+        kind: "sparkline_mechanic_conformance_runtime_heartbeat_response",
+        protocolVersion:
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+        sessionId: "session_1",
+        runtimeId: "runtime_1",
+        probeId: "deterministic_replay_a",
+        nonce: "nonce_1",
+      },
+      "https://trusted.example"
+    );
+
+    dispose();
+    expect(runtimeWindow.removeEventListener).toHaveBeenCalledWith(
+      "message",
+      messageListener
+    );
+  });
+
   it("runs browser conformance before the foundation gate and cleans probe resources", async () => {
     const events: string[] = [];
     const realmAdapter = { id: "realm_candidate" };
@@ -20,6 +101,7 @@ describe("createBrowserRuntimeFoundation", () => {
       dependencies: {
         createRealmAdapter: vi.fn(() => realmAdapter),
         createWorker: vi.fn(() => worker),
+        waitForWorkerReady: vi.fn(async () => events.push("wait_worker")),
         prepareIframe: vi.fn((candidate) => candidate),
         disposeIframePreparation: vi.fn(() =>
           events.push("dispose_iframe_preparation")
@@ -47,6 +129,7 @@ describe("createBrowserRuntimeFoundation", () => {
 
     expect(result).toEqual({ gateResult, realmAdapter });
     expect(events).toEqual([
+      "wait_worker",
       "load_iframe",
       "run_conformance",
       "run_foundation_gate",
@@ -72,6 +155,7 @@ describe("createBrowserRuntimeFoundation", () => {
         dependencies: {
           createRealmAdapter: vi.fn(() => ({ id: "realm_candidate" })),
           createWorker: vi.fn(() => worker),
+          waitForWorkerReady: vi.fn(async () => undefined),
           prepareIframe: vi.fn((candidate) => candidate),
           disposeIframePreparation,
           loadIframe: vi.fn(async () => iframe),

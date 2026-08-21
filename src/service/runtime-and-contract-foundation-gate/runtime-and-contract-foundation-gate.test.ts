@@ -166,6 +166,26 @@ describe("Runtime and Contract Foundation Gate", () => {
       status: "failed",
       code: "realm_conformance_rejected",
       message: "Mechanic Execution Realm conformance did not pass every hard gate.",
+      details: {
+        schemaVersion: "mechanic_execution_realm_failure_report/v1",
+        suiteVersion: MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
+        capabilityVersion: "mechanic_capability/v1",
+        candidateId: "foundation_realm",
+        verdict: "rejected",
+        failedGates: [
+          {
+            id: "escape_resistance",
+            probeIds: ["escape_probe"],
+            failures: [
+              {
+                code: "escape_observed",
+                message: "The candidate exposed forbidden authority.",
+              },
+            ],
+            probeResults: [],
+          },
+        ],
+      },
     });
   });
 

@@ -1,6 +1,7 @@
 import {
   createMechanicExecutionRealmBrowserConformanceSession,
   disposeMechanicExecutionRealmBrowserConformanceIframePreparation,
+  MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
   prepareMechanicExecutionRealmBrowserConformanceIframe,
   runMechanicExecutionRealmConformanceSuite,
   type MechanicExecutionRealmConformanceReport,
@@ -10,13 +11,14 @@ import type { MechanicExecutionRealmAdapter } from "@/runtime/mechanics/mechanic
 import {
   createSesWorkerMechanicExecutionRealmAdapter,
   createSesWorkerMechanicExecutionRealmController,
+  waitForSesWorkerMechanicExecutionRealmControllerReady,
+  type SesWorkerMechanicExecutionRealmController,
 } from "@/runtime/mechanics/ses-worker-mechanic-execution-realm";
 import {
   runRuntimeAndContractFoundationGate,
   type RuntimeAndContractFoundationGateResult,
 } from "@/service/runtime-and-contract-foundation-gate";
 
-const FOUNDATION_RUNTIME_ROUTE = "/runtime/mechanic-conformance";
 const FOUNDATION_IFRAME_LOAD_TIMEOUT_MS = 10_000;
 
 type FoundationWorker = Pick<Worker, "postMessage" | "terminate"> &
@@ -25,6 +27,7 @@ type FoundationWorker = Pick<Worker, "postMessage" | "terminate"> &
 type BrowserRuntimeFoundationDependencies = Readonly<{
   createRealmAdapter(): MechanicExecutionRealmAdapter;
   createWorker(): FoundationWorker;
+  waitForWorkerReady(worker: FoundationWorker): Promise<void>;
   prepareIframe(iframe: HTMLIFrameElement): HTMLIFrameElement;
   disposeIframePreparation(iframe: HTMLIFrameElement): void;
   loadIframe(input: Readonly<{
@@ -61,6 +64,10 @@ const defaultDependencies: BrowserRuntimeFoundationDependencies =
   Object.freeze({
     createRealmAdapter: createSesWorkerMechanicExecutionRealmAdapter,
     createWorker: createSesWorkerMechanicExecutionRealmController,
+    waitForWorkerReady: (worker) =>
+      waitForSesWorkerMechanicExecutionRealmControllerReady(
+        worker as SesWorkerMechanicExecutionRealmController
+      ),
     prepareIframe:
       prepareMechanicExecutionRealmBrowserConformanceIframe,
     disposeIframePreparation:
@@ -97,6 +104,7 @@ export async function createBrowserRuntimeFoundation({
   let session: MechanicExecutionRealmConformanceSession | undefined;
 
   try {
+    await dependencies.waitForWorkerReady(worker);
     loadedIframe = await dependencies.loadIframe({
       iframe,
       ownerDocument,
@@ -147,7 +155,7 @@ async function loadTrustedFoundationIframe({
   iframe.title = "Generated mechanic runtime conformance";
   iframe.hidden = true;
   iframe.setAttribute("aria-hidden", "true");
-  iframe.setAttribute("src", FOUNDATION_RUNTIME_ROUTE);
+  iframe.srcdoc = createMechanicConformanceRuntimeDocument();
 
   return new Promise((resolve, reject) => {
     const clear = () => {
@@ -180,6 +188,117 @@ async function loadTrustedFoundationIframe({
     iframe.addEventListener("error", onError, { once: true });
     mount.append(iframe);
   });
+}
+
+/**
+ * Installs the runtime half of the browser-attested heartbeat protocol without
+ * importing application code. Keeping every helper inside this function makes
+ * its source safe to embed in the isolated srcdoc below.
+ */
+export function installMechanicConformanceRuntimeHeartbeat(
+  ownerWindow: Window,
+  protocolVersion: string
+): () => void {
+  const expectedParent = ownerWindow.parent;
+  let disposed = false;
+  let identity:
+    | Readonly<{ parentOrigin: string; runtimeId: string; sessionId: string }>
+    | undefined;
+
+  const isNonemptyString = (value: unknown): value is string =>
+    typeof value === "string" && value.length > 0;
+  const isExactRecord = (
+    value: unknown,
+    keys: readonly string[]
+  ): value is Record<string, unknown> => {
+    if (typeof value !== "object" || value === null) {
+      return false;
+    }
+    const ownKeys = Object.keys(value).sort();
+    const expectedKeys = [...keys].sort();
+    return (
+      ownKeys.length === expectedKeys.length &&
+      ownKeys.every((key, index) => key === expectedKeys[index])
+    );
+  };
+  const isInitialization = (
+    value: unknown
+  ): value is Record<string, unknown> & {
+    runtimeId: string;
+    sessionId: string;
+  } =>
+    isExactRecord(value, [
+      "kind",
+      "protocolVersion",
+      "sessionId",
+      "runtimeId",
+    ]) &&
+    value.kind === "sparkline_mechanic_conformance_runtime_initialize" &&
+    value.protocolVersion === protocolVersion &&
+    isNonemptyString(value.sessionId) &&
+    isNonemptyString(value.runtimeId);
+  const isChallenge = (
+    value: unknown
+  ): value is Record<string, unknown> & { nonce: string; probeId: string } =>
+    isExactRecord(value, ["kind", "protocolVersion", "probeId", "nonce"]) &&
+    value.kind ===
+      "sparkline_mechanic_conformance_runtime_heartbeat_challenge" &&
+    value.protocolVersion === protocolVersion &&
+    isNonemptyString(value.probeId) &&
+    isNonemptyString(value.nonce);
+  const onMessage = (event: MessageEvent<unknown>) => {
+    if (disposed || event.source !== expectedParent) {
+      return;
+    }
+
+    if (!identity && isInitialization(event.data)) {
+      identity = Object.freeze({
+        parentOrigin: event.origin,
+        runtimeId: event.data.runtimeId,
+        sessionId: event.data.sessionId,
+      });
+      return;
+    }
+
+    if (
+      !identity ||
+      event.origin !== identity.parentOrigin ||
+      !isChallenge(event.data)
+    ) {
+      return;
+    }
+
+    expectedParent.postMessage(
+      {
+        kind: "sparkline_mechanic_conformance_runtime_heartbeat_response",
+        protocolVersion,
+        sessionId: identity.sessionId,
+        runtimeId: identity.runtimeId,
+        probeId: event.data.probeId,
+        nonce: event.data.nonce,
+      },
+      identity.parentOrigin
+    );
+  };
+
+  ownerWindow.addEventListener("message", onMessage);
+  return () => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    identity = undefined;
+    ownerWindow.removeEventListener("message", onMessage);
+  };
+}
+
+export function createMechanicConformanceRuntimeDocument(): string {
+  const installerSource = installMechanicConformanceRuntimeHeartbeat.toString();
+  const protocolVersion = JSON.stringify(
+    MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION
+  );
+
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'"><title>Mechanic conformance heartbeat</title></head><body><script>(${installerSource})(window,${protocolVersion});</script></body></html>`;
 }
 
 function requireDocument(): Document {

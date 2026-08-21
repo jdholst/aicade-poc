@@ -139,6 +139,7 @@ type RuntimeExecutorCapabilityResponse = {
 };
 
 const workerScope = globalThis as unknown as WorkerScope;
+const TARGET_EXECUTOR_POOL_SIZE = 3;
 const noResources = Object.freeze({
   ownedObjects: 0,
   scheduledCallbacks: 0,
@@ -155,6 +156,7 @@ let idleSlots: ExecutorSlot[] = [];
 let activeJob: ActiveJob | undefined;
 let replacementsInFlight = 0;
 const pendingExecutorWorkers = new Set<Worker>();
+const pendingConformanceExecutions = new Map<string, string>();
 
 const initialPoolReady = createInitialExecutorPool().then((slots) => {
   if (mode === "disposed") {
@@ -279,12 +281,29 @@ async function executeConformance(
   request: MechanicExecutionRealmBrowserCandidateRequest
 ): Promise<void> {
   const identity = candidateIdentity;
-  if (!identity || activeJob) {
+  if (!identity || activeJob || pendingConformanceExecutions.size > 0) {
     return;
   }
 
-  const slot = await acquireExecutorSlot();
-  if (mode !== "conformance" || activeJob) {
+  pendingConformanceExecutions.set(request.probeId, request.nonce);
+  let slot: ExecutorSlot;
+  try {
+    slot = await acquireExecutorSlot();
+  } catch (error) {
+    if (
+      pendingConformanceExecutions.get(request.probeId) === request.nonce
+    ) {
+      pendingConformanceExecutions.delete(request.probeId);
+      sendConformanceResponse(request, failedConformanceResult(request, error));
+    }
+    return;
+  }
+  const requestIsStillPending =
+    pendingConformanceExecutions.get(request.probeId) === request.nonce;
+  if (requestIsStillPending) {
+    pendingConformanceExecutions.delete(request.probeId);
+  }
+  if (mode !== "conformance" || activeJob || !requestIsStillPending) {
     releaseUnusedSlot(slot);
     return;
   }
@@ -333,6 +352,7 @@ async function executeConformance(
 async function terminateConformance(
   request: MechanicExecutionRealmBrowserCandidateRequest
 ): Promise<void> {
+  pendingConformanceExecutions.delete(request.probeId);
   const job = activeJob;
   if (
     job?.mode === "conformance" &&
@@ -892,7 +912,7 @@ function finishActiveJob(job: ActiveJob, kill: boolean): void {
 function replenishExecutorPool(): void {
   while (
     mode !== "disposed" &&
-    idleSlots.length + replacementsInFlight < 2
+    idleSlots.length + replacementsInFlight < TARGET_EXECUTOR_POOL_SIZE
   ) {
     replacementsInFlight += 1;
     void createExecutorSlot().then(
@@ -969,6 +989,7 @@ function disposeController(): void {
     worker.terminate();
   }
   pendingExecutorWorkers.clear();
+  pendingConformanceExecutions.clear();
   replacementsInFlight = 0;
   if (state) {
     state.capabilityPort.removeEventListener(
@@ -1143,10 +1164,11 @@ async function createExecutorSlot(): Promise<ExecutorSlot> {
 }
 
 async function createInitialExecutorPool(): Promise<ExecutorSlot[]> {
-  const results = await Promise.allSettled([
-    createExecutorSlot(),
-    createExecutorSlot(),
-  ]);
+  const results = await Promise.allSettled(
+    Array.from({ length: TARGET_EXECUTOR_POOL_SIZE }, () =>
+      createExecutorSlot()
+    )
+  );
   const failure = results.find(
     (result): result is PromiseRejectedResult => result.status === "rejected"
   );

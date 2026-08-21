@@ -538,6 +538,83 @@ describe("top-down Phaser template", () => {
     expect(moveToObjectCalls).toEqual([]);
   });
 
+  it("preserves a stronger generated player velocity until the generated mechanic releases it", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_dash",
+      type: "generated_dash",
+      entityIds: ["entity_player"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, dispatchWindowEvent, gameElements, messages, runUpdate } =
+      createRuntimeHarness(generatedTemplate, { right: true });
+    let getEntityHandle:
+      | ((entityId: string) => {
+          body?: {
+            setVelocity: (x: number, y: number) => void;
+          };
+        } | null)
+      | undefined;
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install: vi.fn(
+          async (input: {
+            getEntityHandle: typeof getEntityHandle;
+          }) => {
+            getEntityHandle = input.getEntityHandle;
+            return {
+              identity: { artifactId: "extension_generated_dash_v1" },
+              advanceSimulation: vi.fn(async () => undefined),
+              dispatchLogicalAction: vi.fn(async () => {
+                getEntityHandle?.("entity_player")?.body?.setVelocity(550, 0);
+              }),
+              dispose: vi.fn(async () => undefined),
+            };
+          }
+        ),
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    await vi.waitFor(() => {
+      expect(messages).toContainEqual(
+        expect.objectContaining({ type: "game-ready" })
+      );
+    });
+
+    dispatchWindowEvent("keydown", {
+      isTrusted: true,
+      key: "ArrowRight",
+      repeat: false,
+    });
+    const player = gameElements.find(
+      (element) => element.kind === "rectangle" && element.x === 156
+    );
+    await vi.waitFor(() => {
+      expect(player?.body?.velocity).toEqual({ x: 550, y: 0 });
+    });
+
+    runUpdate();
+
+    expect(player?.body?.velocity).toEqual({ x: 550, y: 0 });
+
+    player?.body?.setVelocity(160, 0);
+    runUpdate();
+
+    expect(player?.body?.velocity).toEqual({ x: 220, y: 0 });
+  });
+
   it("does not apply player movement when the player_movement mechanic is omitted", () => {
     const runtimeSource = loadTopDownRuntimeSource();
     const templateWithoutMovement = {
@@ -1149,7 +1226,7 @@ describe("top-down Phaser template", () => {
       );
     });
 
-    runUpdate(11);
+    runUpdate(11.75);
     expect(advanceSimulation).toHaveBeenCalledTimes(1);
     expect(advanceSimulation).toHaveBeenLastCalledWith(11);
 
@@ -1481,6 +1558,167 @@ describe("top-down Phaser template", () => {
     );
   });
 
+  it("dispatches the generated logical action during first-playable input validation", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_first_playable",
+      type: "generated_mechanic",
+      entityIds: ["entity_player"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, dispatchWindowEvent, messages } =
+      createRuntimeHarness(generatedTemplate);
+    const dispatchLogicalAction = vi.fn(async () => undefined);
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install: vi.fn(async () => ({
+          identity: { artifactId: "extension_generated_first_playable_v1" },
+          advanceSimulation: vi.fn(async () => undefined),
+          dispatchLogicalAction,
+          dispose: vi.fn(async () => undefined),
+        })),
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    await vi.waitFor(() => {
+      expect(messages).toContainEqual(
+        expect.objectContaining({ type: "game-ready" })
+      );
+    });
+
+    dispatchWindowEvent("message", {
+      data: {
+        type: "game-run-first-playable-checks",
+        actionId: "move",
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(dispatchLogicalAction).toHaveBeenCalledWith("move");
+    });
+    await vi.waitFor(() => {
+      const inputEvidence = messages.find(
+        (message) =>
+          message.type === "game-validation-evidence" &&
+          message.data?.checkId === "input_response"
+      );
+      expect(
+        inputEvidence
+          ? JSON.parse(JSON.stringify(inputEvidence))
+          : inputEvidence
+      ).toMatchObject({
+        type: "game-validation-evidence",
+        data: {
+          checkId: "input_response",
+          status: "passed",
+          evidence: {
+            generatedActionId: "move",
+            generatedActionDispatched: true,
+          },
+        },
+      });
+    });
+  });
+
+  it("emits structured generated-action evidence before containing its fatal failure", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_failing_first_playable",
+      type: "generated_mechanic",
+      entityIds: ["entity_player"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, dispatchWindowEvent, messages } =
+      createRuntimeHarness(generatedTemplate);
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install: vi.fn(async () => ({
+          identity: { artifactId: "extension_generated_failure_v1" },
+          advanceSimulation: vi.fn(async () => undefined),
+          dispatchLogicalAction: vi.fn(async () => {
+            throw new Error(
+              'Mechanic private state "dash_ends_at" requires an integer value.'
+            );
+          }),
+          dispose: vi.fn(async () => undefined),
+        })),
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    await vi.waitFor(() => {
+      expect(messages).toContainEqual(
+        expect.objectContaining({ type: "game-ready" })
+      );
+    });
+    dispatchWindowEvent("message", {
+      data: {
+        type: "game-run-first-playable-checks",
+        actionId: "move",
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        messages.some(
+          (message) =>
+            message.type === "game-validation-evidence" &&
+            message.data?.checkId === "input_response" &&
+            message.data?.status === "failed"
+        )
+      ).toBe(true);
+      expect(messages.some((message) => message.type === "game-error")).toBe(
+        true
+      );
+    });
+    const failedEvidenceIndex = messages.findIndex(
+      (message) =>
+        message.type === "game-validation-evidence" &&
+        message.data?.checkId === "input_response" &&
+        message.data?.status === "failed"
+    );
+    const fatalErrorIndex = messages.findIndex(
+      (message) => message.type === "game-error"
+    );
+    expect(failedEvidenceIndex).toBeGreaterThanOrEqual(0);
+    expect(fatalErrorIndex).toBeGreaterThan(failedEvidenceIndex);
+    expect(messages[failedEvidenceIndex]).toMatchObject({
+      data: {
+        issues: [
+          {
+            code: "generated_action_probe_failed",
+            path: "runtime.generatedMechanic.action",
+            message:
+              'Mechanic private state "dash_ends_at" requires an integer value.',
+          },
+        ],
+      },
+    });
+  });
+
   it("fails input-response runtime evidence when movement is not installed", () => {
     const runtimeSource = loadTopDownRuntimeSource();
     const templateWithoutMovement = {
@@ -1533,7 +1771,9 @@ describe("top-down Phaser template", () => {
     );
     expect(runtimeSource).toContain("function setPaused(nextIsPaused)");
     expect(runtimeSource).toContain("function applyHostViewport(nextViewport)");
-    expect(runtimeSource).toContain("function runFirstPlayableChecks()");
+    expect(runtimeSource).toContain(
+      "function runFirstPlayableChecks(generatedActionId)"
+    );
     expect(runtimeSource).toContain("game.scene.pause");
     expect(runtimeSource).toContain("game.scene.resume");
     expect(runtimeSource).toContain("game.scale.resize");
