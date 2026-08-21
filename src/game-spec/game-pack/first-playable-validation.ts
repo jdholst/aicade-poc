@@ -170,22 +170,53 @@ export function writeFirstPlayableValidationResult({
     throw new Error("Cannot write a running first-playable validation attempt.");
   }
 
+  const attemptEvidence = attempt.evidence.map((evidence) => {
+    const existingEvidence = gamePack.validationEvidence.find(
+      (candidate) => candidate.id === evidence.id
+    );
+    return existingEvidence?.generatedMechanicArtifactIds
+      ? {
+          ...evidence,
+          generatedMechanicArtifactIds:
+            existingEvidence.generatedMechanicArtifactIds,
+        }
+      : evidence;
+  });
   const validationEvidence = upsertGamePackRecordsById(
     gamePack.validationEvidence,
-    attempt.evidence
+    attemptEvidence
   );
 
   if (attempt.status === "passed") {
     const checkpointId = getCheckpointIdForValidationWrite(gamePack);
-    const build = createPlayableBuildRecord({
+    const candidateBuild = createPlayableBuildRecord({
       id: "build_initial_playable",
       startedAt: attempt.startedAt,
       completedAt,
       gamePack,
       checkpointId,
       status: "validated",
-      validationEvidence: attempt.evidence,
+      validationEvidence: attemptEvidence,
     });
+    const existingBuild = gamePack.builds.find(
+      (build) => build.id === candidateBuild.id
+    );
+    const build = existingBuild
+      ? {
+          ...existingBuild,
+          status: candidateBuild.status,
+          validationEvidenceIds: [
+            ...new Set([
+              ...existingBuild.validationEvidenceIds,
+              ...candidateBuild.validationEvidenceIds,
+            ]),
+          ],
+          artifactMetadata: {
+            ...existingBuild.artifactMetadata,
+            ...candidateBuild.artifactMetadata,
+          },
+        }
+      : candidateBuild;
     const checkpoints =
       gamePack.checkpoints.length === 0
         ? [
