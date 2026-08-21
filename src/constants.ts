@@ -74,9 +74,24 @@ export const SANDBOX_BOOT_TIMEOUT_MS = 12_000;
 export const DEFAULT_STARTER_PROMPT =
   "A simple 2D platformer where I control a character that can jump";
 
-export const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
+export const DEFAULT_OPENAI_MODEL = "gpt-5.6-luna";
 
 export const OPENAI_MODEL_OPTIONS = [
+  {
+    id: "gpt-5.6-sol",
+    label: "GPT-5.6 Sol",
+    detail: "Frontier model for complex professional work.",
+  },
+  {
+    id: "gpt-5.6-terra",
+    label: "GPT-5.6 Terra",
+    detail: "GPT-5.6 model that balances intelligence and cost.",
+  },
+  {
+    id: "gpt-5.6-luna",
+    label: "GPT-5.6 Luna",
+    detail: "GPT-5.6 model optimized for cost-sensitive workloads.",
+  },
   {
     id: "gpt-5.5",
     label: "GPT-5.5",
