@@ -13,6 +13,7 @@ import {
 } from "@/service/spec-generation";
 import type { StarterProjectRequest } from "@/service/starter-project/starter-project-client";
 import { CreatorGenerationRoutingError } from "@/service/creator-generation/creator-game-generation-dispatcher";
+import type { OmittedMechanicWarning } from "@/service/creator-generation/degraded-generation-fallback-policy";
 
 export type PhaserGenerationRunReceiptLifecycle = {
   generationRunId?: GenerationRun["id"];
@@ -27,6 +28,9 @@ export type PhaserGenerationRunReceiptLifecycle = {
   recordSpecGenerationSuccess: (
     result: TopDownSpecGenerationClientResult
   ) => Promise<void>;
+  recordDegradedGeneration: (
+    warning: OmittedMechanicWarning
+  ) => Promise<"recorded" | "persistence_unavailable">;
 };
 
 type CreatePhaserGenerationRunReceiptLifecycleInput = {
@@ -118,6 +122,22 @@ export function createPhaserGenerationRunReceiptLifecycle({
         })
       );
     },
+
+    async recordDegradedGeneration(warning) {
+      if (!generationRunId || !repository) {
+        return "persistence_unavailable";
+      }
+
+      const result = await persistGenerationRunReceipt(() =>
+        recordDegradedCreatorGenerationOutcome({
+          generationRunId,
+          recordedAt: now(),
+          repository,
+          warning,
+        })
+      );
+      return result === true ? "recorded" : "persistence_unavailable";
+    },
   };
 
   async function persistGenerationRunReceipt<Result>(
@@ -133,6 +153,85 @@ export function createPhaserGenerationRunReceiptLifecycle({
       isPersistenceDisabled = true;
     }
   }
+}
+
+async function recordDegradedCreatorGenerationOutcome({
+  generationRunId,
+  recordedAt,
+  repository,
+  warning,
+}: {
+  generationRunId: GenerationRun["id"];
+  recordedAt: string;
+  repository: Pick<GenerationRunRepository, "update">;
+  warning: OmittedMechanicWarning;
+}): Promise<boolean> {
+  const routingEvidence = {
+    stage: warning.routingFailure.evidence.stage,
+    code: warning.routingFailure.evidence.code,
+    issues: warning.routingFailure.evidence.issues.map((issue) => ({
+      ...issue,
+    })),
+    ...(warning.routingFailure.evidence.code === "capability_gap"
+      ? {
+          missingCapabilities: [
+            ...warning.routingFailure.evidence.missingCapabilities,
+          ],
+        }
+      : {}),
+  };
+  const creatorGenerationOutcome = {
+    schemaVersion: warning.schemaVersion,
+    status: "degraded" as const,
+    recordedAt,
+    warning: {
+      ...warning,
+      issues: warning.issues.map((issue) => ({ ...issue })),
+      fallbackValidation: {
+        ...warning.fallbackValidation,
+        mechanicTypes: [...warning.fallbackValidation.mechanicTypes],
+      },
+      routingFailure: {
+        kind: warning.routingFailure.kind,
+        evidence: routingEvidence,
+      },
+    },
+    generatedStageCallCounts: {
+      contract: 0,
+      source: 0,
+      realm: 0,
+      browser: 0,
+      handoff: 0,
+      persistence: 0,
+    },
+  };
+  const updatedGenerationRun = await repository.update(
+    generationRunId,
+    (generationRun) => {
+    if (
+      generationRun.status !== "running" ||
+      hasGeneratedMechanicLineage(generationRun)
+    ) {
+      throw new Error(
+        "Degraded creator generation cannot attach warning evidence to a terminal or generated-lineage GenerationRun."
+      );
+    }
+
+    return {
+      ...generationRun,
+      metadata: {
+        ...(generationRun.metadata ?? {}),
+        creatorGenerationOutcome,
+      },
+    };
+    }
+  );
+  return (
+    updatedGenerationRun.status === "running" &&
+    !hasGeneratedMechanicLineage(updatedGenerationRun) &&
+    JSON.stringify(updatedGenerationRun.metadata?.creatorGenerationOutcome) ===
+      JSON.stringify(creatorGenerationOutcome)
+  );
 }
 
 async function createInitialPhaserGenerationRunReceipt({
@@ -452,13 +551,20 @@ async function recordInterruptedSpecGenerationAttempt({
 function hasGeneratedMechanicAcceptanceTransaction(
   generationRun: GenerationRun
 ): boolean {
-  const transaction =
-    generationRun.metadata?.generatedMechanicAcceptanceTransaction;
+  return Object.hasOwn(
+    generationRun.metadata ?? {},
+    "generatedMechanicAcceptanceTransaction"
+  );
+}
+
+function hasGeneratedMechanicLineage(generationRun: GenerationRun): boolean {
   return (
-    transaction !== null &&
-    typeof transaction === "object" &&
-    !Array.isArray(transaction) &&
-    (transaction.status === "pending" || transaction.status === "finalized")
+    hasGeneratedMechanicAcceptanceTransaction(generationRun) ||
+    generationRun.artifactScopedRepair !== undefined ||
+    (generationRun.relationships?.acceptedGeneratedMechanicArtifactIds
+      ?.length ?? 0) > 0 ||
+    Object.hasOwn(generationRun.metadata ?? {}, "generatedMechanicHandoff") ||
+    Object.hasOwn(generationRun.metadata ?? {}, "generatedMechanicOutcome")
   );
 }
 

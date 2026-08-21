@@ -151,7 +151,7 @@ describe("createPlayableDraftSource", () => {
     expect(source).toMatchObject({
       persistencePolicy: "reuse-restored-game-pack",
       readyPolicy: "ready-on-runtime-ready",
-      runFirstPlayableChecksOnReady: true,
+      runFirstPlayableChecksOnReady: false,
       source: "restored-game-pack",
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
@@ -206,6 +206,7 @@ describe("createPlayableDraftSource", () => {
       type: "phaser",
       source: "accepted-game-pack",
       persistencePolicy: "do-not-persist",
+      runFirstPlayableChecksOnReady: false,
       generatedMechanicProject: {
         artifact: fixture.artifact,
         dependency: fixture.dependency,

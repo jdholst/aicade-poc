@@ -355,7 +355,7 @@ describe("startEditorGenerationRun", () => {
     expect(continueGeneratedMechanicGeneration).not.toHaveBeenCalled();
   });
 
-  it("records exact unsupported routing evidence without starting generated work", async () => {
+  it("returns a degraded playable spec and records exact omission evidence without starting generated work", async () => {
     const spec = getFirstValidTopDownGameSpecFixture();
     const { repository } = createGenerationRunTestRepository();
     const continueGeneratedMechanicGeneration = vi.fn();
@@ -400,27 +400,252 @@ describe("startEditorGenerationRun", () => {
     });
 
     await expect(run.done).resolves.toMatchObject({
-      status: "error",
-      reason: "request-failed",
-      message: issue.message,
+      status: "success",
+      source: "phaser-spec",
+      spec,
+      degradedWarning: {
+        schemaVersion: "degraded_creator_generation/v1",
+        code: "generated_mechanic_omitted",
+        intentId: "intent_capability_gap",
+        issues: [issue],
+        fallbackValidation: {
+          status: "passed",
+          gameSpecId: spec.id,
+        },
+      },
     });
     expect(continueGeneratedMechanicGeneration).not.toHaveBeenCalled();
     await expect(
       repository.fetch("generation_run_capability_gap")
     ).resolves.toMatchObject({
-      status: "failed",
-      stage: "mechanic-validation",
-      failureClass: "unsupported-prompt-intent",
+      status: "running",
       attempts: [
         expect.objectContaining({
           validation: {
-            stage: "mechanic-validation",
-            status: "failed",
-            issues: [issue],
+            stage: "semantic-validation",
+            status: "passed",
           },
         }),
       ],
+      metadata: {
+        creatorGenerationOutcome: {
+          schemaVersion: "degraded_creator_generation/v1",
+          status: "degraded",
+          warning: expect.objectContaining({
+            code: "generated_mechanic_omitted",
+            issues: [issue],
+          }),
+          generatedStageCallCounts: {
+            contract: 0,
+            source: 0,
+            realm: 0,
+            browser: 0,
+            handoff: 0,
+            persistence: 0,
+          },
+        },
+      },
     });
+  });
+
+  it("lets cancellation win when it arrives while the degraded warning receipt is being written", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const durableRepository = createGenerationRunTestRepository().repository;
+    let updateCount = 0;
+    let releaseDegradedWrite!: () => void;
+    const degradedWriteReleased = new Promise<void>((resolve) => {
+      releaseDegradedWrite = resolve;
+    });
+    let reportDegradedWriteStarted!: () => void;
+    const degradedWriteStarted = new Promise<void>((resolve) => {
+      reportDegradedWriteStarted = resolve;
+    });
+    const repository = {
+      create: durableRepository.create,
+      update: vi.fn(
+        async (...args: Parameters<typeof durableRepository.update>) => {
+          updateCount += 1;
+          const updated = await durableRepository.update(...args);
+          if (updateCount === 2) {
+            reportDegradedWriteStarted();
+            await degradedWriteReleased;
+          }
+          return updated;
+        }
+      ),
+    };
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration: vi.fn(),
+      createGenerationRunId: () => "generation_run_degraded_cancel_race",
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      request: { prompt: "spawn a new object" },
+      requestPhaserSpecGeneration: vi.fn().mockResolvedValue({
+        metadata: {
+          attemptCount: 1,
+          generationRunId: "generation_run_degraded_cancel_race",
+          model: "gpt-5.6-luna",
+          taskRoute: "spec_generation.primary",
+        },
+        routing: {
+          kind: "capability_gap",
+          generationRunId: "generation_run_degraded_cancel_race",
+          intentId: "intent_capability_gap",
+          evidence: {
+            stage: "routing",
+            code: "capability_gap",
+            missingCapabilities: ["object_create"],
+            issues: [
+              {
+                path: "intent.requiredCapabilities.0",
+                code: "missing_capability",
+                message: "The selected host cannot create objects.",
+              },
+            ],
+          },
+        },
+        runtimeKind: "phaser",
+        spec,
+      }),
+    });
+
+    await degradedWriteStarted;
+    run.abort();
+    releaseDegradedWrite();
+
+    await expect(run.done).resolves.toMatchObject({
+      generationRunId: "generation_run_degraded_cancel_race",
+      status: "cancelled",
+    });
+    await expect(
+      durableRepository.fetch("generation_run_degraded_cancel_race")
+    ).resolves.toMatchObject({
+      status: "cancelled",
+    });
+  });
+
+  it("lets production manual QA disable degraded fallback through one URL policy switch", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const continueGeneratedMechanicGeneration = vi.fn();
+    const originalUrl = globalThis.location.href;
+    globalThis.history.replaceState(
+      {},
+      "",
+      "/editor?degradedGenerationFallback=off"
+    );
+
+    try {
+      const run = startEditorGenerationRun({
+        continueGeneratedMechanicGeneration,
+        createGenerationRunId: () => "generation_run_fallback_disabled",
+        generationRunRepository: createGenerationRunTestRepository().repository,
+        generationSource: "phaser-ai",
+        request: { prompt: "spawn a new object" },
+        requestPhaserSpecGeneration: vi.fn().mockResolvedValue({
+          metadata: {
+            attemptCount: 1,
+            generationRunId: "generation_run_fallback_disabled",
+            model: "gpt-5.6-luna",
+            taskRoute: "spec_generation.primary",
+          },
+          routing: {
+            kind: "capability_gap",
+            generationRunId: "generation_run_fallback_disabled",
+            intentId: "intent_capability_gap",
+            evidence: {
+              stage: "routing",
+              code: "capability_gap",
+              missingCapabilities: ["object_create"],
+              issues: [
+                {
+                  path: "intent.requiredCapabilities.0",
+                  code: "missing_capability",
+                  message: "The selected host cannot create objects.",
+                },
+              ],
+            },
+          },
+          runtimeKind: "phaser",
+          spec,
+        }),
+      });
+
+      await expect(run.done).resolves.toMatchObject({
+        status: "error",
+        reason: "request-failed",
+        validationFailure: {
+          stage: "mechanic_validation",
+          issues: [{ code: "missing_capability" }],
+        },
+      });
+      expect(continueGeneratedMechanicGeneration).not.toHaveBeenCalled();
+    } finally {
+      globalThis.history.replaceState({}, "", originalUrl);
+    }
+  });
+
+  it("fails closed when the degraded warning receipt cannot be persisted", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const { repository: durableRepository } = createGenerationRunTestRepository();
+    let updateCount = 0;
+    const repository = {
+      create: durableRepository.create,
+      update: vi.fn(async (...args: Parameters<typeof durableRepository.update>) => {
+        updateCount += 1;
+        if (updateCount === 2) {
+          throw new Error("Degraded receipt write failed.");
+        }
+        return durableRepository.update(...args);
+      }),
+    };
+    const continueGeneratedMechanicGeneration = vi.fn();
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => "generation_run_degraded_receipt_failure",
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      request: { prompt: "spawn a new object" },
+      requestPhaserSpecGeneration: vi.fn().mockResolvedValue({
+        metadata: {
+          attemptCount: 1,
+          generationRunId: "generation_run_degraded_receipt_failure",
+          model: "gpt-5.4-mini",
+          taskRoute: "spec_generation.primary",
+        },
+        routing: {
+          kind: "capability_gap",
+          generationRunId: "generation_run_degraded_receipt_failure",
+          intentId: "intent_capability_gap",
+          evidence: {
+            stage: "routing",
+            code: "capability_gap",
+            missingCapabilities: ["object_create"],
+            issues: [
+              {
+                path: "intent.requiredCapabilities.0",
+                code: "missing_capability",
+                message: "The selected host cannot create objects.",
+              },
+            ],
+          },
+        },
+        runtimeKind: "phaser",
+        spec,
+      }),
+    });
+
+    await expect(run.done).resolves.toMatchObject({
+      status: "error",
+      reason: "request-failed",
+      message:
+        "Degraded creator generation could not persist its required warning receipt.",
+    });
+    expect(continueGeneratedMechanicGeneration).not.toHaveBeenCalled();
+    const receipt = await durableRepository.fetch(
+      "generation_run_degraded_receipt_failure"
+    );
+    expect(receipt?.status).toBe("running");
+    expect(receipt?.metadata?.creatorGenerationOutcome).toBeUndefined();
   });
 
   it("does not overwrite terminal generated-mechanic failure evidence at the outer editor boundary", async () => {
@@ -740,6 +965,77 @@ describe("startEditorGenerationRun", () => {
     });
     expect(observedSignal?.aborted).toBe(true);
     expect(observedSignal?.reason).toBe("timed-out");
+  });
+
+  it("does not convert a late eligible planning result into degraded success after timeout", async () => {
+    vi.useFakeTimers();
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const repository = createGenerationRunTestRepository().repository;
+    const continueGeneratedMechanicGeneration = vi.fn();
+    const run = startEditorGenerationRun({
+      continueGeneratedMechanicGeneration,
+      createGenerationRunId: () => "generation_run_late_degraded_timeout",
+      generationRunRepository: repository,
+      generationSource: "phaser-ai",
+      now: createDeterministicClock([
+        "2026-06-10T12:00:00.000Z",
+        "2026-06-10T12:00:25.000Z",
+      ]),
+      request: { prompt: "make a collection game with an optional dash" },
+      requestPhaserSpecGeneration: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(
+              () =>
+                resolve({
+                  metadata: {
+                    attemptCount: 1,
+                    generationRunId:
+                      "generation_run_late_degraded_timeout",
+                    model: "gpt-5.6-luna",
+                    taskRoute: "spec_generation.primary",
+                  },
+                  routing: {
+                    kind: "capability_gap",
+                    generationRunId:
+                      "generation_run_late_degraded_timeout",
+                    intentId: "intent_optional_dash",
+                    evidence: {
+                      stage: "routing",
+                      code: "capability_gap",
+                      missingCapabilities: ["object_motion_write"],
+                      issues: [
+                        {
+                          path: "intent.requiredCapabilities",
+                          code: "missing_capability",
+                          message: "The selected host cannot provide motion.",
+                        },
+                      ],
+                    },
+                  },
+                  runtimeKind: "phaser",
+                  spec,
+                }),
+              50
+            );
+          })
+      ),
+      timeoutMs: 25,
+    });
+
+    await vi.advanceTimersByTimeAsync(25);
+    await expect(run.done).resolves.toMatchObject({
+      generationRunId: "generation_run_late_degraded_timeout",
+      reason: "timed-out",
+      status: "error",
+    });
+    await vi.advanceTimersByTimeAsync(25);
+    expect(continueGeneratedMechanicGeneration).not.toHaveBeenCalled();
+    const receipt = await repository.fetch(
+      "generation_run_late_degraded_timeout"
+    );
+    expect(receipt?.status).toBe("timed-out");
+    expect(receipt?.metadata?.creatorGenerationOutcome).toBeUndefined();
   });
 
   it("finalizes stalled Phaser AI generation receipts as timed out", async () => {

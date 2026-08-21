@@ -84,7 +84,7 @@ export type PlayableDraftSource =
       validationSource: PlayableDraftValidationSource;
       readyPolicy: PlayableDraftReadyPolicy;
       persistencePolicy: PlayableDraftPersistencePolicy;
-      runFirstPlayableChecksOnReady: true;
+      runFirstPlayableChecksOnReady: boolean;
     };
 
 export type CreatePlayableDraftSourceInput = {
@@ -309,7 +309,7 @@ function createRestoredGamePackDraftSource(
         source === "accepted-game-pack"
           ? "do-not-persist"
           : "reuse-restored-game-pack",
-      runFirstPlayableChecksOnReady: true,
+      runFirstPlayableChecksOnReady: false,
     };
   } catch (error) {
     return createBlockedGameSpecSource(

@@ -265,6 +265,49 @@ describe("EditorAIChat", () => {
     expect(onRegenerateGame).toHaveBeenCalledTimes(1);
   });
 
+  it("shows a concise conformance summary instead of the concatenated report", () => {
+    const rawMessage = [
+      "The candidate did not return measured structured evidence.",
+      "The candidate did not produce identical observable output.",
+    ].join(" ");
+
+    render(
+      <EditorAIChat
+        actions={createActions()}
+        chat={createChatSession({
+          loadState: {
+            status: "error",
+            message: rawMessage,
+            generatedMechanicFailure: {
+              stage: "foundation",
+              issues: [
+                {
+                  path: "foundation.realm_conformance.resource_enforcement",
+                  code: "resource_limit_not_enforced",
+                  message:
+                    "The candidate did not return measured structured evidence.",
+                },
+                {
+                  path: "foundation.realm_conformance.determinism",
+                  code: "non_deterministic_replay",
+                  message:
+                    "The candidate did not produce identical observable output.",
+                },
+              ],
+            },
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        "The secure mechanic runtime could not be verified. Review 2 failed conformance checks below."
+      )
+    ).toBeVisible();
+    expect(screen.queryByText(rawMessage)).not.toBeInTheDocument();
+  });
+
   it("regenerates from the edited prompt after a generation error", () => {
     const onPromptDraftChange = vi.fn();
     const onPromptRegenerate = vi.fn();
@@ -365,6 +408,97 @@ describe("EditorAIChat", () => {
     ).toBeVisible();
     expect(screen.getByText("Controls")).toBeVisible();
     expect(screen.queryByText(/automatic repair/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a concise degraded-success warning with expandable developer evidence", () => {
+    render(
+      <EditorAIChat
+        actions={createActions()}
+        chat={createChatSession({
+          loadState: {
+            status: "success",
+            source: "phaser-spec",
+            generationRunId: "generation_run_degraded_ui",
+            metadata: {
+              attemptCount: 1,
+              model: "gpt-5.4-mini",
+              taskRoute: "spec_generation.primary",
+            },
+            runtimeKind: "phaser",
+            spec: topDownPhaserTemplate.gameSpec,
+            degradedWarning: {
+              schemaVersion: "degraded_creator_generation/v1",
+              stage: "mechanic_validation",
+              code: "generated_mechanic_omitted",
+              intentId: "intent_optional_dash",
+              summary: "Game generated with limited functionality.",
+              omittedBehavior:
+                "The requested dash could not be safely added. The playable base game was generated without it.",
+              issues: [
+                {
+                  path: "intent.triggers",
+                  code: "unsupported_generated_host_trigger",
+                  message:
+                    "The generated-mechanic host could not prove the requested trigger.",
+                },
+              ],
+              retryable: true,
+              generatedWorkState: "not_started",
+              routingFailure: {
+                kind: "capability_gap",
+                evidence: {
+                  stage: "routing",
+                  code: "capability_gap",
+                  missingCapabilities: ["object_motion_write"],
+                  issues: [
+                    {
+                      path: "intent.triggers",
+                      code: "unsupported_generated_host_trigger",
+                      message:
+                        "The generated-mechanic host could not prove the requested trigger.",
+                    },
+                  ],
+                },
+              },
+              policyDecision: {
+                status: "eligible",
+                code: "trusted_base_game_independent",
+              },
+              fallbackValidation: {
+                status: "passed",
+                gameSpecId: topDownPhaserTemplate.gameSpec.id,
+                mechanicTypes: topDownPhaserTemplate.gameSpec.mechanics.map(
+                  (mechanic) => mechanic.type
+                ),
+                primaryObjectiveId:
+                  topDownPhaserTemplate.gameSpec.objectives[0].id,
+              },
+            },
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Game generated with limited functionality",
+      })
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "The requested dash could not be safely added. The playable base game was generated without it."
+      )
+    ).toBeVisible();
+
+    const details = screen.getByText("View omission details");
+    expect(details).toBeVisible();
+    fireEvent.click(details);
+    expect(screen.getByText("unsupported_generated_host_trigger")).toBeVisible();
+    expect(screen.getByText("generation_run_degraded_ui")).toBeVisible();
+    expect(screen.getByText("intent_optional_dash")).toBeVisible();
+    expect(screen.getAllByText("capability_gap")).toHaveLength(2);
+    expect(screen.getByText("trusted_base_game_independent")).toBeVisible();
+    expect(screen.getByText("object_motion_write")).toBeVisible();
   });
 
   it("shows a change prompt action after a game has been built", () => {

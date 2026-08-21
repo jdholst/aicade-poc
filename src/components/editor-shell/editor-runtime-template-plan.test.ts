@@ -104,7 +104,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
       },
       persistencePolicy: "reuse-restored-game-pack",
       readyPolicy: "ready-on-runtime-ready",
-      runFirstPlayableChecksOnReady: true,
+      runFirstPlayableChecksOnReady: false,
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
         title: topDownPhaserTemplate.title,
@@ -159,6 +159,7 @@ describe("createEditorRuntimeTemplatePlan", () => {
     expect(plan).toMatchObject({
       type: "phaser-valid",
       persistencePolicy: "do-not-persist",
+      runFirstPlayableChecksOnReady: false,
       firstPlayableValidationSource: {
         gamePack: fixture.gamePack,
         source: "accepted-game-pack",

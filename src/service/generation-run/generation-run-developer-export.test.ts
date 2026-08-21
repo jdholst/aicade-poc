@@ -72,6 +72,7 @@ describe("installGenerationRunDeveloperJsonExport", () => {
       now: createDeterministicClock([
         "2026-06-10T12:00:00.000Z",
         "2026-06-10T12:00:04.000Z",
+        "2026-06-10T12:00:05.000Z",
       ]),
       repository,
       request: {
@@ -88,6 +89,49 @@ describe("installGenerationRunDeveloperJsonExport", () => {
       },
       runtimeKind: "phaser",
       spec,
+    });
+    await lifecycle.recordDegradedGeneration({
+      schemaVersion: "degraded_creator_generation/v1",
+      stage: "mechanic_validation",
+      code: "generated_mechanic_omitted",
+      intentId: "intent_optional_dash_export",
+      summary: "Game generated with limited functionality.",
+      omittedBehavior:
+        "The requested dash could not be safely added. The playable base game was generated without it.",
+      issues: [
+        {
+          path: "intent.triggers",
+          code: "unsupported_generated_host_trigger",
+          message: "The generated host could not prove the trigger.",
+        },
+      ],
+      retryable: true,
+      generatedWorkState: "not_started",
+      routingFailure: {
+        kind: "capability_gap",
+        evidence: {
+          stage: "routing",
+          code: "capability_gap",
+          missingCapabilities: ["object_motion_write"],
+          issues: [
+            {
+              path: "intent.triggers",
+              code: "unsupported_generated_host_trigger",
+              message: "The generated host could not prove the trigger.",
+            },
+          ],
+        },
+      },
+      policyDecision: {
+        status: "eligible",
+        code: "trusted_base_game_independent",
+      },
+      fallbackValidation: {
+        status: "passed",
+        gameSpecId: spec.id,
+        mechanicTypes: spec.mechanics.map((mechanic) => mechanic.type),
+        primaryObjectiveId: spec.objectives[0].id,
+      },
     });
 
     installGenerationRunDeveloperJsonExport({
@@ -111,6 +155,24 @@ describe("installGenerationRunDeveloperJsonExport", () => {
           runtimeKind: "phaser",
           templateId: spec.template.id,
           mechanicIds: spec.mechanics.map((mechanic) => mechanic.id),
+          metadata: {
+            creatorGenerationOutcome: {
+              schemaVersion: "degraded_creator_generation/v1",
+              status: "degraded",
+              warning: expect.objectContaining({
+                intentId: "intent_optional_dash_export",
+                code: "generated_mechanic_omitted",
+              }),
+              generatedStageCallCounts: {
+                contract: 0,
+                source: 0,
+                realm: 0,
+                browser: 0,
+                handoff: 0,
+                persistence: 0,
+              },
+            },
+          },
           taskRoutes: ["spec_generation.primary"],
           providerModels: [
             {

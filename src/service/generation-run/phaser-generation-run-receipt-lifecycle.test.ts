@@ -142,6 +142,256 @@ describe("createPhaserGenerationRunReceiptLifecycle", () => {
     });
   });
 
+  it("refuses to attach degraded-success evidence after a terminal interruption wins", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const lifecycle = createPhaserGenerationRunReceiptLifecycle({
+      createGenerationRunId: () => "generation_run_degraded_interrupted",
+      generationSource: "phaser-ai",
+      now: createDeterministicClock([
+        "2026-06-10T12:00:00.000Z",
+        "2026-06-10T12:00:02.000Z",
+        "2026-06-10T12:00:03.000Z",
+        "2026-06-10T12:00:04.000Z",
+      ]),
+      repository,
+      request: { prompt: "add an optional dash" },
+    });
+    await lifecycle.createInitialReceipt();
+    await lifecycle.recordSpecGenerationSuccess({
+      metadata: {
+        attemptCount: 1,
+        model: "gpt-5.6-luna",
+        taskRoute: "creator_generation_planning.primary",
+      },
+      runtimeKind: "phaser",
+      spec,
+    });
+    await lifecycle.recordSpecGenerationInterruption("cancelled");
+
+    await expect(
+      lifecycle.recordDegradedGeneration({
+        schemaVersion: "degraded_creator_generation/v1",
+        stage: "mechanic_validation",
+        code: "generated_mechanic_omitted",
+        intentId: "intent_optional_dash",
+        summary: "Game generated with limited functionality.",
+        omittedBehavior:
+          "The requested dash could not be safely added. The playable base game was generated without it.",
+        issues: [
+          {
+            path: "intent.requiredCapabilities",
+            code: "missing_capability",
+            message: "The selected host cannot provide the requested capability.",
+          },
+        ],
+        retryable: true,
+        generatedWorkState: "not_started",
+        routingFailure: {
+          kind: "capability_gap",
+          evidence: {
+            stage: "routing",
+            code: "capability_gap",
+            missingCapabilities: ["object_motion_write"],
+            issues: [
+              {
+                path: "intent.requiredCapabilities",
+                code: "missing_capability",
+                message:
+                  "The selected host cannot provide the requested capability.",
+              },
+            ],
+          },
+        },
+        policyDecision: {
+          status: "eligible",
+          code: "trusted_base_game_independent",
+        },
+        fallbackValidation: {
+          status: "passed",
+          gameSpecId: spec.id,
+          mechanicTypes: spec.mechanics.map((mechanic) => mechanic.type),
+          primaryObjectiveId: spec.objectives.find(
+            (objective) => objective.primary
+          )!.id,
+        },
+      })
+    ).resolves.toBe("persistence_unavailable");
+    const interrupted = await repository.fetch(
+      "generation_run_degraded_interrupted"
+    );
+    expect(interrupted?.status).toBe("cancelled");
+    expect(
+      interrupted?.metadata?.creatorGenerationOutcome
+    ).toBeUndefined();
+  });
+
+  it("refuses degraded-success evidence when generated artifact lineage already exists", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const generationRunId = "generation_run_degraded_lineage_conflict";
+    const lifecycle = createPhaserGenerationRunReceiptLifecycle({
+      createGenerationRunId: () => generationRunId,
+      generationSource: "phaser-ai",
+      repository,
+      request: { prompt: "add an optional dash" },
+    });
+    await lifecycle.createInitialReceipt();
+    await lifecycle.recordSpecGenerationSuccess({
+      metadata: {
+        attemptCount: 1,
+        model: "gpt-5.6-luna",
+        taskRoute: "creator_generation_planning.primary",
+      },
+      runtimeKind: "phaser",
+      spec,
+    });
+    await repository.update(generationRunId, (generationRun) => ({
+      ...generationRun,
+      relationships: {
+        acceptedGeneratedMechanicArtifactIds: [
+          "generated_artifact_already_accepted",
+        ],
+      },
+    }));
+    const routingEvidence = {
+      stage: "routing" as const,
+      code: "capability_gap" as const,
+      missingCapabilities: ["object_motion_write"],
+      issues: [
+        {
+          path: "intent.requiredCapabilities",
+          code: "missing_capability",
+          message: "The selected host cannot provide motion.",
+        },
+      ],
+    };
+
+    await expect(
+      lifecycle.recordDegradedGeneration({
+        schemaVersion: "degraded_creator_generation/v1",
+        stage: "mechanic_validation",
+        code: "generated_mechanic_omitted",
+        intentId: "intent_optional_dash",
+        summary: "Game generated with limited functionality.",
+        omittedBehavior:
+          "The requested dash could not be safely added. The playable base game was generated without it.",
+        issues: routingEvidence.issues,
+        retryable: true,
+        generatedWorkState: "not_started",
+        routingFailure: {
+          kind: "capability_gap",
+          evidence: routingEvidence,
+        },
+        policyDecision: {
+          status: "eligible",
+          code: "trusted_base_game_independent",
+        },
+        fallbackValidation: {
+          status: "passed",
+          gameSpecId: spec.id,
+          mechanicTypes: spec.mechanics.map((mechanic) => mechanic.type),
+          primaryObjectiveId: spec.objectives.find(
+            (objective) => objective.primary
+          )!.id,
+        },
+      })
+    ).resolves.toBe("persistence_unavailable");
+    const receipt = await repository.fetch(generationRunId);
+    expect(receipt?.relationships?.acceptedGeneratedMechanicArtifactIds).toEqual([
+      "generated_artifact_already_accepted",
+    ]);
+    expect(receipt?.metadata?.creatorGenerationOutcome).toBeUndefined();
+  });
+
+  it("refuses degraded-success evidence when generated acceptance metadata is present but malformed", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const generationRunId = "generation_run_degraded_ambiguous_acceptance";
+    const lifecycle = createPhaserGenerationRunReceiptLifecycle({
+      createGenerationRunId: () => generationRunId,
+      generationSource: "phaser-ai",
+      repository,
+      request: { prompt: "add an optional dash" },
+    });
+    await lifecycle.createInitialReceipt();
+    await lifecycle.recordSpecGenerationSuccess({
+      metadata: {
+        attemptCount: 1,
+        model: "gpt-5.6-luna",
+        taskRoute: "creator_generation_planning.primary",
+      },
+      runtimeKind: "phaser",
+      spec,
+    });
+    await repository.update(generationRunId, (generationRun) => ({
+      ...generationRun,
+      metadata: {
+        ...(generationRun.metadata ?? {}),
+        generatedMechanicAcceptanceTransaction: {
+          schemaVersion: "unknown/v1",
+          status: "corrupt",
+        },
+      },
+    }));
+
+    await expect(
+      lifecycle.recordDegradedGeneration({
+        schemaVersion: "degraded_creator_generation/v1",
+        stage: "mechanic_validation",
+        code: "generated_mechanic_omitted",
+        intentId: "intent_optional_dash",
+        summary: "Game generated with limited functionality.",
+        omittedBehavior:
+          "The requested dash could not be safely added. The playable base game was generated without it.",
+        issues: [
+          {
+            path: "intent.requiredCapabilities",
+            code: "missing_capability",
+            message: "The selected host cannot provide motion.",
+          },
+        ],
+        retryable: true,
+        generatedWorkState: "not_started",
+        routingFailure: {
+          kind: "capability_gap",
+          evidence: {
+            stage: "routing",
+            code: "capability_gap",
+            missingCapabilities: ["object_motion_write"],
+            issues: [
+              {
+                path: "intent.requiredCapabilities",
+                code: "missing_capability",
+                message: "The selected host cannot provide motion.",
+              },
+            ],
+          },
+        },
+        policyDecision: {
+          status: "eligible",
+          code: "trusted_base_game_independent",
+        },
+        fallbackValidation: {
+          status: "passed",
+          gameSpecId: spec.id,
+          mechanicTypes: spec.mechanics.map((mechanic) => mechanic.type),
+          primaryObjectiveId: spec.objectives.find(
+            (objective) => objective.primary
+          )!.id,
+        },
+      })
+    ).resolves.toBe("persistence_unavailable");
+    const receipt = await repository.fetch(generationRunId);
+    expect(receipt?.metadata?.creatorGenerationOutcome).toBeUndefined();
+    expect(
+      receipt?.metadata?.generatedMechanicAcceptanceTransaction
+    ).toEqual({
+      schemaVersion: "unknown/v1",
+      status: "corrupt",
+    });
+  });
+
   it("preserves a succeeded run once generated-mechanic acceptance is pending", async () => {
     const repository = createGenerationRunTestRepository().repository;
     const spec = getFirstValidTopDownGameSpecFixture();

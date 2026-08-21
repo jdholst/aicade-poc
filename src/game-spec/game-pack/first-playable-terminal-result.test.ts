@@ -9,7 +9,10 @@ import {
   createRunningPhaserSpecGenerationRun,
 } from "@/service/generation-run/testing/generation-run-test-harness";
 
-import { writeFirstPlayableTerminalResult } from "./first-playable-terminal-result";
+import {
+  finalizeGenerationRunFromFirstPlayable,
+  writeFirstPlayableTerminalResult,
+} from "./first-playable-terminal-result";
 
 describe("writeFirstPlayableTerminalResult", () => {
   it("writes passed first-playable results without succeeding the GenerationRun before durable persistence", async () => {
@@ -181,6 +184,70 @@ describe("writeFirstPlayableTerminalResult", () => {
     );
 
     expect(generationRun?.relationships).toBeUndefined();
+  });
+
+  it("preserves degraded omission evidence when first-playable finalization succeeds", async () => {
+    const repository = createGenerationRunTestRepository().repository;
+    const gamePack = createGamePack();
+    const { attempt } = createFirstPlayableAttemptFixture({
+      gamePack,
+      scenario: "passed",
+    });
+    await repository.create({
+      ...createRunningPhaserSpecGenerationRun({
+        gamePack,
+        id: "generation_run_degraded_reload",
+      }),
+      metadata: {
+        creatorGenerationOutcome: {
+          schemaVersion: "degraded_creator_generation/v1",
+          status: "degraded",
+          warning: {
+            code: "generated_mechanic_omitted",
+            omittedBehavior:
+              "The requested dash could not be safely added. The playable base game was generated without it.",
+          },
+          generatedStageCallCounts: {
+            contract: 0,
+            source: 0,
+            realm: 0,
+            browser: 0,
+            handoff: 0,
+            persistence: 0,
+          },
+        },
+      },
+    });
+
+    await finalizeGenerationRunFromFirstPlayable({
+      attempt,
+      completedAt: "2026-06-10T12:00:05.000Z",
+      gamePack,
+      generationRunId: "generation_run_degraded_reload",
+      repository,
+    });
+
+    await expect(
+      repository.fetch("generation_run_degraded_reload")
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      metadata: {
+        creatorGenerationOutcome: {
+          status: "degraded",
+          warning: {
+            code: "generated_mechanic_omitted",
+          },
+          generatedStageCallCounts: {
+            contract: 0,
+            source: 0,
+            realm: 0,
+            browser: 0,
+            handoff: 0,
+            persistence: 0,
+          },
+        },
+      },
+    });
   });
 });
 

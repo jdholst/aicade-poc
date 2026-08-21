@@ -57,7 +57,7 @@ export type EditorRuntimeTemplatePlan =
       firstPlayableValidationSource: FirstPlayableValidationSource;
       persistencePolicy: PlayableDraftPersistencePolicy;
       readyPolicy: PlayableDraftReadyPolicy;
-      runFirstPlayableChecksOnReady: true;
+      runFirstPlayableChecksOnReady: boolean;
       sourceKey: string;
       template: HandAuthoredPhaserTemplate;
       generatedMechanicProject?: PreparedRestoredGeneratedMechanicProject;

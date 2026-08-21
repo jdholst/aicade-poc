@@ -7,6 +7,12 @@ import {
 } from "@/service/spec-generation";
 
 import type { CreatorGenerationRouting } from "./creator-generation-routing";
+import {
+  DEGRADED_GENERATION_FALLBACK_POLICY,
+  evaluateDegradedGenerationFallback,
+  type DegradedGenerationFallbackIssue,
+  type OmittedMechanicWarning,
+} from "./degraded-generation-fallback-policy";
 import { createGenerationOperationContext } from "./generation-operation-context";
 
 export type CreatorGenerationPlanClientResult =
@@ -31,6 +37,7 @@ export type ContinueGeneratedMechanicGeneration<Result> = (
 
 export type DispatchCreatorGenerationPlanInput<Result> = Readonly<{
   continueGeneratedMechanicGeneration: ContinueGeneratedMechanicGeneration<Result>;
+  degradedGenerationFallbackEnabled?: boolean;
   generationRunId?: StableId;
   plan: CreatorGenerationPlanClientResult;
   request: StarterProjectRequest;
@@ -47,6 +54,12 @@ export type CreatorGenerationDispatchResult<Result> =
       result: Result;
     }>
   | Readonly<{
+      kind: "degraded";
+      generationRunId: StableId;
+      result: TopDownSpecGenerationClientResult;
+      warning: OmittedMechanicWarning;
+    }>
+  | Readonly<{
       kind: "rejected";
       routeKind: Exclude<
         CreatorGenerationRouting["kind"],
@@ -56,11 +69,16 @@ export type CreatorGenerationDispatchResult<Result> =
         CreatorGenerationRouting,
         {
           kind:
+            | "intent_validation_failure"
             | "clarification_failure"
             | "capability_gap"
             | "constraint_conflict";
         }
       >["evidence"];
+      fallbackEvidence?: Readonly<{
+        status: "fatal";
+        issues: readonly DegradedGenerationFallbackIssue[];
+      }>;
     }>;
 
 export class CreatorGenerationRoutingError extends SpecGenerationClientError {
@@ -87,6 +105,8 @@ export class CreatorGenerationRoutingError extends SpecGenerationClientError {
  */
 export async function dispatchCreatorGenerationPlan<Result>({
   continueGeneratedMechanicGeneration,
+  degradedGenerationFallbackEnabled =
+    DEGRADED_GENERATION_FALLBACK_POLICY.enabled,
   generationRunId,
   plan,
   request,
@@ -109,6 +129,42 @@ export async function dispatchCreatorGenerationPlan<Result>({
   }
 
   if (routing.kind !== "generated_mechanic") {
+    if (signal.aborted) {
+      throw new DOMException(
+        "Creator generation dispatch was cancelled.",
+        "AbortError"
+      );
+    }
+
+    if (degradedGenerationFallbackEnabled) {
+      const fallback = evaluateDegradedGenerationFallback({
+        baseGameSpec: plan.spec,
+        generatedWorkState: "not_started",
+        routingFailure: routing,
+      });
+      if (fallback.kind === "eligible") {
+        return Object.freeze({
+          kind: "degraded" as const,
+          generationRunId,
+          result: withoutRouting({
+            ...plan,
+            spec: fallback.baseGameSpec,
+          }),
+          warning: fallback.warning,
+        });
+      }
+
+      return Object.freeze({
+        kind: "rejected" as const,
+        routeKind: routing.kind,
+        evidence: routing.evidence,
+        fallbackEvidence: Object.freeze({
+          status: "fatal" as const,
+          issues: fallback.issues,
+        }),
+      });
+    }
+
     return Object.freeze({
       kind: "rejected" as const,
       routeKind: routing.kind,

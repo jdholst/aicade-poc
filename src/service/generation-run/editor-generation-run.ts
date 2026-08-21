@@ -12,6 +12,10 @@ import {
   type ContinueGeneratedMechanicGeneration,
 } from "@/service/creator-generation/creator-game-generation-dispatcher";
 import {
+  DEGRADED_GENERATION_FALLBACK_POLICY,
+  type OmittedMechanicWarning,
+} from "@/service/creator-generation/degraded-generation-fallback-policy";
+import {
   continueGeneratedMechanicGeneration,
   type ContinueGeneratedMechanicGenerationResult,
 } from "@/service/creator-generation/continue-generated-mechanic-generation";
@@ -64,6 +68,7 @@ export type EditorGenerationRunCompletion =
     }
   | ({
       generationRunId?: GenerationRun["id"];
+      degradedWarning?: OmittedMechanicWarning;
       status: "success";
       source: "phaser-spec";
     } & TopDownSpecGenerationClientResult);
@@ -93,6 +98,7 @@ type EditorGenerationRunTimer = {
 type StartEditorGenerationRunInput = {
   continueGeneratedMechanicGeneration?: ContinueGeneratedMechanicGeneration<ContinueGeneratedMechanicGenerationResult>;
   createGenerationRunId?: () => GenerationRun["id"];
+  degradedGenerationFallbackEnabled?: boolean;
   generationRunRepository?: Pick<GenerationRunRepository, "create" | "update"> | null;
   generatedMechanicTimeoutMs?: number;
   generationSource: EditorGenerationSource;
@@ -116,6 +122,7 @@ export type EditorGenerationRun = {
 export function startEditorGenerationRun({
   continueGeneratedMechanicGeneration: continueGeneratedMechanic = continueGeneratedMechanicGeneration,
   createGenerationRunId,
+  degradedGenerationFallbackEnabled = getDefaultDegradedGenerationFallbackEnabled(),
   generationRunRepository = getBrowserGenerationRunRepository(),
   generatedMechanicTimeoutMs = GENERATED_MECHANIC_GENERATION_TIMEOUT_MS,
   generationSource,
@@ -161,6 +168,7 @@ export function startEditorGenerationRun({
       const adapterPromise = runGenerationAdapter({
         generationSource,
         continueGeneratedMechanicGeneration: continueGeneratedMechanic,
+        degradedGenerationFallbackEnabled,
         request,
         requestCanvasStarterProject,
         requestPhaserSpecGeneration,
@@ -248,6 +256,7 @@ export function startEditorGenerationRun({
 
 async function runGenerationAdapter({
   continueGeneratedMechanicGeneration,
+  degradedGenerationFallbackEnabled,
   generationSource,
   receiptLifecycle,
   request,
@@ -257,6 +266,7 @@ async function runGenerationAdapter({
   onGeneratedMechanicRoute,
 }: {
   continueGeneratedMechanicGeneration: ContinueGeneratedMechanicGeneration<ContinueGeneratedMechanicGenerationResult>;
+  degradedGenerationFallbackEnabled: boolean;
   generationSource: Exclude<EditorGenerationSource, "phaser-fixture">;
   receiptLifecycle: PhaserGenerationRunReceiptLifecycle;
   request: StarterProjectRequest;
@@ -283,13 +293,18 @@ async function runGenerationAdapter({
         onGeneratedMechanicRoute();
         return continueGeneratedMechanicGeneration(input);
       },
+      degradedGenerationFallbackEnabled,
       generationRunId: receiptLifecycle.generationRunId,
       plan: result,
       request,
       signal,
     });
     if (dispatched.kind === "rejected") {
-      const message = dispatched.evidence.issues
+      const issues = [
+        ...dispatched.evidence.issues,
+        ...(dispatched.fallbackEvidence?.issues ?? []),
+      ];
+      const message = issues
         .map((issue) => issue.message)
         .join(" ");
       throw new CreatorGenerationRoutingError({
@@ -300,7 +315,7 @@ async function runGenerationAdapter({
           ...(receiptLifecycle.generationRunId
             ? { generationRunId: receiptLifecycle.generationRunId }
             : {}),
-          issues: dispatched.evidence.issues.map((issue) => ({ ...issue })),
+          issues: issues.map((issue) => ({ ...issue })),
           stage: "mechanic_validation",
           taskRoute: "spec_generation.primary",
         },
@@ -322,6 +337,25 @@ async function runGenerationAdapter({
         gamePack: dispatched.result.value.gamePack,
         status: "success",
         source: "phaser-game-pack",
+      };
+    }
+
+    if (dispatched.kind === "degraded") {
+      const receiptStatus =
+        await receiptLifecycle.recordDegradedGeneration(dispatched.warning);
+      signal.throwIfAborted();
+      if (receiptStatus !== "recorded") {
+        throw new Error(
+          "Degraded creator generation could not persist its required warning receipt."
+        );
+      }
+
+      return {
+        generationRunId: dispatched.generationRunId,
+        degradedWarning: dispatched.warning,
+        status: "success",
+        source: "phaser-spec",
+        ...dispatched.result,
       };
     }
 
@@ -408,4 +442,17 @@ function getBrowserGenerationRunRepository():
   }
 
   return createIndexedDbGenerationRunRepository();
+}
+
+function getDefaultDegradedGenerationFallbackEnabled(): boolean {
+  if (typeof globalThis.location === "undefined") {
+    return DEGRADED_GENERATION_FALLBACK_POLICY.enabled;
+  }
+
+  const override = new URLSearchParams(globalThis.location.search).get(
+    "degradedGenerationFallback"
+  );
+  return override === "off" || override === "0"
+    ? false
+    : DEGRADED_GENERATION_FALLBACK_POLICY.enabled;
 }

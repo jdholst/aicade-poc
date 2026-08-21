@@ -37,6 +37,7 @@ import {
   generationRunSchema,
   type GenerationRun,
 } from "../generation-run/generation-run-schema";
+import { isCreatorGenerationPersistenceRestorable } from "./creator-generation-persistence-transaction";
 import {
   clearGeneratedMechanicHandoffReceipt,
   readGeneratedMechanicHandoffReceipt,
@@ -1724,7 +1725,10 @@ function hasGeneratedMechanicAcceptanceJournalResidue(
 
 export function isGamePackAcceptanceRestorable(gamePack: GamePack): boolean {
   const transaction = readGeneratedMechanicAcceptanceTransaction(gamePack);
-  if (hasGeneratedMechanicAcceptanceJournalResidue(gamePack)) {
+  if (
+    hasGeneratedMechanicAcceptanceJournalResidue(gamePack) ||
+    !isCreatorGenerationPersistenceRestorable(gamePack)
+  ) {
     return false;
   }
   return (

@@ -174,6 +174,15 @@ export {
 } from "./game-pack/game-pack-lineage";
 
 export {
+  attachFinalizedGenerationRunToGamePack,
+  CREATOR_GENERATION_PERSISTENCE_TRANSACTION_VERSION,
+  isCreatorGenerationPersistenceRestorable,
+  readCreatorGenerationPersistenceTransaction,
+  writeCreatorGenerationPersistenceTransaction,
+  type CreatorGenerationPersistenceTransaction,
+} from "./game-pack/creator-generation-persistence-transaction";
+
+export {
   createGamePackRepository,
   createIndexedDbGamePackRepository,
   GamePackRepositoryError,
