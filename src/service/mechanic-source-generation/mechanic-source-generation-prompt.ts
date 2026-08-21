@@ -108,6 +108,8 @@ const sourceVisibleTypeDocumentation = {
     "Readonly<{ active: boolean; kind: string; position: Readonly<{ x: number; y: number }>; properties: Readonly<Record<string, JsonValue>>; velocity: Readonly<{ x: number; y: number }> }>",
   MechanicMotionMutation:
     "Readonly<{ position?: Readonly<{ x: number; y: number }>; velocity?: Readonly<{ x: number; y: number }> }>",
+  MechanicSpatialQuery:
+    'Readonly<{ center: Readonly<{ x: number; y: number }>; radius: number; active?: boolean; objectKinds?: readonly string[]; ownership?: "any" | "bound" | "owned" }>',
 } as const;
 
 export function createMechanicSourceGenerationSystemPrompt({
@@ -252,6 +254,7 @@ Source rules:
 - The trusted host owns lifecycle scheduling and fixed-step cadence; source candidates never choose timing metadata.
 - Callback bodies may reference only config, bindings, lifecycleInput, and the exact granted capabilities expressions documented above.
 - Object observations expose only the fields in MechanicObjectObservation. There is no movementDirection, direction, or facing field. When accepted behavior needs current movement direction, derive movement direction from velocity.x and velocity.y; if both are zero, use a bounded deterministic fallback vector consistent with the accepted assumptions.
+- Owned-object initial JSON may use bounded position, velocity, shape, dimensions, color, and immutable properties as documented by the accepted host profile. Opaque handles cannot be stored in JSON private state; rediscover declared owned objects in later callbacks with a bounded spatial query using ownership "owned", and explicitly destroy every completed transient object.
 - Input lifecycle payloads and emitted output payloads must match their contract-declared port schemas exactly.
 - Every granted capability must be called through its documented capabilities expression, every capability call is asynchronous, and every call must be awaited.
 - The retained top-down host advances generated simulation time in whole deterministic milliseconds while carrying sub-millisecond frame remainder internally. Treat capabilities.time.now() as simulation time rather than wall-clock time and keep deadline arithmetic deterministic.

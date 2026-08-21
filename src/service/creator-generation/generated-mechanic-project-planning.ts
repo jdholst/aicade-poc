@@ -198,14 +198,6 @@ export function validateGeneratedMechanicTopDownHostAdmission({
         "The retained top-down generated-mechanic host does not admit mechanic ports.",
     });
   }
-  if (contract.ownedObjects.length > 0) {
-    issues.push({
-      path: "contract.ownedObjects",
-      code: "unsupported_runtime_owned_objects",
-      message:
-        "The retained top-down generated-mechanic host does not admit mechanic-owned objects.",
-    });
-  }
   contract.capabilities.forEach((capabilityId, index) => {
     if (!supportedCapabilities.has(capabilityId)) {
       issues.push({

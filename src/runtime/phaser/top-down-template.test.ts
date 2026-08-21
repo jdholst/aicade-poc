@@ -1032,10 +1032,66 @@ describe("top-down Phaser template", () => {
         gameSpec: generatedTemplate.gameSpec,
         mechanic: generatedMechanic,
         template: generatedTemplate,
+        createOwnedObject: expect.any(Function),
         getEntityDefinition: expect.any(Function),
         getEntityHandle: expect.any(Function),
       })
     );
+    const installInput = install.mock.calls[0]?.[0] as
+      | {
+          createOwnedObject(input: {
+            objectId: string;
+            objectKind: string;
+            initial: Record<string, unknown>;
+          }): {
+            object: {
+              body?: { velocity?: { x: number; y: number } };
+              destroy?: () => void;
+              x: number;
+              y: number;
+            };
+            observeProperties?: () => Record<string, unknown>;
+          };
+        }
+      | undefined;
+    if (!installInput) {
+      throw new Error("Expected one generated host install input.");
+    }
+    const owned = installInput.createOwnedObject({
+      objectId: "owned_effect_1",
+      objectKind: "effect",
+      initial: {
+        position: { x: 24, y: 32 },
+        velocity: { x: 80, y: 0 },
+        shape: "circle",
+        radius: 6,
+        color: 0xffcc44,
+        properties: { strength: 2 },
+      },
+    });
+    expect(owned.object).toMatchObject({
+      kind: "circle",
+      x: 24,
+      y: 32,
+      body: { velocity: { x: 80, y: 0 } },
+    });
+    expect(owned.observeProperties?.()).toEqual({ strength: 2 });
+    expect(owned.object.destroy).toEqual(expect.any(Function));
+    const boundedOwned = installInput.createOwnedObject({
+      objectId: "owned_effect_bounded",
+      objectKind: "effect",
+      initial: {
+        active: false,
+        position: { x: 2_000_000, y: -2_000_000 },
+        velocity: { x: 3_000, y: -3_000 },
+      },
+    });
+    expect(boundedOwned.object).toMatchObject({
+      active: true,
+      x: 1_000_000,
+      y: -1_000_000,
+      body: { velocity: { x: 2_000, y: -2_000 } },
+    });
     expect(messages).not.toContainEqual(
       expect.objectContaining({ type: "game-ready" })
     );

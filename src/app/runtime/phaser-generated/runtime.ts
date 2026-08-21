@@ -4,6 +4,7 @@ import {
   projectAcceptedGeneratedMechanicExecutableArtifact,
   type GeneratedMechanicExecutableArtifact,
 } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
+import type { JsonValue } from "@/game-spec/game-spec-schema";
 import type { PreparedGeneratedMechanicRuntimeProject } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
 import type {
   ContainedMechanicRuntimeStep,
@@ -24,6 +25,7 @@ import type { GeneratedMechanicPhaserChildSession } from "@/runtime/phaser/gener
 import type {
   TrustedTopDownPhaserMechanicObject,
   TrustedTopDownPhaserMechanicObjectRegistration,
+  TrustedTopDownPhaserOwnedObjectFactory,
 } from "@/runtime/phaser/top-down-mechanic-object-adapter";
 import {
   createTopDownPhaserTemplate,
@@ -66,6 +68,11 @@ type GeneratedMechanicInstallInput = Readonly<{
     entityId: string
   ): HandAuthoredPhaserTemplate["gameSpec"]["entities"][number] | null;
   getEntityHandle(entityId: string): TrustedTopDownPhaserMechanicObject | null;
+  createOwnedObject(input: {
+    objectId: string;
+    objectKind: string;
+    initial: JsonValue;
+  }): ReturnType<TrustedTopDownPhaserOwnedObjectFactory>;
 }>;
 
 type TopDownRetainedGeneratedMechanicSession = Readonly<{
@@ -363,6 +370,10 @@ export function createTrustedGeneratedMechanicPhaserRoute({
               template,
               input
             );
+            const ownedObjectFactories = createExactOwnedObjectFactories(
+              artifact,
+              input
+            );
             const createdSession = await dependencies.createRuntimeSession(
               "runtimeCandidate" in project
                 ? {
@@ -370,12 +381,14 @@ export function createTrustedGeneratedMechanicPhaserRoute({
                     dependency: project.dependency,
                     realmAdapter,
                     objects,
+                    ownedObjectFactories,
                   }
                 : {
                     artifact: project.artifact,
                     dependency: project.dependency,
                     realmAdapter,
                     objects,
+                    ownedObjectFactories,
                   }
             );
             runtimeSession = createdSession;
@@ -645,12 +658,31 @@ function validateHostInstallInput(
     input.gameSpec !== template.gameSpec ||
     input.mechanic !== expectedMechanic ||
     typeof input.getEntityDefinition !== "function" ||
-    typeof input.getEntityHandle !== "function"
+    typeof input.getEntityHandle !== "function" ||
+    typeof input.createOwnedObject !== "function"
   ) {
     throw new Error(
       "The generated mechanic host received a foreign Phaser installation context."
     );
   }
+}
+
+function createExactOwnedObjectFactories(
+  artifact: GeneratedMechanicExecutableArtifact,
+  input: GeneratedMechanicInstallInput
+): Readonly<Record<string, TrustedTopDownPhaserOwnedObjectFactory>> {
+  const factories = Object.create(null) as Record<
+    string,
+    TrustedTopDownPhaserOwnedObjectFactory
+  >;
+  for (const { objectKind } of artifact.contract.ownedObjects) {
+    if (Object.prototype.hasOwnProperty.call(factories, objectKind)) {
+      continue;
+    }
+    factories[objectKind] = ({ objectId, initial }) =>
+      input.createOwnedObject({ objectId, objectKind, initial });
+  }
+  return Object.freeze(factories);
 }
 
 function createExactBoundEntityRegistrations(

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import {
   jsonValueSchema,
   stableIdSchema,
@@ -14,7 +16,23 @@ import {
   isMechanicObjectBindingAuthorityAuthentic,
   type MechanicMotionMutation,
   type MechanicObjectHandle,
+  type MechanicSpatialQuery,
 } from "./mechanic-object-host";
+
+const mechanicSpatialQuerySchema = z
+  .object({
+    center: z
+      .object({
+        x: z.number().finite(),
+        y: z.number().finite(),
+      })
+      .strict(),
+    radius: z.number().finite().nonnegative().max(1_000_000),
+    active: z.boolean().optional(),
+    objectKinds: z.array(stableIdSchema).min(1).max(32).optional(),
+    ownership: z.enum(["any", "bound", "owned"]).optional(),
+  })
+  .strict();
 
 export const MECHANIC_OBJECT_CAPABILITY_HOST_VERSION =
   "mechanic_object_capability_host/v1" as const;
@@ -109,12 +127,42 @@ export function createMechanicObjectCapabilityHost(
           objectHost.destroy(handle);
           return jsonResult(null);
         }
+        case "spatial_query": {
+          requireArgumentCount(capabilityId, capabilityArguments, 1);
+          const query = requireSpatialQuery(
+            capabilityId,
+            capabilityArguments[0]
+          );
+          return Object.freeze({
+            kind: "opaque_handles" as const,
+            value: objectHost.querySpatial(query),
+          });
+        }
         default:
           throw new Error(
             `Mechanic object capability "${capabilityId}" is unsupported by this host.`
           );
       }
     },
+  });
+}
+
+function requireSpatialQuery(
+  capabilityId: StableId,
+  value: unknown
+): MechanicSpatialQuery {
+  const parsed = mechanicSpatialQuerySchema.safeParse(value);
+  if (!parsed.success) {
+    throw new TypeError(
+      `Mechanic object capability "${capabilityId}" requires a strict bounded spatial query.`
+    );
+  }
+  return Object.freeze({
+    ...parsed.data,
+    center: Object.freeze(parsed.data.center),
+    ...(parsed.data.objectKinds
+      ? { objectKinds: Object.freeze([...parsed.data.objectKinds]) }
+      : {}),
   });
 }
 

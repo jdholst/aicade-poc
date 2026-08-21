@@ -20,6 +20,7 @@ export type PostedMessage = {
 };
 
 export type GameElement = {
+  active?: boolean;
   body?: {
     setAllowGravity: () => void;
     setCollideWorldBounds: () => void;
@@ -28,6 +29,7 @@ export type GameElement = {
     velocityCalls: Array<{ x: number; y: number }>;
   };
   kind: string;
+  destroy?: () => void;
   setPosition?: (x: number, y: number) => void;
   setStrokeStyle?: () => GameElement;
   x: number;
@@ -141,6 +143,10 @@ export function createRuntimeHarness(
     add: {
       circle(x: number, y: number) {
         const element: GameElement = {
+          active: true,
+          destroy() {
+            element.active = false;
+          },
           kind: "circle",
           setPosition(nextX: number, nextY: number) {
             element.x = nextX;
@@ -154,6 +160,10 @@ export function createRuntimeHarness(
       },
       rectangle(x: number, y: number) {
         const element: GameElement = {
+          active: true,
+          destroy() {
+            element.active = false;
+          },
           kind: "rectangle",
           setPosition(nextX: number, nextY: number) {
             element.x = nextX;
@@ -170,6 +180,10 @@ export function createRuntimeHarness(
       },
       star(x: number, y: number) {
         const element: GameElement = {
+          active: true,
+          destroy() {
+            element.active = false;
+          },
           kind: "star",
           setPosition(nextX: number, nextY: number) {
             element.x = nextX;

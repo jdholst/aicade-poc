@@ -1694,7 +1694,13 @@ type MechanicObjectHandle = Readonly<{ readonly [mechanicObjectHandleBrand]: "Me
 type MechanicObjectPoint = Readonly<{ x: number; y: number }>;
 type MechanicObjectObservation = Readonly<{ active: boolean; kind: string; position: MechanicObjectPoint; properties: Readonly<Record<string, JsonValue>>; velocity: MechanicObjectPoint }>;
 type MechanicMotionMutation = Readonly<{ position?: MechanicObjectPoint; velocity?: MechanicObjectPoint }>;
-type MechanicSpatialQuery = Readonly<Record<string, JsonValue>>;
+type MechanicSpatialQuery = Readonly<{
+  center: MechanicObjectPoint;
+  radius: number;
+  active?: boolean;
+  objectKinds?: readonly string[];
+  ownership?: "any" | "bound" | "owned";
+}>;
 type MechanicStateId = ${stringUnion(stateIds)};
 type MechanicOwnedObjectArchetypeId = ${stringUnion(archetypeIds)};
 type MechanicPortId = ${stringUnion(outputPortIds)};

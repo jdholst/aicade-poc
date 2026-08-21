@@ -3,10 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { GeneratedMechanicProjectDependency } from "@/game-spec/game-pack/generated-mechanic-project-handoff";
 import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
 import {
+  acceptedGeneratedMechanicArtifactSchema,
+  createGeneratedMechanicRuntimePolicy,
   GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
   projectAcceptedGeneratedMechanicRuntimeCandidate,
   type AcceptedGeneratedMechanicArtifact,
 } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
+import { createMechanicCapabilityGrant } from "@/game-spec/mechanics/mechanic-capability-registry";
+import { PHASE_9_GENERATION_CONSTRAINT_SET } from "@/game-spec/mechanics/mechanic-generation-constraints";
 import type { MechanicExecutionRealmAdapter } from "@/runtime/mechanics/mechanic-execution-realm";
 import { MECHANIC_EXECUTION_REALM_ADAPTER_VERSION } from "@/runtime/mechanics/mechanic-execution-realm";
 import type { GeneratedMechanicRuntimeSession } from "@/runtime/mechanics/generated-mechanic-runtime-session";
@@ -106,6 +110,38 @@ describe("createTrustedGeneratedMechanicPhaserRoute", () => {
     expect(harness.createSession.mock.calls[0]?.[0]).not.toHaveProperty(
       "artifact"
     );
+    await route.dispose();
+  });
+
+  it("projects exact trusted factories for every declared owned-object kind", async () => {
+    const harness = createHarness({ ownedObjects: true });
+
+    const route = createTrustedGeneratedMechanicPhaserRoute(harness.input);
+    await route.ready;
+
+    const sessionInput = harness.createSession.mock.calls[0]?.[0];
+    if (!sessionInput) {
+      throw new Error("Expected one retained session input.");
+    }
+    expect(Object.keys(sessionInput.ownedObjectFactories ?? {})).toEqual([
+      "effect",
+    ]);
+    const factory = sessionInput.ownedObjectFactories?.effect;
+    if (!factory) {
+      throw new Error("Expected the exact effect factory.");
+    }
+
+    const created = factory({
+      objectId: "owned_effect_1",
+      initial: { position: { x: 12, y: 18 } },
+    });
+
+    expect(harness.createOwnedObject).toHaveBeenCalledWith({
+      objectId: "owned_effect_1",
+      objectKind: "effect",
+      initial: { position: { x: 12, y: 18 } },
+    });
+    expect(created.object).toBe(harness.ownedObjectHandle);
     await route.dispose();
   });
 
@@ -229,6 +265,7 @@ type HarnessOptions = Readonly<{
     | "objectives";
   foreignRuntimeIdentity?: boolean;
   missingAcceptedEntityHandle?: boolean;
+  ownedObjects?: boolean;
   runtimeCandidate?: boolean;
   mutateTemplate?: (
     template: ReturnType<typeof createTopDownPhaserTemplate>
@@ -236,7 +273,10 @@ type HarnessOptions = Readonly<{
 }>;
 
 function createHarness(options: HarnessOptions = {}) {
-  const fixture = createGeneratedMechanicProjectFixture();
+  const baseFixture = createGeneratedMechanicProjectFixture();
+  const fixture = options.ownedObjects
+    ? createOwnedObjectProjectFixture(baseFixture)
+    : baseFixture;
   const projectedRuntimeCandidate =
     projectAcceptedGeneratedMechanicRuntimeCandidate(fixture.artifact);
   const runtimeCandidate = {
@@ -276,6 +316,13 @@ function createHarness(options: HarnessOptions = {}) {
       setVelocity: vi.fn(),
     },
   };
+  const ownedObjectHandle = {
+    x: 12,
+    y: 18,
+    active: true,
+    destroy: vi.fn(),
+  };
+  const createOwnedObject = vi.fn(() => ({ object: ownedObjectHandle }));
   const terminateController = vi.fn();
   const controller: SesWorkerMechanicExecutionRealmController = {
     addEventListener: vi.fn(),
@@ -368,6 +415,7 @@ function createHarness(options: HarnessOptions = {}) {
             entityId === "entity_generated_motion_probe"
               ? motionProbeHandle
               : null,
+          createOwnedObject,
         });
         retainedSession = requireRecord(retained);
         requireFunction(runtimeGlobal.__AICADE_RUNTIME_NOTIFY__)({
@@ -387,6 +435,7 @@ function createHarness(options: HarnessOptions = {}) {
     commandEvent,
     controller,
     createSession,
+    createOwnedObject,
     disposeChild,
     disposeSession,
     dispatchLogicalAction,
@@ -410,11 +459,74 @@ function createHarness(options: HarnessOptions = {}) {
     },
     loadedPaths,
     motionProbeHandle,
+    ownedObjectHandle,
     runtimeEvents,
     runtimeGlobal,
     session,
     terminateController,
   };
+}
+
+function createOwnedObjectProjectFixture(
+  base: ReturnType<typeof createGeneratedMechanicProjectFixture>
+) {
+  const contract = {
+    ...base.artifact.contract,
+    ownedObjects: [
+      { id: "transient_effect", objectKind: "effect", maximumInstances: 2 },
+    ],
+    capabilities: [
+      ...base.artifact.contract.capabilities,
+      "object_create",
+      "spatial_query",
+      "object_destroy",
+    ],
+    resourceExpectations: {
+      ...base.artifact.contract.resourceExpectations,
+      maximumOwnedObjects: 2,
+    },
+    scenarios: base.artifact.contract.scenarios.map((scenario) => ({
+      ...scenario,
+      observations: [
+        ...scenario.observations,
+        {
+          kind: "owned_object_count" as const,
+          archetypeId: "transient_effect",
+          operator: "equals" as const,
+          value: 0,
+        },
+      ],
+    })),
+  };
+  const grant = createMechanicCapabilityGrant({
+    contract,
+    constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+  });
+  if (!grant.success) {
+    throw new Error("Expected the owned-object route grant to pass.");
+  }
+  const sourceArtifact = {
+    ...base.artifact.sourceArtifact,
+    grant: grant.data,
+    usedCapabilities: [...contract.capabilities],
+  };
+  const runtimePolicy = createGeneratedMechanicRuntimePolicy({
+    contract,
+    versionId: base.artifact.versionId,
+  });
+  const artifact = acceptedGeneratedMechanicArtifactSchema.parse({
+    ...base.artifact,
+    contract,
+    sourceArtifact,
+    runtimePolicy,
+  });
+  const dependency: GeneratedMechanicProjectDependency = {
+    ...base.dependency,
+    contract: artifact.contract,
+    runtimePolicy: artifact.runtimePolicy,
+    sourceArtifact: artifact.sourceArtifact,
+  };
+  return { ...base, artifact, dependency };
 }
 
 function createIdentity(

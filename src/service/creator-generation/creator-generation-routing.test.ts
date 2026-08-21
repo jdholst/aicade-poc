@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MECHANIC_CAPABILITY_VERSION, type MechanicIntent } from "@/game-spec";
 import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
+import { TOP_DOWN_CREATOR_GENERATION_HOST_CAPABILITY_IDS } from "@/service/creator-generation-planning/creator-generation-planning-policy";
 
 import { createCreatorGenerationRouting } from "./creator-generation-routing";
 
@@ -94,6 +95,41 @@ describe("createCreatorGenerationRouting", () => {
         constraintSet: {
           capabilityVersion: MECHANIC_CAPABILITY_VERSION,
           maximumGeneratedMechanicsPerRun: 1,
+        },
+      },
+    });
+  });
+
+  it("routes a generic transient owned-object intent through the production host profile", () => {
+    const intent = createIntent({
+      actors: ["player"],
+      behaviors: ["spawn_transient_effect"],
+      connections: [{ direction: "input", port: "move" }],
+      ownedObjects: ["transient_effect"],
+      references: [{ kind: "entity", id: "entity_player" }],
+      requiredCapabilities: [
+        "object_create",
+        "object_motion_write",
+        "spatial_query",
+        "object_destroy",
+      ],
+    });
+
+    const result = createCreatorGenerationRouting({
+      availableCapabilities: TOP_DOWN_CREATOR_GENERATION_HOST_CAPABILITY_IDS,
+      baseGameSpec: getFirstValidTopDownGameSpecFixture(),
+      generationRunId: "generation_run_transient_owned_object",
+      intent,
+    });
+
+    expect(result).toMatchObject({
+      kind: "generated_mechanic",
+      generationRunId: "generation_run_transient_owned_object",
+      intent,
+      admittedRequest: {
+        resolution: {
+          kind: "generated_mechanic",
+          intentId: intent.id,
         },
       },
     });

@@ -88,6 +88,54 @@ describe("createMechanicObjectCapabilityHost", () => {
     );
   });
 
+  it("returns deterministic opaque handles for bounded spatial queries over exposed objects", () => {
+    const fixture = createFixture();
+    const actorHandle = fixture.objectHost.resolveOne("actor_binding");
+    const created = invoke(fixture.capabilityHost, "object_create", [
+      "generic_marker",
+      { strength: 2 },
+    ]);
+    if (created.kind !== "opaque_handle") {
+      throw new Error("Expected an opaque handle result.");
+    }
+
+    expect(
+      invoke(fixture.capabilityHost, "spatial_query", [
+        {
+          center: { x: 0, y: 0 },
+          radius: 3,
+          active: true,
+          ownership: "any",
+        },
+      ])
+    ).toEqual({
+      kind: "opaque_handles",
+      value: [created.value, actorHandle],
+    });
+    expect(
+      invoke(fixture.capabilityHost, "spatial_query", [
+        {
+          center: { x: 0, y: 0 },
+          radius: 0,
+          objectKinds: ["marker"],
+          ownership: "owned",
+        },
+      ])
+    ).toEqual({ kind: "opaque_handles", value: [created.value] });
+
+    invoke(fixture.capabilityHost, "object_destroy", [created.value]);
+
+    expect(
+      invoke(fixture.capabilityHost, "spatial_query", [
+        {
+          center: { x: 0, y: 0 },
+          radius: 3,
+          ownership: "owned",
+        },
+      ])
+    ).toEqual({ kind: "opaque_handles", value: [] });
+  });
+
   it.each([
     ["object_read", []],
     ["object_read", [{}, {}]],
@@ -97,6 +145,8 @@ describe("createMechanicObjectCapabilityHost", () => {
     ["object_create", ["generic_marker", {}, null]],
     ["object_destroy", []],
     ["object_destroy", [{}, {}]],
+    ["spatial_query", []],
+    ["spatial_query", [{}, {}]],
   ] as const)("rejects the wrong argument count for %s", (capabilityId, args) => {
     const fixture = createFixture();
 
@@ -175,7 +225,27 @@ describe("createMechanicObjectCapabilityHost", () => {
     expect(fixture.createOwnedObject).not.toHaveBeenCalled();
   });
 
-  it.each(["spatial_query", "state_read"])(
+  it.each([
+    null,
+    [],
+    {},
+    { center: { x: 0 }, radius: 1 },
+    { center: { x: 0, y: 0 }, radius: -1 },
+    { center: { x: 0, y: 0 }, radius: Number.NaN },
+    { center: { x: 0, y: 0 }, radius: 1, ownership: "foreign" },
+    { center: { x: 0, y: 0 }, radius: 1, objectKinds: ["Not Stable"] },
+    { center: { x: 0, y: 0 }, radius: 1, extra: true },
+  ])("rejects an invalid spatial query %#", (query) => {
+    const fixture = createFixture();
+
+    expect(() =>
+      invoke(fixture.capabilityHost, "spatial_query", [query])
+    ).toThrow(
+      'Mechanic object capability "spatial_query" requires a strict bounded spatial query.'
+    );
+  });
+
+  it.each(["state_read"])(
     "fails closed for unsupported capability %s",
     (capabilityId) => {
       const fixture = createFixture();
@@ -257,7 +327,8 @@ function createFixture() {
       "object_read",
       "object_motion_write",
       "object_create",
-      "object_destroy"
+      "object_destroy",
+      "spatial_query"
     ),
     bindings: [
       {

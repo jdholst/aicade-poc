@@ -379,6 +379,211 @@ describe("evaluateGeneratedMechanicArtifact", () => {
     });
   });
 
+  it("proves owned-object creation, travel, target interaction, and cleanup after the causal action", async () => {
+    const contract = createContract({
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      resourceExpectations: {
+        ...createContract().resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+      scenarios: [
+        {
+          id: "owned_lifecycle_scenario",
+          seed: 4,
+          setup: [],
+          steps: [
+            { kind: "dispatch_action", actionId: "activate" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "transient_effect",
+              operator: "equals",
+              value: 0,
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "owned_lifecycle_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "owned_lifecycle_effect",
+          scenarioId: "owned_lifecycle_scenario",
+          observation: {
+            kind: "owned_object_lifecycle_after_action",
+            archetypeIds: ["transient_effect"],
+            actionId: "activate",
+            requireTargetInteraction: true,
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => {
+        const activity = {
+          active: 0,
+          created: 0,
+          destroyed: 0,
+          simulatedDistanceTraveled: 0,
+          targetInteractions: 0,
+        };
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: () => true,
+          readDeclaredState: () => 3,
+          readBindingProperty: () => null,
+          countOwnedObjects: () => activity.active,
+          readOwnedObjectActivity: () => ({ ...activity }),
+          readEmittedOutputs: () => [],
+          install: async () => undefined,
+          receiveInput: async () => undefined,
+          dispatchAction: async () => {
+            activity.created += 1;
+            activity.active += 1;
+          },
+          advanceTime: async () => {
+            activity.simulatedDistanceTraveled += 12;
+            activity.targetInteractions += 1;
+            activity.destroyed += 1;
+            activity.active -= 1;
+          },
+          dispose: async () => undefined,
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "passed",
+      evidence: {
+        scenarios: [
+          {
+            outcome: "passed",
+            externalObservations: [
+              {
+                id: "owned_lifecycle_effect",
+                kind: "owned_object_lifecycle_after_action",
+                passed: true,
+                actual: {
+                  before: [
+                    {
+                      archetypeId: "transient_effect",
+                      created: 0,
+                      destroyed: 0,
+                    },
+                  ],
+                  after: [
+                    {
+                      archetypeId: "transient_effect",
+                      created: 1,
+                      destroyed: 1,
+                      simulatedDistanceTraveled: 12,
+                      targetInteractions: 1,
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects attempted owned-object calls that do not prove travel or routed-target interaction", async () => {
+    const contract = createContract({
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      resourceExpectations: {
+        ...createContract().resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+      scenarios: [
+        {
+          id: "unproven_lifecycle_scenario",
+          seed: 4,
+          setup: [],
+          steps: [
+            { kind: "dispatch_action", actionId: "activate" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [],
+        },
+      ],
+    });
+
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "unproven_lifecycle_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "unproven_lifecycle",
+          scenarioId: "unproven_lifecycle_scenario",
+          observation: {
+            kind: "owned_object_lifecycle_after_action",
+            archetypeIds: ["transient_effect"],
+            actionId: "activate",
+            requireTargetInteraction: true,
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => {
+        const activity = {
+          active: 0,
+          created: 0,
+          destroyed: 0,
+          simulatedDistanceTraveled: 0,
+          targetInteractions: 0,
+        };
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: () => true,
+          readDeclaredState: () => 3,
+          readBindingProperty: () => null,
+          countOwnedObjects: () => activity.active,
+          readOwnedObjectActivity: () => ({ ...activity }),
+          readEmittedOutputs: () => [],
+          install: async () => undefined,
+          receiveInput: async () => undefined,
+          dispatchAction: async () => {
+            activity.active = 1;
+            activity.created = 1;
+          },
+          advanceTime: async () => {
+            activity.destroyed = 1;
+            activity.active = 0;
+          },
+          dispose: async () => undefined,
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "failed",
+      evidence: {
+        scenarios: [
+          {
+            externalObservations: [
+              {
+                id: "unproven_lifecycle",
+                passed: false,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it("rejects a substituted action in evaluator-authored evidence before runtime creation", async () => {
     let runtimeCreated = false;
     const result = await evaluateGeneratedMechanicArtifact({

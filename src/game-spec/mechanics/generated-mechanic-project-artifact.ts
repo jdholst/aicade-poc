@@ -106,6 +106,9 @@ export const TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS =
   Object.freeze([
     "object_read",
     "object_motion_write",
+    "object_create",
+    "object_destroy",
+    "spatial_query",
     "state_read",
     "state_write",
     "time_read",
@@ -120,7 +123,6 @@ export type GeneratedMechanicProjectHostProfileIssue = Readonly<{
   path: string;
   code:
     | "unsupported_runtime_ports"
-    | "unsupported_runtime_owned_objects"
     | "unsupported_runtime_capability"
     | "unsupported_runtime_binding"
     | "unsupported_runtime_gameplay_events";
@@ -647,14 +649,6 @@ export function generatedMechanicProjectHostProfileIssues({
       code: "unsupported_runtime_ports",
       message:
         "The persisted top-down generated-mechanic host profile does not admit mechanic ports until a durable trusted port-owner profile is available.",
-    });
-  }
-  if (contract.ownedObjects.length > 0) {
-    issues.push({
-      path: "runtimePolicy.hostProfileId",
-      code: "unsupported_runtime_owned_objects",
-      message:
-        "The persisted top-down generated-mechanic host profile does not admit mechanic-owned objects until trusted object factories are available.",
     });
   }
   contract.capabilities.forEach((capabilityId, index) => {

@@ -16,6 +16,7 @@ describe("createGeneratedMechanicLifecycleEvaluationRuntimeFactory", () => {
   it("runs normalized artifact callbacks through the deterministic lifecycle for every replay", async () => {
     const realmAdapter = new RecordingRealmAdapter();
     let disposedFixtureCount = 0;
+    const simulationAdvances: number[] = [];
     const createRuntime =
       createGeneratedMechanicLifecycleEvaluationRuntimeFactory({
         realmAdapter,
@@ -32,6 +33,9 @@ describe("createGeneratedMechanicLifecycleEvaluationRuntimeFactory", () => {
             readBindingProperty: () => "active",
             countOwnedObjects: () => 0,
             readEmittedOutputs: () => [],
+          },
+          advanceSimulation: async (milliseconds) => {
+            simulationAdvances.push(milliseconds);
           },
           dispose: async () => {
             disposedFixtureCount += 1;
@@ -63,6 +67,7 @@ describe("createGeneratedMechanicLifecycleEvaluationRuntimeFactory", () => {
     expect(result.outcome).toBe("passed");
     expect(realmAdapter.createdSeeds).toEqual([7, 7]);
     expect(disposedFixtureCount).toBe(2);
+    expect(simulationAdvances).toEqual([4, 4, 4, 4]);
     expect(realmAdapter.executions.map((execution) => execution.callbackId)).toEqual([
       "install_compiled_artifact",
       "action_compiled_artifact",

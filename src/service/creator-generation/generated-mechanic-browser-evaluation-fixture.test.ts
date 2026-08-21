@@ -71,6 +71,263 @@ describe("generated mechanic browser evaluation fixture", () => {
     await fixture.dispose();
   });
 
+  it("evaluates declared owned objects through create, query, motion, and destroy", async () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const contract: GeneratedMechanicContract = {
+      ...createContract(gameSpec.entities[0].id),
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 2 },
+      ],
+      capabilities: [
+        ...createContract(gameSpec.entities[0].id).capabilities,
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...createContract(gameSpec.entities[0].id).resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+    };
+    const grantResult = createMechanicCapabilityGrant({
+      contract,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+    });
+    if (!grantResult.success) {
+      throw new Error("Expected the owned-object grant to be admitted.");
+    }
+    const fixture = createGeneratedMechanicBrowserExecutionFixture({
+      contract,
+      gameSpec,
+      grant: grantResult.data,
+      resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
+      seed: 7,
+    });
+
+    const created = await fixture.capabilityHost.invoke({
+      capabilityId: "object_create",
+      arguments: [
+        "transient_effect",
+        {
+          active: false,
+          position: { x: 24, y: 32 },
+          velocity: { x: 8, y: 0 },
+          properties: { strength: 2 },
+        },
+      ],
+    });
+    if (created.kind !== "opaque_handle") {
+      throw new Error("Expected one owned-object handle.");
+    }
+
+    expect(
+      fixture.capabilityHost.invoke({
+        capabilityId: "object_read",
+        arguments: [created.value],
+      })
+    ).toEqual({
+      kind: "json",
+      value: {
+        active: true,
+        kind: "effect",
+        position: { x: 24, y: 32 },
+        properties: { strength: 2 },
+        velocity: { x: 8, y: 0 },
+      },
+    });
+    expect(
+      fixture.capabilityHost.invoke({
+        capabilityId: "spatial_query",
+        arguments: [
+          {
+            center: { x: 24, y: 32 },
+            radius: 0,
+            objectKinds: ["effect"],
+            ownership: "owned",
+          },
+        ],
+      })
+    ).toEqual({ kind: "opaque_handles", value: [created.value] });
+    await fixture.advanceSimulation(1000);
+    expect(
+      fixture.capabilityHost.invoke({
+        capabilityId: "object_read",
+        arguments: [created.value],
+      })
+    ).toMatchObject({
+      kind: "json",
+      value: { position: { x: 32, y: 32 } },
+    });
+    await expect(
+      fixture.observations.countOwnedObjects("transient_effect")
+    ).resolves.toBe(1);
+
+    await fixture.capabilityHost.invoke({
+      capabilityId: "object_motion_write",
+      arguments: [created.value, { position: { x: 40, y: 32 } }],
+    });
+    await fixture.capabilityHost.invoke({
+      capabilityId: "object_destroy",
+      arguments: [created.value],
+    });
+
+    await expect(
+      fixture.observations.readOwnedObjectActivity("transient_effect")
+    ).resolves.toEqual({
+      active: 0,
+      created: 1,
+      destroyed: 1,
+      simulatedDistanceTraveled: 8,
+      targetInteractions: 0,
+    });
+    const bounded = fixture.capabilityHost.invoke({
+      capabilityId: "object_create",
+      arguments: [
+        "transient_effect",
+        {
+          active: false,
+          position: { x: 2_000_000, y: -2_000_000 },
+          velocity: { x: 3_000, y: -3_000 },
+        },
+      ],
+    });
+    if (bounded.kind !== "opaque_handle") {
+      throw new Error("Expected one bounded owned-object handle.");
+    }
+    expect(
+      fixture.capabilityHost.invoke({
+        capabilityId: "object_read",
+        arguments: [bounded.value],
+      })
+    ).toMatchObject({
+      kind: "json",
+      value: {
+        active: true,
+        position: { x: 1_000_000, y: -1_000_000 },
+        velocity: { x: 2_000, y: -2_000 },
+      },
+    });
+    fixture.capabilityHost.invoke({
+      capabilityId: "object_destroy",
+      arguments: [bounded.value],
+    });
+    await expect(
+      fixture.observations.countOwnedObjects("transient_effect")
+    ).resolves.toBe(0);
+    await fixture.dispose();
+  });
+
+  it("attributes a routed-target motion effect only after a spatial match with a traveling owned object", async () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const actorEntity = gameSpec.entities[0];
+    const targetEntity = gameSpec.entities[1];
+    if (!actorEntity || !targetEntity) {
+      throw new Error("Expected actor and target entities.");
+    }
+    const targetIndex = gameSpec.entities.indexOf(targetEntity);
+    const baseContract = createContract(actorEntity.id);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        targets: [targetEntity.role],
+        references: [
+          { kind: "entity", id: actorEntity.id },
+          { kind: "entity", id: targetEntity.id },
+        ],
+      },
+      bindings: [
+        ...baseContract.bindings,
+        {
+          id: "target",
+          referenceKind: "entity",
+          cardinality: "one",
+          objectIds: [targetEntity.id],
+        },
+      ],
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      capabilities: [
+        ...baseContract.capabilities,
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+    };
+    const grantResult = createMechanicCapabilityGrant({
+      contract,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+    });
+    if (!grantResult.success) {
+      throw new Error("Expected the interaction grant to be admitted.");
+    }
+    const fixture = createGeneratedMechanicBrowserExecutionFixture({
+      contract,
+      gameSpec,
+      grant: grantResult.data,
+      resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
+      seed: 7,
+    });
+    const targetHandle = fixture.bindings.find(({ id }) => id === "target")
+      ?.handles[0];
+    if (!targetHandle) {
+      throw new Error("Expected one exact target handle.");
+    }
+    const targetPosition = {
+      x: 80 + targetIndex * 32,
+      y: 80 + targetIndex * 24,
+    };
+    const created = fixture.capabilityHost.invoke({
+      capabilityId: "object_create",
+      arguments: [
+        "transient_effect",
+        { position: targetPosition, velocity: { x: 10, y: 0 } },
+      ],
+    });
+    if (created.kind !== "opaque_handle") {
+      throw new Error("Expected one transient owned-object handle.");
+    }
+
+    expect(
+      fixture.capabilityHost.invoke({
+        capabilityId: "spatial_query",
+        arguments: [
+          {
+            center: targetPosition,
+            radius: 0,
+            objectKinds: [targetEntity.role],
+            ownership: "bound",
+          },
+        ],
+      })
+    ).toEqual({ kind: "opaque_handles", value: [targetHandle] });
+    fixture.capabilityHost.invoke({
+      capabilityId: "object_motion_write",
+      arguments: [targetHandle, { velocity: { x: 12, y: 0 } }],
+    });
+    await fixture.advanceSimulation(100);
+    fixture.capabilityHost.invoke({
+      capabilityId: "object_destroy",
+      arguments: [created.value],
+    });
+
+    await expect(
+      fixture.observations.readOwnedObjectActivity("transient_effect")
+    ).resolves.toMatchObject({
+      active: 0,
+      created: 1,
+      destroyed: 1,
+      simulatedDistanceTraveled: 1,
+      targetInteractions: 1,
+    });
+    await fixture.dispose();
+  });
+
   it("authors one independent causal motion observation per scenario", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const contract = createContract(gameSpec.entities[0].id);
@@ -81,6 +338,45 @@ describe("generated mechanic browser evaluation fixture", () => {
         contract,
         gameSpec
       )
+    ).toEqual([
+      {
+        id: "external_scenario_dash_referenced_entity_motion_changed",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "referenced_entity_motion_changed",
+          bindingIds: ["actor"],
+          actionId: "move",
+        },
+      },
+    ]);
+  });
+
+  it("does not impose transient lifecycle evidence on every owned-object intent", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const intent: MechanicIntent = {
+      ...createIntent(entityId),
+      ownedObjects: ["persistent_companion"],
+      requiredCapabilities: ["object_motion_write", "object_create"],
+    };
+    const contract: GeneratedMechanicContract = {
+      ...createContract(entityId),
+      ownedObjects: [
+        {
+          id: "persistent_companion",
+          objectKind: "companion",
+          maximumInstances: 1,
+        },
+      ],
+      capabilities: ["object_motion_write", "object_create"],
+      resourceExpectations: {
+        ...createContract(entityId).resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
     ).toEqual([
       {
         id: "external_scenario_dash_referenced_entity_motion_changed",
@@ -200,6 +496,77 @@ describe("generated mechanic browser evaluation fixture", () => {
     ]);
   });
 
+  it("authors target interaction and owned-object lifecycle proof for transient-object contracts", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const actorEntity = gameSpec.entities.find(({ role }) => role === "player");
+    const targetEntity = gameSpec.entities.find(({ role }) => role !== "player");
+    if (!actorEntity || !targetEntity) {
+      throw new Error("Expected distinct actor and target entities.");
+    }
+    const baseIntent = createIntent(actorEntity.id);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      targets: [targetEntity.role],
+      ownedObjects: ["transient_effect"],
+      references: [
+        { kind: "entity", id: actorEntity.id },
+        { kind: "entity", id: targetEntity.id },
+      ],
+      requiredCapabilities: [
+        ...baseIntent.requiredCapabilities,
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(actorEntity.id);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        targets: intent.targets,
+        references: intent.references,
+      },
+      bindings: [
+        ...baseContract.bindings,
+        {
+          id: "target",
+          referenceKind: "entity",
+          cardinality: "one",
+          objectIds: [targetEntity.id],
+        },
+      ],
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 2 },
+      ],
+      capabilities: [
+        ...baseContract.capabilities,
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_after_action",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_after_action",
+          archetypeIds: ["transient_effect"],
+          actionId: "move",
+          requireTargetInteraction: true,
+        },
+      },
+    ]);
+  });
+
   it("rejects a legacy contract without trusted intent lineage at the production observation seam", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const contract = createContract(gameSpec.entities[0].id);
@@ -264,6 +631,60 @@ describe("generated mechanic browser evaluation fixture", () => {
       "callback_fixed_step",
     ]);
     await harness.runtime.dispose();
+  });
+
+  it("advances owned-object motion through the production evaluation runtime factory", async () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const baseContract = createContract(gameSpec.entities[0].id);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      capabilities: [...baseContract.capabilities, "object_create"],
+      lifecycle: {
+        ...baseContract.lifecycle,
+        fixedStep: true,
+      },
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+    };
+    const grantResult = createMechanicCapabilityGrant({
+      contract,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+    });
+    if (!grantResult.success) {
+      throw new Error("Expected the production travel grant to be admitted.");
+    }
+    const createRuntime =
+      createGeneratedMechanicBrowserEvaluationRuntimeFactory({
+        gameSpec,
+        realmAdapter: createOwnedObjectTravelRealmAdapter(),
+        resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
+      });
+    const runtime = await createRuntime({
+      fixtureId: "production_travel_fixture",
+      scenarioId: contract.scenarios[0]!.id,
+      seed: 7,
+      contract,
+      artifact: createSourceArtifact(contract, grantResult.data),
+      config: {},
+    });
+
+    await runtime.install();
+    await runtime.dispatchAction("move");
+    await runtime.advanceTime(100);
+
+    await expect(
+      runtime.readOwnedObjectActivity?.("transient_effect")
+    ).resolves.toMatchObject({
+      active: 1,
+      created: 1,
+      simulatedDistanceTraveled: 1,
+    });
+    await runtime.dispose();
   });
 
   it("does not schedule fixed-step callbacks for non-fixed browser evaluation", async () => {
@@ -381,6 +802,37 @@ function createRecordingRealmAdapter(
           const result = Promise.resolve({
             executionId: input.id,
             outcome: "completed" as const,
+          });
+          return { result, terminate: () => result };
+        },
+        dispose() {},
+      };
+    },
+  };
+}
+
+function createOwnedObjectTravelRealmAdapter(): MechanicExecutionRealmAdapter {
+  return {
+    adapterVersion: "mechanic_execution_realm_adapter/v1",
+    id: "owned_object_travel_evaluation_realm",
+    async create(input) {
+      return {
+        execute(execution) {
+          const callbackId = execution.lifecycle?.invocations[0]?.callbackId;
+          const result = Promise.resolve().then(async () => {
+            if (callbackId === "callback_logical_action") {
+              await input.capabilityHost.invoke({
+                capabilityId: "object_create",
+                arguments: [
+                  "transient_effect",
+                  { position: { x: 24, y: 32 }, velocity: { x: 10, y: 0 } },
+                ],
+              });
+            }
+            return {
+              executionId: execution.id,
+              outcome: "completed" as const,
+            };
           });
           return { result, terminate: () => result };
         },

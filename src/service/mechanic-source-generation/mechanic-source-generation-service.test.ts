@@ -226,6 +226,36 @@ describe("generated mechanic source stage", () => {
     expect(realmAdapter.executions).toHaveLength(0);
   });
 
+  it("typechecks spatial queries against the retained bounded query shape", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+    const contract = createContract({ capabilities: ["spatial_query"] });
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter, contract),
+      contract,
+      grant: createGrant("spatial_query"),
+      candidate: createCandidate(
+        'return await capabilities.objects.querySpatial({ center: { x: 0, y: 0 }, radius: 1, ownership: "foreign" });'
+      ),
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "source_typecheck",
+        code: "generated_mechanic_source_typecheck_failed",
+        issues: [
+          {
+            path: "callbacks.0.source",
+            code: "type_failure",
+            message: expect.stringContaining('"foreign"'),
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
+  });
+
   it("rejects ambient authority before typecheck or realm admission", async () => {
     const realmAdapter = new RecordingRealmAdapter();
 

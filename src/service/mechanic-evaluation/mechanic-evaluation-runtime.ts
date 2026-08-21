@@ -23,6 +23,7 @@ type EvaluationObservations = Pick<
   | "readDeclaredState"
   | "readBindingProperty"
   | "countOwnedObjects"
+  | "readOwnedObjectActivity"
   | "readEmittedOutputs"
 >;
 
@@ -31,6 +32,7 @@ export type GeneratedMechanicEvaluationFixture = Readonly<{
   capabilityHost: MechanicExecutionRealmCapabilityHost;
   observations: EvaluationObservations;
   fixedStepIntervalMilliseconds?: number;
+  advanceSimulation?(milliseconds: number): Promise<void>;
   dispose(): Promise<void>;
 }>;
 
@@ -114,10 +116,21 @@ export function createGeneratedMechanicLifecycleEvaluationRuntimeFactory({
         );
       },
       advanceTime: async (milliseconds) => {
-        requireAllCompleted(
-          await installedLifecycle.advanceSimulation(milliseconds),
-          "simulation advancement"
-        );
+        const maximumStep =
+          fixture.fixedStepIntervalMilliseconds ?? milliseconds;
+        let remainingMilliseconds = milliseconds;
+        while (remainingMilliseconds > 0) {
+          const stepMilliseconds = Math.min(
+            remainingMilliseconds,
+            maximumStep
+          );
+          await fixture.advanceSimulation?.(stepMilliseconds);
+          requireAllCompleted(
+            await installedLifecycle.advanceSimulation(stepMilliseconds),
+            "simulation advancement"
+          );
+          remainingMilliseconds -= stepMilliseconds;
+        }
       },
       dispose: async () => {
         if (disposed) {

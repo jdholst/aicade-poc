@@ -17,7 +17,10 @@ import {
 import { PHASE_9_GENERATION_CONSTRAINT_SET } from "@/game-spec/mechanics/mechanic-generation-constraints";
 import { topDownGameSpecSchema } from "@/game-spec/top-down-spec-schema";
 import { crystalSpecChaseGameSpecFixtureInput } from "@/runtime/phaser/fixtures/crystal-spec-chase";
-import type { TrustedTopDownPhaserMechanicObjectRegistration } from "@/runtime/phaser/top-down-mechanic-object-adapter";
+import type {
+  TrustedTopDownPhaserMechanicObjectRegistration,
+  TrustedTopDownPhaserOwnedObjectFactory,
+} from "@/runtime/phaser/top-down-mechanic-object-adapter";
 import {
   GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
 } from "@/game-spec/mechanics/generated-mechanic-project-artifact";
@@ -174,6 +177,98 @@ describe("createGeneratedMechanicRuntimeSession", () => {
     await expect(session.dispose()).resolves.toMatchObject({
       outcome: "completed",
     });
+  });
+
+  it("runs declared owned objects through the retained session capability host", async () => {
+    const fixture = createOwnedObjectFixture();
+    const adapter = new OwnedObjectRealmAdapter();
+    const destroyed = vi.fn();
+    const createEffect: TrustedTopDownPhaserOwnedObjectFactory = ({ initial }) => {
+      const position = (initial as { position: { x: number; y: number } }).position;
+      const state = {
+        active: true,
+        position: { ...position },
+        velocity: { x: 0, y: 0 },
+      };
+      return {
+        object: {
+          get active() {
+            return state.active;
+          },
+          get x() {
+            return state.position.x;
+          },
+          get y() {
+            return state.position.y;
+          },
+          setPosition(x, y) {
+            state.position = { x, y };
+          },
+          body: {
+            get velocity() {
+              return state.velocity;
+            },
+            setVelocity(x, y) {
+              state.velocity = { x, y };
+            },
+          },
+          destroy() {
+            state.active = false;
+            destroyed();
+          },
+        },
+        observeProperties: () => ({ source: "generic_factory" }),
+      };
+    };
+
+    const session = await createGeneratedMechanicRuntimeSession({
+      artifact: fixture.artifact,
+      dependency: fixture.dependency,
+      realmAdapter: adapter,
+      objects: fixture.objects,
+      ownedObjectFactories: { effect: createEffect },
+    });
+
+    await expect(session.install()).resolves.toMatchObject({
+      outcome: "completed",
+    });
+    await expect(session.dispatchLogicalAction("move")).resolves.toMatchObject({
+      outcome: "completed",
+    });
+    expect(adapter.observations).toEqual({
+      createdKind: "effect",
+      movedPosition: { x: 28, y: 32 },
+      queriedHandleCount: 1,
+    });
+    expect(destroyed).toHaveBeenCalledTimes(1);
+    await expect(session.dispose()).resolves.toMatchObject({
+      outcome: "completed",
+    });
+  });
+
+  it("rejects extra trusted owned-object factory keys even when their value is undefined", async () => {
+    const fixture = createOwnedObjectFixture();
+    const adapter = new OwnedObjectRealmAdapter();
+    const createEffect: TrustedTopDownPhaserOwnedObjectFactory = () => ({
+      object: {
+        x: 0,
+        y: 0,
+        destroy() {},
+      },
+    });
+
+    await expect(
+      createGeneratedMechanicRuntimeSession({
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+        realmAdapter: adapter,
+        objects: fixture.objects,
+        ownedObjectFactories: {
+          effect: createEffect,
+          undeclared_kind: undefined,
+        },
+      })
+    ).rejects.toThrow(/exactly one trusted owned-object factory/i);
   });
 
   it("rejects a transient executable whose exact Final Game Spec lineage was substituted", async () => {
@@ -663,6 +758,88 @@ class ScriptedRealmAdapter implements MechanicExecutionRealmAdapter {
   }
 }
 
+class OwnedObjectRealmAdapter implements MechanicExecutionRealmAdapter {
+  readonly adapterVersion = MECHANIC_EXECUTION_REALM_ADAPTER_VERSION;
+  readonly id = GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID;
+  readonly observations = {
+    createdKind: "",
+    movedPosition: { x: 0, y: 0 },
+    queriedHandleCount: 0,
+  };
+
+  constructor() {
+    authenticTestRealmAdapters.add(this);
+  }
+
+  async create(
+    input: CreateMechanicExecutionRealmInput
+  ): Promise<MechanicExecutionRealm> {
+    return {
+      execute: (execution) => {
+        const callbackId = execution.lifecycle?.invocations[0]?.callbackId;
+        const result = this.runCallback(input, execution.id, callbackId);
+        return {
+          result,
+          terminate: async () => ({
+            executionId: execution.id,
+            outcome: "terminated" as const,
+          }),
+        };
+      },
+      dispose() {},
+    };
+  }
+
+  private async runCallback(
+    input: CreateMechanicExecutionRealmInput,
+    executionId: StableId,
+    callbackId: StableId | undefined
+  ): Promise<MechanicExecutionRealmExecutionResult> {
+    if (callbackId === "action_session") {
+      const created = await invokeCapability(input, "object_create", [
+        "transient_effect",
+        { position: { x: 24, y: 32 } },
+      ]);
+      if (created.kind !== "opaque_handle") {
+        throw new Error("Expected one created handle.");
+      }
+      const queried = await invokeCapability(input, "spatial_query", [
+        {
+          center: { x: 24, y: 32 },
+          radius: 0,
+          objectKinds: ["effect"],
+          ownership: "owned",
+        },
+      ]);
+      if (queried.kind !== "opaque_handles") {
+        throw new Error("Expected queried handles.");
+      }
+      this.observations.queriedHandleCount = queried.value.length;
+      await invokeCapability(input, "object_motion_write", [
+        created.value,
+        { position: { x: 28, y: 32 } },
+      ]);
+      const observation = await invokeCapability(input, "object_read", [
+        created.value,
+      ]);
+      if (observation.kind !== "json" || !isJsonRecord(observation.value)) {
+        throw new Error("Expected an owned-object observation.");
+      }
+      const position = observation.value.position;
+      if (!isJsonRecord(position)) {
+        throw new Error("Expected an owned-object position.");
+      }
+      this.observations.createdKind = String(observation.value.kind);
+      this.observations.movedPosition = {
+        x: Number(position.x),
+        y: Number(position.y),
+      };
+      await invokeCapability(input, "object_destroy", [created.value]);
+    }
+    return { executionId, outcome: "completed" };
+  }
+}
+
 async function invokeCapability(
   input: CreateMechanicExecutionRealmInput,
   capabilityId: StableId,
@@ -817,6 +994,67 @@ function createFixture() {
     },
   ];
   return { artifact, dependency, actor, objects };
+}
+
+function createOwnedObjectFixture() {
+  const base = createFixture();
+  const contract: GeneratedMechanicContract = {
+    ...base.artifact.contract,
+    ownedObjects: [
+      { id: "transient_effect", objectKind: "effect", maximumInstances: 2 },
+    ],
+    capabilities: [
+      ...base.artifact.contract.capabilities,
+      "object_create",
+      "spatial_query",
+      "object_destroy",
+    ],
+    resourceExpectations: {
+      ...base.artifact.contract.resourceExpectations,
+      maximumOwnedObjects: 2,
+    },
+    scenarios: base.artifact.contract.scenarios.map((scenario) => ({
+      ...scenario,
+      observations: [
+        ...scenario.observations,
+        {
+          kind: "owned_object_count" as const,
+          archetypeId: "transient_effect",
+          operator: "equals" as const,
+          value: 0,
+        },
+      ],
+    })),
+  };
+  const grant = createMechanicCapabilityGrant({
+    contract,
+    constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+  });
+  if (!grant.success) {
+    throw new Error("Expected the owned-object fixture grant to pass.");
+  }
+  const sourceArtifact = {
+    ...base.artifact.sourceArtifact,
+    grant: grant.data,
+    usedCapabilities: [...contract.capabilities],
+  };
+  const runtimePolicy = createGeneratedMechanicRuntimePolicy({
+    contract,
+    versionId: base.artifact.versionId,
+  });
+  const artifact = acceptedGeneratedMechanicArtifactSchema.parse({
+    ...base.artifact,
+    contract,
+    sourceArtifact,
+    runtimePolicy,
+  });
+  const dependency: GeneratedMechanicProjectDependency = {
+    ...base.dependency,
+    contract: artifact.contract,
+    runtimePolicy: artifact.runtimePolicy,
+    sourceArtifact: artifact.sourceArtifact,
+  };
+  return { artifact, dependency, objects: base.objects };
 }
 
 function divergeFinalGameSpec(

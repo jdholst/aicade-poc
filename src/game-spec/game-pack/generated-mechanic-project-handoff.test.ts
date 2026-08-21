@@ -1191,32 +1191,6 @@ describe("generated mechanic project handoff", () => {
 
   it.each([
     {
-      name: "mechanic-owned objects",
-      code: "unsupported_runtime_owned_objects",
-      mutate: (contract: GeneratedMechanicContract) => ({
-        ...contract,
-        ownedObjects: [
-          { id: "runtime_marker", objectKind: "effect", maximumInstances: 1 },
-        ],
-      }),
-    },
-    {
-      name: "object creation",
-      code: "unsupported_runtime_capability",
-      mutate: (contract: GeneratedMechanicContract) => ({
-        ...contract,
-        capabilities: [...contract.capabilities, "object_create" as const],
-      }),
-    },
-    {
-      name: "spatial queries",
-      code: "unsupported_runtime_capability",
-      mutate: (contract: GeneratedMechanicContract) => ({
-        ...contract,
-        capabilities: [...contract.capabilities, "spatial_query" as const],
-      }),
-    },
-    {
       name: "gameplay events without a trusted event source",
       code: "unsupported_runtime_gameplay_events",
       mutate: (contract: GeneratedMechanicContract) => ({

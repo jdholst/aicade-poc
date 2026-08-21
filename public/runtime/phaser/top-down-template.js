@@ -797,7 +797,104 @@
       return installedMechanics;
     }
 
-    function installGeneratedMechanic() {
+    function createGeneratedOwnedObject(scene, input) {
+      if (
+        !input ||
+        typeof input !== "object" ||
+        typeof input.objectId !== "string" ||
+        typeof input.objectKind !== "string"
+      ) {
+        throw new TypeError(
+          "Generated owned-object creation requires exact object identity."
+        );
+      }
+      const initial =
+        input.initial &&
+        typeof input.initial === "object" &&
+        !Array.isArray(input.initial)
+          ? input.initial
+          : {};
+      const position =
+        initial.position &&
+        typeof initial.position === "object" &&
+        !Array.isArray(initial.position)
+          ? initial.position
+          : {};
+      const velocity =
+        initial.velocity &&
+        typeof initial.velocity === "object" &&
+        !Array.isArray(initial.velocity)
+          ? initial.velocity
+          : {};
+      const properties =
+        initial.properties &&
+        typeof initial.properties === "object" &&
+        !Array.isArray(initial.properties)
+          ? initial.properties
+          : {};
+      const x = boundedNumber(
+        position.x,
+        config.viewport.width / 2,
+        -1000000,
+        1000000
+      );
+      const y = boundedNumber(
+        position.y,
+        config.viewport.height / 2,
+        -1000000,
+        1000000
+      );
+      const color = Math.round(
+        boundedNumber(initial.color, 0xffffff, 0, 0xffffff)
+      );
+      const object =
+        initial.shape === "rectangle"
+          ? scene.add.rectangle(
+              x,
+              y,
+              boundedNumber(initial.width, 12, 1, 256),
+              boundedNumber(initial.height, 12, 1, 256),
+              color
+            )
+          : scene.add.circle(
+              x,
+              y,
+              boundedNumber(initial.radius, 6, 1, 128),
+              color
+            );
+      scene.physics.add.existing(object, false);
+      if (
+        object.body &&
+        typeof object.body.setAllowGravity === "function"
+      ) {
+        object.body.setAllowGravity(false);
+      }
+      if (object.body && typeof object.body.setVelocity === "function") {
+        object.body.setVelocity(
+          boundedNumber(velocity.x, 0, -2000, 2000),
+          boundedNumber(velocity.y, 0, -2000, 2000)
+        );
+      }
+      if (typeof object.destroy !== "function") {
+        throw new Error(
+          'Generated owned object "' + input.objectId + '" cannot be destroyed.'
+        );
+      }
+      return {
+        object,
+        observeProperties() {
+          return Object.assign({}, properties);
+        },
+      };
+    }
+
+    function boundedNumber(value, fallback, minimum, maximum) {
+      return typeof value === "number" && Number.isFinite(value)
+        ? Math.min(maximum, Math.max(minimum, value))
+        : fallback;
+    }
+
+    function installGeneratedMechanic(scene) {
       const generatedHost = getGeneratedMechanicHost();
       if (!generatedHost) {
         return null;
@@ -820,6 +917,9 @@
           gameSpec: config.gameSpec,
           mechanic,
           template: config.template,
+          createOwnedObject(input) {
+            return createGeneratedOwnedObject(scene, input);
+          },
           getEntityDefinition: entityModule.findById,
           getEntityHandle: entityModule.getEntityHandle,
         })
@@ -1511,7 +1611,7 @@
           });
         };
         const generatedInstall =
-          modules.mechanicsModule.installGeneratedMechanic();
+          modules.mechanicsModule.installGeneratedMechanic(this);
         if (generatedInstall) {
           generatedInstall.then(notifyReady, function (error) {
             modules.reporter.reportFatalRuntimeFailure(

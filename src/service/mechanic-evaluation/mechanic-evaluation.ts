@@ -21,6 +21,12 @@ export type ExternalAcceptanceObservationAssertion =
       kind: "referenced_entity_motion_changed";
       bindingIds: readonly StableId[];
       actionId: StableId;
+    }>
+  | Readonly<{
+      kind: "owned_object_lifecycle_after_action";
+      archetypeIds: readonly StableId[];
+      actionId: StableId;
+      requireTargetInteraction?: true;
     }>;
 
 export type ExternalAcceptanceObservation = Readonly<{
@@ -38,6 +44,17 @@ export type GeneratedMechanicEvaluationRuntime = Readonly<{
     property: StableId
   ): MaybePromise<JsonValue>;
   countOwnedObjects(archetypeId: StableId): MaybePromise<number>;
+  readOwnedObjectActivity?(
+    archetypeId: StableId
+  ): MaybePromise<
+    Readonly<{
+      active: number;
+      created: number;
+      destroyed: number;
+      simulatedDistanceTraveled: number;
+      targetInteractions: number;
+    }>
+  >;
   readEmittedOutputs(portId: StableId): MaybePromise<readonly JsonValue[]>;
   install(): Promise<void>;
   receiveInput(portId: StableId, value: JsonValue): Promise<void>;
@@ -350,7 +367,10 @@ function externalObservationAdmissionIssues(
       );
       return;
     }
-    if (external.observation.kind !== "referenced_entity_motion_changed") {
+    if (
+      external.observation.kind !== "referenced_entity_motion_changed" &&
+      external.observation.kind !== "owned_object_lifecycle_after_action"
+    ) {
       return;
     }
     const scenarioActionIds = scenario.steps.flatMap((step) =>
@@ -368,19 +388,41 @@ function externalObservationAdmissionIssues(
         })
       );
     }
+    if (external.observation.kind === "referenced_entity_motion_changed") {
+      if (
+        external.observation.bindingIds.length === 0 ||
+        new Set(external.observation.bindingIds).size !==
+          external.observation.bindingIds.length ||
+        external.observation.bindingIds.some(
+          (bindingId) => !contractBindingIds.has(bindingId)
+        )
+      ) {
+        issues.push(
+          Object.freeze({
+            path: `externalObservations.${index}.observation.bindingIds`,
+            code: "external_plan_mismatch" as const,
+            message: `External observation "${external.id}" must name a nonempty, unique set of exact contract bindings.`,
+          })
+        );
+      }
+      return;
+    }
+    const contractArchetypeIds = new Set(
+      contract.ownedObjects.map(({ id }) => id)
+    );
     if (
-      external.observation.bindingIds.length === 0 ||
-      new Set(external.observation.bindingIds).size !==
-        external.observation.bindingIds.length ||
-      external.observation.bindingIds.some(
-        (bindingId) => !contractBindingIds.has(bindingId)
+      external.observation.archetypeIds.length === 0 ||
+      new Set(external.observation.archetypeIds).size !==
+        external.observation.archetypeIds.length ||
+      external.observation.archetypeIds.some(
+        (archetypeId) => !contractArchetypeIds.has(archetypeId)
       )
     ) {
       issues.push(
         Object.freeze({
-          path: `externalObservations.${index}.observation.bindingIds`,
+          path: `externalObservations.${index}.observation.archetypeIds`,
           code: "external_plan_mismatch" as const,
-          message: `External observation "${external.id}" must name a nonempty, unique set of exact contract bindings.`,
+          message: `External observation "${external.id}" must name a nonempty, unique set of exact contract owned-object archetypes.`,
         })
       );
     }
@@ -422,6 +464,7 @@ async function runScenario(
     StableId,
     Omit<ExternalObservationEvidence, "id" | "source">
   >();
+  const causalExternalObservationBaselines = new Map<StableId, JsonValue>();
   const issues: GeneratedMechanicScenarioEvaluationEvidence["issues"][number][] = [];
   let runtime: GeneratedMechanicEvaluationRuntime | undefined;
 
@@ -455,8 +498,10 @@ async function runScenario(
               ? input.externalObservations.filter(
                   (external) =>
                     external.scenarioId === scenario.id &&
-                    external.observation.kind ===
-                      "referenced_entity_motion_changed" &&
+                    (external.observation.kind ===
+                      "referenced_entity_motion_changed" ||
+                      external.observation.kind ===
+                        "owned_object_lifecycle_after_action") &&
                     external.observation.actionId === step.actionId
                 )
               : [];
@@ -465,8 +510,17 @@ async function runScenario(
               captureExternalBaseline(activeRuntime, external.observation)
             )
           );
+          for (const [index, external] of causalObservations.entries()) {
+            causalExternalObservationBaselines.set(
+              external.id,
+              causalBaselines[index]!
+            );
+          }
           await executeStep(activeRuntime, step);
           for (const [index, external] of causalObservations.entries()) {
+            if (observesExternalAfterScenario(external.observation)) {
+              continue;
+            }
             causalExternalObservationEvidence.set(
               external.id,
               await observeExternal(
@@ -482,6 +536,28 @@ async function runScenario(
             input: snapshotJson(step),
           });
         }
+        for (const external of input.externalObservations) {
+          if (
+            external.scenarioId !== scenario.id ||
+            !observesExternalAfterScenario(external.observation)
+          ) {
+            continue;
+          }
+          const baseline = causalExternalObservationBaselines.get(external.id);
+          if (!causalExternalObservationBaselines.has(external.id)) {
+            throw new Error(
+              `External observation "${external.id}" did not capture its causal action baseline.`
+            );
+          }
+          causalExternalObservationEvidence.set(
+            external.id,
+            await observeExternal(
+              activeRuntime,
+              external.observation,
+              baseline
+            )
+          );
+        }
         for (const observation of scenario.observations) {
           declaredObservations.push(
             await observeDeclared(activeRuntime, observation)
@@ -493,7 +569,9 @@ async function runScenario(
           }
           const observed =
             external.observation.kind ===
-            "referenced_entity_motion_changed"
+              "referenced_entity_motion_changed" ||
+            external.observation.kind ===
+              "owned_object_lifecycle_after_action"
               ? causalExternalObservationEvidence.get(external.id)
               : await observeExternal(
                   activeRuntime,
@@ -502,7 +580,7 @@ async function runScenario(
                 );
           if (!observed) {
             throw new Error(
-              `External observation "${external.id}" was not captured at its exact action boundary.`
+              `External observation "${external.id}" was not captured from its causal action.`
             );
           }
           externalObservationEvidence.push({
@@ -621,11 +699,65 @@ async function observeDeclared(
   }
 }
 
+function observesExternalAfterScenario(
+  observation: ExternalAcceptanceObservationAssertion
+): boolean {
+  return observation.kind === "owned_object_lifecycle_after_action";
+}
+
 async function observeExternal(
   runtime: GeneratedMechanicEvaluationRuntime,
   observation: ExternalAcceptanceObservationAssertion,
   baseline: JsonValue | undefined
 ): Promise<Omit<ExternalObservationEvidence, "id" | "source">> {
+  if (observation.kind === "owned_object_lifecycle_after_action") {
+    if (!runtime.readOwnedObjectActivity) {
+      throw new Error(
+        "Evaluation runtime does not expose owned-object activity observations."
+      );
+    }
+    const before = Array.isArray(baseline) ? baseline : [];
+    const after = await Promise.all(
+      observation.archetypeIds.map(async (archetypeId) => ({
+        archetypeId,
+        ...(await runtime.readOwnedObjectActivity!(archetypeId)),
+      }))
+    );
+    const passed =
+      before.length === after.length &&
+      after.every((entry, index) => {
+        const beforeEntry = before[index];
+        if (
+          typeof beforeEntry !== "object" ||
+          beforeEntry === null ||
+          Array.isArray(beforeEntry) ||
+          beforeEntry.archetypeId !== entry.archetypeId
+        ) {
+          return false;
+        }
+        const created = entry.created - Number(beforeEntry.created);
+        const destroyed = entry.destroyed - Number(beforeEntry.destroyed);
+        const simulatedDistanceTraveled =
+          entry.simulatedDistanceTraveled -
+          Number(beforeEntry.simulatedDistanceTraveled);
+        const targetInteractions =
+          entry.targetInteractions - Number(beforeEntry.targetInteractions);
+        return (
+          created > 0 &&
+          simulatedDistanceTraveled > 0 &&
+          (observation.requireTargetInteraction !== true ||
+            targetInteractions > 0) &&
+          destroyed >= created &&
+          entry.active === Number(beforeEntry.active)
+        );
+      });
+    return snapshotJson({
+      kind: observation.kind,
+      passed,
+      actual: { before, after },
+      assertion: observation,
+    });
+  }
   if (observation.kind !== "referenced_entity_motion_changed") {
     return observeExternalDeclared(runtime, observation);
   }
@@ -665,7 +797,8 @@ async function observeExternalDeclared(
   runtime: GeneratedMechanicEvaluationRuntime,
   observation: Exclude<
     ExternalAcceptanceObservationAssertion,
-    { kind: "referenced_entity_motion_changed" }
+    | { kind: "referenced_entity_motion_changed" }
+    | { kind: "owned_object_lifecycle_after_action" }
   >
 ): Promise<Omit<ExternalObservationEvidence, "id" | "source">> {
   const evidence = await observeDeclared(runtime, observation);
@@ -681,6 +814,21 @@ async function captureExternalBaseline(
   runtime: GeneratedMechanicEvaluationRuntime,
   observation: ExternalAcceptanceObservationAssertion
 ): Promise<JsonValue> {
+  if (observation.kind === "owned_object_lifecycle_after_action") {
+    if (!runtime.readOwnedObjectActivity) {
+      throw new Error(
+        "Evaluation runtime does not expose owned-object activity observations."
+      );
+    }
+    return snapshotJson(
+      await Promise.all(
+        observation.archetypeIds.map(async (archetypeId) => ({
+          archetypeId,
+          ...(await runtime.readOwnedObjectActivity!(archetypeId)),
+        }))
+      )
+    );
+  }
   if (observation.kind !== "referenced_entity_motion_changed") {
     return null;
   }

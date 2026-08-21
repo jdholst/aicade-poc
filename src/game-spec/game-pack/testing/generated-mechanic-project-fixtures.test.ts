@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   acceptedGeneratedMechanicArtifactSchema,
+  createMechanicCapabilityGrant,
   createGeneratedMechanicRuntimePolicy,
   generatedMechanicProjectHostProfileIssues,
   gamePackSchema,
@@ -189,39 +190,89 @@ describe("generated mechanic project fixtures", () => {
     ).toBe(false);
   });
 
+  it("round-trips declared owned objects and generic object capabilities through exact restore", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const contract = {
+      ...fixture.artifact.contract,
+      ownedObjects: [
+        { id: "runtime_effect", objectKind: "effect", maximumInstances: 2 },
+      ],
+      capabilities: [
+        ...fixture.artifact.contract.capabilities,
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...fixture.artifact.contract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: fixture.artifact.contract.scenarios.map((scenario) => ({
+        ...scenario,
+        observations: [
+          ...scenario.observations,
+          {
+            kind: "owned_object_count" as const,
+            archetypeId: "runtime_effect",
+            operator: "equals" as const,
+            value: 0,
+          },
+        ],
+      })),
+    };
+    const grant = createMechanicCapabilityGrant({
+      contract,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+    });
+    if (!grant.success) {
+      throw new Error("Expected the owned-object fixture grant to pass.");
+    }
+    const sourceArtifact = {
+      ...fixture.artifact.sourceArtifact,
+      grant: grant.data,
+      usedCapabilities: [...contract.capabilities],
+    };
+    const runtimePolicy = createGeneratedMechanicRuntimePolicy({
+      contract,
+      versionId: fixture.artifact.versionId,
+    });
+    const artifact = acceptedGeneratedMechanicArtifactSchema.parse({
+      ...fixture.artifact,
+      contract,
+      sourceArtifact,
+      runtimePolicy,
+    });
+    const gamePack = gamePackSchema.parse({
+      ...fixture.gamePack,
+      acceptedGeneratedMechanicArtifacts: [artifact],
+    });
+
+    expect(
+      generatedMechanicProjectHostProfileIssues({
+        contract,
+        finalGameSpec: artifact.finalGameSpec,
+        referenceCatalog: artifact.referenceCatalog,
+      })
+    ).toEqual([]);
+    expect(
+      prepareRestoredGeneratedMechanicProject({
+        gamePack,
+        trustedPortContracts: [],
+      })
+    ).toMatchObject({
+      success: true,
+      data: {
+        artifact: {
+          contract: {
+            ownedObjects: contract.ownedObjects,
+            capabilities: contract.capabilities,
+          },
+        },
+      },
+    });
+  });
+
   it.each([
-    {
-      name: "mechanic-owned objects",
-      mutate: (fixture: ReturnType<typeof createGeneratedMechanicProjectFixture>) => ({
-        contract: {
-          ...fixture.artifact.contract,
-          ownedObjects: [
-            { id: "runtime_marker", objectKind: "effect", maximumInstances: 1 },
-          ],
-        },
-        code: "unsupported_runtime_owned_objects",
-      }),
-    },
-    {
-      name: "object creation",
-      mutate: (fixture: ReturnType<typeof createGeneratedMechanicProjectFixture>) => ({
-        contract: {
-          ...fixture.artifact.contract,
-          capabilities: [...fixture.artifact.contract.capabilities, "object_create"],
-        },
-        code: "unsupported_runtime_capability",
-      }),
-    },
-    {
-      name: "spatial queries",
-      mutate: (fixture: ReturnType<typeof createGeneratedMechanicProjectFixture>) => ({
-        contract: {
-          ...fixture.artifact.contract,
-          capabilities: [...fixture.artifact.contract.capabilities, "spatial_query"],
-        },
-        code: "unsupported_runtime_capability",
-      }),
-    },
     {
       name: "gameplay events without a trusted event source",
       mutate: (fixture: ReturnType<typeof createGeneratedMechanicProjectFixture>) => ({

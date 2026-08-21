@@ -93,7 +93,7 @@ describe("generated mechanic project planning", () => {
           ...contract.lifecycle,
           callbacks: ["install", "gameplay_event"],
         },
-        capabilities: ["state_write", "object_create"],
+        capabilities: ["state_write", "object_create", "signal_emit"],
       },
       catalog,
       intent,
@@ -111,11 +111,60 @@ describe("generated mechanic project planning", () => {
         "missing_observable_entity_binding",
         "missing_independent_effect_capability",
         "unsupported_runtime_ports",
-        "unsupported_runtime_owned_objects",
         "unsupported_runtime_gameplay_events",
         "unsupported_runtime_capability",
       ])
     );
+  });
+
+  it("admits declared owned objects and their generic object capabilities", () => {
+    const catalog = createGeneratedMechanicReferenceCatalog(createBaseGameSpec());
+    const intent: MechanicIntent = {
+      ...createIntent(),
+      ownedObjects: ["generic_marker"],
+      requiredCapabilities: [
+        "object_motion_write",
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+    };
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      ownedObjects: [
+        { id: "generic_marker", objectKind: "effect", maximumInstances: 2 },
+      ],
+      capabilities: [
+        "object_motion_write",
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...createContract().resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: createContract().scenarios.map((scenario) => ({
+        ...scenario,
+        observations: [
+          ...scenario.observations,
+          {
+            kind: "owned_object_count" as const,
+            archetypeId: "generic_marker",
+            operator: "equals" as const,
+            value: 0,
+          },
+        ],
+      })),
+    };
+
+    expect(
+      validateGeneratedMechanicTopDownHostAdmission({
+        contract,
+        catalog,
+        intent,
+      })
+    ).toEqual({ success: true, data: contract });
   });
 
   it("requires logical actions to be backed by exact active controls", () => {

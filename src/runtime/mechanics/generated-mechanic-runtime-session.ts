@@ -4,6 +4,7 @@ import {
   GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
   GENERATED_MECHANIC_FIXED_STEP_INTERVAL_MILLISECONDS,
   GENERATED_MECHANIC_RESOURCE_BUDGET_PROFILE_ID,
+  TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS,
   TOP_DOWN_PHASER_GENERATED_MECHANIC_HOST_PROFILE_ID,
   createGeneratedMechanicRuntimePolicy,
   generatedMechanicFinalGameSpecSchema,
@@ -17,6 +18,7 @@ import {
 import {
   createTopDownPhaserMechanicObjectHost,
   type TrustedTopDownPhaserMechanicObjectRegistration,
+  type TrustedTopDownPhaserOwnedObjectFactory,
 } from "@/runtime/phaser/top-down-mechanic-object-adapter";
 
 import {
@@ -51,16 +53,9 @@ import type {
 export const GENERATED_MECHANIC_RUNTIME_SESSION_VERSION =
   "generated_mechanic_runtime_session/v1" as const;
 
-const SUPPORTED_SESSION_CAPABILITIES = new Set<StableId>([
-  "object_read",
-  "object_motion_write",
-  "state_read",
-  "state_write",
-  "time_read",
-  "random_next",
-  "time_schedule",
-  "event_subscribe",
-]);
+const SUPPORTED_SESSION_CAPABILITIES = new Set<StableId>(
+  TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS
+);
 
 export type GeneratedMechanicRuntimeSessionIdentity = Readonly<{
   schemaVersion: typeof GENERATED_MECHANIC_RUNTIME_SESSION_VERSION;
@@ -102,6 +97,9 @@ type CreateGeneratedMechanicRuntimeSessionCommonInput = Readonly<{
   dependency: GeneratedMechanicProjectDependency;
   realmAdapter: MechanicExecutionRealmAdapter;
   objects: readonly TrustedTopDownPhaserMechanicObjectRegistration[];
+  ownedObjectFactories?: Readonly<
+    Record<string, TrustedTopDownPhaserOwnedObjectFactory | undefined>
+  >;
 }>;
 
 export type CreateGeneratedMechanicRuntimeSessionInput =
@@ -120,7 +118,12 @@ export type CreateGeneratedMechanicRuntimeSessionInput =
 export async function createGeneratedMechanicRuntimeSession(
   input: CreateGeneratedMechanicRuntimeSessionInput
 ): Promise<GeneratedMechanicRuntimeSession> {
-  const { dependency, realmAdapter, objects } = input;
+  const {
+    dependency,
+    realmAdapter,
+    objects,
+    ownedObjectFactories = Object.freeze({}),
+  } = input;
   const runtimeCandidate = normalizeRuntimeCandidate(input);
   const artifact = runtimeCandidate.executableArtifact;
   rejectUnsupportedRuntimeFeatures(artifact, dependency);
@@ -128,6 +131,7 @@ export async function createGeneratedMechanicRuntimeSession(
   validateRuntimePolicy(artifact, dependency, realmAdapter);
   validateResourceExpectations(artifact);
   validateBoundObjects(artifact, dependency, objects);
+  validateOwnedObjectFactories(artifact, ownedObjectFactories);
 
   const program = createGeneratedMechanicLifecycleProgram({
     contract: artifact.contract,
@@ -151,9 +155,9 @@ export async function createGeneratedMechanicRuntimeSession(
         cardinality: binding.cardinality,
         getObjectIds: () => Object.freeze([...binding.objectIds]),
       })),
-      ownedObjectArchetypes: [],
+      ownedObjectArchetypes: artifact.contract.ownedObjects,
       objects,
-      ownedObjectFactories: Object.freeze({}),
+      ownedObjectFactories,
     });
     const realmBindings: readonly MechanicExecutionRealmBinding[] = Object.freeze(
       artifact.bindings.map((binding) =>
@@ -300,17 +304,36 @@ function rejectUnsupportedRuntimeFeatures(
       "Generated runtime sessions do not admit mechanic ports before a trusted signal host is installed."
     );
   }
-  if (artifact.contract.ownedObjects.length > 0) {
-    throw new Error(
-      "Generated runtime sessions do not admit mechanic-owned objects."
-    );
-  }
   for (const capabilityId of artifact.contract.capabilities) {
     if (!SUPPORTED_SESSION_CAPABILITIES.has(capabilityId)) {
       throw new Error(
         `Generated runtime session capability "${capabilityId}" is unsupported by the retained host.`
       );
     }
+  }
+}
+
+function validateOwnedObjectFactories(
+  artifact: GeneratedMechanicExecutableArtifact,
+  factories: Readonly<
+    Record<string, TrustedTopDownPhaserOwnedObjectFactory | undefined>
+  >
+): void {
+  const requiredKinds = [
+    ...new Set(artifact.contract.ownedObjects.map(({ objectKind }) => objectKind)),
+  ].sort();
+  const providedKinds = Object.keys(factories).sort();
+  if (
+    requiredKinds.length !== providedKinds.length ||
+    requiredKinds.some(
+      (objectKind, index) =>
+        objectKind !== providedKinds[index] ||
+        typeof factories[objectKind] !== "function"
+    )
+  ) {
+    throw new Error(
+      "Generated runtime sessions require exactly one trusted owned-object factory for every declared object kind."
+    );
   }
 }
 

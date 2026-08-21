@@ -96,6 +96,10 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       '"requiredIndependentEffectCapability": "object_motion_write"'
     );
     expect(prompt).toContain('"requiredTrigger": "logical_action"');
+    expect(prompt).toContain('"ownedObjects": true');
+    expect(prompt).toContain('"id": "object_create"');
+    expect(prompt).toContain('"id": "spatial_query"');
+    expect(prompt).toContain('"id": "object_destroy"');
     expect(prompt).toContain(
       '"bindingPropertyIds": [\n    "active",\n    "kind",\n    "role",\n    "name",\n    "position",\n    "velocity",\n    "position_x",\n    "position_y",\n    "velocity_x",\n    "velocity_y"\n  ]'
     );
@@ -112,8 +116,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       '"routedActionConnection": "exactly one accepted intent input connection whose port is an exact active logical action"'
     );
     expect(prompt).toContain(
-      "causally change the motion of an exact intent-referenced entity"
+      "observable owned-object creation, travel, routed-target interaction when applicable, and cleanup"
     );
+    expect(prompt).toContain(
+      "does not require the full object_create, object_motion_write, spatial_query, and object_destroy lifecycle"
+    );
+    expect(prompt).not.toContain("declare no mechanic-owned objects");
     expect(prompt).toContain(
       "Private state may support the mechanic, but it is never independent acceptance evidence"
     );

@@ -98,7 +98,7 @@ ${JSON.stringify({
   routedEntityBindings:
     "exactly one single-entity binding for every intent-referenced entity, with no additional bindings",
   independentAcceptanceEvidence:
-    "every scenario must dispatch an exact active logical action and then causally change the motion of an exact intent-referenced entity",
+    "every scenario must dispatch an exact active logical action; ordinary contracts must causally change referenced-entity motion, while intents that require the full generic create/move/spatial-query/destroy lifecycle must produce observable owned-object creation, travel, routed-target interaction when applicable, and cleanup",
   requiredIndependentEffectCapability: "object_motion_write",
   requiredTrigger: "logical_action",
   bindingPropertyIds:
@@ -107,7 +107,15 @@ ${JSON.stringify({
     "exactly one accepted intent input connection whose port is an exact active logical action",
   privateStateIsIndependentAcceptanceEvidence: false,
   ports: false,
-  ownedObjects: false,
+  ownedObjects: true,
+  ownedObjectInitialData: {
+    position: "optional finite { x, y }",
+    velocity: "optional finite { x, y }, bounded by the trusted host",
+    shape: 'optional "circle" or "rectangle"',
+    dimensions: "optional bounded radius or width and height",
+    color: "optional integer from 0 through 16777215",
+    properties: "optional JSON object exposed only as immutable observations",
+  },
   gameplayEventCallbacks: false,
   logicalActionReferencesMustMatchActiveControls: true,
 }, null, 2)}
@@ -128,7 +136,7 @@ Contract rules:
 - Declare deterministic Behavior Scenario DSL setup, actions, time or events, and observable outcomes; scenarios are evidence proposals, not executable self-tests.
 - Use only those exact binding property IDs in scenario binding_property observations. Do not invent derived aliases such as velocity_magnitude, speed, inside_region, or distance; express supported evidence with the listed scalar components or use the evaluator-authored referenced-entity motion observation.
 - Use time_schedule plus a scheduled lifecycle callback for one-shot delayed transitions such as ending a temporary effect or releasing a cooldown. Do not use fixed_step to poll for dash expiry, cooldown expiry, or another one-shot deadline. Set lifecycle.fixedStep to false unless the accepted behavior genuinely requires continuous simulation updates; every advance_time scenario step accumulates the operations of all callbacks it dispatches under one fixed budget.
-- Target the current persisted top-down creator host profile exactly: declare exactly one single-entity binding for every intent-referenced entity and no additional bindings; declare no ports, no mechanic-owned objects, no gameplay-event callback, and only the listed supported capabilities. The accepted intent must have exactly one input connection whose port is an exact active logical action, and every scenario must dispatch that same action exactly once before causally changing the motion of an exact intent-referenced entity through object_motion_write so evaluator-authored evidence can independently distinguish working behavior from an inert implementation. Private state may support the mechanic, but it is never independent acceptance evidence. Logical actions must use action IDs from the trusted reference catalog.
+- Target the current persisted top-down creator host profile exactly: declare exactly one single-entity binding for every intent-referenced entity and no additional bindings; declare no ports, no gameplay-event callback, and only the listed supported capabilities. Declare mechanic-owned archetypes only when the accepted intent requires owned objects, keep each maximumInstances within the selected budget, and grant only the exact generic object capabilities justified by that behavior. The accepted intent must have exactly one input connection whose port is an exact active logical action, and every scenario must dispatch that same action exactly once. Contracts whose accepted intent does not require the full object_create, object_motion_write, spatial_query, and object_destroy lifecycle must causally change the motion of an exact intent-referenced entity. When the accepted intent requires that full generic lifecycle, evaluator-authored observations must instead prove owned-object creation, nonzero travel over simulated time, an attributable routed-target interaction when targets are declared, and explicit cleanup. Private state may support the mechanic, but it is never independent acceptance evidence. Logical actions must use action IDs from the trusted reference catalog.
 - Do not use named-mechanic profiles, mechanic-specific algorithms, hidden helpers, implementation fragments, or external test code.
 - Do not return implementation code or any game specification.
 

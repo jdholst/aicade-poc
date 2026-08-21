@@ -88,6 +88,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       '"MechanicObjectObservation": "Readonly<{ active: boolean; kind: string; position: Readonly<{ x: number; y: number }>; properties: Readonly<Record<string, JsonValue>>; velocity: Readonly<{ x: number; y: number }> }>"'
     );
     expect(prompt).toContain(
+      '"MechanicSpatialQuery": "Readonly<{ center: Readonly<{ x: number; y: number }>; radius: number; active?: boolean; objectKinds?: readonly string[]; ownership?: \\\"any\\\" | \\\"bound\\\" | \\\"owned\\\" }>"'
+    );
+    expect(prompt).toContain(
+      "Owned-object initial JSON may use bounded position, velocity, shape, dimensions, color, and immutable properties"
+    );
+    expect(prompt).toContain(
       "There is no movementDirection, direction, or facing field"
     );
     expect(prompt).toContain(

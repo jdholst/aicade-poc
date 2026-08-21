@@ -46,6 +46,14 @@ export type MechanicMotionMutation = Readonly<{
   velocity?: MechanicObjectPoint;
 }>;
 
+export type MechanicSpatialQuery = Readonly<{
+  center: MechanicObjectPoint;
+  radius: number;
+  active?: boolean;
+  objectKinds?: readonly StableId[];
+  ownership?: "any" | "bound" | "owned";
+}>;
+
 export type TrustedMechanicObjectObservation = {
   active: boolean;
   kind: StableId;
@@ -273,6 +281,67 @@ export function createMechanicObjectHost({
     }
   }
 
+  function querySpatial(query: MechanicSpatialQuery) {
+    requireActiveHost();
+    requireCapability("spatial_query");
+    const boundObjectIds = new Set(
+      [...bindingsById.values()].flatMap((binding) => binding.getObjectIds())
+    );
+    const ownedObjectIds = new Set(ownedObjectsById.keys());
+    const ownership = query.ownership ?? "any";
+    const candidateObjectIds =
+      ownership === "bound"
+        ? boundObjectIds
+        : ownership === "owned"
+          ? ownedObjectIds
+          : new Set([...boundObjectIds, ...ownedObjectIds]);
+    const objectKinds = query.objectKinds
+      ? new Set(query.objectKinds)
+      : undefined;
+    const maximumDistanceSquared = query.radius * query.radius;
+    const matches: Array<{
+      distanceSquared: number;
+      objectId: StableId;
+    }> = [];
+
+    for (const objectId of candidateObjectIds) {
+      if (!adapter.hasObject(objectId)) {
+        continue;
+      }
+      const observation = adapter.observeObject(objectId);
+      if (
+        query.active !== undefined &&
+        observation.active !== query.active
+      ) {
+        continue;
+      }
+      if (objectKinds && !objectKinds.has(observation.kind)) {
+        continue;
+      }
+      const position = freezePoint(observation.position);
+      const xDistance = position.x - query.center.x;
+      const yDistance = position.y - query.center.y;
+      const distanceSquared = xDistance * xDistance + yDistance * yDistance;
+      if (distanceSquared <= maximumDistanceSquared) {
+        matches.push({ distanceSquared, objectId });
+      }
+    }
+
+    matches.sort((left, right) => {
+      const distanceDifference =
+        left.distanceSquared - right.distanceSquared;
+      if (distanceDifference !== 0) {
+        return distanceDifference;
+      }
+      return left.objectId < right.objectId
+        ? -1
+        : left.objectId > right.objectId
+          ? 1
+          : 0;
+    });
+    return Object.freeze(matches.map(({ objectId }) => getHandle(objectId)));
+  }
+
   function destroy(handle: MechanicObjectHandle) {
     requireActiveHost();
     requireCapability("object_destroy");
@@ -408,6 +477,7 @@ export function createMechanicObjectHost({
     destroy,
     dispose,
     getOwnedObjectCount,
+    querySpatial,
     read,
     resolveMany,
     resolveOne,
