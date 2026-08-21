@@ -135,6 +135,22 @@ describe("OpenAI mechanic contract provider", () => {
       "intentLineage"
     );
     expect(body.tools[0].parameters.required).not.toContain("intentLineage");
+    expect(JSON.stringify(body.tools[0].parameters)).not.toContain('"oneOf"');
+    expect(JSON.stringify(body.tools[0].parameters)).not.toContain('"const"');
+    expect(
+      body.tools[0].parameters.properties.privateState.items.properties
+        .initialValue
+    ).toEqual({
+      anyOf: [
+        { type: "boolean" },
+        { type: "number" },
+        { type: "string" },
+        { type: "null" },
+      ],
+    });
+    expect(findSchemaNodesWithoutExplicitShape(body.tools[0].parameters)).toEqual(
+      []
+    );
     expect(body.instructions).toContain(JSON.stringify(intent, null, 2));
     expect(body.instructions).toContain(
       "Required top-level candidate artifact ID: generation_run_contract_contract_initial_1"
@@ -417,3 +433,50 @@ describe("OpenAI mechanic contract provider", () => {
     });
   });
 });
+
+function findSchemaNodesWithoutExplicitShape(
+  schema: Record<string, unknown>,
+  path = "$"
+): string[] {
+  const missingPaths =
+    Object.hasOwn(schema, "type") ||
+    Object.hasOwn(schema, "anyOf") ||
+    Object.hasOwn(schema, "enum") ||
+    Object.hasOwn(schema, "$ref")
+      ? []
+      : [path];
+  const properties = isRecord(schema.properties) ? schema.properties : {};
+
+  for (const [key, child] of Object.entries(properties)) {
+    if (isRecord(child)) {
+      missingPaths.push(
+        ...findSchemaNodesWithoutExplicitShape(child, `${path}.properties.${key}`)
+      );
+    }
+  }
+
+  if (isRecord(schema.items)) {
+    missingPaths.push(
+      ...findSchemaNodesWithoutExplicitShape(schema.items, `${path}.items`)
+    );
+  }
+
+  if (Array.isArray(schema.anyOf)) {
+    schema.anyOf.forEach((child, index) => {
+      if (isRecord(child)) {
+        missingPaths.push(
+          ...findSchemaNodesWithoutExplicitShape(
+            child,
+            `${path}.anyOf.${index}`
+          )
+        );
+      }
+    });
+  }
+
+  return missingPaths;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

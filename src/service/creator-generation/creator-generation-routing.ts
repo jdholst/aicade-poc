@@ -29,9 +29,20 @@ export type CreatorGenerationRouting =
       admittedRequest: AdmittedGeneratedMechanicRequest;
     }>
   | Readonly<{
+      kind: "intent_validation_failure";
+      generationRunId: StableId;
+      intentSummary?: string;
+      evidence: Readonly<{
+        stage: "routing";
+        code: "invalid_intent_transport";
+        issues: readonly CreatorGenerationRoutingIssue[];
+      }>;
+    }>
+  | Readonly<{
       kind: "clarification_failure";
       generationRunId: StableId;
       intentId: StableId;
+      intentSummary?: string;
       evidence: Readonly<{
         stage: "routing";
         code: "clarification_required" | "invalid_intent_references";
@@ -42,6 +53,7 @@ export type CreatorGenerationRouting =
       kind: "capability_gap";
       generationRunId: StableId;
       intentId: StableId;
+      intentSummary?: string;
       evidence: Readonly<{
         stage: "routing";
         code: "capability_gap";
@@ -53,6 +65,7 @@ export type CreatorGenerationRouting =
       kind: "constraint_conflict";
       generationRunId: StableId;
       intentId: StableId;
+      intentSummary?: string;
       evidence: Readonly<{
         stage: "routing";
         code: "generated_mechanic_limit_exceeded";
@@ -79,6 +92,7 @@ export function createCreatorGenerationRouting({
       kind: "clarification_failure",
       generationRunId,
       intentId: intent.id,
+      intentSummary: intent.summary,
       evidence: {
         stage: "routing",
         code: "invalid_intent_references",
@@ -105,23 +119,32 @@ export function createCreatorGenerationRouting({
   }
 
   if (resolution.kind === "clarification_failure") {
-    return createClarificationFailure(generationRunId, resolution);
+    return createClarificationFailure(
+      generationRunId,
+      intent.summary,
+      resolution
+    );
   }
 
   if (resolution.kind === "capability_gap") {
-    return createCapabilityGap(generationRunId, resolution);
+    return createCapabilityGap(generationRunId, intent.summary, resolution);
   }
 
-  const generatedHostIssues = getGeneratedHostIntentIssues(intent, baseGameSpec);
+  const generatedHostIntent = normalizeGeneratedHostLifecycleIntent(intent);
+  const generatedHostIssues = getGeneratedHostIntentIssues(
+    generatedHostIntent,
+    baseGameSpec
+  );
   if (generatedHostIssues.length > 0) {
     return freeze({
       kind: "capability_gap" as const,
       generationRunId,
       intentId: intent.id,
+      intentSummary: intent.summary,
       evidence: {
         stage: "routing" as const,
         code: "capability_gap" as const,
-        missingCapabilities: intent.requiredCapabilities.includes(
+        missingCapabilities: generatedHostIntent.requiredCapabilities.includes(
           "object_motion_write"
         )
           ? []
@@ -140,6 +163,7 @@ export function createCreatorGenerationRouting({
       kind: "constraint_conflict",
       generationRunId,
       intentId: intent.id,
+      intentSummary: intent.summary,
       evidence: {
         stage: "routing",
         code: "generated_mechanic_limit_exceeded",
@@ -160,8 +184,32 @@ export function createCreatorGenerationRouting({
   return freeze({
     kind: "generated_mechanic",
     generationRunId,
-    intent,
+    intent: generatedHostIntent,
     admittedRequest: coordination.requests[0],
+  });
+}
+
+function normalizeGeneratedHostLifecycleIntent(
+  intent: MechanicIntent
+): MechanicIntent {
+  const supportedMovementAliasTriggers = new Set([
+    "install",
+    "logical_move_action",
+  ]);
+  if (
+    !intent.triggers.includes("logical_move_action") ||
+    intent.triggers.some(
+      (trigger) => !supportedMovementAliasTriggers.has(trigger)
+    )
+  ) {
+    return intent;
+  }
+
+  return freeze({
+    ...intent,
+    triggers: intent.triggers.map((trigger) =>
+      trigger === "logical_move_action" ? "logical_action" : trigger
+    ),
   });
 }
 
@@ -242,12 +290,14 @@ function getGeneratedHostIntentIssues(
 
 function createClarificationFailure(
   generationRunId: StableId,
+  intentSummary: string,
   resolution: MechanicClarificationFailureResolution
 ): CreatorGenerationRouting {
   return freeze({
     kind: "clarification_failure",
     generationRunId,
     intentId: resolution.intentId,
+    intentSummary,
     evidence: {
       stage: "routing",
       code: "clarification_required",
@@ -262,12 +312,14 @@ function createClarificationFailure(
 
 function createCapabilityGap(
   generationRunId: StableId,
+  intentSummary: string,
   resolution: MechanicCapabilityGapResolution
 ): CreatorGenerationRouting {
   return freeze({
     kind: "capability_gap",
     generationRunId,
     intentId: resolution.intentId,
+    intentSummary,
     evidence: {
       stage: "routing",
       code: "capability_gap",

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_OPENAI_MODEL } from "@/constants";
+
 import {
   createDebugSpecGenerationProvider,
   resolveDebugSpecGenerationAdapter,
@@ -100,7 +102,7 @@ describe("resolveDebugSpecGenerationAdapter", () => {
     expect(adapter).toMatchObject({
       type: "active",
       mode: "success",
-      model: "gpt-5.4-mini",
+      model: DEFAULT_OPENAI_MODEL,
       providerCredential: "debug-generation",
     });
 

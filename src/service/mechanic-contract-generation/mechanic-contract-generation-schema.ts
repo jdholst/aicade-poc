@@ -10,7 +10,9 @@ export type MechanicContractJsonSchema = {
   $defs?: Record<string, MechanicContractJsonSchema>;
   additionalProperties?: boolean;
   anyOf?: MechanicContractJsonSchema[];
+  const?: unknown;
   default?: unknown;
+  enum?: unknown[];
   items?: MechanicContractJsonSchema;
   oneOf?: MechanicContractJsonSchema[];
   properties?: Record<string, MechanicContractJsonSchema>;
@@ -21,7 +23,7 @@ export type MechanicContractJsonSchema = {
 
 export function createGeneratedMechanicContractJsonSchema() {
   const schema = z.toJSONSchema(generatedMechanicContractSchema, {
-    target: "draft-7",
+    target: "draft-2020-12",
     unrepresentable: "any",
   }) as MechanicContractJsonSchema;
 
@@ -39,6 +41,25 @@ function normalizeStrictToolSchema(schema: MechanicContractJsonSchema) {
   visitSchema(schema, (node) => {
     delete node.default;
     delete node.propertyNames;
+
+    if (Object.keys(node).length === 0) {
+      node.anyOf = [
+        { type: "boolean" },
+        { type: "number" },
+        { type: "string" },
+        { type: "null" },
+      ];
+    }
+
+    if (Object.hasOwn(node, "const")) {
+      node.enum = [node.const];
+      delete node.const;
+    }
+
+    if (node.oneOf) {
+      node.anyOf = node.oneOf;
+      delete node.oneOf;
+    }
 
     if (node.properties) {
       node.additionalProperties = false;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   stableIdSchema,
   type MechanicIntent,
+  type StableId,
 } from "@/game-spec";
 import {
   topDownGameSpecJsonSchema,
@@ -30,9 +31,9 @@ const mechanicIntentAmbiguityTransportSchema = z
   .object({
     id: stableIdSchema,
     description: boundedTextSchema,
-    inferredValue: z.string().min(1).max(600).nullable(),
-    rationale: boundedTextSchema.nullable(),
-    reversible: z.literal(true).nullable(),
+    inferredValue: z.string().min(1).max(600),
+    rationale: boundedTextSchema,
+    reversible: z.literal(true),
   })
   .strict();
 
@@ -89,6 +90,13 @@ const creatorGenerationPlanEnvelopeTransportSchema = z
   })
   .strict();
 
+const creatorGenerationPlanEnvelopePartsTransportSchema = z
+  .object({
+    gameSpec: z.record(z.string(), z.unknown()),
+    mechanicIntent: z.unknown(),
+  })
+  .strict();
+
 export type MechanicIntentTransport = z.infer<
   typeof mechanicIntentTransportSchema
 >;
@@ -96,6 +104,26 @@ export type MechanicIntentTransport = z.infer<
 export type CreatorGenerationPlanEnvelope = Readonly<{
   gameSpec: Record<string, unknown>;
   mechanicIntent: MechanicIntent;
+}>;
+
+export type CreatorGenerationPlanIntentTransportIssue = Readonly<{
+  path: string;
+  code: StableId;
+  message: string;
+}>;
+
+export type CreatorGenerationPlanEnvelopeParts = Readonly<{
+  gameSpec: Record<string, unknown>;
+  mechanicIntent:
+    | Readonly<{
+        status: "valid";
+        value: MechanicIntent;
+      }>
+    | Readonly<{
+        status: "invalid";
+        summary?: string;
+        issues: readonly CreatorGenerationPlanIntentTransportIssue[];
+      }>;
 }>;
 
 export function parseCreatorGenerationPlanEnvelope(
@@ -107,6 +135,55 @@ export function parseCreatorGenerationPlanEnvelope(
     gameSpec: parsed.gameSpec,
     mechanicIntent: normalizeMechanicIntent(parsed.mechanicIntent),
   };
+}
+
+export function parseCreatorGenerationPlanEnvelopeParts(
+  input: unknown
+): CreatorGenerationPlanEnvelopeParts {
+  const parsed = creatorGenerationPlanEnvelopePartsTransportSchema.parse(input);
+  const intent = mechanicIntentTransportSchema.safeParse(parsed.mechanicIntent);
+
+  if (!intent.success) {
+    const summary = getBoundedIntentSummary(parsed.mechanicIntent);
+    const boundedIssues = intent.error.issues.slice(0, 127).map((issue) => ({
+      path: ["mechanicIntent", ...issue.path].join("."),
+      code: "invalid_intent_transport" as const,
+      message: "Mechanic Intent did not match the planning transport schema.",
+    }));
+    if (intent.error.issues.length > boundedIssues.length) {
+      boundedIssues.push({
+        path: "mechanicIntent",
+        code: "invalid_intent_transport",
+        message:
+          "Additional Mechanic Intent transport issues were omitted from this bounded report.",
+      });
+    }
+    return {
+      gameSpec: parsed.gameSpec,
+      mechanicIntent: {
+        status: "invalid",
+        ...(summary ? { summary } : {}),
+        issues: boundedIssues,
+      },
+    };
+  }
+
+  return {
+    gameSpec: parsed.gameSpec,
+    mechanicIntent: {
+      status: "valid",
+      value: normalizeMechanicIntent(intent.data),
+    },
+  };
+}
+
+function getBoundedIntentSummary(input: unknown): string | undefined {
+  if (!input || typeof input !== "object" || !("summary" in input)) {
+    return undefined;
+  }
+
+  const summary = boundedTextSchema.safeParse(input.summary);
+  return summary.success ? summary.data : undefined;
 }
 
 export const creatorGenerationPlanJsonSchema: JsonSchemaObject = {
@@ -124,14 +201,7 @@ function normalizeMechanicIntent(
 ): MechanicIntent {
   return {
     ...transport,
-    ambiguities: transport.ambiguities.map(
-      ({ inferredValue, rationale, reversible, ...ambiguity }) => ({
-        ...ambiguity,
-        ...(inferredValue === null ? {} : { inferredValue }),
-        ...(rationale === null ? {} : { rationale }),
-        ...(reversible === null ? {} : { reversible }),
-      })
-    ),
+    ambiguities: transport.ambiguities.map((ambiguity) => ({ ...ambiguity })),
   };
 }
 

@@ -19,7 +19,14 @@ import {
 describe("createMechanicSourceGenerationSystemPrompt", () => {
   it("documents only the accepted generic source boundary and excludes evaluator scaffolding", () => {
     const intent = createIntent();
-    const contract = createContract();
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      lifecycle: {
+        callbacks: ["install", "logical_action"],
+        fixedStep: true,
+        dispose: true,
+      },
+    };
     const grant = createGrant("state_write");
     const prompt = createMechanicSourceGenerationSystemPrompt({
       intent,
@@ -67,10 +74,47 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain('"portId": "accepted_input"');
     expect(prompt).toContain('"kind": "boolean"');
     expect(prompt).toContain("The trusted host owns lifecycle scheduling");
+    expect(prompt).toContain(
+      `Exact required source callback kinds JSON:\n${JSON.stringify(
+        ["install", "logical_action", "fixed_step", "dispose"],
+        null,
+        2
+      )}`
+    );
+    expect(prompt).toContain(
+      "The callbacks array must contain exactly one callback for each kind in that exact checklist"
+    );
+    expect(prompt).toContain(
+      '"MechanicObjectObservation": "Readonly<{ active: boolean; kind: string; position: Readonly<{ x: number; y: number }>; properties: Readonly<Record<string, JsonValue>>; velocity: Readonly<{ x: number; y: number }> }>"'
+    );
+    expect(prompt).toContain(
+      "There is no movementDirection, direction, or facing field"
+    );
+    expect(prompt).toContain(
+      "derive movement direction from velocity.x and velocity.y"
+    );
     expect(prompt).not.toContain('"fixedStep": {');
     expect(prompt).toContain("Return one candidate Generated Mechanic Source");
     expect(prompt).toContain(
       "Every granted capability must be called through its documented capabilities expression"
+    );
+    expect(prompt).toContain(
+      "Each host lifecycle operation has a hard maximum of 16 capability-operation units"
+    );
+    expect(prompt).toContain(
+      "Repeated capability calls and loop iterations multiply their documented operation costs"
+    );
+    expect(prompt).toContain(
+      "An advance_time scenario step accumulates the costs of every scheduled and fixed-step callback it dispatches"
+    );
+    expect(prompt).toContain(
+      "an over-budget repair must remove, combine, or avoid capability calls"
+    );
+    expect(prompt).toContain(
+      "The retained top-down host advances generated simulation time in whole deterministic milliseconds"
+    );
+    expect(prompt).toContain(
+      "Every value written to an integer private-state field must remain a finite integer"
     );
     expect(prompt).not.toContain("EVALUATOR_ONLY_SENTINEL");
     expect(prompt).not.toContain('"scenarios"');

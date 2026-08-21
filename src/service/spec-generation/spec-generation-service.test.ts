@@ -99,6 +99,66 @@ describe("Spec Generation service contract", () => {
     ]);
   });
 
+  it("repairs aggregate control labels before generated actions reach the browser host", async () => {
+    const invalidCandidate = getMutableFixture();
+    invalidCandidate.controls[0].action = "move_action";
+    invalidCandidate.controls[0].keys = ["WASD", "ARROW KEYS"];
+    const repairedCandidate = getMutableFixture();
+    repairedCandidate.controls[0].action = "move_action";
+    const providerCalls: unknown[] = [];
+
+    const result = await generateTopDownGameSpec({
+      prompt: "Make movement trigger a visible dash.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async (input) => {
+        providerCalls.push(input);
+        return input.repairContext ? repairedCandidate : invalidCandidate;
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      spec: repairedCandidate,
+      metadata: {
+        attemptCount: 2,
+        repairStatus: "repaired",
+        repairAttempts: [
+          {
+            attempt: 1,
+            outcome: "failed_validation",
+            stage: "semantic_validation",
+            issues: [
+              {
+                path: "controls.control_move.keys.0",
+                message:
+                  'Unsupported physical key "WASD". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+              },
+              {
+                path: "controls.control_move.keys.1",
+                message:
+                  'Unsupported physical key "ARROW KEYS". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(providerCalls[1]).toMatchObject({
+      repairContext: {
+        stage: "semantic_validation",
+        validationIssues: [
+          {
+            path: "controls.control_move.keys.0",
+          },
+          {
+            path: "controls.control_move.keys.1",
+          },
+        ],
+      },
+    });
+  });
+
   it("rejects generated specs missing the required pickup_collection mechanic", async () => {
     const candidate = getMutableFixture();
     removeRequiredGenerationMechanic(candidate, "pickup_collection");

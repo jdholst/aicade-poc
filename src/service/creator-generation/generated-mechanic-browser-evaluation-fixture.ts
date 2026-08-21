@@ -1,5 +1,6 @@
 import {
   GENERATED_MECHANIC_FIXED_STEP_INTERVAL_MILLISECONDS,
+  TOP_DOWN_GENERATED_MECHANIC_EVALUATION_PROPERTY_IDS,
   type GeneratedMechanicContract,
   type MechanicCapabilityGrant,
   type MechanicIntent,
@@ -424,6 +425,15 @@ function readVirtualEntityProperty(
   state: VirtualEntityState,
   property: StableId
 ): JsonValue {
+  if (
+    !TOP_DOWN_GENERATED_MECHANIC_EVALUATION_PROPERTY_IDS.some(
+      (propertyId) => propertyId === property
+    )
+  ) {
+    throw new Error(
+      `Generated mechanic evaluation property "${property}" is not exposed by the top-down host.`
+    );
+  }
   switch (property) {
     case "active":
       return state.active;
@@ -446,7 +456,7 @@ function readVirtualEntityProperty(
       return state.velocity.y;
     default:
       throw new Error(
-        `Generated mechanic evaluation property "${property}" is not exposed by the top-down host.`
+        `Generated mechanic evaluation property "${property}" is declared but not implemented by the top-down host.`
       );
   }
 }

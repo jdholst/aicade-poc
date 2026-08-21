@@ -80,6 +80,15 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     });
 
     expect(prompt).toContain(JSON.stringify(intent, null, 2));
+    expect(prompt).toContain(
+      `Exact accepted behavior trigger tokens JSON:\n${JSON.stringify(intent.triggers, null, 2)}`
+    );
+    expect(prompt).toContain(
+      `Exact accepted behavior outcome tokens JSON:\n${JSON.stringify(intent.outcomes, null, 2)}`
+    );
+    expect(prompt).toContain(
+      "Copy every trigger and outcome token verbatim into behavior.triggers and behavior.outcomes"
+    );
     expect(prompt).toContain('"id": "state_write"');
     expect(prompt).toContain('"kind": "stable_id"');
     expect(prompt).toContain('"resourceBudgetProfile": "phase_9_fixed_budget"');
@@ -87,6 +96,18 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       '"requiredIndependentEffectCapability": "object_motion_write"'
     );
     expect(prompt).toContain('"requiredTrigger": "logical_action"');
+    expect(prompt).toContain(
+      '"bindingPropertyIds": [\n    "active",\n    "kind",\n    "role",\n    "name",\n    "position",\n    "velocity",\n    "position_x",\n    "position_y",\n    "velocity_x",\n    "velocity_y"\n  ]'
+    );
+    expect(prompt).toContain(
+      "Use only those exact binding property IDs in scenario binding_property observations"
+    );
+    expect(prompt).toContain(
+      "Use time_schedule plus a scheduled lifecycle callback for one-shot delayed transitions"
+    );
+    expect(prompt).toContain(
+      "Do not use fixed_step to poll for dash expiry, cooldown expiry, or another one-shot deadline"
+    );
     expect(prompt).toContain(
       '"routedActionConnection": "exactly one accepted intent input connection whose port is an exact active logical action"'
     );
@@ -154,6 +175,60 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "Correct every exact path, code, and message in the stage-failure feedback"
+    );
+  });
+
+  it("tells contract repair to remove a source-proven unused capability grant", () => {
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_source_1",
+      issues: [
+        {
+          path: "grant.capabilities.4",
+          code: "unused_capability",
+          message:
+            'Granted capability "time_read" has no verified source use and would provide unjustified authority.',
+        },
+      ],
+      invalidatedArtifactIds: ["contract_candidate_initial_1"],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent,
+      resolution,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId:
+          "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "When source-use validation reports unused_capability, remove that exact capability declaration unless an accepted requirement genuinely needs it"
+    );
+    expect(prompt).toContain(
+      "Never add a meaningless capability call merely to make an unused grant appear used"
     );
   });
 });

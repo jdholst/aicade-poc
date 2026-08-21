@@ -96,6 +96,70 @@ describe("Generated Mechanic HTTP providers", () => {
     );
   });
 
+  it("omits blank optional provider configuration fields before transport validation", async () => {
+    const requests: RequestInit[] = [];
+    const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
+      requests.push(init ?? {});
+      return providerResponse({
+        generationRunId: "generation_run_blank_provider_config",
+        stage: "contract",
+        attempt: 1,
+        attemptKind: "initial",
+        candidate: { contractCandidate: true },
+      });
+    });
+    const provider = createGeneratedMechanicContractHttpProvider({
+      attempt: 1,
+      kind: "initial",
+      fetchImpl,
+      generationRunId: "generation_run_blank_provider_config",
+      providerRequest: {
+        openAiApiKey: "",
+        openAiKeyword: "Green Panda",
+        openAiModel: "gpt-5.5",
+      },
+    });
+
+    await expect(provider(createContractProviderInput())).resolves.toEqual({
+      contractCandidate: true,
+    });
+
+    const body = JSON.parse(String(requests[0]?.body));
+    expect(body.providerConfig).toEqual({
+      openAiKeyword: "Green Panda",
+      openAiModel: "gpt-5.5",
+    });
+  });
+
+  it("reports the rejected transport paths without exposing field values", async () => {
+    const provider = createGeneratedMechanicContractHttpProvider({
+      attempt: 1,
+      kind: "initial",
+      fetchImpl: vi.fn(),
+      generationRunId: "generation_run_transport_report",
+      providerRequest: { openAiKeyword: "Green Panda" },
+    });
+    const input = createContractProviderInput();
+
+    await expect(
+      provider({
+        ...input,
+        referenceCatalog: { entity: [""] },
+      })
+    ).rejects.toMatchObject({
+      name: "MechanicContractGenerationProviderError",
+      evidence: {
+        issues: [
+          expect.objectContaining({
+            message: expect.stringContaining(
+              "stageInput.referenceCatalog.entity.0"
+            ),
+          }),
+        ],
+      },
+    });
+  });
+
   it("serializes only source-guidance data and preserves source attempt correlation", async () => {
     const candidate = { sourceCandidate: true };
     const requests: RequestInit[] = [];

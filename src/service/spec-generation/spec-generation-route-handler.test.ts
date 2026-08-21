@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_OPENAI_MODEL } from "@/constants";
 import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-game-spec-fixture";
 
 import { createSpecGenerationPostHandler } from "./spec-generation-route-handler";
@@ -103,7 +104,7 @@ describe("Spec Generation API route contract", () => {
       ok: true,
       metadata: {
         taskRoute: "spec_generation.primary",
-        model: "gpt-5.4-mini",
+        model: DEFAULT_OPENAI_MODEL,
         attemptCount: 1,
       },
     });

@@ -143,6 +143,32 @@ describe("Top-down Game Spec pre-runtime validation", () => {
     );
   });
 
+  it("rejects aggregate control labels that the retained browser host cannot dispatch", () => {
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      controls: [
+        {
+          ...validTopDownGameSpec.controls[0],
+          action: "move_action",
+          keys: ["WASD", "ARROW KEYS"],
+        },
+      ],
+    });
+
+    expect(issues).toEqual([
+      {
+        path: "controls.control_move.keys.0",
+        message:
+          'Unsupported physical key "WASD". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+      },
+      {
+        path: "controls.control_move.keys.1",
+        message:
+          'Unsupported physical key "ARROW KEYS". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight.',
+      },
+    ]);
+  });
+
   it("rejects malformed specs before semantic checks run", () => {
     expect(() =>
       validateTopDownGameSpec({

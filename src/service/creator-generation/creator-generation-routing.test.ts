@@ -30,6 +30,42 @@ describe("createCreatorGenerationRouting", () => {
     });
   });
 
+  it("maps a partially covered movement-triggered dash to the generated host lifecycle", () => {
+    const result = createCreatorGenerationRouting({
+      availableCapabilities: ["object_motion_write"],
+      baseGameSpec: getFirstValidTopDownGameSpecFixture(),
+      generationRunId: "generation_run_dash_extension",
+      intent: createIntent({
+        actors: ["player"],
+        behaviors: ["dash_actor"],
+        configuration: [
+          { key: "speed_multiplier", value: 2 },
+          { key: "duration_milliseconds", value: 160 },
+        ],
+        connections: [{ direction: "input", port: "move" }],
+        outcomes: ["actor_moves_visibly_faster"],
+        references: [{ kind: "entity", id: "entity_player" }],
+        requiredCapabilities: ["object_motion_write"],
+        triggers: ["logical_move_action"],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      kind: "generated_mechanic",
+      generationRunId: "generation_run_dash_extension",
+      intent: {
+        triggers: ["logical_action"],
+        connections: [{ direction: "input", port: "move" }],
+      },
+      admittedRequest: {
+        resolution: {
+          kind: "generated_mechanic",
+          intentId: "intent_creator",
+        },
+      },
+    });
+  });
+
   it("admits one uncovered, capability-supported intent for generated work", () => {
     const intent = createIntent({
       actors: ["player"],
@@ -79,6 +115,7 @@ describe("createCreatorGenerationRouting", () => {
     expect(result).toMatchObject({
       kind: "capability_gap",
       generationRunId: "generation_run_action_gap",
+      intentSummary: "Apply one creator-requested behavior.",
       evidence: {
         missingCapabilities: [],
         issues: [
@@ -207,6 +244,7 @@ describe("createCreatorGenerationRouting", () => {
       kind: "clarification_failure",
       generationRunId: "generation_run_unknown_reference",
       intentId: "intent_creator",
+      intentSummary: "Apply one creator-requested behavior.",
       evidence: {
         stage: "routing",
         code: "invalid_intent_references",
@@ -242,6 +280,7 @@ describe("createCreatorGenerationRouting", () => {
       kind: "clarification_failure",
       generationRunId: "generation_run_duplicate_reference",
       intentId: "intent_creator",
+      intentSummary: "Apply one creator-requested behavior.",
       evidence: {
         stage: "routing",
         code: "invalid_intent_references",

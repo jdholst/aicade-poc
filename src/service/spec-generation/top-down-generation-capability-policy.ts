@@ -7,6 +7,9 @@ import {
   TOP_DOWN_TEMPLATE_ID,
   type TopDownGameSpec,
 } from "@/game-spec/top-down-spec-schema";
+import {
+  TOP_DOWN_BROWSER_CONTROL_KEYS,
+} from "@/game-spec/top-down-control-profile";
 import { topDownSpecGenerationMechanicTypes } from "@/game-spec/mechanics/mechanic-registry";
 import { JsonSchemaObject } from "./spec-generation-schema";
 import type {
@@ -28,6 +31,7 @@ export type TopDownGenerationCapabilityPolicy = {
   maxValidationGoals: number;
   minMechanics: number;
   maxMechanics: number;
+  controlKeys: readonly string[];
   layoutRules: readonly string[];
   forbiddenOutputs: readonly string[];
 };
@@ -64,6 +68,7 @@ export function createTopDownGenerationCapabilityPolicy(): TopDownGenerationCapa
     maxValidationGoals: 4,
     minMechanics: 2,
     maxMechanics: 3,
+    controlKeys: [...TOP_DOWN_BROWSER_CONTROL_KEYS],
     layoutRules: [
       "Use layout primitives only: arena, walls, rectangular/circular obstacles, spawn zones, pickup zones, and optional regions.",
       "Mechanic regionIds must reference layout.regions IDs only; never use pickup zone or spawn zone IDs as regionIds.",
@@ -105,6 +110,9 @@ export function renderTopDownSpecGenerationGuide(
     `Use schemaVersion ${policy.schemaVersion} and template.id ${policy.templateId}.`,
     "Use exactly one scene and exactly one primary objective.",
     "Use stable IDs for every entity, asset, objective, validation goal, scene, zone, and mechanic.",
+    `Use only individual physical control keys: ${policy.controlKeys.join(
+      ", "
+    )}. Never use aggregate labels such as "WASD" or "ARROW KEYS".`,
     ...policy.layoutRules,
     `Use only these mechanics: ${renderAllowedMechanicList(policy)}. Include ${renderRequiredMechanicList(
       policy
@@ -187,6 +195,11 @@ function applyTopDownSpecGenerationSchemaNarrowing(
 
   const template = requireProperty(schema, "template");
   requireProperty(template, "id").enum = [policy.templateId];
+
+  const control = requireArrayItem(requireProperty(schema, "controls"));
+  requireArrayItem(requireProperty(control, "keys")).enum = [
+    ...policy.controlKeys,
+  ];
 
   const config = requireProperty(template, "config");
   delete requireProperties(config).extensions;

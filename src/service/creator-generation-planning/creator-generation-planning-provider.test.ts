@@ -83,6 +83,24 @@ describe("OpenAI creator-generation planning provider", () => {
     expect(requestBody.instructions).toContain(
       "Do not invent variants such as logical_custom_action"
     );
+    expect(requestBody.instructions).toContain(
+      "Infer ordinary missing gameplay details instead of requesting clarification"
+    );
+    expect(requestBody.instructions).toContain(
+      "current movement or facing direction"
+    );
+    expect(requestBody.instructions).toContain(
+      "bounded speed, duration, distance, count, and cooldown values"
+    );
+    expect(requestBody.instructions).toContain(
+      '"minimumSpeedMultiplier": 2'
+    );
+    expect(requestBody.instructions).toContain(
+      '"minimumExtraTravelPixels": 32'
+    );
+    expect(requestBody.instructions).toContain(
+      '"minimumDurationMilliseconds": 150'
+    );
     expect(JSON.stringify(requestBody)).not.toContain("sk-secret");
   });
 
@@ -119,6 +137,12 @@ describe("OpenAI creator-generation planning provider", () => {
 
     expect(requestBody.instructions).toContain(
       "This catalog supplies exact requirement vocabulary only; deterministic routing remains Sparkline-owned."
+    );
+    expect(requestBody.instructions).toContain(
+      "An existing movement action that triggers a new dash is only partially covered"
+    );
+    expect(requestBody.instructions).toContain(
+      "use logical_action for that generated lifecycle and bind the exact active movement action through the input connection"
     );
     expect(catalog.map(({ mechanicType }: { mechanicType: string }) => mechanicType)).toEqual([
       "player_movement",

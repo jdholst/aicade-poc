@@ -114,11 +114,17 @@ function createStageClient(
     generationRunIdInput
   );
   const attempt = positiveIntegerSchema.parse(attemptInput);
-  const providerConfig: GeneratedMechanicProviderConfig = {
-    openAiApiKey: providerRequest.openAiApiKey,
-    openAiKeyword: providerRequest.openAiKeyword,
-    openAiModel: providerRequest.openAiModel,
-  };
+  const providerConfig: GeneratedMechanicProviderConfig = Object.fromEntries(
+    Object.entries({
+      openAiApiKey: providerRequest.openAiApiKey,
+      openAiKeyword: providerRequest.openAiKeyword,
+      openAiModel: providerRequest.openAiModel,
+    }).flatMap(([key, value]) => {
+      const normalizedValue = value?.trim();
+
+      return normalizedValue ? [[key, normalizedValue]] : [];
+    })
+  );
 
   return async function requestStageCandidate(
     stageInput: unknown,
@@ -138,9 +144,18 @@ function createStageClient(
       stageInput,
     });
     if (!bodyResult.success) {
+      const transportReport = bodyResult.error.issues
+        .slice(0, 5)
+        .map((issue) => {
+          const path = issue.path.map(String).join(".") || "request";
+
+          return `${path}: ${issue.message}`;
+        })
+        .join("; ");
+
       throw createProviderError(
         "provider_failure",
-        "Generated mechanic stage input did not match the HTTP transport schema."
+        `Generated mechanic stage input did not match the HTTP transport schema. ${transportReport}`
       );
     }
 

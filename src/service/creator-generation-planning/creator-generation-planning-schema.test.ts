@@ -5,20 +5,39 @@ import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-g
 import {
   creatorGenerationPlanJsonSchema,
   parseCreatorGenerationPlanEnvelope,
+  parseCreatorGenerationPlanEnvelopeParts,
 } from "./creator-generation-planning-schema";
 
 describe("creator-generation planning transport", () => {
-  it("normalizes explicit null ambiguity fields into an unresolved Mechanic Intent", () => {
+  it("rejects unresolved planner ambiguities and retains explicit reversible assumptions", () => {
+    expect(() =>
+      parseCreatorGenerationPlanEnvelope({
+        gameSpec: getFirstValidTopDownGameSpecFixture(),
+        mechanicIntent: createTransportIntent({
+          ambiguities: [
+            {
+              id: "ambiguity_dash_direction",
+              description: "The dash direction was not specified.",
+              inferredValue: null,
+              rationale: null,
+              reversible: null,
+            },
+          ],
+        }),
+      })
+    ).toThrow();
+
     const envelope = parseCreatorGenerationPlanEnvelope({
       gameSpec: getFirstValidTopDownGameSpecFixture(),
       mechanicIntent: createTransportIntent({
         ambiguities: [
           {
-            id: "ambiguity_actor",
-            description: "The requested actor is unclear.",
-            inferredValue: null,
-            rationale: null,
-            reversible: null,
+            id: "ambiguity_dash_direction",
+            description: "The dash direction was not specified.",
+            inferredValue: "current_movement_direction",
+            rationale:
+              "Following the actor's current movement preserves player intent.",
+            reversible: true,
           },
         ],
       }),
@@ -26,8 +45,12 @@ describe("creator-generation planning transport", () => {
 
     expect(envelope.mechanicIntent.ambiguities).toEqual([
       {
-        id: "ambiguity_actor",
-        description: "The requested actor is unclear.",
+        id: "ambiguity_dash_direction",
+        description: "The dash direction was not specified.",
+        inferredValue: "current_movement_direction",
+        rationale:
+          "Following the actor's current movement preserves player intent.",
+        reversible: true,
       },
     ]);
   });
@@ -51,6 +74,54 @@ describe("creator-generation planning transport", () => {
         },
       })
     ).toThrow();
+  });
+
+  it("retains a bounded base Game Spec when only the Mechanic Intent transport is invalid", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+
+    expect(
+      parseCreatorGenerationPlanEnvelopeParts({
+        gameSpec,
+        mechanicIntent: {
+          ...createTransportIntent(),
+          generatedSource: "return null",
+        },
+      })
+    ).toEqual({
+      gameSpec,
+      mechanicIntent: {
+        status: "invalid",
+        summary: "Move the player with logical directional input.",
+        issues: [
+          {
+            path: "mechanicIntent",
+            code: "invalid_intent_transport",
+            message: "Mechanic Intent did not match the planning transport schema.",
+          },
+        ],
+      },
+    });
+  });
+
+  it("bounds malformed intent evidence to the client transport limit", () => {
+    const result = parseCreatorGenerationPlanEnvelopeParts({
+      gameSpec: getFirstValidTopDownGameSpecFixture(),
+      mechanicIntent: createTransportIntent({
+        references: Array.from({ length: 128 }, () => ({})),
+      }),
+    });
+
+    expect(result.mechanicIntent.status).toBe("invalid");
+    if (result.mechanicIntent.status !== "invalid") {
+      throw new Error("Expected invalid intent transport evidence.");
+    }
+    expect(result.mechanicIntent.issues).toHaveLength(128);
+    expect(result.mechanicIntent.issues.at(-1)).toEqual({
+      path: "mechanicIntent",
+      code: "invalid_intent_transport",
+      message:
+        "Additional Mechanic Intent transport issues were omitted from this bounded report.",
+    });
   });
 
   it("publishes a strict combined Structured Outputs schema", () => {
@@ -77,6 +148,10 @@ describe("creator-generation planning transport", () => {
 
     const serialized = JSON.stringify(creatorGenerationPlanJsonSchema);
     expect(serialized).toContain("template_top_down");
+    expect(
+      creatorGenerationPlanJsonSchema.properties.gameSpec.properties.controls
+        .items.properties.keys.items.enum
+    ).toEqual(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
     expect(serialized).not.toContain('"additionalProperties":true');
     expect(serialized).not.toContain('"oneOf"');
   });

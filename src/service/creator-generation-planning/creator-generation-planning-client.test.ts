@@ -160,6 +160,62 @@ describe("requestTopDownCreatorGenerationPlanning", () => {
     });
   });
 
+  it("preserves a typed intent-transport failure alongside the valid base Game Spec", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          ok: true,
+          spec,
+          metadata: {
+            attemptCount: 1,
+            generationRunId: "generation_run_invalid_intent_client",
+            model: "gpt-5.4-mini",
+            taskRoute: "spec_generation.primary",
+          },
+          routing: {
+            kind: "intent_validation_failure",
+            generationRunId: "generation_run_invalid_intent_client",
+            evidence: {
+              stage: "routing",
+              code: "invalid_intent_transport",
+              issues: [
+                {
+                  path: "mechanicIntent.references.0.id",
+                  code: "invalid_intent_transport",
+                  message:
+                    "Mechanic Intent did not match the planning transport schema.",
+                },
+              ],
+            },
+          },
+        })
+      )
+    );
+
+    await expect(
+      requestTopDownCreatorGenerationPlanning(
+        { prompt: "Make a crystal arena with an optional flourish." },
+        undefined,
+        { generationRunId: "generation_run_invalid_intent_client" }
+      )
+    ).resolves.toMatchObject({
+      spec,
+      routing: {
+        kind: "intent_validation_failure",
+        evidence: {
+          code: "invalid_intent_transport",
+          issues: [
+            expect.objectContaining({
+              path: "mechanicIntent.references.0.id",
+            }),
+          ],
+        },
+      },
+    });
+  });
+
   it("classifies cancellation after response headers arrive before decoding JSON", async () => {
     const controller = new AbortController();
     vi.stubGlobal(

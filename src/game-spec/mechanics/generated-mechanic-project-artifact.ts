@@ -22,6 +22,19 @@ export const GENERATED_MECHANIC_RUNTIME_CANDIDATE_VERSION =
   "generated_mechanic_runtime_candidate/v1" as const;
 export const TOP_DOWN_PHASER_GENERATED_MECHANIC_HOST_PROFILE_ID =
   "top_down_phaser_generated_mechanic_host/v1" as const;
+export const TOP_DOWN_GENERATED_MECHANIC_EVALUATION_PROPERTY_IDS =
+  Object.freeze([
+    "active",
+    "kind",
+    "role",
+    "name",
+    "position",
+    "velocity",
+    "position_x",
+    "position_y",
+    "velocity_x",
+    "velocity_y",
+  ] as const);
 export const GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID =
   "ses_compartment_dedicated_worker_2_2_0" as const;
 export const GENERATED_MECHANIC_RESOURCE_BUDGET_PROFILE_ID =

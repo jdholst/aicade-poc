@@ -16,9 +16,10 @@ import {
 } from "@/service/spec-generation/spec-generation-service";
 
 import type { CreatorGenerationPlanProvider } from "./creator-generation-planning-provider";
+import { applyTopDownCreatorPerceptibilityFloor } from "./creator-generation-perceptibility-policy";
 import {
-  parseCreatorGenerationPlanEnvelope,
-  type CreatorGenerationPlanEnvelope,
+  parseCreatorGenerationPlanEnvelopeParts,
+  type CreatorGenerationPlanEnvelopeParts,
 } from "./creator-generation-planning-schema";
 
 export type GenerateTopDownCreatorPlanInput = Omit<
@@ -52,12 +53,12 @@ export async function generateTopDownCreatorPlan({
   const availableCapabilities = stableIdSchema
     .array()
     .parse(availableCapabilitiesInput);
-  let latestEnvelope: CreatorGenerationPlanEnvelope | undefined;
+  let latestEnvelope: CreatorGenerationPlanEnvelopeParts | undefined;
 
   const result = await generateTopDownGameSpec({
     ...specGenerationInput,
     provider: async (providerInput) => {
-      const envelope = parseCreatorGenerationPlanEnvelope(
+      const envelope = parseCreatorGenerationPlanEnvelopeParts(
         await provider({
           ...providerInput,
           availableCapabilities,
@@ -80,13 +81,36 @@ export async function generateTopDownCreatorPlan({
     );
   }
 
+  if (latestEnvelope.mechanicIntent.status === "invalid") {
+    return {
+      ...result,
+      routing: {
+        kind: "intent_validation_failure",
+        generationRunId,
+        ...(latestEnvelope.mechanicIntent.summary
+          ? { intentSummary: latestEnvelope.mechanicIntent.summary }
+          : {}),
+        evidence: {
+          stage: "routing",
+          code: "invalid_intent_transport",
+          issues: latestEnvelope.mechanicIntent.issues,
+        },
+      },
+    };
+  }
+
+  const intent = applyTopDownCreatorPerceptibilityFloor(
+    latestEnvelope.mechanicIntent.value,
+    result.spec
+  );
+
   return {
     ...result,
     routing: createCreatorGenerationRouting({
       availableCapabilities,
       baseGameSpec: result.spec,
       generationRunId,
-      intent: latestEnvelope.mechanicIntent,
+      intent,
     }),
   };
 }

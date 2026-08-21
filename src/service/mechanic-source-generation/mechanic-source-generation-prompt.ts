@@ -103,6 +103,13 @@ const sourceCandidateSchemaDocumentation = {
   },
 } as const;
 
+const sourceVisibleTypeDocumentation = {
+  MechanicObjectObservation:
+    "Readonly<{ active: boolean; kind: string; position: Readonly<{ x: number; y: number }>; properties: Readonly<Record<string, JsonValue>>; velocity: Readonly<{ x: number; y: number }> }>",
+  MechanicMotionMutation:
+    "Readonly<{ position?: Readonly<{ x: number; y: number }>; velocity?: Readonly<{ x: number; y: number }> }>",
+} as const;
+
 export function createMechanicSourceGenerationSystemPrompt({
   intent,
   resolution,
@@ -190,6 +197,13 @@ export function createMechanicSourceGenerationSystemPrompt({
       dispose: "undefined",
     },
   };
+  const requiredCallbackKinds = [
+    ...new Set([
+      ...contract.lifecycle.callbacks,
+      ...(contract.lifecycle.fixedStep ? ["fixed_step" as const] : []),
+      "dispose" as const,
+    ]),
+  ];
   const attemptGuidance = createSourceAttemptGuidance(generationAttempt);
 
   return `
@@ -218,8 +232,14 @@ ${JSON.stringify(referenceCatalog, null, 2)}
 Exact granted async capability documentation JSON:
 ${JSON.stringify(capabilityDocumentation, null, 2)}
 
+Exact source-visible capability value types JSON:
+${JSON.stringify(sourceVisibleTypeDocumentation, null, 2)}
+
 Contract-derived source context JSON:
 ${JSON.stringify(sourceContextDocumentation, null, 2)}
+
+Exact required source callback kinds JSON:
+${JSON.stringify(requiredCallbackKinds, null, 2)}
 
 Generated Mechanic Source candidate schema JSON:
 ${JSON.stringify(sourceCandidateSchemaDocumentation, null, 2)}
@@ -228,10 +248,16 @@ ${attemptGuidance}
 
 Source rules:
 - Return callback bodies only in the strict candidate schema; do not return a persistent module, imports, exports, a game specification, or prose.
-- Declare exactly one callback for every lifecycle kind accepted by the contract, plus dispose. Include fixed_step only when the contract enables it. The trusted host owns lifecycle scheduling and fixed-step cadence; source candidates never choose timing metadata.
+- The callbacks array must contain exactly one callback for each kind in that exact checklist, with no missing, duplicated, or additional kinds. Recheck the checklist after every repair. Include fixed_step whenever it appears there, even if logical_action performs the primary visible effect.
+- The trusted host owns lifecycle scheduling and fixed-step cadence; source candidates never choose timing metadata.
 - Callback bodies may reference only config, bindings, lifecycleInput, and the exact granted capabilities expressions documented above.
+- Object observations expose only the fields in MechanicObjectObservation. There is no movementDirection, direction, or facing field. When accepted behavior needs current movement direction, derive movement direction from velocity.x and velocity.y; if both are zero, use a bounded deterministic fallback vector consistent with the accepted assumptions.
 - Input lifecycle payloads and emitted output payloads must match their contract-declared port schemas exactly.
 - Every granted capability must be called through its documented capabilities expression, every capability call is asynchronous, and every call must be awaited.
+- The retained top-down host advances generated simulation time in whole deterministic milliseconds while carrying sub-millisecond frame remainder internally. Treat capabilities.time.now() as simulation time rather than wall-clock time and keep deadline arithmetic deterministic.
+- Every value written to an integer private-state field must remain a finite integer. Combine whole simulation milliseconds only with finite integer durations or counters; never write a fractional, non-finite, or implicitly coerced deadline.
+- Each host lifecycle operation has a hard maximum of ${resourceBudget.maximumOperationsPerTick} capability-operation units. Every capability call consumes its documented resourceCosts.operationsPerTick value. Repeated capability calls and loop iterations multiply their documented operation costs. An advance_time scenario step accumulates the costs of every scheduled and fixed-step callback it dispatches, so all callbacks reached by that one step must fit together under the limit. Ensure the maximum possible path through every install, action, event, schedule, or time-advance operation remains within that limit.
+- Avoid capability-call polling and repeated reads or writes when one bounded read or write can implement the accepted behavior. When runtime evidence reports operations_per_tick over budget, an over-budget repair must remove, combine, or avoid capability calls until the maximum callback path is at or below the exact limit; rearranging the same calls is not a repair.
 - time.schedule callback IDs must name scheduled callbacks, and events.subscribe callback IDs must name gameplay_event callbacks.
 - Do not reference raw realm primitives, engine objects, ambient globals, dynamic evaluation, DOM, network, storage, workers, raw timers, ambient time, or ambient randomness.
 - Compose behavior from the supplied primitive capability surface. Do not rely on named profiles, source skeletons, algorithms, prompt branches, hidden helpers, handwritten fragments, or any material not supplied above.

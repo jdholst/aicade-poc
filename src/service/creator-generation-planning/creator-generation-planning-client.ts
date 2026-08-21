@@ -228,10 +228,26 @@ const clarificationRoutingSchema = z
     kind: z.literal("clarification_failure"),
     generationRunId: stableIdSchema,
     intentId: stableIdSchema,
+    intentSummary: z.string().min(1).max(600).optional(),
     evidence: z
       .object({
         stage: z.literal("routing"),
         code: z.enum(["clarification_required", "invalid_intent_references"]),
+        issues: z.array(routingIssueSchema).min(1).max(128),
+      })
+      .strict(),
+  })
+  .strict();
+
+const intentValidationFailureRoutingSchema = z
+  .object({
+    kind: z.literal("intent_validation_failure"),
+    generationRunId: stableIdSchema,
+    intentSummary: z.string().min(1).max(600).optional(),
+    evidence: z
+      .object({
+        stage: z.literal("routing"),
+        code: z.literal("invalid_intent_transport"),
         issues: z.array(routingIssueSchema).min(1).max(128),
       })
       .strict(),
@@ -243,6 +259,7 @@ const capabilityGapRoutingSchema = z
     kind: z.literal("capability_gap"),
     generationRunId: stableIdSchema,
     intentId: stableIdSchema,
+    intentSummary: z.string().min(1).max(600).optional(),
     evidence: z
       .object({
         stage: z.literal("routing"),
@@ -259,6 +276,7 @@ const constraintConflictRoutingSchema = z
     kind: z.literal("constraint_conflict"),
     generationRunId: stableIdSchema,
     intentId: stableIdSchema,
+    intentSummary: z.string().min(1).max(600).optional(),
     evidence: z
       .object({
         stage: z.literal("routing"),
@@ -271,6 +289,7 @@ const constraintConflictRoutingSchema = z
 
 const nonGeneratedRoutingSchema = z.discriminatedUnion("kind", [
   builtInRoutingSchema,
+  intentValidationFailureRoutingSchema,
   clarificationRoutingSchema,
   capabilityGapRoutingSchema,
   constraintConflictRoutingSchema,
