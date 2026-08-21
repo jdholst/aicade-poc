@@ -101,12 +101,21 @@ describe("createCreatorGenerationRouting", () => {
   });
 
   it("routes a generic transient owned-object intent through the production host profile", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const targetEntity = gameSpec.entities.find(({ role }) => role !== "player");
+    if (!targetEntity) {
+      throw new Error("Expected a non-player target entity.");
+    }
     const intent = createIntent({
       actors: ["player"],
+      targets: [targetEntity.role],
       behaviors: ["spawn_transient_effect"],
       connections: [{ direction: "input", port: "move" }],
       ownedObjects: ["transient_effect"],
-      references: [{ kind: "entity", id: "entity_player" }],
+      references: [
+        { kind: "entity", id: "entity_player" },
+        { kind: "entity", id: targetEntity.id },
+      ],
       requiredCapabilities: [
         "object_create",
         "object_motion_write",
@@ -117,7 +126,7 @@ describe("createCreatorGenerationRouting", () => {
 
     const result = createCreatorGenerationRouting({
       availableCapabilities: TOP_DOWN_CREATOR_GENERATION_HOST_CAPABILITY_IDS,
-      baseGameSpec: getFirstValidTopDownGameSpecFixture(),
+      baseGameSpec: gameSpec,
       generationRunId: "generation_run_transient_owned_object",
       intent,
     });
@@ -185,6 +194,49 @@ describe("createCreatorGenerationRouting", () => {
         issues: [
           expect.objectContaining({
             code: "observable_actor_reference_required",
+          }),
+        ],
+      },
+    });
+  });
+
+  it("reports an unrepresented target before transient-object generation", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const targetEntity = gameSpec.entities.find(({ role }) => role !== "player");
+    if (!targetEntity) {
+      throw new Error("Expected a non-player target entity.");
+    }
+    const result = createCreatorGenerationRouting({
+      availableCapabilities: TOP_DOWN_CREATOR_GENERATION_HOST_CAPABILITY_IDS,
+      baseGameSpec: gameSpec,
+      generationRunId: "generation_run_target_gap",
+      intent: createIntent({
+        actors: ["player"],
+        targets: ["visible_target"],
+        behaviors: ["launch_transient_object"],
+        ownedObjects: ["transient_object"],
+        connections: [{ direction: "input", port: "move" }],
+        requiredCapabilities: [
+          "object_create",
+          "object_motion_write",
+          "spatial_query",
+          "object_destroy",
+        ],
+        references: [
+          { kind: "entity", id: "entity_player" },
+          { kind: "entity", id: targetEntity.id },
+        ],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      kind: "capability_gap",
+      generationRunId: "generation_run_target_gap",
+      evidence: {
+        missingCapabilities: [],
+        issues: [
+          expect.objectContaining({
+            code: "observable_target_reference_required",
           }),
         ],
       },

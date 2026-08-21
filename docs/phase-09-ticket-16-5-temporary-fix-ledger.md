@@ -139,6 +139,17 @@ This ledger records expedient fixes accepted to improve real-provider end-to-end
 - Removal criteria: compiled requirement ownership and dependency proofs can classify fallback eligibility across game types; the temporary `player_movement` plus `pickup_collection` predicate and raw-intent recovery path are removed.
 - Current coverage: split-envelope transport tests, centralized policy tests, dispatcher zero-call/cancellation and connection-sanitization tests, editor receipt/persistence tests, developer export and creator UI tests, and a real planning-to-first-playable collection integration replay.
 
+### TF-13 — Exact generated-target role guidance
+
+- Status: active creator-planning compatibility shortcut
+- Motivated by: real-provider Ticket 17 projectile attempts that passed contract admission and then stopped during evaluator setup with `Top-down generated mechanic evaluation requires exactly one single-entity binding for every trusted actor-role entity reference.` The retained evaluator selects transient-object interaction targets by matching Mechanic Intent target tokens to exact referenced `gameSpec.entities[].role` values, but the planning prompt previously stated that invariant only for actors.
+- Current shortcut: the creator-planning prompt now tells the provider to copy every generated-host target from the exact role of a referenced Game Spec entity and explicitly rejects generic aliases such as `visible_target` when the referenced role is `enemy`, `pickup`, `hazard`, or another exact role. Trusted routing independently checks that every target role is represented by an exact routed entity reference before contract or source generation begins.
+- Risk: a successful full generated-mechanic run still depends on provider compliance with duplicated role-plus-reference vocabulary. A mismatched target now fails closed before paid generated stages and may enter the existing degraded fallback, but trusted code does not yet repair or derive the intended target mapping.
+- Current guardrails: routing never rewrites or guesses a target, unknown and duplicate stable references remain rejected, contract admission still requires one exact single-entity binding per routed entity reference, and evaluator target-interaction evidence remains tied to the trusted lineage.
+- Robust replacement: use the trusted intent compiler to resolve provider-proposed target semantics to exact stable entity IDs, preserve ambiguity when resolution is not unique, and derive contract bindings plus evaluator target IDs from that compiled mapping rather than repeating free-form role tokens.
+- Removal criteria: provider-authored target aliases cannot reach routing, contract generation, or evaluator setup; accepted target identity is compiled from stable references with deterministic ambiguity handling and covered by prompt-shaped end-to-end tests.
+- Current coverage: creator-generation routing regression for a `visible_target` alias paired with an exact non-player entity reference, plus creator-planning provider-prompt assertions for the target-role invariant.
+
 ## Fixes deliberately not classified as band-aids
 
 The following changes address trusted infrastructure invariants and should remain even after the temporary entries above are replaced:

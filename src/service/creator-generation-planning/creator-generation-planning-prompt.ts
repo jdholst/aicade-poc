@@ -36,6 +36,8 @@ export function createCreatorGenerationPlanningSystemPrompt({
     requiredReferenceKind: "entity",
     requiredActorReference:
       "every actor must equal the role of an exact referenced gameSpec entity",
+    requiredTargetReference:
+      "every target must equal the role of an exact referenced gameSpec entity",
     requiredInputConnection:
       "exactly one input connection whose port is an exact active gameSpec control action ID",
     independentAcceptanceEvidence:
@@ -72,6 +74,7 @@ Creator-generation planning envelope:
 - Use the canonical generated-host trigger vocabulary below only when it truthfully describes the requested behavior. A creator-controlled generated behavior uses exactly logical_action. Do not invent variants such as logical_custom_action, logical_dash_action, or logical_move_action. Preserve a materially different requested trigger unchanged so deterministic routing can return an honest capability gap.
 - A generated-host intent must name object_motion_write only when the requested outcome truly includes independently visible motion of an exact entity reference. Do not invent motion or an entity reference merely to pass admission.
 - Every generated-host actor must equal the role of an exact entity reference from gameSpec; do not invent actor labels or unrelated references.
+- Every generated-host target must equal the role of an exact entity reference from gameSpec; do not invent generic target labels such as visible_target when the referenced entity's role is enemy, pickup, hazard, or another exact gameSpec role.
 - A generated-host intent must use exactly one input connection whose port is the exact active gameSpec control action ID that triggers the requested behavior. Do not invent an action ID or add output connections merely to pass admission.
 - Do not return source code, a Generated Mechanic Contract, routing policy, evaluation evidence, or a Game Pack.
 

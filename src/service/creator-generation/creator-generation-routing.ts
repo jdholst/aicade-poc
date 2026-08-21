@@ -255,6 +255,14 @@ function getGeneratedHostIntentIssues(
         "The current top-down generated-mechanic host requires every requested actor role to be represented by an exact routed Game Spec entity reference.",
     });
   }
+  if (intent.targets.some((target) => !referencedEntityRoles.has(target))) {
+    issues.push({
+      path: "intent.targets",
+      code: "observable_target_reference_required",
+      message:
+        "The current top-down generated-mechanic host requires every requested target role to be represented by an exact routed Game Spec entity reference.",
+    });
+  }
   const supportedTriggers = new Set(["install", "logical_action"]);
   if (
     !intent.triggers.includes("logical_action") ||

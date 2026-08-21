@@ -81,6 +81,12 @@ describe("OpenAI creator-generation planning provider", () => {
       '"requiredActorReference": "every actor must equal the role of an exact referenced gameSpec entity"'
     );
     expect(requestBody.instructions).toContain(
+      '"requiredTargetReference": "every target must equal the role of an exact referenced gameSpec entity"'
+    );
+    expect(requestBody.instructions).toContain(
+      "Every generated-host target must equal the role of an exact entity reference from gameSpec"
+    );
+    expect(requestBody.instructions).toContain(
       "Do not invent variants such as logical_custom_action"
     );
     expect(requestBody.instructions).toContain(
