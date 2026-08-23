@@ -360,8 +360,73 @@ function generatedContractIntentLineageIssues(
       });
     }
   }
+  appendTransientLifetimeFinalCountIssues(intent, contract, issues);
 
   return issues;
+}
+
+function appendTransientLifetimeFinalCountIssues(
+  intent: MechanicIntent,
+  contract: GeneratedMechanicContract,
+  issues: ContractValidationEvidence["issues"]
+): void {
+  const requiredCapabilities = new Set(intent.requiredCapabilities);
+  if (
+    intent.ownedObjects.length === 0 ||
+    !["object_create", "object_motion_write", "object_destroy"].every(
+      (capabilityId) => requiredCapabilities.has(capabilityId)
+    )
+  ) {
+    return;
+  }
+  const acceptedLifetimes = intent.configuration.flatMap(
+    ({ key, value }) =>
+      key.endsWith("_lifetime_ms") &&
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      value > 0
+        ? [value]
+        : []
+  );
+  if (acceptedLifetimes.length === 0) {
+    return;
+  }
+  const acceptedLifetime = Math.min(...acceptedLifetimes);
+  const ownedObjectIds = new Set(contract.ownedObjects.map(({ id }) => id));
+
+  contract.scenarios.forEach((scenario, scenarioIndex) => {
+    const actionIndex = scenario.steps.findIndex(
+      (step) => step.kind === "dispatch_action"
+    );
+    if (actionIndex < 0) {
+      return;
+    }
+    const advancedMilliseconds = scenario.steps
+      .slice(actionIndex + 1)
+      .reduce(
+        (total, step) =>
+          step.kind === "advance_time" ? total + step.milliseconds : total,
+        0
+      );
+    if (advancedMilliseconds < acceptedLifetime) {
+      return;
+    }
+    scenario.observations.forEach((observation, observationIndex) => {
+      if (
+        observation.kind !== "owned_object_count" ||
+        !ownedObjectIds.has(observation.archetypeId) ||
+        observation.operator === "at_most" ||
+        observation.value === 0
+      ) {
+        return;
+      }
+      issues.push({
+        path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
+        code: "contradiction",
+        message: `Generated mechanic scenario "${scenario.id}" advances ${advancedMilliseconds}ms after its action, meeting or exceeding the accepted transient lifetime ${acceptedLifetime}ms. Its final owned-object count cannot require an active "${observation.archetypeId}"; declare final count 0 or end the scenario before cleanup.`,
+      });
+    });
+  });
 }
 
 function appendMissingIntentValues({

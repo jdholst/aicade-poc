@@ -169,6 +169,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
     );
     expect(prompt).toContain(
+      "retain object_read and make actor-relative creation explicit"
+    );
+    expect(prompt).toContain(
+      "actor-origin lifecycle evidence"
+    );
+    expect(prompt).toContain(
       "does not require the transient object_create, object_motion_write, and object_destroy lifecycle"
     );
     expect(prompt).not.toContain("declare no mechanic-owned objects");
@@ -239,6 +245,60 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "Do not add supporting, action, objective, asset, region, owned-object, duplicate, or otherwise non-routed bindings"
+    );
+  });
+
+  it("tells contract repair to make post-lifetime owned-object counts zero", () => {
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_contract_1",
+      issues: [
+        {
+          path: "scenarios.0.observations.0",
+          code: "contradiction",
+          message:
+            'Generated mechanic scenario "shoot_creates_moves_and_expires_projectile" advances 1300ms after its action, meeting or exceeding the accepted transient lifetime 1200ms. Its final owned-object count cannot require an active "player_projectile"; declare final count 0 or end the scenario before cleanup.',
+        },
+      ],
+      invalidatedArtifactIds: ["contract_candidate_initial_1"],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent,
+      resolution,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId:
+          "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "When contradiction reports that a scenario meets or exceeds an accepted transient lifetime, edit the exact owned_object_count observation at the reported path: set operator to equals and value to 0"
+    );
+    expect(prompt).toContain(
+      "Preserve its dispatch_action and advance_time steps; do not shorten the cleanup scenario merely to retain a positive final count"
     );
   });
 
@@ -460,6 +520,62 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker"
+    );
+  });
+
+  it("aligns failed pre-install state setup with the exact private-state initial value", () => {
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_source_1",
+      issues: [
+        {
+          path: "evaluation.scenarios.cooldown.setup.1",
+          code: "setup_observation_failed",
+          message:
+            'Scenario setup 1 "state_equals" failed. Assertion: {"kind":"state_equals","stateId":"last_shot_time","value":0}. Actual: -1.',
+        },
+      ],
+      invalidatedArtifactIds: ["source_candidate_initial_1"],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent,
+      resolution,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId:
+          "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "Scenario setup is evaluated before the install callback"
+    );
+    expect(prompt).toContain(
+      "For setup_observation_failed on state_equals, replace the setup value with the exact matching privateState initialValue"
+    );
+    expect(prompt).toContain(
+      "do not change generated source to manufacture the setup state"
     );
   });
 });

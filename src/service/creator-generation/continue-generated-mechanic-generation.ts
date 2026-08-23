@@ -362,7 +362,7 @@ export function createContinueGeneratedMechanicGeneration({
           return {
             success: false,
             evidence: {
-              responsibleStage: "source",
+              responsibleStage: evaluationFailureResponsibleStage(evaluation),
               issues: evaluationIssues(evaluation),
               artifact: {
                 id: artifactScopedRepairArtifactIdSchema.parse(
@@ -783,6 +783,16 @@ function evaluationIssues(
     });
   }
   return Object.freeze(issues.map((issue) => Object.freeze(issue)));
+}
+
+function evaluationFailureResponsibleStage(
+  evaluation: GeneratedMechanicEvaluationResult
+): "contract" | "source" {
+  return evaluation.evidence.scenarios.some(
+    (scenario) => scenario.setup.some(({ passed }) => !passed)
+  )
+    ? "contract"
+    : "source";
 }
 
 function requireSameGenerationRunIdentity(

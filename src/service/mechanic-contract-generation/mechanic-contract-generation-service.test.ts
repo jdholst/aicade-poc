@@ -378,6 +378,110 @@ describe("generateMechanicContract", () => {
     });
   });
 
+  it("rejects a positive final owned-object count after the accepted transient lifetime", async () => {
+    const transientIntent: MechanicIntent = {
+      ...intent,
+      ownedObjects: ["projectile"],
+      temporalRules: ["projectile_expires"],
+      configuration: [{ key: "projectile_lifetime_ms", value: 1200 }],
+      requiredCapabilities: [
+        "state_write",
+        "object_create",
+        "object_motion_write",
+        "object_destroy",
+        "time_schedule",
+      ],
+    };
+    const result = await generateMechanicContract({
+      intent: transientIntent,
+      admittedRequest: {
+        resolution: { ...resolution, intentId: transientIntent.id },
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        config: {
+          kind: "object",
+          fields: [
+            {
+              key: "projectile_lifetime_ms",
+              required: true,
+              value: {
+                kind: "number",
+                minimum: 1,
+                maximum: 10000,
+                default: 1200,
+              },
+            },
+          ],
+        },
+        ownedObjects: [
+          {
+            id: "projectile",
+            objectKind: "projectile",
+            maximumInstances: 1,
+          },
+        ],
+        capabilities: transientIntent.requiredCapabilities,
+        lifecycle: {
+          ...candidate.lifecycle,
+          callbacks: ["install", "logical_action", "scheduled"],
+        },
+        resourceExpectations: {
+          ...candidate.resourceExpectations,
+          maximumOwnedObjects: 1,
+          maximumOperationsPerTick: 8,
+          maximumScheduledCallbacks: 1,
+        },
+        scenarios: [
+          {
+            id: "projectile_expires",
+            seed: 7,
+            setup: [
+              {
+                kind: "state_equals",
+                stateId: "enabled",
+                value: false,
+              },
+            ],
+            steps: [
+              { kind: "dispatch_action", actionId: "toggle" },
+              { kind: "advance_time", milliseconds: 1200 },
+            ],
+            observations: [
+              {
+                kind: "owned_object_count",
+                archetypeId: "projectile",
+                operator: "at_least",
+                value: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          expect.objectContaining({
+            path: "scenarios.0.observations.0",
+            code: "contradiction",
+            message: expect.stringContaining(
+              "accepted transient lifetime 1200ms"
+            ),
+          }),
+        ],
+      },
+    });
+  });
+
   it("stamps exact trusted semantic lineage and ignores provider-authored substitutions", async () => {
     const semanticIntent: MechanicIntent = {
       ...intent,

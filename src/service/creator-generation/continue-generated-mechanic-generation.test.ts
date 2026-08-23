@@ -510,6 +510,160 @@ describe("createContinueGeneratedMechanicGeneration", () => {
     expect(completeHandoff).not.toHaveBeenCalled();
   });
 
+  it("routes contract-authored evaluation failures back to contract repair", async () => {
+    const fixture = createInputFixture();
+    const { repository: generationRunRepository } =
+      createGenerationRunTestRepository();
+    await generationRunRepository.create(
+      generationRunSchema.parse({
+        id: GENERATION_RUN_ID,
+        operationType: "generate",
+        status: "running",
+        createdAt: CREATED_AT,
+        startedAt: CREATED_AT,
+        request: { summary: fixture.input.context.requestSummary },
+        runtimeKind: "phaser",
+        templateId: fixture.baseGameSpec.template.id,
+        attempts: [],
+      })
+    );
+    const evaluation: GeneratedMechanicEvaluationResult = {
+      outcome: "failed",
+      evidence: {
+        schemaVersion: "generated_mechanic_evaluation/v1",
+        fixtureId: `evaluation_${GENERATION_RUN_ID}_1`,
+        contractId: fixture.project.dependency.contract.id,
+        sourceArtifactId: fixture.project.dependency.sourceArtifact.id,
+        scenarios: [
+          {
+            scenarioId: "contract_owned_observations",
+            seed: 1,
+            outcome: "failed",
+            setup: [
+              {
+                kind: "state_equals",
+                passed: false,
+                actual: -1,
+                assertion: {
+                  kind: "state_equals",
+                  stateId: "last_shot_time",
+                  value: 0,
+                },
+              },
+            ],
+            steps: [],
+            declaredObservations: [
+              {
+                source: "model_declared",
+                kind: "owned_object_count",
+                passed: false,
+                actual: 0,
+                assertion: {
+                  kind: "owned_object_count",
+                  archetypeId: "player_projectile",
+                  operator: "equals",
+                  value: 1,
+                },
+              },
+            ],
+            externalObservations: [],
+            issues: [],
+          },
+        ],
+        issues: [],
+      },
+    };
+    const generateContract: typeof generateMechanicContract = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          contract: fixture.project.dependency.contract,
+          grant: fixture.project.dependency.sourceArtifact.grant,
+        },
+      })
+    );
+    const generateSource: typeof generateBuildAndExecuteMechanicSource = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          artifact: fixture.project.dependency.sourceArtifact,
+          execution: {
+            callbackId:
+              fixture.project.dependency.sourceArtifact.callbacks[0]!.id,
+            result: {
+              executionId: `source_execution_${GENERATION_RUN_ID}_1`,
+              outcome: "completed",
+            },
+          },
+        },
+      })
+    );
+    const runPipeline = vi.fn(async ({ dependencies }) => {
+      const foundation = await dependencies.runFoundation();
+      if (!foundation.success) {
+        throw new Error("Expected the passing foundation fixture.");
+      }
+      const contract = await dependencies.runContract({
+        attemptNumber: 1,
+        kind: "initial",
+      });
+      if (!contract.success) {
+        throw new Error("Expected the accepted contract fixture.");
+      }
+      const source = await dependencies.runSourceAndEvaluation({
+        attemptNumber: 1,
+        foundation: foundation.data,
+        contract: contract.data.value,
+        kind: "initial",
+      });
+
+      expect(source).toMatchObject({
+        success: false,
+        evidence: {
+          responsibleStage: "contract",
+          issues: [
+            {
+              path: "evaluation.scenarios.contract_owned_observations.setup.0",
+              code: "setup_observation_failed",
+            },
+            {
+              path: "evaluation.scenarios.contract_owned_observations.declaredObservations.0",
+              code: "declared_observation_failed",
+            },
+          ],
+        },
+      });
+      return {
+        outcome: "rejected" as const,
+        evidence: {
+          stage: "repair_exhausted" as const,
+          issues: source.success ? [] : source.evidence.issues,
+        },
+      };
+    });
+    const continueGeneration = createContinueGeneratedMechanicGeneration({
+      services: {
+        generationRunRepository,
+        gamePackRepository: {
+          compareAndSwap: vi.fn(),
+          load: vi.fn(),
+        },
+        createFoundation: async () => createPassedFoundation(),
+        createContractProvider: vi.fn(() => vi.fn()),
+        createSourceProvider: vi.fn(() => vi.fn()),
+        generateContract,
+        generateSource,
+        evaluateArtifact: vi.fn(async () => evaluation),
+        runPipeline,
+      },
+    });
+
+    await expect(continueGeneration(fixture.input)).resolves.toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "repair_exhausted" },
+    });
+  });
+
   it("cannot overwrite a terminal cancellation with a late repair result", async () => {
     const fixture = createInputFixture();
     const { repository: generationRunRepository } =
