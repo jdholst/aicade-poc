@@ -16,6 +16,7 @@ import {
 } from "@/service/spec-generation/spec-generation-service";
 
 import type { CreatorGenerationPlanProvider } from "./creator-generation-planning-provider";
+import { applyTopDownCreatorOwnedObjectRediscoveryPolicy } from "./creator-generation-owned-object-policy";
 import { applyTopDownCreatorPerceptibilityFloor } from "./creator-generation-perceptibility-policy";
 import {
   parseCreatorGenerationPlanEnvelopeParts,
@@ -99,9 +100,11 @@ export async function generateTopDownCreatorPlan({
     };
   }
 
-  const intent = applyTopDownCreatorPerceptibilityFloor(
-    latestEnvelope.mechanicIntent.value,
-    result.spec
+  const intent = applyTopDownCreatorOwnedObjectRediscoveryPolicy(
+    applyTopDownCreatorPerceptibilityFloor(
+      latestEnvelope.mechanicIntent.value,
+      result.spec
+    )
   );
 
   return {

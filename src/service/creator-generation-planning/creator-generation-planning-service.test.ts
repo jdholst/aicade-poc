@@ -317,6 +317,60 @@ describe("generateTopDownCreatorPlan", () => {
       { key: "dash_cooldown_ms", value: 600 },
     ]);
   });
+
+  it("adds retained-host rediscovery authority for a transient owned-object lifecycle", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const providerIntent = createTransientOwnedObjectIntent();
+    const provider = vi.fn().mockResolvedValue({
+      gameSpec: spec,
+      mechanicIntent: providerIntent,
+    });
+
+    const result = await generateTopDownCreatorPlan({
+      prompt: "Launch a short-lived moving object when the player acts.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      generationRunId: "generation_run_transient_owned_object",
+      availableCapabilities: [
+        "object_read",
+        "object_create",
+        "object_motion_write",
+        "object_destroy",
+        "spatial_query",
+      ],
+      provider,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      routing: {
+        kind: "generated_mechanic",
+        intent: {
+          requiredCapabilities: [
+            "object_create",
+            "object_motion_write",
+            "object_destroy",
+            "object_read",
+            "spatial_query",
+          ],
+          ambiguities: expect.arrayContaining([
+            expect.objectContaining({
+              id: "assumption_transient_owned_object_rediscovery",
+              inferredValue: "spatial_query",
+              reversible: true,
+            }),
+            expect.objectContaining({
+              id: "assumption_transient_owned_object_actor_observation",
+              inferredValue: "object_read",
+              reversible: true,
+            }),
+          ]),
+        },
+      },
+    });
+    expect(providerIntent.requiredCapabilities).not.toContain("spatial_query");
+    expect(providerIntent.requiredCapabilities).not.toContain("object_read");
+  });
 });
 
 function createMovementIntent() {
@@ -403,5 +457,31 @@ function createGeneratedDashIntent() {
         reversible: true,
       },
     ],
+  };
+}
+
+function createTransientOwnedObjectIntent() {
+  return {
+    id: "intent_transient_owned_object",
+    summary: "Launch, move, and later clean up a transient owned object.",
+    triggers: ["logical_action"],
+    actors: ["player"],
+    targets: [],
+    behaviors: ["launch_transient_owned_object"],
+    ownedObjects: ["transient_object"],
+    stateChanges: [],
+    temporalRules: ["object_exists_across_simulated_time"],
+    spatialRules: ["object_moves_before_cleanup"],
+    constraints: ["destroy_transient_object_after_lifetime"],
+    configuration: [{ key: "lifetime_milliseconds", value: 500 }],
+    connections: [{ direction: "input", port: "move" }],
+    references: [{ kind: "entity", id: "entity_player" }],
+    outcomes: ["owned_object_travels_then_is_destroyed"],
+    requiredCapabilities: [
+      "object_create",
+      "object_motion_write",
+      "object_destroy",
+    ],
+    ambiguities: [],
   };
 }

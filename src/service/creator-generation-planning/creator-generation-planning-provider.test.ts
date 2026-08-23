@@ -134,6 +134,9 @@ describe("OpenAI creator-generation planning provider", () => {
     expect(requestBody.instructions).toContain(
       "object_create, object_motion_write, and object_destroy"
     );
+    expect(requestBody.instructions).toContain(
+      "include object_read when the owned object's initial position or motion depends on a bound actor's live transform"
+    );
     expect(JSON.stringify(requestBody)).not.toContain("sk-secret");
   });
 
