@@ -110,6 +110,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "Owned-object initial JSON may use bounded position, velocity, shape, dimensions, color, and immutable properties"
     );
     expect(prompt).toContain(
+      "When accepted spatial behavior requires an owned object to originate at a bound actor"
+    );
+    expect(prompt).toContain(
+      "pass that exact observed position in the capabilities.objects.create initial JSON"
+    );
+    expect(prompt).toContain(
       "Call capabilities.objects.destroy only with a mechanic-owned handle"
     );
     expect(prompt).toContain(
@@ -148,10 +154,25 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "an over-budget repair must remove, combine, or avoid capability calls"
     );
     expect(prompt).toContain(
+      "The active synchronous work inside each callback must finish within maximumCallbackMilliseconds of 8"
+    );
+    expect(prompt).toContain(
       "The retained top-down host advances generated simulation time in whole deterministic milliseconds"
     );
     expect(prompt).toContain(
       "Every value written to an integer private-state field must remain a finite integer"
+    );
+    expect(prompt).toContain(
+      "For a contract deadline state named *_until"
+    );
+    expect(prompt).toContain(
+      "reject only while now < deadline; equality accepts the action"
+    );
+    expect(prompt).toContain(
+      "Never index an array or readonly array with a variable, even when TypeScript annotates it as number"
+    );
+    expect(prompt).toContain(
+      "iterate with for...of, or use a literal index such as [0] only after explicitly checking the array is nonempty"
     );
     expect(prompt).not.toContain("EVALUATOR_ONLY_SENTINEL");
     expect(prompt).not.toContain('"scenarios"');
@@ -159,6 +180,149 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).not.toMatch(/projectile|hazard|proximity|navigation/i);
     expect(prompt).not.toContain("External Acceptance Observations");
     expect(prompt).not.toContain("evaluator tests");
+  });
+
+  it("names forbidden constructor authority and turns its rejection into exact repair guidance", () => {
+    const intent = createIntent();
+    const baseInput = {
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(createGrant("state_write")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget" as const,
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary" as const,
+    };
+
+    const initialPrompt = createMechanicSourceGenerationSystemPrompt(baseInput);
+
+    expect(initialPrompt).toContain(
+      'Never access, destructure, alias, or derive "constructor", "__proto__", or "prototype"'
+    );
+    expect(initialPrompt).toContain(
+      "Use direct granted capability expressions and ordinary local values instead of constructor or prototype reflection"
+    );
+
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "callbacks.2.source",
+          code: "forbidden_source_authority",
+          message:
+            'Generated mechanic source cannot reference forbidden authority "constructor".',
+        },
+        {
+          path: "callbacks.1.source",
+          code: "forbidden_source_authority",
+          message:
+            "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const repairPrompt = createMechanicSourceGenerationSystemPrompt({
+      ...baseInput,
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(repairPrompt).toContain(JSON.stringify(repair, null, 2));
+    expect(repairPrompt).toContain(
+      'For forbidden_source_authority "constructor", remove every constructor or prototype-chain access'
+    );
+    expect(repairPrompt).toContain(
+      "Do not hide the access behind a computed property, destructuring, an alias, a cast, or Object reflection"
+    );
+    expect(repairPrompt).toContain(
+      "For a runtime-computed property access rejection, replace every dynamic lookup or computed destructuring key"
+    );
+    expect(repairPrompt).toContain(
+      "Use the direct named property from the accepted source context or a provably numeric array index"
+    );
+    expect(repairPrompt).toContain(
+      "replace array[indexVariable] loops with for (const item of array)"
+    );
+    expect(repairPrompt).toContain(
+      "use array[0] only after an explicit nonempty check"
+    );
+  });
+
+  it("turns callback CPU budget failures into bounded-work repair guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "scenarios.shoot_travel_and_expire",
+          code: "resource_limit_exceeded",
+          message: "Resource callback_milliseconds exceeded 8 with 9.",
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(createGrant("state_write")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(JSON.stringify(repair, null, 2));
+    expect(prompt).toContain(
+      "For a callback_milliseconds resource failure, reduce active synchronous work in the named callback"
+    );
+    expect(prompt).toContain(
+      "Use one bounded for...of pass with an early exit where accepted behavior permits"
+    );
+    expect(prompt).toContain(
+      "Do not raise or reinterpret maximumCallbackMilliseconds"
+    );
   });
 
   it("includes exact upstream invalidation feedback and requires the correlated source candidate ID", () => {
@@ -430,6 +594,300 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       'ownership: "owned"'
+    );
+  });
+
+  it("turns failed owned-object lifecycle deltas into exact interaction repair guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "evaluation.scenarios.transient.externalObservations.0",
+          code: "external_observation_failed",
+          message:
+            'Evaluator-authored observation 0 "owned_object_lifecycle_after_action" failed. Actual: {"deltas":[{"activeDelta":0,"actorOriginCreationsDelta":0,"createdDelta":1,"destroyedDelta":1,"simulatedDistanceTraveledDelta":12,"targetInteractionsDelta":0}]}.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(
+        createGrant(
+          "object_read",
+          "object_create",
+          "object_motion_write",
+          "object_destroy",
+          "spatial_query"
+        )
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "For an owned_object_lifecycle_after_action failure, inspect every reported lifecycle delta"
+    );
+    expect(prompt).toContain("targetInteractionsDelta");
+    expect(prompt).toContain("actorOriginCreationsDelta");
+    expect(prompt).toContain(
+      "read the actor binding and pass its observed position into capabilities.objects.create"
+    );
+    expect(prompt).toContain('ownership: "bound"');
+    expect(prompt).toContain(
+      "apply a finite nonzero capabilities.objects.writeMotion mutation to the first returned target handle"
+    );
+  });
+
+  it("turns opaque-handle property access into capability-bound observation guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "callbacks.1.source",
+          code: "type_failure",
+          message:
+            "Property 'velocity' does not exist on type 'Readonly<{ readonly [mechanicObjectHandleBrand]: \"MechanicObjectHandle\"; }>'.",
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(
+        createGrant("object_motion_write", "spatial_query")
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "MechanicObjectHandle is an opaque identity token with no readable fields"
+    );
+    expect(prompt).toContain(
+      "querySpatial returns opaque handles, not MechanicObjectObservation values"
+    );
+    expect(prompt).toContain(
+      "For a Property access failure on MechanicObjectHandle"
+    );
+    expect(prompt).toContain(
+      "Only when the exact grant includes capabilities.objects.read"
+    );
+    expect(prompt).toContain(
+      "When object_read is absent, derive the finite mutation from accepted config, lifecycle input, or deterministic constants"
+    );
+  });
+
+  it("turns cooldown timestamp drift into last-action and deadline guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "evaluation.scenarios.accepted.declaredObservations.0",
+          code: "declared_observation_failed",
+          message:
+            'Model-declared observation 0 "state_equals" failed. Assertion: {"kind":"state_equals","stateId":"last_action_time","value":250}. Actual: 500.',
+        },
+        {
+          path: "evaluation.scenarios.cooldown.externalObservations.0",
+          code: "external_observation_failed",
+          message:
+            'Evaluator-authored observation 0 "owned_object_lifecycle_after_action" failed. Actual: {"deltas":[{"archetypeId":"transient_effect","activeDelta":1,"createdDelta":1,"destroyedDelta":0,"simulatedDistanceTraveledDelta":0,"targetInteractionsDelta":0}]}.',
+        },
+        {
+          path: "evaluation.scenarios.initial_action.declaredObservations.0",
+          code: "declared_observation_failed",
+          message:
+            'Model-declared observation 0 "state_equals" failed. Assertion: {"kind":"state_equals","stateId":"cooldown_until","value":250}. Actual: 0.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(
+        createGrant(
+          "object_create",
+          "object_motion_write",
+          "object_destroy",
+          "spatial_query",
+          "state_read",
+          "state_write",
+          "time_read",
+          "time_schedule"
+        )
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain("For a cooldown timestamp mismatch");
+    expect(prompt).toContain(
+      "a last_*_time state stores the current simulation time only when the action is accepted"
+    );
+    expect(prompt).toContain(
+      "reject while now - lastAcceptedTime is less than the cooldown duration"
+    );
+    expect(prompt).toContain(
+      "never write now + cooldown duration into last_*_time"
+    );
+    expect(prompt).toContain(
+      "Do not use time.schedule to implement a timestamp-enforced cooldown"
+    );
+    expect(prompt).toContain(
+      "schedule the accepted delayed lifecycle behavior with its own duration"
+    );
+    expect(prompt).toContain(
+      "For a cooldown deadline boundary mismatch involving *_until"
+    );
+    expect(prompt).toContain(
+      "reject only when now < deadline and accept when now === deadline"
+    );
+    expect(prompt).toContain(
+      "after acceptance write now + duration into the deadline state"
+    );
+  });
+
+  it("turns a mismatched scheduled callback literal into exact callback-ID repair guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "callbacks.1.source",
+          code: "type_failure",
+          message:
+            'Argument of type \'"expire_projectiles"\' is not assignable to parameter of type \'"scheduled"\'.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      lifecycle: {
+        callbacks: ["install", "logical_action", "scheduled"],
+        fixedStep: false,
+        dispose: true,
+      },
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract,
+      grant: createMechanicSourceGenerationGrant(createGrant("time_schedule")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "Set every callback id exactly equal to its callback kind"
+    );
+    expect(prompt).toContain(
+      'For a time.schedule callback-ID type failure, pass the literal "scheduled"'
+    );
+    expect(prompt).toContain(
+      'never a behavior label such as "expire_projectiles"'
     );
   });
 

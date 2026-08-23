@@ -931,6 +931,9 @@ const forbiddenDynamicPropertyNames = new Set([
   "prototype",
 ]);
 
+const RUNTIME_COMPUTED_PROPERTY_ACCESS =
+  "runtime_computed_property_access" as const;
+
 const forbiddenObjectReflectionMembers = new Set([
   "create",
   "defineProperties",
@@ -1104,7 +1107,7 @@ function inspectTypedDynamicAuthority(
         context.checker
       )
     ) {
-      forbiddenAuthority = "constructor";
+      forbiddenAuthority = RUNTIME_COMPUTED_PROPERTY_ACCESS;
       return;
     }
     const destructuringAuthority =
@@ -1123,7 +1126,11 @@ function inspectTypedDynamicAuthority(
     ? fail(
         "source_static_validation",
         "generated_mechanic_source_static_validation_failed",
-        [forbiddenAuthorityIssue(callbackIndex, forbiddenAuthority)]
+        [
+          forbiddenAuthority === RUNTIME_COMPUTED_PROPERTY_ACCESS
+            ? forbiddenDynamicPropertyAccessIssue(callbackIndex)
+            : forbiddenAuthorityIssue(callbackIndex, forbiddenAuthority),
+        ]
       )
     : { success: true };
 }
@@ -1269,7 +1276,7 @@ function forbiddenPropertyNameAuthority(
     }
     return includeDynamic &&
       !isProvablyNumericIndexExpression(propertyName.expression, checker)
-      ? "constructor"
+      ? RUNTIME_COMPUTED_PROPERTY_ACCESS
       : undefined;
   }
   const name = propertyName.text;
@@ -1309,6 +1316,17 @@ function forbiddenAuthorityIssue(
     path: `callbacks.${callbackIndex}.source`,
     code: "forbidden_source_authority",
     message: `Generated mechanic source cannot reference forbidden authority "${authority}".`,
+  };
+}
+
+function forbiddenDynamicPropertyAccessIssue(
+  callbackIndex: number
+): GeneratedMechanicSourceIssue {
+  return {
+    path: `callbacks.${callbackIndex}.source`,
+    code: "forbidden_source_authority",
+    message:
+      "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
   };
 }
 
@@ -1956,6 +1974,7 @@ declare const Array: ArrayConstructor;
 interface StringConstructor { (value?: unknown): string; }
 declare const String: StringConstructor;
 interface NumberConstructor {
+  readonly MAX_SAFE_INTEGER: number;
   (value?: unknown): number;
   isFinite(value: unknown): boolean;
   isInteger(value: unknown): boolean;

@@ -388,6 +388,8 @@ describe("generated mechanic source stage", () => {
     },
     {
       authority: "constructor",
+      expectedMessage:
+        "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
       source:
         'let target: any; target = async () => undefined; const key: any = JSON.parse("\\\"constructor\\\""); const DynamicFunction = target[key]; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
     },
@@ -398,11 +400,15 @@ describe("generated mechanic source stage", () => {
     },
     {
       authority: "constructor",
+      expectedMessage:
+        "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
       source:
         'const key: string = JSON.parse("\\\"constructor\\\""); const target = async function () {} as unknown as Record<string, any>; const { [key]: DynamicFunction } = target; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
     },
     {
       authority: "constructor",
+      expectedMessage:
+        "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
       source:
         'let target: any; target = async () => undefined; const key: number = JSON.parse("\\\"constructor\\\""); const DynamicFunction = target[key]; const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
     },
@@ -413,6 +419,8 @@ describe("generated mechanic source stage", () => {
     },
     {
       authority: "constructor",
+      expectedMessage:
+        "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
       source:
         'let DynamicFunction: any; const key: string = JSON.parse("\\\"constructor\\\""); const target = async function () {} as unknown as Record<string, any>; ({ [key]: DynamicFunction } = target); const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
     },
@@ -423,12 +431,15 @@ describe("generated mechanic source stage", () => {
     },
     {
       authority: "constructor",
+      expectedMessage:
+        "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
       source:
         'let DynamicFunction: any; const key: string = JSON.parse("\\\"constructor\\\""); const target = async function () {} as unknown as Record<string, any>; for ({ [key]: DynamicFunction } of [target]) {} const value = DynamicFunction("return globalThis")(); await capabilities.state.write("counter", Number(Boolean(value)));',
     },
   ])(
     "rejects forbidden ambient API $authority",
-    async ({ authority, source }) => {
+    async (testCase) => {
+      const { authority, source } = testCase;
       const realmAdapter = new RecordingRealmAdapter();
 
       const result = await buildAndExecuteGeneratedMechanicSource({
@@ -445,7 +456,10 @@ describe("generated mechanic source stage", () => {
             {
               path: "callbacks.0.source",
               code: "forbidden_source_authority",
-              message: `Generated mechanic source cannot reference forbidden authority "${authority}".`,
+              message:
+                "expectedMessage" in testCase
+                  ? testCase.expectedMessage
+                  : `Generated mechanic source cannot reference forbidden authority "${authority}".`,
             },
           ],
         },
@@ -466,6 +480,34 @@ describe("generated mechanic source stage", () => {
 
     expect(result).toMatchObject({ success: true });
     expect(realmAdapter.executions).toHaveLength(1);
+  });
+
+  it("reports runtime-computed property access precisely while retaining fail-closed rejection", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter),
+      candidate: createCandidate(
+        'const values: Record<string, number> = { safe: config.initialCount }; const key: string = JSON.parse("\\\"safe\\\""); const value = values[key]; await capabilities.state.write("counter", value);'
+      ),
+    });
+
+    expect(result).toEqual({
+      success: false,
+      evidence: {
+        stage: "source_static_validation",
+        code: "generated_mechanic_source_static_validation_failed",
+        issues: [
+          {
+            path: "callbacks.0.source",
+            code: "forbidden_source_authority",
+            message:
+              "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
+          },
+        ],
+      },
+    });
+    expect(realmAdapter.executions).toHaveLength(0);
   });
 
   it("supports the finite deterministic BigInt source surface", async () => {
@@ -489,6 +531,20 @@ describe("generated mechanic source stage", () => {
       ...createBuildInput(realmAdapter),
       candidate: createCandidate(
         'const magnitude = Math.hypot(3, 4); await capabilities.state.write("counter", magnitude);'
+      ),
+    });
+
+    expect(result).toMatchObject({ success: true });
+    expect(realmAdapter.executions).toHaveLength(1);
+  });
+
+  it("supports Number.MAX_SAFE_INTEGER in the generated source surface", async () => {
+    const realmAdapter = new RecordingRealmAdapter();
+
+    const result = await buildAndExecuteGeneratedMechanicSource({
+      ...createBuildInput(realmAdapter),
+      candidate: createCandidate(
+        'const deadline = Number.MAX_SAFE_INTEGER; await capabilities.state.write("counter", deadline);'
       ),
     });
 
