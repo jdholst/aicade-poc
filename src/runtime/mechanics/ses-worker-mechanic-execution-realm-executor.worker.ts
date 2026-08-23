@@ -20,6 +20,7 @@ import {
   evaluateMeteredMechanicRuntimeCallback,
   runMechanicRuntimeCallbacks,
 } from "@/runtime/mechanics/mechanic-runtime-callback-runner";
+import { scheduleMechanicCallbackYieldAcknowledgement } from "@/runtime/mechanics/mechanic-callback-yield-scheduler";
 import {
   SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
   type SesWorkerRealmBindingDescriptor,
@@ -171,7 +172,6 @@ const noResources = Object.freeze({
   pendingTasks: 0,
 });
 const pendingCapabilityCalls = new Map<string, PendingCapabilityCall>();
-const runtimeCallbackYieldChannel = new MessageChannel();
 const generatedMechanicCallbackCompartment = createMechanicCompartment(
   Object.freeze(Object.create(null))
 );
@@ -179,18 +179,6 @@ const compiledGeneratedMechanicCallbacks = new Map<string, unknown>();
 const MAXIMUM_CACHED_GENERATED_MECHANIC_CALLBACKS = 64;
 let activeRuntimeJobId: string | undefined;
 let nextCapabilityCallId = 0;
-
-runtimeCallbackYieldChannel.port1.addEventListener("message", (event) => {
-  if (
-    !event.isTrusted ||
-    event.currentTarget !== runtimeCallbackYieldChannel.port1 ||
-    !isRuntimeCallbackYieldTask(event.data)
-  ) {
-    return;
-  }
-  acknowledgeRuntimeCallbackYield(event.data);
-});
-runtimeCallbackYieldChannel.port1.start();
 
 workerScope.addEventListener("message", (event) => {
   if (!event.isTrusted) {
@@ -1015,11 +1003,13 @@ function requestRuntimeCapability(
         capabilityId,
         arguments: args,
       });
-      runtimeCallbackYieldChannel.port2.postMessage({
-        jobId: input.jobId,
-        executionId: input.executionId,
-        callId,
-      } satisfies RuntimeCallbackYieldTask);
+      scheduleMechanicCallbackYieldAcknowledgement(() => {
+        acknowledgeRuntimeCallbackYield({
+          jobId: input.jobId,
+          executionId: input.executionId,
+          callId,
+        });
+      });
     } catch (error) {
       pendingCapabilityCalls.delete(key);
       reject(
@@ -1409,17 +1399,6 @@ function isRuntimeCapabilityResponseMessage(
       : isRecord(value.response.error) &&
         typeof value.response.error.code === "string" &&
         typeof value.response.error.message === "string")
-  );
-}
-
-function isRuntimeCallbackYieldTask(
-  value: unknown
-): value is RuntimeCallbackYieldTask {
-  return (
-    isRecord(value) &&
-    typeof value.jobId === "string" &&
-    typeof value.executionId === "string" &&
-    typeof value.callId === "string"
   );
 }
 

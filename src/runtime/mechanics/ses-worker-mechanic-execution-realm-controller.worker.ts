@@ -13,6 +13,7 @@ import type {
   MechanicExecutionRealmDiagnostic,
   MechanicExecutionRealmExecutionResult,
 } from "@/runtime/mechanics/mechanic-execution-realm";
+import { mechanicCallbackWatchdogDelayMilliseconds } from "@/runtime/mechanics/mechanic-callback-watchdog-policy";
 import {
   SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
   type SesWorkerRealmBindingDescriptor,
@@ -586,7 +587,7 @@ function resumeCallbackDeadline(job: ActiveJob): void {
   budget.activeStartedAt = performance.now();
   job.callbackTimer = setTimeout(
     () => containSlowCallback(job, budget.limit),
-    Math.max(0, budget.remainingMilliseconds) + 1
+    mechanicCallbackWatchdogDelayMilliseconds(budget.remainingMilliseconds)
   );
 }
 
