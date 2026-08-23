@@ -62,6 +62,16 @@ Run validation first. Present the complete sequence, provider modes, campaign ce
 
 The authorization remains valid on resume because usage only decreases the remaining envelope. Changing the definition, manifest, prompts, thresholds, probe, model, provider modes, or ceilings invalidates the loop.
 
+## Worktree preparation
+
+Starting a new loop creates its linked worktree and then performs this sequence inside that worktree:
+
+1. Remove `node_modules` and `.next`.
+2. Run `npm install` to create worktree-local dependencies.
+3. Run `npm run build` before the first editor submission.
+
+Dependencies and build output are never copied from the control checkout. If installation or the production build fails, the loop stops before making an editor submission or provider request. Resuming an existing loop does not recreate its worktree or repeat installation automatically.
+
 ## Failure and fix flow
 
 When a campaign fails, the loop checks only that campaign's failed attempts. It starts another campaign on the same revision only when every failure classification is listed by the current step and its same-revision run limit remains.

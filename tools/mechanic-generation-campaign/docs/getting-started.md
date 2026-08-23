@@ -70,3 +70,5 @@ npm run campaign -- loop validate --definition .qa/ticket-17-loop.json
 ```
 
 Validation prints the exact definition hash and all campaign, submission, fix, isolation, and provider-call ceilings. Use that hash only after the complete envelope has been authorized.
+
+When the loop starts, the CLI creates the linked worktree, removes its `node_modules` and `.next`, runs `npm install` inside it, and then runs the production build before submitting the first prompt. Do not copy dependencies or build output from the control checkout into the loop worktree.

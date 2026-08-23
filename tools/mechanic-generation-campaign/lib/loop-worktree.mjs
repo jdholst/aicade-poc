@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { constants } from "node:fs";
-import { cp, lstat, mkdir } from "node:fs/promises";
+import { lstat, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -13,6 +12,7 @@ export async function prepareLoopWorktree({
   loopId,
   baseHead,
   worktreeRoot,
+  prepareDependencies = resetAndInstallWorktreeDependencies,
 }) {
   const revision = await inspectRevision(controlRoot);
   if (revision.dirty || revision.head !== baseHead) {
@@ -40,8 +40,19 @@ export async function prepareLoopWorktree({
     worktreePath,
     baseHead,
   ]);
-  await cloneDependencies(controlRoot, worktreePath);
+  await prepareDependencies(worktreePath);
   return { path: worktreePath, branch };
+}
+
+export async function resetAndInstallWorktreeDependencies(
+  worktreePath,
+  { runInstall = installWorktreeDependencies } = {}
+) {
+  await Promise.all([
+    rm(path.join(worktreePath, "node_modules"), { recursive: true, force: true }),
+    rm(path.join(worktreePath, ".next"), { recursive: true, force: true }),
+  ]);
+  await runInstall(worktreePath);
 }
 
 export async function inspectLoopWorktree({ path: worktreePath, branch }) {
@@ -74,14 +85,11 @@ export async function changedFilesBetween(worktreePath, beforeHead, afterHead) {
   return stdout.split("\n").filter(Boolean).sort();
 }
 
-async function cloneDependencies(controlRoot, worktreePath) {
-  const source = path.join(controlRoot, "node_modules");
-  if (!(await pathExists(source))) return;
-  const destination = path.join(worktreePath, "node_modules");
-  if (await pathExists(destination)) return;
-  await cp(source, destination, {
-    recursive: true,
-    mode: constants.COPYFILE_FICLONE,
+function installWorktreeDependencies(worktreePath) {
+  return execFileAsync("npm", ["install"], {
+    cwd: worktreePath,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
   });
 }
 

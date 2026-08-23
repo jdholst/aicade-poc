@@ -52,3 +52,5 @@ A verified fix commit starts a new revision cycle and resets every sequence step
 Loop terminal states are `achieved`, `exhausted`, `invalid`, and `blocked`. `interrupted` is resumable on the same clean revision; `waiting_for_fix` is an agent action checkpoint.
 
 Loop execution worktrees live under the adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` root. Campaign evidence remains under the control checkout's ignored `.qa/mechanic-generation-campaign/` root. Never move a loop worktree beneath the control checkout because nested package roots can change production build behavior.
+
+Immediately after creating a linked loop worktree, remove that worktree's `node_modules` and `.next` directories, run `npm install` from the worktree root, and only then run the production build. Never copy or share the control checkout's dependency or build directories. A preparation or build failure occurs before the first editor submission and must stop the loop without consuming a submission or provider-call budget.

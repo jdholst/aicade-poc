@@ -28,7 +28,7 @@ Use [campaign loops](../../../tools/mechanic-generation-campaign/docs/campaign-l
 
 1. Read the campaign-loop documentation and live `loop --help` output. Validate the selected definition.
 2. Present the complete sequence, model, provider modes, definition hash, and campaign, submission, fix, isolation, and per-stage actual-provider ceilings. Obtain one authorization for that exact hash.
-3. Start or resume through the loop CLI. Use the absolute worktree path reported by the CLI for every diagnosis, edit, test, and Git operation.
+3. Start or resume through the loop CLI. A new loop must prepare its linked worktree by removing that worktree's `node_modules` and `.next` directories, running `npm install` there, and then completing the production build before the first editor submission. Do not reuse dependencies from the control checkout. Use the absolute worktree path reported by the CLI for every diagnosis, edit, test, and Git operation.
 4. At `waiting_for_fix`, inspect the linked campaign artifacts. Run an authorized isolation profile only when it answers a specific stage-level question.
 5. For a pipeline fix, run GitNexus impact analysis where indexed, reproduce the failure with a red test, implement a mechanic-general fix, and verify focused tests, the full relevant suite, lint, and a production build. Run `detect_changes()` before committing.
 6. Classify the fix as durable or temporary. Update the canonical temporary-fix ledger only for temporary policy, then commit the verified change on the loop branch and create the exact `campaign-loop-fix/v1` report described in the loop documentation.

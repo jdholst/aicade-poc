@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   inspectLoopWorktree,
   prepareLoopWorktree,
+  resetAndInstallWorktreeDependencies,
 } from "./lib/loop-worktree.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -47,29 +48,76 @@ async function createRepository() {
 describe("campaign loop worktree", () => {
   it("creates an isolated codex branch without changing the control branch", async () => {
     const { controlRoot, head } = await createRepository();
+    const preparedWorktrees = [];
     const result = await prepareLoopWorktree({
       controlRoot,
       loopId: "ticket-17-loop",
       baseHead: head,
       worktreeRoot: path.join(controlRoot, ".qa", "campaign-worktrees"),
+      prepareDependencies: async (worktreePath) => {
+        preparedWorktrees.push(worktreePath);
+      },
     });
 
     expect(result.branch).toBe("codex/campaign-loop-ticket-17-loop");
+    expect(preparedWorktrees).toEqual([result.path]);
     expect((await git(controlRoot, ["branch", "--show-current"])).stdout.trim()).toBe("master");
     expect(await inspectLoopWorktree(result)).toMatchObject({
       branch: result.branch,
       head,
       dirty: false,
     });
-    const dependencyStats = await lstat(path.join(result.path, "node_modules"));
-    expect(dependencyStats.isDirectory()).toBe(true);
-    expect(dependencyStats.isSymbolicLink()).toBe(false);
     await expect(
       readFile(
         path.join(result.path, "node_modules", "fixture-package", "package.json"),
         "utf8"
       )
-    ).resolves.toContain("fixture-package");
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("removes stale dependency and build state before installing", async () => {
+    const worktreePath = await mkdtemp(path.join(tmpdir(), "campaign-loop-install-"));
+    temporaryDirectories.push(worktreePath);
+    const staleDependency = path.join(worktreePath, "node_modules", "stale.txt");
+    const staleBuild = path.join(worktreePath, ".next", "stale.txt");
+    await mkdir(path.dirname(staleDependency), { recursive: true });
+    await mkdir(path.dirname(staleBuild), { recursive: true });
+    await writeFile(staleDependency, "stale dependency\n", "utf8");
+    await writeFile(staleBuild, "stale build\n", "utf8");
+
+    let installed = false;
+    await resetAndInstallWorktreeDependencies(worktreePath, {
+      runInstall: async (installRoot) => {
+        expect(installRoot).toBe(worktreePath);
+        await expect(readFile(staleDependency, "utf8")).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        await expect(readFile(staleBuild, "utf8")).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        installed = true;
+        await mkdir(path.join(installRoot, "node_modules"), { recursive: true });
+      },
+    });
+
+    expect(installed).toBe(true);
+    expect((await lstat(path.join(worktreePath, "node_modules"))).isDirectory()).toBe(true);
+  });
+
+  it("runs npm install from the prepared worktree", async () => {
+    const worktreePath = await mkdtemp(path.join(tmpdir(), "campaign-loop-npm-install-"));
+    temporaryDirectories.push(worktreePath);
+    await writeFile(
+      path.join(worktreePath, "package.json"),
+      '{"name":"campaign-loop-install-fixture","version":"1.0.0","private":true}\n',
+      "utf8"
+    );
+
+    await resetAndInstallWorktreeDependencies(worktreePath);
+
+    await expect(readFile(path.join(worktreePath, "package-lock.json"), "utf8")).resolves.toContain(
+      '"campaign-loop-install-fixture"'
+    );
   });
 
   it("rejects a dirty control checkout before creating a branch", async () => {
