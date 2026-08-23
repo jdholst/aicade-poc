@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "campaign-manifest/v1",
+  "id": "p09-t18-seeded-hazard-spawner",
+  "mechanic": {
+    "id": "seeded_hazard_spawner",
+    "name": "Seeded hazard spawner",
+    "ticket": "Phase 09 Ticket 18",
+    "ticketUrl": "https://www.notion.so/3af9db009ee581d5aceec82f2a00a9ce",
+    "requirementIds": ["existing_movement", "seeded_randomness", "scheduled_repetition", "owned_hazard_creation", "spawn_limits", "deterministic_replay", "hazard_cleanup", "playable_objective", "trusted_system_preservation"]
+  },
+  "model": "gpt-5.6-luna",
+  "credential": { "source": "keyword_env", "envName": "AICADE_CAMPAIGN_KEYWORD" },
+  "prompts": [
+    {
+      "id": "baseline",
+      "text": "Create a compact top-down survival arena that keeps the existing movement controls. Add a generated hazard spawner that uses seeded randomness and scheduling to create hazards repeatedly at valid arena positions. The same seed, inputs, and clock must replay the same spawn order and positions, while a different seed should vary them. Enforce clear simultaneous and total spawn limits, clean up expired or out-of-bounds hazards, include a simple playable objective, and keep score, win/loss, and unrelated systems trusted and unchanged.",
+      "requirementIds": ["existing_movement", "seeded_randomness", "scheduled_repetition", "owned_hazard_creation", "spawn_limits", "deterministic_replay", "hazard_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "plain_paraphrase",
+      "text": "Build a small top-down survival game with the current movement controls. A generated mechanic should schedule recurring owned hazards and choose valid spawn positions with deterministic seeded randomness. Identical seeds, actions, and time must reproduce the sequence, while another seed changes it. Cap active and total hazards, remove hazards after expiry or arena exit, retain a simple objective, and leave trusted score, win/loss, and unrelated systems alone.",
+      "requirementIds": ["existing_movement", "seeded_randomness", "scheduled_repetition", "owned_hazard_creation", "spawn_limits", "deterministic_replay", "hazard_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "constraints_first",
+      "text": "Preserve existing movement plus trusted score, win/loss, and unrelated systems. Use bounded active and total hazard counts, valid arena positions, deterministic replay for the same seed and clock, variation for a different seed, and cleanup on expiry or boundary exit. Within those constraints, create a compact playable top-down survival objective with a scheduled generated mechanic that repeatedly spawns owned hazards using seeded randomness.",
+      "requirementIds": ["existing_movement", "seeded_randomness", "scheduled_repetition", "owned_hazard_creation", "spawn_limits", "deterministic_replay", "hazard_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "outcomes_first",
+      "text": "The finished survival arena should repeatedly show hazards appearing at valid positions, obeying active and total limits, then disappearing after expiry or leaving bounds. Replaying the same seed, inputs, and clock must reproduce every spawn, and changing the seed must vary the sequence. Generate that behavior with scheduled owned-object creation and seeded randomness, keep existing movement and a simple objective, and preserve trusted score, win/loss, and unrelated systems.",
+      "requirementIds": ["existing_movement", "seeded_randomness", "scheduled_repetition", "owned_hazard_creation", "spawn_limits", "deterministic_replay", "hazard_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "compact",
+      "text": "Create a playable compact top-down survival arena with existing movement. Schedule repeated owned hazards at valid seeded-random positions, replay identically for the same seed and clock, vary for another seed, enforce active and total limits, and clean up expired or out-of-bounds hazards. Preserve trusted score, win/loss, and unrelated systems.",
+      "requirementIds": ["existing_movement", "seeded_randomness", "scheduled_repetition", "owned_hazard_creation", "spawn_limits", "deterministic_replay", "hazard_cleanup", "playable_objective", "trusted_system_preservation"]
+    }
+  ],
+  "providerModes": { "planning": "actual", "contract": "actual", "source": "actual" },
+  "fixtures": {},
+  "probe": "../probes/seeded-hazard-spawner.mjs",
+  "cohorts": {
+    "discovery": { "maxAttempts": 1, "minimumSuccesses": 1 },
+    "isolation": { "maxAttempts": 1, "minimumSuccesses": 1 },
+    "repeatability": { "maxAttempts": 10, "minimumSuccesses": 8 },
+    "variation": { "runsPerPrompt": 2, "minimumSuccesses": 8, "requireEveryPromptSuccess": true }
+  }
+}

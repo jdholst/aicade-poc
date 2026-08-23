@@ -6,6 +6,7 @@
     "dev": "next dev",
     "dev:local": "next dev --hostname 127.0.0.1 --port 3000",
     "build": "next build",
+    "campaign": "node tools/mechanic-generation-campaign/cli.mjs",
     "test": "vitest run",
     "test:editor-prompt-flow": "vitest run src/hooks/use-editor-session.test.ts src/components/editor-shell/editor-ai-chat.test.tsx",
     "qa:editor-prompt-flow": "node scripts/qa-editor-prompt-flow.mjs",

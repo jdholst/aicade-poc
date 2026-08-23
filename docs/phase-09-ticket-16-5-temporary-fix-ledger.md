@@ -7,7 +7,20 @@ This ledger records expedient fixes accepted to improve real-provider end-to-end
 - Add an entry whenever a fix deliberately prioritizes reaching a playable result over the most general architecture.
 - Keep the validating safety boundary intact; do not record bypassing or weakening validation as an acceptable shortcut.
 - Record the attempt or failure that motivated the fix, the tests that constrain it, and the stronger replacement.
-- Remove an entry only after its replacement is implemented, verified end to end, and linked from the entry.
+- Move an entry to Retired temporary fixes only after its replacement is implemented, verified, and linked from the entry.
+
+## Retired temporary fixes
+
+### TF-28 — Ticket 17 source-focus provider fixtures
+
+- Status: retired; replaced by the external mechanic-generation campaign harness
+- Motivated by: Ticket 17 round-two testing repeatedly confirmed that creator planning and initial Generated Mechanic Contract generation could reach source generation, while most failures occurred in generated source typing, repair, and deterministic evaluation. Repeating the first two external calls added cost and variance without isolating that work.
+- Historical shortcut: server-side `AICADE_TICKET_17_PLANNING_FIXTURE` and `AICADE_TICKET_17_SOURCE_FOCUS_FIXTURES` flags replaced planning alone or planning plus contract from ad hoc root JSON captures. The selector lived inside the two production provider routes.
+- Risk: fixture-backed runs were pinned to one projectile plan or plan-plus-contract and could not expose provider variance in those stages. The production route wrappers also mixed disposable QA policy into Sparkline source.
+- Robust replacement: `tools/mechanic-generation-campaign` uses Playwright request interception with versioned, hash-locked fixtures, per-stage Actual/Fixture modes, correlation rewriting, exact actual and fixture call counts, ignored raw artifacts, compact published summaries, and a standalone read-only dashboard. Sparkline provider routes always use their actual providers.
+- Retirement evidence: harness fixture-policy tests prove planning-only isolation makes zero planning upstream calls while contract and source remain actual, and planning-plus-contract isolation leaves exactly one actual source call. Manifest validation verifies the reviewed Ticket 17 planning and contract fixture hashes. The server-side selector module, dedicated tests, route wrappers, and both source flags were removed.
+- Remaining release evidence: fixture-backed campaigns remain diagnostic only. Discovery, repeatability, and prompt-variation proof still require full-actual runs on one frozen revision.
+- Historical coverage: the original selector regressions and attempt reports remain unchanged as narrative evidence. Normal planning/provider route suites, harness tests, lint, production build, and a later full-actual campaign provide ongoing coverage.
 
 ## Active temporary fixes
 
@@ -303,17 +316,6 @@ This ledger records expedient fixes accepted to improve real-provider end-to-end
 - Robust replacement: add deterministic contract validation that joins each state setup assertion to its declared private-state initial value and rejects mismatches before source generation with exact paths and expected/actual values.
 - Removal criteria: pre-install state setup equality is enforced by trusted contract validation and provider prompt recipes are unnecessary.
 - Current coverage: contract-prompt initial semantics plus exact `setup_observation_failed` repair regression; continuation regression proves setup failure ownership routes to contract while the existing source-owned evaluator integration remains source-repaired.
-
-### TF-28 — Ticket 17 source-focus provider fixtures
-
-- Status: active local QA provider bypass; uncommitted and explicitly enabled in `.env.local`
-- Motivated by: Ticket 17 round-two testing has repeatedly confirmed that creator planning and initial Generated Mechanic Contract generation can reach source generation, while most current failures occur in generated source typing, repair, and deterministic evaluation. Repeating the first two external provider calls adds cost and provider variance without helping isolate that source-stage work.
-- Current shortcut: two independent server-side flags select the bypass depth. `AICADE_TICKET_17_PLANNING_FIXTURE=1` replaces only the creator-planning provider response with the Game Spec and Mechanic Intent from root `planning-contract.json`; both contract and source requests through the generated-mechanic provider route remain actual configured provider calls. The broader legacy `AICADE_TICKET_17_SOURCE_FOCUS_FIXTURES=1` continues to replace planning plus the contract candidate from root `generated-mechanic-contract.json`, while source remains actual. The active contract attempt ID replaces only the broader mode's saved fixture correlation ID.
-- Risk: planning-only runs are pinned to one captured projectile plan and cannot expose new planning regressions or provider variance, although they do exercise real initial and repair contract calls. Broader source-focus runs are pinned to both the captured plan and contract; any contract repair deliberately receives the same candidate again. The planning fixture omits its captured movement and collection `mechanicConnections` because generated assembly cannot authenticate pre-existing provider-authored connections, so neither fixture mode exercises those two base connections.
-- Current guardrails: each bypass is inactive unless its exact server-side QA flag equals `1`; the planning-only flag is ignored by the generated-mechanic provider route, and a selector regression proves that its contract provider remains the actual injected provider. Fixtures are loaded server-side from explicit local files; planning still runs the normal Game Spec, intent, routing, and admission path; fixture-backed contract candidates still run normal contract validation and least-authority grant issuance; source generation, static checks, execution, deterministic evaluation, conformance, handoff, and runtime checks remain unchanged. Terminal warnings identify every replaced provider call.
-- Robust replacement: use a first-class, development-only provider selector with visible Mock/Actual stage controls and per-stage call-count evidence, backed by versioned fixtures stored outside ad hoc root captures. Keep normal end-to-end actual-provider coverage for planning and contract before release decisions.
-- Removal criteria: remove the route selectors, fixture module/tests, both `.env.local` flags, and this ledger entry after contract/source diagnosis is complete or before committing production work. Re-run at least one full actual-provider planning-to-runtime attempt afterward.
-- Current coverage: red-to-green provider-selector regressions include planning-only isolation and the broader planning-plus-contract mode, direct parsing of both supplied workspace fixtures, real planning-service and contract-service admission, absence of unsupported base mechanic connections, and a final-state scenario regression. Attempt 9 removed a post-cleanup count contradiction; Attempt 10 refined cooldown modeling to one routed dispatch per scenario while covering accepted-at-250-ms and rejected-at-100-ms paths. Existing planning/provider route suites, lint, and production build also pass.
 
 ### TF-29 — Opaque-handle observation guidance
 
