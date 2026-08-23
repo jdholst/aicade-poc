@@ -429,6 +429,7 @@ describe("evaluateGeneratedMechanicArtifact", () => {
       createRuntime: async ({ artifact }) => {
         const activity = {
           active: 0,
+          actorOriginCreations: 0,
           created: 0,
           destroyed: 0,
           simulatedDistanceTraveled: 0,
@@ -496,6 +497,382 @@ describe("evaluateGeneratedMechanicArtifact", () => {
     });
   });
 
+  it("proves a rejected action leaves owned-object lifecycle activity unchanged", async () => {
+    const contract = createContract({
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      resourceExpectations: {
+        ...createContract().resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+      scenarios: [
+        {
+          id: "owned_lifecycle_rejection_scenario",
+          seed: 4,
+          setup: [],
+          steps: [{ kind: "dispatch_action", actionId: "activate" }],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "transient_effect",
+              operator: "equals",
+              value: 0,
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "owned_lifecycle_rejection_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "owned_lifecycle_rejection",
+          scenarioId: "owned_lifecycle_rejection_scenario",
+          observation: {
+            kind: "owned_object_lifecycle_unchanged_after_action",
+            archetypeIds: ["transient_effect"],
+            actionId: "activate",
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => {
+        const activity = {
+          active: 0,
+          actorOriginCreations: 0,
+          created: 0,
+          destroyed: 0,
+          simulatedDistanceTraveled: 0,
+          targetInteractions: 0,
+        };
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: () => true,
+          readDeclaredState: () => 3,
+          readBindingProperty: () => null,
+          countOwnedObjects: () => activity.active,
+          readOwnedObjectActivity: () => ({ ...activity }),
+          readEmittedOutputs: () => [],
+          install: async () => undefined,
+          receiveInput: async () => undefined,
+          dispatchAction: async () => undefined,
+          advanceTime: async () => undefined,
+          dispose: async () => undefined,
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "passed",
+      evidence: {
+        scenarios: [
+          {
+            outcome: "passed",
+            externalObservations: [
+              {
+                id: "owned_lifecycle_rejection",
+                kind: "owned_object_lifecycle_unchanged_after_action",
+                passed: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("proves immediate actor-origin owned-object creation without requiring travel or cleanup", async () => {
+    const contract = createContract({
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      resourceExpectations: {
+        ...createContract().resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+      scenarios: [
+        {
+          id: "owned_creation_scenario",
+          seed: 4,
+          setup: [],
+          steps: [{ kind: "dispatch_action", actionId: "activate" }],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "transient_effect",
+              operator: "at_least",
+              value: 1,
+            },
+          ],
+        },
+      ],
+    });
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "owned_creation_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "owned_creation",
+          scenarioId: "owned_creation_scenario",
+          observation: {
+            kind: "owned_object_creation_after_action",
+            archetypeIds: ["transient_effect"],
+            actionId: "activate",
+            requireActorOrigin: true,
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => {
+        const activity = {
+          active: 0,
+          actorOriginCreations: 0,
+          created: 0,
+          destroyed: 0,
+          simulatedDistanceTraveled: 0,
+          targetInteractions: 0,
+        };
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: () => true,
+          readDeclaredState: () => 3,
+          readBindingProperty: () => null,
+          countOwnedObjects: () => activity.active,
+          readOwnedObjectActivity: () => ({ ...activity }),
+          readEmittedOutputs: () => [],
+          install: async () => undefined,
+          receiveInput: async () => undefined,
+          dispatchAction: async () => {
+            activity.active += 1;
+            activity.actorOriginCreations += 1;
+            activity.created += 1;
+          },
+          advanceTime: async () => undefined,
+          dispose: async () => undefined,
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "passed",
+      evidence: {
+        scenarios: [
+          {
+            outcome: "passed",
+            externalObservations: [
+              {
+                id: "owned_creation",
+                kind: "owned_object_creation_after_action",
+                passed: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("proves active actor-origin owned-object lifecycle progress without requiring cleanup", async () => {
+    const contract = createContract({
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      resourceExpectations: {
+        ...createContract().resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+      scenarios: [
+        {
+          id: "owned_progress_scenario",
+          seed: 4,
+          setup: [],
+          steps: [
+            { kind: "dispatch_action", actionId: "activate" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "transient_effect",
+              operator: "at_least",
+              value: 1,
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "owned_progress_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "owned_progress",
+          scenarioId: "owned_progress_scenario",
+          observation: {
+            kind: "owned_object_lifecycle_progress_after_action",
+            archetypeIds: ["transient_effect"],
+            actionId: "activate",
+            requireActorOrigin: true,
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => {
+        const activity = {
+          active: 0,
+          actorOriginCreations: 0,
+          created: 0,
+          destroyed: 0,
+          simulatedDistanceTraveled: 0,
+          targetInteractions: 0,
+        };
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: () => true,
+          readDeclaredState: () => 3,
+          readBindingProperty: () => null,
+          countOwnedObjects: () => activity.active,
+          readOwnedObjectActivity: () => ({ ...activity }),
+          readEmittedOutputs: () => [],
+          install: async () => undefined,
+          receiveInput: async () => undefined,
+          dispatchAction: async () => {
+            activity.active = 1;
+            activity.actorOriginCreations = 1;
+            activity.created = 1;
+          },
+          advanceTime: async () => {
+            activity.simulatedDistanceTraveled = 12;
+          },
+          dispose: async () => undefined,
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "passed",
+      evidence: {
+        scenarios: [
+          {
+            outcome: "passed",
+            externalObservations: [
+              {
+                id: "owned_progress",
+                kind: "owned_object_lifecycle_progress_after_action",
+                passed: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects owned-object lifecycle evidence when creation did not occur at the actor origin", async () => {
+    const contract = createContract({
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 1 },
+      ],
+      resourceExpectations: {
+        ...createContract().resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+      scenarios: [
+        {
+          id: "wrong_origin_scenario",
+          seed: 4,
+          setup: [],
+          steps: [
+            { kind: "dispatch_action", actionId: "activate" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [],
+        },
+      ],
+    });
+
+    const result = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "wrong_origin_fixture",
+      contract,
+      artifact: createArtifact(),
+      config: { initialCount: 3 },
+      externalObservations: [
+        {
+          id: "wrong_origin_lifecycle",
+          scenarioId: "wrong_origin_scenario",
+          observation: {
+            kind: "owned_object_lifecycle_after_action",
+            archetypeIds: ["transient_effect"],
+            actionId: "activate",
+            requireActorOrigin: true,
+          },
+        },
+      ],
+      createRuntime: async ({ artifact }) => {
+        const activity = {
+          active: 0,
+          actorOriginCreations: 0,
+          created: 0,
+          destroyed: 0,
+          simulatedDistanceTraveled: 0,
+          targetInteractions: 0,
+        };
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: () => true,
+          readDeclaredState: () => 3,
+          readBindingProperty: () => null,
+          countOwnedObjects: () => activity.active,
+          readOwnedObjectActivity: () => ({ ...activity }),
+          readEmittedOutputs: () => [],
+          install: async () => undefined,
+          receiveInput: async () => undefined,
+          dispatchAction: async () => {
+            activity.active = 1;
+            activity.created = 1;
+          },
+          advanceTime: async () => {
+            activity.active = 0;
+            activity.destroyed = 1;
+            activity.simulatedDistanceTraveled = 12;
+          },
+          dispose: async () => undefined,
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "failed",
+      evidence: {
+        scenarios: [
+          {
+            externalObservations: [
+              {
+                id: "wrong_origin_lifecycle",
+                passed: false,
+                actual: {
+                  after: [
+                    expect.objectContaining({
+                      actorOriginCreations: 0,
+                      created: 1,
+                    }),
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it("rejects attempted owned-object calls that do not prove travel or routed-target interaction", async () => {
     const contract = createContract({
       ownedObjects: [
@@ -539,6 +916,7 @@ describe("evaluateGeneratedMechanicArtifact", () => {
       createRuntime: async ({ artifact }) => {
         const activity = {
           active: 0,
+          actorOriginCreations: 0,
           created: 0,
           destroyed: 0,
           simulatedDistanceTraveled: 0,

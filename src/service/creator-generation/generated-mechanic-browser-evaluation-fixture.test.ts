@@ -175,6 +175,7 @@ describe("generated mechanic browser evaluation fixture", () => {
       fixture.observations.readOwnedObjectActivity("transient_effect")
     ).resolves.toEqual({
       active: 0,
+      actorOriginCreations: 0,
       created: 1,
       destroyed: 1,
       simulatedDistanceTraveled: 8,
@@ -210,6 +211,28 @@ describe("generated mechanic browser evaluation fixture", () => {
     fixture.capabilityHost.invoke({
       capabilityId: "object_destroy",
       arguments: [bounded.value],
+    });
+    const actorPosition = await fixture.observations.readBindingProperty(
+      "actor",
+      "position"
+    );
+    const actorOriginObject = fixture.capabilityHost.invoke({
+      capabilityId: "object_create",
+      arguments: ["transient_effect", { position: actorPosition }],
+    });
+    if (actorOriginObject.kind !== "opaque_handle") {
+      throw new Error("Expected one actor-origin owned-object handle.");
+    }
+    await expect(
+      fixture.observations.readOwnedObjectActivity("transient_effect")
+    ).resolves.toMatchObject({
+      active: 1,
+      actorOriginCreations: 1,
+      created: 3,
+    });
+    fixture.capabilityHost.invoke({
+      capabilityId: "object_destroy",
+      arguments: [actorOriginObject.value],
     });
     await expect(
       fixture.observations.countOwnedObjects("transient_effect")
@@ -418,6 +441,15 @@ describe("generated mechanic browser evaluation fixture", () => {
         ...baseContract.resourceExpectations,
         maximumOwnedObjects: 2,
       },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+        },
+      ],
     };
 
     expect(
@@ -430,6 +462,234 @@ describe("generated mechanic browser evaluation fixture", () => {
           kind: "owned_object_lifecycle_after_action",
           archetypeIds: ["projectile"],
           actionId: "move",
+        },
+      },
+    ]);
+  });
+
+  it("authors active lifecycle progress proof when a timed scenario positively requires an owned object", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      ownedObjects: ["projectile"],
+      spatialRules: ["spawn_owned_object_at_actor_position"],
+      requiredCapabilities: [
+        "object_read",
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        spatialRules: intent.spatialRules,
+      },
+      ownedObjects: [
+        { id: "projectile", objectKind: "projectile", maximumInstances: 2 },
+      ],
+      capabilities: intent.requiredCapabilities,
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "projectile",
+              operator: "at_least",
+              value: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_progress_after_action",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_progress_after_action",
+          archetypeIds: ["projectile"],
+          actionId: "move",
+          requireActorOrigin: true,
+        },
+      },
+    ]);
+  });
+
+  it("requires evaluator-authored actor-origin proof for actor-relative owned objects", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      ownedObjects: ["projectile"],
+      spatialRules: ["spawn_owned_object_at_actor_position"],
+      requiredCapabilities: [
+        "object_read",
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        spatialRules: intent.spatialRules,
+      },
+      ownedObjects: [
+        { id: "projectile", objectKind: "projectile", maximumInstances: 2 },
+      ],
+      capabilities: intent.requiredCapabilities,
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_after_action",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_after_action",
+          archetypeIds: ["projectile"],
+          actionId: "move",
+          requireActorOrigin: true,
+        },
+      },
+    ]);
+  });
+
+  it("authors unchanged owned-object lifecycle proof for a routed action that ends a rejection scenario", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      ownedObjects: ["projectile"],
+      requiredCapabilities: [
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      ownedObjects: [
+        { id: "projectile", objectKind: "projectile", maximumInstances: 2 },
+      ],
+      capabilities: [
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_unchanged_after_action",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_unchanged_after_action",
+          archetypeIds: ["projectile"],
+          actionId: "move",
+        },
+      },
+    ]);
+  });
+
+  it("authors immediate creation proof when a no-time scenario positively requires an owned object", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      ownedObjects: ["projectile"],
+      spatialRules: ["spawn_owned_object_at_actor_position"],
+      requiredCapabilities: [
+        "object_read",
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        spatialRules: intent.spatialRules,
+      },
+      ownedObjects: [
+        { id: "projectile", objectKind: "projectile", maximumInstances: 2 },
+      ],
+      capabilities: intent.requiredCapabilities,
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "projectile",
+              operator: "at_least",
+              value: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_creation_after_action",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_creation_after_action",
+          archetypeIds: ["projectile"],
+          actionId: "move",
+          requireActorOrigin: true,
         },
       },
     ]);
@@ -594,6 +854,15 @@ describe("generated mechanic browser evaluation fixture", () => {
         ...baseContract.resourceExpectations,
         maximumOwnedObjects: 2,
       },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+        },
+      ],
     };
 
     expect(

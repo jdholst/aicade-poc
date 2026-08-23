@@ -26,7 +26,26 @@ export type ExternalAcceptanceObservationAssertion =
       kind: "owned_object_lifecycle_after_action";
       archetypeIds: readonly StableId[];
       actionId: StableId;
+      requireActorOrigin?: true;
       requireTargetInteraction?: true;
+    }>
+  | Readonly<{
+      kind: "owned_object_creation_after_action";
+      archetypeIds: readonly StableId[];
+      actionId: StableId;
+      requireActorOrigin?: true;
+    }>
+  | Readonly<{
+      kind: "owned_object_lifecycle_progress_after_action";
+      archetypeIds: readonly StableId[];
+      actionId: StableId;
+      requireActorOrigin?: true;
+      requireTargetInteraction?: true;
+    }>
+  | Readonly<{
+      kind: "owned_object_lifecycle_unchanged_after_action";
+      archetypeIds: readonly StableId[];
+      actionId: StableId;
     }>;
 
 export type ExternalAcceptanceObservation = Readonly<{
@@ -47,9 +66,10 @@ export type GeneratedMechanicEvaluationRuntime = Readonly<{
   readOwnedObjectActivity?(
     archetypeId: StableId
   ): MaybePromise<
-    Readonly<{
-      active: number;
-      created: number;
+      Readonly<{
+        active: number;
+        actorOriginCreations: number;
+        created: number;
       destroyed: number;
       simulatedDistanceTraveled: number;
       targetInteractions: number;
@@ -369,7 +389,12 @@ function externalObservationAdmissionIssues(
     }
     if (
       external.observation.kind !== "referenced_entity_motion_changed" &&
-      external.observation.kind !== "owned_object_lifecycle_after_action"
+      external.observation.kind !== "owned_object_lifecycle_after_action" &&
+      external.observation.kind !== "owned_object_creation_after_action" &&
+      external.observation.kind !==
+        "owned_object_lifecycle_progress_after_action" &&
+      external.observation.kind !==
+        "owned_object_lifecycle_unchanged_after_action"
     ) {
       return;
     }
@@ -500,8 +525,14 @@ async function runScenario(
                     external.scenarioId === scenario.id &&
                     (external.observation.kind ===
                       "referenced_entity_motion_changed" ||
+                    external.observation.kind ===
+                        "owned_object_lifecycle_after_action" ||
                       external.observation.kind ===
-                        "owned_object_lifecycle_after_action") &&
+                        "owned_object_creation_after_action" ||
+                      external.observation.kind ===
+                        "owned_object_lifecycle_progress_after_action" ||
+                      external.observation.kind ===
+                        "owned_object_lifecycle_unchanged_after_action") &&
                     external.observation.actionId === step.actionId
                 )
               : [];
@@ -571,7 +602,13 @@ async function runScenario(
             external.observation.kind ===
               "referenced_entity_motion_changed" ||
             external.observation.kind ===
-              "owned_object_lifecycle_after_action"
+              "owned_object_lifecycle_after_action" ||
+            external.observation.kind ===
+              "owned_object_creation_after_action" ||
+            external.observation.kind ===
+              "owned_object_lifecycle_progress_after_action" ||
+            external.observation.kind ===
+              "owned_object_lifecycle_unchanged_after_action"
               ? causalExternalObservationEvidence.get(external.id)
               : await observeExternal(
                   activeRuntime,
@@ -702,7 +739,10 @@ async function observeDeclared(
 function observesExternalAfterScenario(
   observation: ExternalAcceptanceObservationAssertion
 ): boolean {
-  return observation.kind === "owned_object_lifecycle_after_action";
+  return (
+    observation.kind === "owned_object_lifecycle_after_action" ||
+    observation.kind === "owned_object_lifecycle_progress_after_action"
+  );
 }
 
 async function observeExternal(
@@ -710,7 +750,12 @@ async function observeExternal(
   observation: ExternalAcceptanceObservationAssertion,
   baseline: JsonValue | undefined
 ): Promise<Omit<ExternalObservationEvidence, "id" | "source">> {
-  if (observation.kind === "owned_object_lifecycle_after_action") {
+  if (
+    observation.kind === "owned_object_lifecycle_after_action" ||
+    observation.kind === "owned_object_creation_after_action" ||
+    observation.kind === "owned_object_lifecycle_progress_after_action" ||
+    observation.kind === "owned_object_lifecycle_unchanged_after_action"
+  ) {
     if (!runtime.readOwnedObjectActivity) {
       throw new Error(
         "Evaluation runtime does not expose owned-object activity observations."
@@ -736,20 +781,47 @@ async function observeExternal(
           return false;
         }
         const created = entry.created - Number(beforeEntry.created);
+        const actorOriginCreations =
+          entry.actorOriginCreations - Number(beforeEntry.actorOriginCreations);
         const destroyed = entry.destroyed - Number(beforeEntry.destroyed);
         const simulatedDistanceTraveled =
           entry.simulatedDistanceTraveled -
           Number(beforeEntry.simulatedDistanceTraveled);
         const targetInteractions =
           entry.targetInteractions - Number(beforeEntry.targetInteractions);
-        return (
-          created > 0 &&
-          simulatedDistanceTraveled > 0 &&
-          (observation.requireTargetInteraction !== true ||
-            targetInteractions > 0) &&
-          destroyed >= created &&
-          entry.active === Number(beforeEntry.active)
-        );
+        const active = entry.active - Number(beforeEntry.active);
+        return observation.kind ===
+          "owned_object_lifecycle_unchanged_after_action"
+          ? created === 0 &&
+              actorOriginCreations === 0 &&
+              destroyed === 0 &&
+              simulatedDistanceTraveled === 0 &&
+              targetInteractions === 0 &&
+              entry.active === Number(beforeEntry.active)
+          : observation.kind === "owned_object_creation_after_action"
+            ? created > 0 &&
+              active === created &&
+              destroyed === 0 &&
+              (observation.requireActorOrigin !== true ||
+                actorOriginCreations === created)
+          : observation.kind ===
+              "owned_object_lifecycle_progress_after_action"
+            ? created > 0 &&
+              active > 0 &&
+              active === created - destroyed &&
+              (observation.requireActorOrigin !== true ||
+                actorOriginCreations === created) &&
+              simulatedDistanceTraveled > 0 &&
+              (observation.requireTargetInteraction !== true ||
+                targetInteractions > 0)
+          : created > 0 &&
+              (observation.requireActorOrigin !== true ||
+                actorOriginCreations === created) &&
+              simulatedDistanceTraveled > 0 &&
+              (observation.requireTargetInteraction !== true ||
+                targetInteractions > 0) &&
+              destroyed >= created &&
+              entry.active === Number(beforeEntry.active);
       });
     return snapshotJson({
       kind: observation.kind,
@@ -799,6 +871,9 @@ async function observeExternalDeclared(
     ExternalAcceptanceObservationAssertion,
     | { kind: "referenced_entity_motion_changed" }
     | { kind: "owned_object_lifecycle_after_action" }
+    | { kind: "owned_object_creation_after_action" }
+    | { kind: "owned_object_lifecycle_progress_after_action" }
+    | { kind: "owned_object_lifecycle_unchanged_after_action" }
   >
 ): Promise<Omit<ExternalObservationEvidence, "id" | "source">> {
   const evidence = await observeDeclared(runtime, observation);
@@ -814,7 +889,12 @@ async function captureExternalBaseline(
   runtime: GeneratedMechanicEvaluationRuntime,
   observation: ExternalAcceptanceObservationAssertion
 ): Promise<JsonValue> {
-  if (observation.kind === "owned_object_lifecycle_after_action") {
+  if (
+    observation.kind === "owned_object_lifecycle_after_action" ||
+    observation.kind === "owned_object_creation_after_action" ||
+    observation.kind === "owned_object_lifecycle_progress_after_action" ||
+    observation.kind === "owned_object_lifecycle_unchanged_after_action"
+  ) {
     if (!runtime.readOwnedObjectActivity) {
       throw new Error(
         "Evaluation runtime does not expose owned-object activity observations."

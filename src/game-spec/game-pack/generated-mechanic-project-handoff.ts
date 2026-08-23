@@ -3523,10 +3523,14 @@ function deterministicEvaluationIssues({
             source === "evaluator_authored" &&
             kind === assertion.kind &&
             externalObservationEvidenceActualMatchesAssertion(
-              actual,
-              assertion,
-              expectedExternalBindingIds,
-              expectedExternalActionId
+              {
+                actual,
+                assertion,
+                contract,
+                scenario,
+                expectedBindingIds: expectedExternalBindingIds,
+                expectedActionId: expectedExternalActionId,
+              }
             )
         )
       );
@@ -3560,20 +3564,25 @@ function deterministicEvaluationIssues({
   return issues;
 }
 
-function externalObservationEvidenceActualMatchesAssertion(
-  actual: JsonValue,
-  assertion: ExternalAcceptanceObservationAssertion,
-  expectedBindingIds: readonly StableId[],
-  expectedActionId: StableId | undefined
-): boolean {
-  if (assertion.kind !== "referenced_entity_motion_changed") {
-    return false;
-  }
+function externalObservationEvidenceActualMatchesAssertion({
+  actual,
+  assertion,
+  contract,
+  scenario,
+  expectedBindingIds,
+  expectedActionId,
+}: Readonly<{
+  actual: JsonValue;
+  assertion: ExternalAcceptanceObservationAssertion;
+  contract: GeneratedMechanicContract;
+  scenario: GeneratedMechanicContract["scenarios"][number];
+  expectedBindingIds: readonly StableId[];
+  expectedActionId: StableId | undefined;
+}>): boolean {
   if (
-    expectedBindingIds.length === 0 ||
     expectedActionId === undefined ||
+    !("actionId" in assertion) ||
     assertion.actionId !== expectedActionId ||
-    !jsonEqual(assertion.bindingIds, expectedBindingIds) ||
     actual === null ||
     typeof actual !== "object" ||
     Array.isArray(actual) ||
@@ -3584,13 +3593,196 @@ function externalObservationEvidenceActualMatchesAssertion(
   }
   const before = (actual as { before?: unknown }).before;
   const after = (actual as { after?: unknown }).after;
+
+  if (assertion.kind === "referenced_entity_motion_changed") {
+    return (
+      !requiresOwnedObjectLifecycleForHandoff(contract) &&
+      expectedBindingIds.length > 0 &&
+      jsonEqual(assertion.bindingIds, expectedBindingIds) &&
+      exactMotionEvidenceEntries(before, expectedBindingIds) &&
+      exactMotionEvidenceEntries(after, expectedBindingIds) &&
+      (before as unknown[]).every(
+        (entry, index) => !jsonEqual(entry, (after as unknown[])[index])
+      )
+    );
+  }
+  if (
+    assertion.kind !== "owned_object_lifecycle_after_action" &&
+    assertion.kind !== "owned_object_creation_after_action" &&
+    assertion.kind !== "owned_object_lifecycle_progress_after_action" &&
+    assertion.kind !== "owned_object_lifecycle_unchanged_after_action"
+  ) {
+    return false;
+  }
+
+  const expectedLifecycleKind = scenarioAdvancesAfterAction(
+    scenario,
+    expectedActionId
+  )
+    ? scenarioRequiresImmediateOwnedObjectCreation(scenario, contract)
+      ? "owned_object_lifecycle_progress_after_action"
+      : "owned_object_lifecycle_after_action"
+    : scenarioRequiresImmediateOwnedObjectCreation(scenario, contract)
+      ? "owned_object_creation_after_action"
+      : "owned_object_lifecycle_unchanged_after_action";
+  const expectedArchetypeIds = contract.ownedObjects.map(({ id }) => id);
+  const requiresTargetInteraction =
+    (contract.intentLineage?.targets.length ?? 0) > 0;
+  const requiresActorOrigin =
+    (contract.intentLineage?.actors.length ?? 0) > 0 &&
+    (contract.intentLineage?.spatialRules.length ?? 0) > 0 &&
+    contract.capabilities.includes("object_read");
+  const beforeEntries = ownedObjectActivityEntries(
+    before,
+    expectedArchetypeIds
+  );
+  const afterEntries = ownedObjectActivityEntries(after, expectedArchetypeIds);
+  if (
+    !requiresOwnedObjectLifecycleForHandoff(contract) ||
+    assertion.kind !== expectedLifecycleKind ||
+    !jsonEqual(assertion.archetypeIds, expectedArchetypeIds) ||
+    (assertion.kind !== "owned_object_lifecycle_unchanged_after_action" &&
+      (assertion.requireActorOrigin === true) !== requiresActorOrigin) ||
+    ((assertion.kind === "owned_object_lifecycle_after_action" ||
+      assertion.kind === "owned_object_lifecycle_progress_after_action") &&
+      (assertion.requireTargetInteraction === true) !==
+        requiresTargetInteraction) ||
+    !beforeEntries ||
+    !afterEntries
+  ) {
+    return false;
+  }
+
+  return afterEntries.every((entry, index) => {
+    const baseline = beforeEntries[index]!;
+    const active = entry.active - baseline.active;
+    const actorOriginCreations =
+      entry.actorOriginCreations - baseline.actorOriginCreations;
+    const created = entry.created - baseline.created;
+    const destroyed = entry.destroyed - baseline.destroyed;
+    const traveled =
+      entry.simulatedDistanceTraveled - baseline.simulatedDistanceTraveled;
+    const targetInteractions =
+      entry.targetInteractions - baseline.targetInteractions;
+    return assertion.kind ===
+      "owned_object_lifecycle_unchanged_after_action"
+      ? active === 0 &&
+          actorOriginCreations === 0 &&
+          created === 0 &&
+          destroyed === 0 &&
+          traveled === 0 &&
+          targetInteractions === 0
+      : assertion.kind === "owned_object_creation_after_action"
+        ? active === created &&
+          created > 0 &&
+          destroyed === 0 &&
+          (!requiresActorOrigin || actorOriginCreations === created)
+      : assertion.kind === "owned_object_lifecycle_progress_after_action"
+        ? active > 0 &&
+          created > 0 &&
+          active === created - destroyed &&
+          (!requiresActorOrigin || actorOriginCreations === created) &&
+          traveled > 0 &&
+          (!requiresTargetInteraction || targetInteractions > 0)
+      : entry.active === baseline.active &&
+          created > 0 &&
+          (!requiresActorOrigin || actorOriginCreations === created) &&
+          traveled > 0 &&
+          destroyed >= created &&
+          (!requiresTargetInteraction || targetInteractions > 0);
+  });
+}
+
+function scenarioRequiresImmediateOwnedObjectCreation(
+  scenario: GeneratedMechanicContract["scenarios"][number],
+  contract: GeneratedMechanicContract
+): boolean {
+  const ownedArchetypeIds = new Set(contract.ownedObjects.map(({ id }) => id));
+  return scenario.observations.some(
+    (observation) =>
+      observation.kind === "owned_object_count" &&
+      ownedArchetypeIds.has(observation.archetypeId) &&
+      observation.operator !== "at_most" &&
+      observation.value > 0
+  );
+}
+
+function requiresOwnedObjectLifecycleForHandoff(
+  contract: GeneratedMechanicContract
+): boolean {
+  const capabilities = new Set(contract.capabilities);
   return (
-    exactMotionEvidenceEntries(before, expectedBindingIds) &&
-    exactMotionEvidenceEntries(after, expectedBindingIds) &&
-    (before as unknown[]).every(
-      (entry, index) => !jsonEqual(entry, (after as unknown[])[index])
+    contract.ownedObjects.length > 0 &&
+    ["object_create", "object_motion_write", "object_destroy"].every(
+      (capabilityId) => capabilities.has(capabilityId)
     )
   );
+}
+
+function scenarioAdvancesAfterAction(
+  scenario: GeneratedMechanicContract["scenarios"][number],
+  actionId: StableId
+): boolean {
+  const actionStepIndex = scenario.steps.findIndex(
+    (step) => step.kind === "dispatch_action" && step.actionId === actionId
+  );
+  return (
+    actionStepIndex >= 0 &&
+    scenario.steps
+      .slice(actionStepIndex + 1)
+      .some((step) => step.kind === "advance_time")
+  );
+}
+
+type OwnedObjectActivityEntry = Readonly<{
+  archetypeId: StableId;
+  active: number;
+  actorOriginCreations: number;
+  created: number;
+  destroyed: number;
+  simulatedDistanceTraveled: number;
+  targetInteractions: number;
+}>;
+
+function ownedObjectActivityEntries(
+  value: unknown,
+  expectedArchetypeIds: readonly StableId[]
+): readonly OwnedObjectActivityEntry[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length !== expectedArchetypeIds.length
+  ) {
+    return undefined;
+  }
+  const entries: OwnedObjectActivityEntry[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      return undefined;
+    }
+    const record = entry as Record<string, unknown>;
+    if (
+      Object.keys(record).length !== 7 ||
+      record.archetypeId !== expectedArchetypeIds[index] ||
+      !isNonnegativeInteger(record.active) ||
+      !isNonnegativeInteger(record.actorOriginCreations) ||
+      !isNonnegativeInteger(record.created) ||
+      !isNonnegativeInteger(record.destroyed) ||
+      !isNonnegativeNumber(record.simulatedDistanceTraveled) ||
+      !isNonnegativeInteger(record.targetInteractions)
+    ) {
+      return undefined;
+    }
+    entries.push(record as OwnedObjectActivityEntry);
+  }
+  return entries;
+}
+
+function isNonnegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isNonnegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function trustedActorBindingIdsForHandoff(

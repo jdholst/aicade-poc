@@ -274,6 +274,206 @@ describe("generated mechanic project handoff", () => {
     });
   });
 
+  it("accepts authentic full, active-progress, immediate-creation, and unchanged owned-object lifecycle evidence", async () => {
+    const context = await createHandoffTestContext();
+    const contract: GeneratedMechanicContract = {
+      ...context.contract,
+      intentLineage: {
+        ...context.contract.intentLineage!,
+        spatialRules: ["spawn_owned_object_at_actor_position"],
+      },
+      ownedObjects: [
+        { id: "projectile", objectKind: "projectile", maximumInstances: 1 },
+      ],
+      capabilities: [
+        ...context.contract.capabilities,
+        "object_read",
+        "object_create",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...context.contract.resourceExpectations,
+        maximumOwnedObjects: 1,
+      },
+      scenarios: [
+        {
+          id: "projectile_lifecycle",
+          seed: 7,
+          setup: [{ kind: "binding_present", bindingId: "actor" }],
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "projectile",
+              operator: "equals",
+              value: 0,
+            },
+          ],
+        },
+        {
+          id: "projectile_progress",
+          seed: 10,
+          setup: [{ kind: "binding_present", bindingId: "actor" }],
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "projectile",
+              operator: "at_least",
+              value: 1,
+            },
+          ],
+        },
+        {
+          id: "projectile_created",
+          seed: 9,
+          setup: [{ kind: "binding_present", bindingId: "actor" }],
+          steps: [{ kind: "dispatch_action", actionId: "move" }],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "projectile",
+              operator: "at_least",
+              value: 1,
+            },
+          ],
+        },
+        {
+          id: "projectile_rejected",
+          seed: 8,
+          setup: [{ kind: "binding_present", bindingId: "actor" }],
+          steps: [{ kind: "dispatch_action", actionId: "move" }],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "projectile",
+              operator: "equals",
+              value: 0,
+            },
+          ],
+        },
+      ],
+    };
+    const grant = createMechanicCapabilityGrant({
+      contract,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+    });
+    if (!grant.success) {
+      throw new Error("Expected the transient lifecycle grant to pass.");
+    }
+    const sourceArtifact: GeneratedMechanicSourceArtifact = {
+      ...context.sourceArtifact,
+      grant: grant.data,
+      usedCapabilities: contract.capabilities,
+    };
+    const deterministicEvaluation = await evaluateGeneratedMechanicArtifact({
+      fixtureId: "fixture_projectile_lifecycle",
+      contract,
+      artifact: sourceArtifact,
+      config: { initial_count: 3 },
+      externalObservations: [
+        {
+          id: "external_projectile_lifecycle",
+          scenarioId: "projectile_lifecycle",
+          observation: {
+            kind: "owned_object_lifecycle_after_action",
+            archetypeIds: ["projectile"],
+            actionId: "move",
+            requireActorOrigin: true,
+          },
+        },
+        {
+          id: "external_projectile_progress",
+          scenarioId: "projectile_progress",
+          observation: {
+            kind: "owned_object_lifecycle_progress_after_action",
+            archetypeIds: ["projectile"],
+            actionId: "move",
+            requireActorOrigin: true,
+          },
+        },
+        {
+          id: "external_projectile_created",
+          scenarioId: "projectile_created",
+          observation: {
+            kind: "owned_object_creation_after_action",
+            archetypeIds: ["projectile"],
+            actionId: "move",
+            requireActorOrigin: true,
+          },
+        },
+        {
+          id: "external_projectile_rejected",
+          scenarioId: "projectile_rejected",
+          observation: {
+            kind: "owned_object_lifecycle_unchanged_after_action",
+            archetypeIds: ["projectile"],
+            actionId: "move",
+          },
+        },
+      ],
+      createRuntime: async ({ artifact, scenarioId }) => {
+        const activity = {
+          active: 0,
+          actorOriginCreations: 0,
+          created: 0,
+          destroyed: 0,
+          simulatedDistanceTraveled: 0,
+          targetInteractions: 0,
+        };
+        return {
+          sourceArtifactId: artifact.id,
+          hasBinding: (bindingId) => bindingId === "actor",
+          readDeclaredState: () => 3,
+          readBindingProperty: () => ({ x: 0, y: 0 }),
+          countOwnedObjects: () => activity.active,
+          readOwnedObjectActivity: () => ({ ...activity }),
+          readEmittedOutputs: () => [],
+          install: async () => undefined,
+          receiveInput: async () => undefined,
+          dispatchAction: async () => {
+            if (
+              scenarioId === "projectile_lifecycle" ||
+              scenarioId === "projectile_progress" ||
+              scenarioId === "projectile_created"
+            ) {
+              activity.active = 1;
+              activity.actorOriginCreations = 1;
+              activity.created = 1;
+            }
+          },
+          advanceTime: async () => {
+            if (scenarioId === "projectile_lifecycle") {
+              activity.active = 0;
+              activity.destroyed = 1;
+              activity.simulatedDistanceTraveled = 12;
+            } else if (scenarioId === "projectile_progress") {
+              activity.simulatedDistanceTraveled = 12;
+            }
+          },
+          dispose: async () => undefined,
+        };
+      },
+    });
+    expect(deterministicEvaluation.outcome).toBe("passed");
+
+    const result = await completeGeneratedMechanicProjectHandoff({
+      ...context.input,
+      contract,
+      deterministicEvaluation,
+      sourceArtifact,
+      runtime: createPassingRuntime([]),
+    });
+
+    expect(result).toMatchObject({ outcome: "accepted" });
+  });
+
   it("loads an honest transient candidate and creates accepted identity only after browser proof", async () => {
     const context = await createHandoffTestContext();
     const events: string[] = [];

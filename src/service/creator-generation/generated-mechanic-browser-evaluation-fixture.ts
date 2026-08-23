@@ -48,6 +48,7 @@ type FixtureObservations = Readonly<{
 
 type OwnedObjectActivity = Readonly<{
   active: number;
+  actorOriginCreations: number;
   created: number;
   destroyed: number;
   simulatedDistanceTraveled: number;
@@ -248,6 +249,7 @@ function createOwnedObjectActivityTracker({
     StableId,
     {
       active: number;
+      actorOriginCreations: number;
       created: number;
       destroyed: number;
       simulatedDistanceTraveled: number;
@@ -258,6 +260,7 @@ function createOwnedObjectActivityTracker({
       id,
       {
         active: 0,
+        actorOriginCreations: 0,
         created: 0,
         destroyed: 0,
         simulatedDistanceTraveled: 0,
@@ -269,6 +272,7 @@ function createOwnedObjectActivityTracker({
   const archetypeByObjectId = new Map<StableId, StableId>();
   const pendingArchetypesByTargetId = new Map<StableId, Set<StableId>>();
   const targetObjectIds = exactTargetObjectIds(contract, gameSpec);
+  const actorObjectIds = exactActorObjectIds(contract, gameSpec);
 
   return Object.freeze({
     wrap(delegate: MechanicObjectCapabilityHost): MechanicExecutionRealmCapabilityHost {
@@ -310,6 +314,19 @@ function createOwnedObjectActivityTracker({
                 objectHost.bindingAuthority.objectIdForHandle(result.value);
               if (createdObjectId) {
                 archetypeByObjectId.set(createdObjectId, archetypeId);
+                const createdState = virtualEntities.get(createdObjectId);
+                if (
+                  createdState &&
+                  [...actorObjectIds].some((actorObjectId) => {
+                    const actorState = virtualEntities.get(actorObjectId);
+                    return (
+                      actorState !== undefined &&
+                      pointDistance(createdState.position, actorState.position) <= 1
+                    );
+                  })
+                ) {
+                  activity.actorOriginCreations += 1;
+                }
               }
             }
           } else if (input.capabilityId === "object_motion_write" && objectId) {
@@ -407,6 +424,25 @@ function exactTargetObjectIds(
       }
       const entity = entitiesById.get(reference.id);
       return entity && targetRoles.has(entity.role) ? [entity.id] : [];
+    })
+  );
+}
+
+function exactActorObjectIds(
+  contract: GeneratedMechanicContract,
+  gameSpec: TopDownGameSpec
+): ReadonlySet<StableId> {
+  const actorRoles = new Set(contract.intentLineage?.actors ?? []);
+  const entitiesById = new Map(
+    gameSpec.entities.map((entity) => [entity.id, entity] as const)
+  );
+  return new Set(
+    (contract.intentLineage?.references ?? []).flatMap((reference) => {
+      if (reference.kind !== "entity") {
+        return [];
+      }
+      const entity = entitiesById.get(reference.id);
+      return entity && actorRoles.has(entity.role) ? [entity.id] : [];
     })
   );
 }
@@ -656,6 +692,12 @@ export function createGeneratedMechanicExternalObservations(
   );
   const requiresTransientLifecycle =
     requiresTransientOwnedObjectLifecycle(intent, contract);
+  const requiresActorOrigin =
+    requiresTransientLifecycle &&
+    intent.actors.length > 0 &&
+    intent.spatialRules.length > 0 &&
+    intent.requiredCapabilities.includes("object_read") &&
+    contract.capabilities.includes("object_read");
   const evidenceRoles = new Set(
     requiresTransientLifecycle && intent.targets.length > 0
       ? intent.targets
@@ -721,22 +763,50 @@ export function createGeneratedMechanicExternalObservations(
           `Top-down generated mechanic scenario "${scenario.id}" must dispatch trusted routed action "${actionId}" exactly once.`
         );
       }
-      return requiresTransientLifecycle
-        ? Object.freeze({
-            id: `external_${scenario.id}_owned_object_lifecycle_after_action`,
+      if (requiresTransientLifecycle) {
+        const actionStepIndex = scenario.steps.findIndex(
+          (step) => step.kind === "dispatch_action"
+        );
+        const observesLifecycleAfterAction = scenario.steps
+          .slice(actionStepIndex + 1)
+          .some((step) => step.kind === "advance_time");
+        const requiresPositiveOwnedObjectCount = scenario.observations.some(
+          (observation) =>
+            observation.kind === "owned_object_count" &&
+            contract.ownedObjects.some(
+              ({ id }) => id === observation.archetypeId
+            ) &&
+            observation.operator !== "at_most" &&
+            observation.value > 0
+        );
+        const lifecycleKind = observesLifecycleAfterAction
+          ? requiresPositiveOwnedObjectCount
+            ? ("owned_object_lifecycle_progress_after_action" as const)
+            : ("owned_object_lifecycle_after_action" as const)
+          : requiresPositiveOwnedObjectCount
+            ? ("owned_object_creation_after_action" as const)
+            : ("owned_object_lifecycle_unchanged_after_action" as const);
+        const requiresCreationProof =
+          lifecycleKind !== "owned_object_lifecycle_unchanged_after_action";
+        return Object.freeze({
+            id: `external_${scenario.id}_${lifecycleKind}`,
             scenarioId: scenario.id,
             observation: Object.freeze({
-              kind: "owned_object_lifecycle_after_action" as const,
+              kind: lifecycleKind,
               archetypeIds: Object.freeze(
                 contract.ownedObjects.map(({ id }) => id)
               ),
               actionId,
-              ...(intent.targets.length > 0
+              ...(requiresCreationProof && requiresActorOrigin
+                ? { requireActorOrigin: true as const }
+                : {}),
+              ...(observesLifecycleAfterAction && intent.targets.length > 0
                 ? { requireTargetInteraction: true as const }
                 : {}),
             }),
-          })
-        : Object.freeze({
+          });
+      }
+      return Object.freeze({
             id: `external_${scenario.id}_referenced_entity_motion_changed`,
             scenarioId: scenario.id,
             observation: Object.freeze({
