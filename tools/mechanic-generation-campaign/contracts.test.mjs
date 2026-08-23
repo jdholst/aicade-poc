@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   parseCampaignManifest,
   parseCampaignAttempt,
+  parseCampaignRun,
   scoreCampaign,
 } from "./lib/contracts.mjs";
 import { redactSensitive } from "./lib/redaction.mjs";
@@ -149,6 +150,39 @@ describe("campaign contracts", () => {
       successes: 0,
       diagnosticSuccesses: 1,
       qualifiesForMechanicProof: false,
+    });
+  });
+
+  it("links a campaign run to an optional loop revision cycle", () => {
+    const run = parseCampaignRun({
+      schemaVersion: "campaign-run/v1",
+      id: "campaign-1",
+      manifestId: manifest.id,
+      manifestPath: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
+      manifestHash: "a".repeat(64),
+      cohort: "discovery",
+      status: "pending",
+      createdAt: "2026-08-23T15:00:00.000Z",
+      model: manifest.model,
+      providerModes: manifest.providerModes,
+      attemptCeiling: 1,
+      attemptIds: [],
+      revision: {
+        head: "b".repeat(40),
+        revisionKey: "c".repeat(64),
+        dirty: false,
+        statusEntries: [],
+      },
+      baseUrl: "http://127.0.0.1:3117",
+      loopId: "ticket-17-loop-1",
+      loopStepId: "discover",
+      loopCycle: 0,
+    });
+
+    expect(run).toMatchObject({
+      loopId: "ticket-17-loop-1",
+      loopStepId: "discover",
+      loopCycle: 0,
     });
   });
 });

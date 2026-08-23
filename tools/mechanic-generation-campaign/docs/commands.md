@@ -152,3 +152,76 @@ Exactly one flag is required:
 - `--write` regenerates `legacy-attempts.jsonl` and `legacy-temporary-fixes.jsonl`.
 
 This command makes no provider calls. It fails if source parsing or expected historical record counts change.
+
+## Campaign loop commands
+
+Campaign loops coordinate several immutable campaigns for one mechanic. They use a clean dedicated `codex/campaign-loop-*` worktree in an adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` root and central ignored evidence storage in the control checkout. Keeping the execution package tree outside the control package tree avoids nested Next.js workspace-root inference. The loop never merges, pushes, deletes, or cleans up its branch automatically.
+
+### Validate a loop
+
+```bash
+npm run campaign -- loop validate --definition <path>
+```
+
+Validates `campaign-loop-manifest/v1`, the exact campaign manifest and external-probe hashes, credentials, current clean revision, sequence, retry classifications, isolation profiles, and every explicit ceiling. It prints the definition hash used for authorization and makes no provider calls.
+
+### Start a loop
+
+```bash
+npm run campaign -- loop run \
+  --definition <path> \
+  --authorize <definition-hash> \
+  [--headed] [--port <number>] [--attempt-timeout-ms <number>]
+```
+
+The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_fix` or a terminal loop status.
+
+### Resume a loop
+
+Resume an interrupted campaign on the unchanged revision:
+
+```bash
+npm run campaign -- loop resume --id <loop-id>
+```
+
+Resume after a verified fix commit:
+
+```bash
+npm run campaign -- loop resume --id <loop-id> --fix-report <path>
+```
+
+A fix report is accepted only from `waiting_for_fix`. Its before and after revisions, commit, changed files, verification, trigger campaign, and durable or temporary classification must match the clean loop worktree. Temporary fixes must include their canonical ledger entries. An accepted fix increments the fix cycle and restarts the sequence from its first step.
+
+### Run auxiliary isolation
+
+```bash
+npm run campaign -- loop isolate \
+  --id <loop-id> \
+  --profile <authorized-profile-id>
+```
+
+Runs one approved fixture-backed isolation campaign while the loop is waiting for a fix. It consumes global and profile limits, but never advances proof.
+
+### Mark a loop blocked
+
+```bash
+npm run campaign -- loop block --id <loop-id> --reason <text>
+```
+
+Use this only when the agent cannot produce a safe verified in-scope fix. The worktree and evidence remain available for review.
+
+### Report a loop
+
+```bash
+npm run campaign -- loop report --id <loop-id>
+```
+
+Prints status, current revision cycle, worktree branch, sequence progress, usage, remaining budgets, and proof status.
+
+### Publish a loop
+
+```bash
+npm run campaign -- loop publish --id <loop-id>
+```
+
+Appends a sanitized compact record to `campaign-loop-history.jsonl`. Absolute control/worktree paths and credentials are omitted. Publishing does not commit, merge, or push.

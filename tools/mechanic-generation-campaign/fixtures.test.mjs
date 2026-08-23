@@ -6,6 +6,7 @@ import {
   resolveProviderRequest,
 } from "./lib/fixture-adapter.mjs";
 import {
+  productionBuildArguments,
   resolveInterceptedRoute,
   summarizeAttemptFailure,
 } from "./lib/browser-runner.mjs";
@@ -108,6 +109,10 @@ describe("fixture correlation", () => {
 });
 
 describe("provider request resolution", () => {
+  it("uses the project's normal production build in linked campaign worktrees", () => {
+    expect(productionBuildArguments()).toEqual(["run", "build"]);
+  });
+
   it("summarizes the latest artifact-repair issue before older planning issues", () => {
     const summary = summarizeAttemptFailure(
       {
@@ -172,6 +177,50 @@ describe("provider request resolution", () => {
         origin: "http://127.0.0.1:3121/",
         "sec-fetch-site": "same-origin",
       },
+    });
+  });
+
+  it("blocks an actual request before upstream forwarding when the loop stage ceiling is reached", async () => {
+    const route = {
+      request: () => ({
+        headers: () => ({}),
+        postDataJSON: () => ({ enteredPrompt: "hello" }),
+        url: () => "http://127.0.0.1:3121/api/creator-generation-planning",
+      }),
+      continue: vi.fn(),
+      fulfill: vi.fn(async () => undefined),
+    };
+    const providerCalls = { planning: 0, contract: 0, source: 0 };
+    const networkCaptures = [];
+
+    const result = await resolveInterceptedRoute({
+      route,
+      stage: "planning",
+      mode: "actual",
+      providerCalls,
+      fixtureCalls: { planning: 0, contract: 0, source: 0 },
+      networkCaptures,
+      actualResponseCaptures: new Map(),
+      providerCallBudget: {
+        consume: vi.fn(async () => false),
+      },
+    });
+
+    expect(result).toEqual({ blocked: true, stage: "planning" });
+    expect(providerCalls.planning).toBe(0);
+    expect(route.continue).not.toHaveBeenCalled();
+    expect(route.fulfill).toHaveBeenCalledWith({
+      status: 429,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "provider_call_budget_exhausted",
+        stage: "planning",
+      }),
+    });
+    expect(networkCaptures[0]).toMatchObject({
+      stage: "planning",
+      source: "blocked",
+      reason: "provider_call_budget_exhausted",
     });
   });
 

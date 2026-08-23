@@ -6,6 +6,8 @@ import {
   importLegacyAttemptReports,
   parseTemporaryFixLedger,
 } from "./legacy-importer.mjs";
+import { createCampaignLoopStore } from "./loop-store.mjs";
+import { remainingLoopBudgets } from "./loop-state.mjs";
 
 const PIPELINE_STAGES = [
   "submission",
@@ -30,12 +32,25 @@ const PIPELINE_STAGES = [
   "external_mechanic_probe",
 ];
 
-export async function buildDashboardSnapshot(repoRoot, store) {
-  const [runs, legacyAttempts, temporaryFixes, publishedHistory] = await Promise.all([
+export async function buildDashboardSnapshot(
+  repoRoot,
+  store,
+  loopStore = createCampaignLoopStore(repoRoot)
+) {
+  const [
+    runs,
+    loopRuns,
+    legacyAttempts,
+    temporaryFixes,
+    publishedHistory,
+    publishedLoopHistory,
+  ] = await Promise.all([
     store.listRuns(),
+    loopStore.listRuns(),
     importLegacyAttemptReports(repoRoot),
     parseTemporaryFixLedger(repoRoot),
     readJsonLines(path.join(store.dataRoot ?? "", "campaign-history.jsonl")),
+    readJsonLines(path.join(loopStore.dataRoot ?? "", "campaign-loop-history.jsonl")),
   ]);
   const campaigns = await Promise.all(
     runs.map(async (run) => ({
@@ -44,12 +59,21 @@ export async function buildDashboardSnapshot(repoRoot, store) {
     }))
   );
   const allAttempts = campaigns.flatMap((campaign) => campaign.attempts);
+  const loops = await Promise.all(
+    loopRuns.map(async (run) => ({
+      ...run,
+      remaining: remainingLoopBudgets(run),
+      fixes: await loopStore.readFixes(run.id),
+    }))
+  );
 
   return {
     schemaVersion: "campaign-dashboard/v1",
     generatedAt: new Date().toISOString(),
     campaigns,
+    loops,
     publishedHistory,
+    publishedLoopHistory,
     legacyAttempts,
     temporaryFixes,
     stageSurvival: createStageSurvival(allAttempts),

@@ -1,9 +1,11 @@
 let snapshot = null;
 
 const campaignFilter = document.querySelector("#campaign-filter");
+const loopFilter = document.querySelector("#loop-filter");
 const fixFilter = document.querySelector("#fix-filter");
 const legacyFilter = document.querySelector("#legacy-filter");
 campaignFilter.addEventListener("change", render);
+loopFilter.addEventListener("change", render);
 fixFilter.addEventListener("change", render);
 legacyFilter.addEventListener("change", render);
 
@@ -14,6 +16,7 @@ async function refresh() {
     snapshot = await response.json();
     document.querySelector("#updated").textContent = new Date(snapshot.generatedAt).toLocaleTimeString();
     syncCampaignOptions();
+    syncLoopOptions();
     render();
   } catch (error) {
     document.querySelector("#updated").textContent = error.message;
@@ -27,6 +30,7 @@ function render() {
     campaign.attempts.map((attempt) => ({ ...attempt, campaignRunId: campaign.id }))
   );
   renderSummary(campaigns, attempts);
+  renderLoops();
   renderMechanics();
   renderStages(attempts);
   renderFailures(attempts);
@@ -44,12 +48,39 @@ function renderSummary(campaigns, attempts) {
     sum + Object.values(attempt.providerCalls ?? {}).reduce((value, count) => value + count, 0), 0);
   const knownCost = attempts.reduce((sum, attempt) => sum + (attempt.cost?.usd ?? 0), 0);
   document.querySelector("#summary").innerHTML = [
+    stat("Loops", snapshot.loops.length, `${snapshot.loops.filter(({ status }) => status === "achieved").length} achieved`),
     stat("Campaigns", campaigns.length, `${campaigns.filter(({ status }) => status === "achieved").length} achieved`),
     stat("Submissions", attempts.length, `${successes} externally verified`),
     stat("Actual calls", actualCalls, "Planning + contract + source"),
     stat("Known cost", `$${knownCost.toFixed(3)}`, "Unknown cost excluded"),
     stat("Temporary fixes", activeFixes, `${snapshot.temporaryFixes.length - activeFixes} retired`),
   ].join("");
+}
+
+function renderLoops() {
+  const loops = loopFilter.value === "all"
+    ? snapshot.loops
+    : snapshot.loops.filter(({ id }) => id === loopFilter.value);
+  document.querySelector("#loops").innerHTML = loops.map((loop) => {
+    const step = loop.steps[loop.currentStepIndex] ?? loop.steps.at(-1);
+    const fixes = loop.fixes ?? [];
+    const proposedTemporary = fixes.filter(({ kind }) => kind === "temporary");
+    const links = loop.campaignLinks.map(({ campaignRunId, role, status }) =>
+      `<span class="evidence-line">${escapeHtml(role)} · ${escapeHtml(campaignRunId)} · ${escapeHtml(status)}</span>`
+    ).join("");
+    const fixLines = fixes.map((fix) =>
+      `<span class="evidence-line"><a href="/artifacts/loops/${encodeURIComponent(loop.id)}/fixes/${encodeURIComponent(fix.id)}.json" target="_blank"><strong>${escapeHtml(fix.id)}</strong></a> · ${escapeHtml(fix.kind)}${fix.temporaryFixIds?.length ? ` · ${escapeHtml(fix.temporaryFixIds.join(", "))} · proposed/unmerged` : ""}</span>`
+    ).join("");
+    return `<tr>
+      <td><strong>${escapeHtml(loop.manifestId)}</strong><br><small>${escapeHtml(loop.id)}</small><br><small>${escapeHtml(loop.worktree.branch)}</small></td>
+      <td><span class="badge ${loop.status}">${escapeHtml(loop.status)}</span>${loop.result ? `<br><small>${loop.result.mechanicProven ? "mechanic proven" : "sequence only"}</small>` : ""}</td>
+      <td>${step ? `${escapeHtml(step.cohort)}<br><small>${escapeHtml(step.status)} · cycle ${loop.currentRevision.cycle}</small>` : "complete"}</td>
+      <td><code>${shortHash(loop.currentRevision.revisionKey)}</code></td>
+      <td>${loop.usage.campaignRuns}/${loop.limits.maxCampaignRuns} campaigns<br>${loop.usage.submissions}/${loop.limits.maxSubmissions} submissions<br>${loop.usage.fixCycles}/${loop.limits.maxFixCycles} fixes</td>
+      <td>${stageCounts(loop.usage.actualProviderCalls)}<br><small>remaining ${stageCounts(loop.remaining.actualProviderCalls)}</small></td>
+      <td>${links}${fixLines || ""}${proposedTemporary.length ? `<small>${proposedTemporary.length} proposed temporary fix(es)</small>` : ""}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="7">${empty("No campaign loops yet.")}</td></tr>`;
 }
 
 function renderMechanics() {
@@ -140,12 +171,19 @@ function syncCampaignOptions() {
   if ([...campaignFilter.options].some(({ value }) => value === previous)) campaignFilter.value = previous;
 }
 
+function syncLoopOptions() {
+  const previous = loopFilter.value;
+  loopFilter.innerHTML = `<option value="all">All loops</option>${snapshot.loops.map((loop) => `<option value="${escapeHtml(loop.id)}">${escapeHtml(loop.manifestId)} · ${escapeHtml(loop.status)}</option>`).join("")}`;
+  if ([...loopFilter.options].some(({ value }) => value === previous)) loopFilter.value = previous;
+}
+
 function stat(label, value, note) { return `<article class="stat"><p class="eyebrow">${label}</p><strong>${value}</strong><small>${note}</small></article>`; }
 function proof(label, status) { return `<span class="${status}">${label}<br><strong>${escapeHtml(humanize(status))}</strong></span>`; }
 function modeText(modes) { return Object.entries(modes).map(([stage, mode]) => `${stage[0].toUpperCase()}:${mode[0].toUpperCase()}`).join(" "); }
 function shortHash(value = "") { return value.slice(0, 9); }
 function humanize(value = "") { return value.replaceAll("_", " ").replaceAll("-", " "); }
 function formatDuration(ms = 0) { return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`; }
+function stageCounts(counts = {}) { return ["planning", "contract", "source"].map((stage) => `${stage[0].toUpperCase()}:${counts[stage] ?? 0}`).join(" "); }
 function empty(message) { return `<p class="empty">${escapeHtml(message)}</p>`; }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]); }
 

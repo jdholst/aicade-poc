@@ -60,3 +60,13 @@ npm run campaign -- publish --campaign <campaign-id>
 ```
 
 Publishing appends history data. It does not create a Git commit.
+
+## Run a multi-campaign proof loop
+
+Read [Campaign loops](campaign-loops.md), create an explicit loop definition under ignored `.qa` storage, and validate it before requesting authorization:
+
+```bash
+npm run campaign -- loop validate --definition .qa/ticket-17-loop.json
+```
+
+Validation prints the exact definition hash and all campaign, submission, fix, isolation, and provider-call ceilings. Use that hash only after the complete envelope has been authorized.

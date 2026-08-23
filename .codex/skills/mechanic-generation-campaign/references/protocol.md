@@ -39,3 +39,16 @@ If sources disagree, use the shallower stage and report the disagreement.
 
 Treat automated classifications as provisional when evidence is incomplete. Preserve the recorded outcome and add a later adjudication instead of rewriting history.
 
+## Campaign loops
+
+A loop contains one mechanic manifest and an ordered campaign sequence. Every numeric ceiling and same-revision retry policy is explicit. Separate campaign runs remain separate evidence; their successful attempts are never pooled.
+
+An achieved custom sequence is not automatically mechanic proof. Proof still requires achieved discovery, repeatability, and variation steps on the same final revision, model, and all-actual provider configuration.
+
+Fixture-backed isolation may diagnose a failure while a loop is waiting for a fix. It consumes the loop's campaign, submission, isolation, and applicable provider-call budgets but does not advance a proof step.
+
+A verified fix commit starts a new revision cycle and resets every sequence step. Campaign links and fix checkpoints remain append-only. Global usage does not reset.
+
+Loop terminal states are `achieved`, `exhausted`, `invalid`, and `blocked`. `interrupted` is resumable on the same clean revision; `waiting_for_fix` is an agent action checkpoint.
+
+Loop execution worktrees live under the adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` root. Campaign evidence remains under the control checkout's ignored `.qa/mechanic-generation-campaign/` root. Never move a loop worktree beneath the control checkout because nested package roots can change production build behavior.

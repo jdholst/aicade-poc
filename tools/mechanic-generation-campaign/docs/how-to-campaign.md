@@ -94,3 +94,5 @@ Inspect attempt artifacts before publishing. Fixture-backed evidence answers onl
 Run discovery, repeatability, and variation as separate full-actual campaigns with the same revision, model, manifest, and provider modes. The complete proof sequence contains 21 submissions: one discovery, ten repeatability, and ten variation.
 
 A mechanic is proven only when all three cohorts pass and every counted success reaches the external mechanic probe. If source or manifest changes are needed, end the current revision cohort, implement the separately authorized fix, and begin a new proof sequence.
+
+Use a [campaign loop](campaign-loops.md) when one bounded authorization should cover repeated campaigns, diagnostic isolation, and verified pipeline fix cycles. The standalone campaign commands remain the correct boundary for one cohort with no source edits.

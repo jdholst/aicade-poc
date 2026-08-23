@@ -16,6 +16,7 @@ import {
   validateManifestEnvironment,
 } from "./lib/manifest-loader.mjs";
 import { createAttemptSchedule, resolveProviderModes } from "./lib/runner-policy.mjs";
+import { handleLoopCommand } from "./lib/loop-cli.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const store = createCampaignStore(repoRoot);
@@ -40,6 +41,11 @@ async function main(args) {
     console.log(`Manifest hash: ${loaded.manifestHash}`);
     console.log(`Prompts: ${loaded.manifest.prompts.length}`);
     console.log(`Fixtures: ${Object.keys(loaded.fixturePaths).join(", ") || "none"}`);
+    return;
+  }
+
+  if (command === "loop") {
+    await handleLoopCommand({ args, repoRoot });
     return;
   }
 
@@ -251,6 +257,7 @@ Usage:
   npm run campaign -- report --campaign <run-id>
   npm run campaign -- publish --campaign <run-id>
   npm run campaign -- import-legacy <--check|--write>
+  npm run campaign -- loop <validate|run|resume|isolate|block|report|publish> [options]
 
 Run options:
   --provider-modes planning=<actual|fixture>,contract=<actual|fixture>,source=<actual|fixture>
@@ -262,4 +269,3 @@ Run options:
   --attempt-timeout-ms <n> Terminal timeout per submission, default 300000
 `);
 }
-

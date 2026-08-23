@@ -2,6 +2,7 @@ const pages = [
   { slug: "overview", title: "Overview", file: "README.md" },
   { slug: "getting-started", title: "Getting started", file: "getting-started.md" },
   { slug: "how-to-campaign", title: "How to campaign", file: "how-to-campaign.md" },
+  { slug: "campaign-loops", title: "Campaign loops", file: "campaign-loops.md" },
   { slug: "commands", title: "Command reference", file: "commands.md" },
 ];
 

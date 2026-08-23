@@ -46,6 +46,18 @@ describe("campaign dashboard data", () => {
     ]) {
       expect(commands).toContain(`npm run campaign -- ${command}`);
     }
+    for (const command of [
+      "validate",
+      "run",
+      "resume",
+      "isolate",
+      "block",
+      "report",
+      "publish",
+    ]) {
+      expect(commands).toContain(`npm run campaign -- loop ${command}`);
+    }
+    expect(dashboard).toContain('id="loops"');
   });
 
   it("combines live campaigns with all legacy attempts and temporary fixes", async () => {
@@ -168,6 +180,108 @@ describe("campaign dashboard data", () => {
         repeatability: "missing",
         variation: "missing",
         proven: false,
+      }),
+    ]);
+  });
+
+  it("shows loop progress, budgets, linked campaigns, and proposed fix checkpoints", async () => {
+    const fakeStore = {
+      artifactRoot: path.join(repoRoot, ".qa", "mechanic-generation-campaign"),
+      dataRoot: path.join(repoRoot, "tools", "mechanic-generation-campaign", "data"),
+      async listRuns() {
+        return [];
+      },
+      async readAttempts() {
+        return [];
+      },
+    };
+    const fakeLoopStore = {
+      async listRuns() {
+        return [
+          {
+            id: "ticket-17-loop-1",
+            manifestId: "p09-t17-projectile",
+            model: "gpt-5.6-luna",
+            status: "waiting_for_fix",
+            createdAt: "2026-08-23T12:00:00.000Z",
+            currentRevision: { cycle: 1, revisionKey: "revision-2" },
+            currentStepIndex: 0,
+            usage: {
+              fixCycles: 1,
+              campaignRuns: 2,
+              submissions: 2,
+              auxiliaryIsolationCampaigns: 1,
+              actualProviderCalls: { planning: 1, contract: 2, source: 2 },
+            },
+            limits: {
+              maxFixCycles: 3,
+              maxCampaignRuns: 8,
+              maxSubmissions: 30,
+              maxAuxiliaryIsolationCampaigns: 2,
+              actualProviderCalls: { planning: 30, contract: 60, source: 60 },
+            },
+            worktree: {
+              branch: "codex/campaign-loop-ticket-17-loop-1",
+              path: "/tmp/worktree",
+            },
+            steps: [
+              {
+                id: "discovery",
+                cohort: "discovery",
+                status: "running",
+                campaignRunIds: ["campaign-1"],
+                sameRevisionRuns: 1,
+              },
+            ],
+            campaignLinks: [
+              {
+                campaignRunId: "campaign-1",
+                role: "sequence",
+                stepId: "discovery",
+                cycle: 0,
+                status: "completed_not_achieved",
+              },
+            ],
+            fixCheckpointIds: ["fix-cycle-1"],
+          },
+        ];
+      },
+      async readFixes() {
+        return [
+          {
+            id: "fix-cycle-1",
+            kind: "temporary",
+            temporaryFixIds: ["TF-33"],
+            diagnosis: "Temporary compatibility policy.",
+            changedFiles: ["src/example.ts", "docs/phase-09-ticket-16-5-temporary-fix-ledger.md"],
+            createdAt: "2026-08-23T13:00:00.000Z",
+          },
+        ];
+      },
+    };
+
+    const snapshot = await buildDashboardSnapshot(
+      repoRoot,
+      fakeStore,
+      fakeLoopStore
+    );
+
+    expect(snapshot.loops).toEqual([
+      expect.objectContaining({
+        id: "ticket-17-loop-1",
+        remaining: expect.objectContaining({
+          fixCycles: 2,
+          campaignRuns: 6,
+          submissions: 28,
+          actualProviderCalls: { planning: 29, contract: 58, source: 58 },
+        }),
+        fixes: [
+          expect.objectContaining({
+            id: "fix-cycle-1",
+            kind: "temporary",
+            temporaryFixIds: ["TF-33"],
+          }),
+        ],
       }),
     ]);
   });

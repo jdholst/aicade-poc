@@ -28,9 +28,14 @@ export async function runCampaign({
   resume,
   port = 3117,
   attemptTimeoutMs = Number(process.env.AICADE_CAMPAIGN_ATTEMPT_TIMEOUT_MS ?? 300_000),
+  store: providedStore,
+  loopContext,
+  providerCallBudget,
+  onSubmission,
+  runId,
 }) {
   const loaded = await loadCampaignManifest(manifestPath);
-  const store = createCampaignStore(repoRoot);
+  const store = providedStore ?? createCampaignStore(repoRoot);
   await store.initialize();
   const providerModes = resolveProviderModes(
     cohort,
@@ -48,7 +53,8 @@ export async function runCampaign({
   }
 
   const createdAt = new Date().toISOString();
-  const campaignRunId = resume ?? createCampaignRunId(loaded.manifest.id, cohort, createdAt);
+  const campaignRunId =
+    resume ?? runId ?? createCampaignRunId(loaded.manifest.id, cohort, createdAt);
   const baseUrl = attachedBaseUrl ?? createLoopbackBaseUrl(port);
   const schedule = createAttemptSchedule(cohort, loaded.manifest.prompts);
   let run = resume
@@ -66,10 +72,17 @@ export async function runCampaign({
         providerModes,
         attemptCeiling: schedule.length,
         attemptIds: [],
+        ...(loopContext
+          ? {
+              loopId: loopContext.loopId,
+              loopStepId: loopContext.loopStepId,
+              loopCycle: loopContext.loopCycle,
+            }
+          : {}),
         revision: compactRevision(revision),
         baseUrl,
       };
-  validateResume(run, loaded, cohort, providerModes, revision);
+  validateResume(run, loaded, cohort, providerModes, revision, loopContext);
   await store.writeRun(run);
 
   const fixtures = await loadFixtures(loaded.fixturePaths);
@@ -86,7 +99,7 @@ export async function runCampaign({
     if (!attachedBaseUrl) {
       await runLoggedProcess(
         "npm",
-        ["run", "build"],
+        productionBuildArguments(),
         repoRoot,
         path.join(campaignDirectory, "build.log")
       );
@@ -134,12 +147,18 @@ export async function runCampaign({
         probe: probeModule.runProbe,
         headed,
         attemptTimeoutMs,
+        providerCallBudget,
+        onSubmission,
       });
       run = {
         ...run,
         attemptIds: [...run.attemptIds, attempt.id],
       };
       await store.writeRun(run);
+
+      if (attempt.classification === "provider_call_budget_exhausted") {
+        break;
+      }
 
       const afterAttemptRevision = await inspectRevision(repoRoot);
       if (afterAttemptRevision.revisionKey !== run.revision.revisionKey) {
@@ -158,7 +177,12 @@ export async function runCampaign({
     const score = scoreCampaign(cohort, loaded.manifest, attempts);
     run = {
       ...run,
-      status: score.status,
+      status: attempts.some(
+        ({ classification }) =>
+          classification === "provider_call_budget_exhausted"
+      )
+        ? "completed_not_achieved"
+        : score.status,
       completedAt: new Date().toISOString(),
       result: {
         successes: score.successes,
@@ -194,6 +218,8 @@ async function runBrowserAttempt({
   fixtures,
   probe,
   attemptTimeoutMs,
+  providerCallBudget,
+  onSubmission,
 }) {
   const id = `a${String(scheduled.sequence).padStart(2, "0")}-${scheduled.promptId}`;
   const attemptDirectory = store.attemptDirectory(run.id, id);
@@ -224,6 +250,10 @@ async function runBrowserAttempt({
     networkCaptures,
     actualResponseCaptures,
     responseCaptureTasks,
+    providerCallBudget,
+    onProviderBudgetExhausted: (stage) => {
+      providerBudgetExhaustedStage = stage;
+    },
   });
 
   let terminal = { kind: "infrastructure_failure", text: "Attempt did not start." };
@@ -232,6 +262,7 @@ async function runBrowserAttempt({
   let gamePack = null;
   let probeResult = { passed: false, assertions: [] };
   let thrownFailure = null;
+  let providerBudgetExhaustedStage = null;
   try {
     await page.goto(new URL("/editor", run.baseUrl).toString(), {
       waitUntil: "domcontentloaded",
@@ -243,6 +274,12 @@ async function runBrowserAttempt({
     );
     await page.getByRole("button", { name: "Send prompt" }).click();
     await configureProviderInput(page, manifest, run.providerModes);
+    await onSubmission?.({
+      campaignRunId: run.id,
+      attemptId: id,
+      sequence: scheduled.sequence,
+      promptId: scheduled.promptId,
+    });
     await page.getByRole("button", { name: "Build the project" }).click();
     terminal = await waitForTerminalEditorState(page, attemptTimeoutMs);
     await page.screenshot({
@@ -282,7 +319,9 @@ async function runBrowserAttempt({
   const failure =
     status === "success"
       ? undefined
-      : thrownFailure ?? summarizeAttemptFailure(generationRun, terminal.text, probeResult);
+      : providerBudgetExhaustedStage
+        ? `${providerBudgetExhaustedStage} provider-call ceiling reached before upstream forwarding.`
+        : thrownFailure ?? summarizeAttemptFailure(generationRun, terminal.text, probeResult);
   const attempt = {
     schemaVersion: CAMPAIGN_ATTEMPT_SCHEMA_VERSION,
     id,
@@ -307,7 +346,9 @@ async function runBrowserAttempt({
       cleanupPassed,
       externalProbePassed,
     }),
-    classification: classifyFailure(status, generationRun),
+    classification: providerBudgetExhaustedStage
+      ? "provider_call_budget_exhausted"
+      : classifyFailure(status, generationRun),
     ...(failure ? { failure } : {}),
     providerModes: run.providerModes,
     providerCalls,
@@ -350,6 +391,8 @@ async function installProviderInterception({
   networkCaptures,
   actualResponseCaptures,
   responseCaptureTasks,
+  providerCallBudget,
+  onProviderBudgetExhausted,
 }) {
   page.on("response", (response) => {
     const capture = actualResponseCaptures.get(response.request());
@@ -359,7 +402,7 @@ async function installProviderInterception({
     void task.finally(() => responseCaptureTasks.delete(task));
   });
   await page.route("**/api/creator-generation-planning", async (route) => {
-    await resolveInterceptedRoute({
+    const result = await resolveInterceptedRoute({
       route,
       stage: "planning",
       mode: providerModes.planning,
@@ -368,7 +411,9 @@ async function installProviderInterception({
       fixtureCalls,
       networkCaptures,
       actualResponseCaptures,
+      providerCallBudget,
     });
+    if (result?.blocked) onProviderBudgetExhausted?.(result.stage);
   });
   await page.route("**/api/generated-mechanic-provider", async (route) => {
     const requestBody = route.request().postDataJSON();
@@ -376,7 +421,7 @@ async function installProviderInterception({
     if (!['contract', 'source'].includes(stage)) {
       throw new Error(`Unknown generated-mechanic provider stage "${stage}".`);
     }
-    await resolveInterceptedRoute({
+    const result = await resolveInterceptedRoute({
       route,
       stage,
       mode: providerModes[stage],
@@ -386,7 +431,9 @@ async function installProviderInterception({
       networkCaptures,
       actualResponseCaptures,
       requestBody,
+      providerCallBudget,
     });
+    if (result?.blocked) onProviderBudgetExhausted?.(result.stage);
   });
 }
 
@@ -399,6 +446,7 @@ export async function resolveInterceptedRoute({
   fixtureCalls,
   networkCaptures,
   actualResponseCaptures,
+  providerCallBudget,
   requestBody = route.request().postDataJSON(),
 }) {
   if (mode === "fixture") {
@@ -409,6 +457,26 @@ export async function resolveInterceptedRoute({
     networkCaptures.push(redactSensitive({ stage, source: "fixture", request: requestBody, response: body }));
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     return;
+  }
+
+  if (providerCallBudget && !(await providerCallBudget.consume(stage))) {
+    networkCaptures.push(
+      redactSensitive({
+        stage,
+        source: "blocked",
+        reason: "provider_call_budget_exhausted",
+        request: requestBody,
+      })
+    );
+    await route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "provider_call_budget_exhausted",
+        stage,
+      }),
+    });
+    return { blocked: true, stage };
   }
 
   providerCalls[stage] += 1;
@@ -431,6 +499,7 @@ export async function resolveInterceptedRoute({
   networkCaptures.push(capture);
   actualResponseCaptures?.set(request, capture);
   await route.continue({ headers: forwardedHeaders });
+  return { blocked: false, stage };
 }
 
 async function captureActualResponse(response, capture) {
@@ -498,7 +567,7 @@ async function loadFixtures(fixturePaths) {
   );
 }
 
-function validateResume(run, loaded, cohort, providerModes, revision) {
+function validateResume(run, loaded, cohort, providerModes, revision, loopContext) {
   if (
     run.manifestId !== loaded.manifest.id ||
     run.manifestHash !== loaded.manifestHash ||
@@ -506,6 +575,14 @@ function validateResume(run, loaded, cohort, providerModes, revision) {
     JSON.stringify(run.providerModes) !== JSON.stringify(providerModes)
   ) {
     throw new Error("Resume configuration does not match the frozen campaign run.");
+  }
+  if (
+    loopContext &&
+    (run.loopId !== loopContext.loopId ||
+      run.loopStepId !== loopContext.loopStepId ||
+      run.loopCycle !== loopContext.loopCycle)
+  ) {
+    throw new Error("Resume loop context does not match the frozen campaign run.");
   }
   if (run.revision.revisionKey !== revision.revisionKey) {
     throw new Error("Cannot resume a campaign on a different repository revision.");
@@ -541,6 +618,10 @@ export function summarizeAttemptFailure(generationRun, terminalText, probeResult
     terminalText ??
     "Campaign attempt failed without structured evidence."
   );
+}
+
+export function productionBuildArguments() {
+  return ["run", "build"];
 }
 
 function classifyFailure(status, generationRun) {

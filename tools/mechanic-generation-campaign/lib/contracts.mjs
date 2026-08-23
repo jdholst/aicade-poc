@@ -264,6 +264,9 @@ export const campaignRunSchema = z
     providerModes: providerModesSchema,
     attemptCeiling: z.number().int().positive(),
     attemptIds: z.array(z.string()),
+    loopId: z.string().min(1).optional(),
+    loopStepId: z.string().min(1).optional(),
+    loopCycle: z.number().int().nonnegative().optional(),
     revision: z
       .object({
         head: z.string().min(1),

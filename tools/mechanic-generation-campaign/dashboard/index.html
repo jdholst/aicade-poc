@@ -23,6 +23,14 @@
       <section id="summary" class="summary-grid"></section>
 
       <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Orchestration</p><h2>Campaign loops</h2></div>
+          <select id="loop-filter" aria-label="Filter campaign loops"><option value="all">All loops</option></select>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Loop</th><th>Status</th><th>Current step</th><th>Revision</th><th>Budgets used</th><th>Actual calls</th><th>Evidence</th></tr></thead><tbody id="loops"></tbody></table></div>
+      </section>
+
+      <section class="panel">
         <div class="panel-heading"><div><p class="eyebrow">Proof matrix</p><h2>Mechanics</h2></div></div>
         <div id="mechanics" class="mechanic-grid"></div>
       </section>
