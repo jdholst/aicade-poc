@@ -1140,6 +1140,27 @@ describe("Execution Realm Conformance Suite", () => {
     expect(candidateStarted).toBe(32);
   });
 
+  it("allows a briefly delayed healthy host heartbeat", async () => {
+    let hostChecks = 0;
+    const report = await runMechanicExecutionRealmConformanceSuite({
+      candidate: createReferenceCandidate(false),
+      host: {
+        async isResponsive() {
+          hostChecks += 1;
+          if (hostChecks === 1) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+          return true;
+        },
+      },
+    });
+
+    expect(report.probeResults[0]).toMatchObject({
+      probeId: "admitted_capability_calls",
+      hostResponsive: true,
+    });
+  });
+
   it("uses a fixed policy and bounds a candidate that cannot terminate", async () => {
     const startedAt = Date.now();
     let hostChecks = 0;
@@ -1184,7 +1205,7 @@ describe("Execution Realm Conformance Suite", () => {
       profileId: "phase_9_realm_conformance",
       maximumExecutionMilliseconds: 50,
       maximumTerminationMilliseconds: 50,
-      maximumHostHeartbeatMilliseconds: 50,
+      maximumHostHeartbeatMilliseconds: 250,
       resourceBudget: {
         profileId: "phase_9_fixed_budget",
       },

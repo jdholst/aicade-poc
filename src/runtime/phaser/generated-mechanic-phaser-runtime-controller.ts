@@ -22,6 +22,7 @@ import {
 import type { HandAuthoredPhaserTemplate } from "./top-down-template";
 
 const GENERATED_MECHANIC_PHASER_RUNTIME_ROUTE = "/runtime/phaser-generated";
+const BROKER_CLOSE_CAUSAL_EVENT_GRACE_MS = 100;
 const FIRST_PLAYABLE_CHECK_IDS = [
   "nonblank_render",
   "player_visible",
@@ -531,9 +532,11 @@ export function createGeneratedMechanicPhaserRuntimeController({
       }
     );
     void activeBroker.closed.then((result) => {
-      if (!teardownStarted && broker === activeBroker) {
-        failClosed(result.message);
-      }
+      browserWindow.setTimeout(() => {
+        if (!teardownStarted && broker === activeBroker) {
+          failClosed(result.message);
+        }
+      }, BROKER_CLOSE_CAUSAL_EVENT_GRACE_MS);
     });
   }
   function createPendingFirstPlayableRequest(): PendingFirstPlayableRequest {

@@ -169,6 +169,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
     );
     expect(prompt).toContain(
+      "Prove a positive transient owned_object_count in a separate dispatch-only scenario with no advance_time step"
+    );
+    expect(prompt).toContain(
+      "any time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated"
+    );
+    expect(prompt).toContain(
       "retain object_read and make actor-relative creation explicit"
     );
     expect(prompt).toContain(

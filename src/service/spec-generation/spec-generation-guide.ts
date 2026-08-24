@@ -48,6 +48,7 @@ Reference rules:
 - Every entity, asset, objective, validation goal, scene, zone, and mechanic ID must be stable and reusable.
 - The scene must reference the primary objective and validation goal.
 - The player spawn zone must reference the player entity.
+- Every non-player entity that must be visible, observed, bound, targeted, or affected at runtime must appear in entityIds of an allowed active mechanic. A spawn-zone reference alone does not create a usable Phaser handle. Use the optional mechanic slot to materialize a compatible live participant; do not declare or spawn a runtime target that no active mechanic owns.
 - Mechanic entityIds must reference entities only: actors, participants, controlled objects, or objects directly affected by the behavior.
 - Mechanic assetIds must reference assets only: visual/content assets the behavior places, collects, displays, scores, or otherwise uses.
 - Mechanic regionIds must reference scene layout.regions only. Do not put pickup zone IDs or spawn zone IDs in regionIds.

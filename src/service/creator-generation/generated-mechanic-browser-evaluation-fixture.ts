@@ -89,8 +89,29 @@ export function createGeneratedMechanicBrowserExecutionFixture({
   seed,
 }: CreateGeneratedMechanicBrowserExecutionFixtureInput): GeneratedMechanicBrowserExecutionFixture {
   const virtualEntities = new Map<StableId, VirtualEntityState>();
+  const actorObjectIds = exactActorObjectIds(contract, gameSpec);
+  const targetObjectIds = exactTargetObjectIds(contract, gameSpec);
+  const firstActorIndex = gameSpec.entities.findIndex(({ id }) =>
+    actorObjectIds.has(id)
+  );
+  const firstActor = gameSpec.entities[firstActorIndex];
+  const actorProofPosition = firstActor
+    ? createInitialVirtualEntityState(firstActor, firstActorIndex).position
+    : undefined;
+  let targetProofOffset = 0;
   const objects = gameSpec.entities.map((entity, index) => {
     const state = createInitialVirtualEntityState(entity, index);
+    if (
+      actorProofPosition &&
+      targetObjectIds.has(entity.id) &&
+      !actorObjectIds.has(entity.id)
+    ) {
+      targetProofOffset += 1;
+      state.position = {
+        x: actorProofPosition.x + targetProofOffset * 32,
+        y: actorProofPosition.y,
+      };
+    }
     virtualEntities.set(entity.id, state);
     const object: TrustedTopDownPhaserMechanicObject = {
       get active() {
@@ -753,6 +774,30 @@ export function createGeneratedMechanicExternalObservations(
       "Top-down generated mechanic evaluation requires exactly one trusted routed input action backed by an active Game Spec control."
     );
   }
+  const targetInteractionScenarioIds = new Set<StableId>();
+  if (requiresTransientLifecycle && intent.targets.length > 0) {
+    const timeAdvancingScenarios = contract.scenarios.filter((scenario) =>
+      scenario.steps.some((step) => step.kind === "advance_time")
+    );
+    const cleanupScenarios = timeAdvancingScenarios.filter(
+      (scenario) =>
+        !scenario.observations.some(
+          (observation) =>
+            observation.kind === "owned_object_count" &&
+            contract.ownedObjects.some(
+              ({ id }) => id === observation.archetypeId
+            ) &&
+            observation.operator !== "at_most" &&
+            observation.value > 0
+        )
+    );
+    for (const scenario of
+      cleanupScenarios.length > 0
+        ? cleanupScenarios
+        : timeAdvancingScenarios.slice(0, 1)) {
+      targetInteractionScenarioIds.add(scenario.id);
+    }
+  }
   return Object.freeze(
     contract.scenarios.map((scenario): ExternalAcceptanceObservation => {
       const scenarioActions = scenario.steps.flatMap((step) =>
@@ -800,7 +845,7 @@ export function createGeneratedMechanicExternalObservations(
               ...(requiresCreationProof && requiresActorOrigin
                 ? { requireActorOrigin: true as const }
                 : {}),
-              ...(observesLifecycleAfterAction && intent.targets.length > 0
+              ...(targetInteractionScenarioIds.has(scenario.id)
                 ? { requireTargetInteraction: true as const }
                 : {}),
             }),

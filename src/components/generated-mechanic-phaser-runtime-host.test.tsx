@@ -601,6 +601,54 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
     expect(session.dispose).toHaveBeenCalledOnce();
   });
 
+  it("lets a queued authenticated runtime failure outrank a concurrent Worker close", async () => {
+    vi.useFakeTimers();
+    const statuses: unknown[] = [];
+    renderHost({ onStatusChange: (status) => statuses.push(status) });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+    fireEvent.load(iframe);
+    await act(async () => {
+      await broker.ready;
+    });
+    dispatchHostMessage(iframe, { kind: "ack" });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: { type: "game-ready" },
+    });
+
+    broker.resolveClosed({
+      reason: "remote_terminate",
+      message: "The iframe controller terminated the parent SES Worker.",
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    window.setTimeout(() => {
+      dispatchHostMessage(iframe, {
+        kind: "runtime",
+        event: {
+          type: "game-error",
+          message: "Generated callback exceeded its execution budget.",
+          issue: {
+            type: "runtime-error",
+            severity: "error",
+            recoverable: false,
+            message: "Generated callback exceeded its execution budget.",
+          },
+        },
+      });
+    }, 25);
+    act(() => vi.runAllTimers());
+
+    expect(statuses.at(-1)).toEqual({
+      state: "error",
+      message: "Generated callback exceeded its execution budget.",
+    });
+    expect(iframe).not.toBeInTheDocument();
+    expect(broker.dispose).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
+  });
+
   it("fails closed on a second load, route mutation, sandbox mutation, or stale frame", async () => {
     const cases = [
       async (iframe: HTMLIFrameElement) => fireEvent.load(iframe),

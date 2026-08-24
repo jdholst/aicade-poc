@@ -157,6 +157,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "The active synchronous work inside each callback must finish within maximumCallbackMilliseconds of 8"
     );
     expect(prompt).toContain(
+      "Do not perform a spatial query only to confirm that an exact required binding exists and then discard the returned handle"
+    );
+    expect(prompt).toContain(
+      "When a later lifecycle callback already queries for interaction, use the exact binding directly for action-time direction and defer that interaction query"
+    );
+    expect(prompt).toContain(
       "The retained top-down host advances generated simulation time in whole deterministic milliseconds"
     );
     expect(prompt).toContain(
