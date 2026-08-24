@@ -753,6 +753,30 @@ export function createGeneratedMechanicExternalObservations(
       "Top-down generated mechanic evaluation requires exactly one trusted routed input action backed by an active Game Spec control."
     );
   }
+  const targetInteractionScenarioIds = new Set<StableId>();
+  if (requiresTransientLifecycle && intent.targets.length > 0) {
+    const timeAdvancingScenarios = contract.scenarios.filter((scenario) =>
+      scenario.steps.some((step) => step.kind === "advance_time")
+    );
+    const cleanupScenarios = timeAdvancingScenarios.filter(
+      (scenario) =>
+        !scenario.observations.some(
+          (observation) =>
+            observation.kind === "owned_object_count" &&
+            contract.ownedObjects.some(
+              ({ id }) => id === observation.archetypeId
+            ) &&
+            observation.operator !== "at_most" &&
+            observation.value > 0
+        )
+    );
+    for (const scenario of
+      cleanupScenarios.length > 0
+        ? cleanupScenarios
+        : timeAdvancingScenarios.slice(0, 1)) {
+      targetInteractionScenarioIds.add(scenario.id);
+    }
+  }
   return Object.freeze(
     contract.scenarios.map((scenario): ExternalAcceptanceObservation => {
       const scenarioActions = scenario.steps.flatMap((step) =>
@@ -800,7 +824,7 @@ export function createGeneratedMechanicExternalObservations(
               ...(requiresCreationProof && requiresActorOrigin
                 ? { requireActorOrigin: true as const }
                 : {}),
-              ...(observesLifecycleAfterAction && intent.targets.length > 0
+              ...(targetInteractionScenarioIds.has(scenario.id)
                 ? { requireTargetInteraction: true as const }
                 : {}),
             }),
