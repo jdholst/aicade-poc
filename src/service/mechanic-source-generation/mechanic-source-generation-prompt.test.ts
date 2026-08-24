@@ -799,6 +799,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "bounded interval shorter than the accepted lifetime"
     );
     expect(prompt).toContain("reschedule before expiry");
+    expect(prompt).toContain(
+      "uses the exact runtime object kind of the accepted target binding"
+    );
+    expect(prompt).toContain(
+      "not the binding ID or an invented object-kind string"
+    );
   });
 
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
