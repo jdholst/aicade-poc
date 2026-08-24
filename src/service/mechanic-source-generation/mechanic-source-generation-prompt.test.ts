@@ -805,6 +805,13 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "not the binding ID or an invented object-kind string"
     );
+    expect(prompt).toContain(
+      "When the evaluation advances time in one coarse step, scheduled callbacks may observe the post-step position"
+    );
+    expect(prompt).toContain(
+      "persist the spawn position in owned-object properties"
+    );
+    expect(prompt).toContain("bounded swept-path check");
   });
 
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
