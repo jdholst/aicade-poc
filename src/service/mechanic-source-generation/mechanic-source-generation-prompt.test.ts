@@ -805,6 +805,31 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "not the binding ID or an invented object-kind string"
     );
+    expect(prompt).toContain(
+      "When the evaluation advances time in one coarse step, scheduled callbacks may observe the post-step position"
+    );
+    expect(prompt).toContain(
+      "persist the spawn position in owned-object properties"
+    );
+    expect(prompt).toContain("bounded swept-path check");
+    expect(prompt).toContain(
+      "center the bounded query at the current observed position"
+    );
+    expect(prompt).toContain(
+      "radius at least the accepted segment length plus the owned-object and target interaction radii"
+    );
+    expect(prompt).toContain(
+      "If scheduled callbacks already implement transient travel, expiry, and interaction, keep fixed_step minimal"
+    );
+    expect(prompt).toContain(
+      "Do not repeat spatial queries, object reads, or motion writes every fixed-step tick"
+    );
+    expect(prompt).toContain(
+      "Check the final swept travel segment for a target before applying expiry cleanup"
+    );
+    expect(prompt).toContain(
+      "do not destroy an owned object at the lifetime boundary before its final target interaction check"
+    );
   });
 
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
