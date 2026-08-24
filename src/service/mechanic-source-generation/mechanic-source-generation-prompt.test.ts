@@ -943,6 +943,9 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "reject while now - lastAcceptedTime is less than the cooldown duration"
     );
     expect(prompt).toContain(
+      "When the initial last_*_time value is a negative sentinel, accept the first action"
+    );
+    expect(prompt).toContain(
       "never write now + cooldown duration into last_*_time"
     );
     expect(prompt).toContain(
