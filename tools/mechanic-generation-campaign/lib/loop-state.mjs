@@ -131,11 +131,27 @@ export function finishSequenceCampaign(run, definition, {
   campaignRunId,
   status,
   attempts,
+  pendingManualQa,
   completedAt = new Date().toISOString(),
 }) {
   assertActiveCampaign(run, campaignRunId, "sequence");
   const stepDefinition = definition.sequence[run.currentStepIndex];
   const currentStep = run.steps[run.currentStepIndex];
+  if (status === "waiting_for_manual_qa") {
+    if (!pendingManualQa) {
+      throw new Error("A campaign waiting for manual QA requires its pending review reference.");
+    }
+    return {
+      ...run,
+      status: "waiting_for_manual_qa",
+      pendingManualQa,
+      campaignLinks: run.campaignLinks.map((link) =>
+        link.campaignRunId === campaignRunId
+          ? { ...link, status: "waiting_for_manual_qa" }
+          : link
+      ),
+    };
+  }
   let next = finishCampaignLink(run, campaignRunId, status);
 
   if (status === "interrupted") {
@@ -150,6 +166,17 @@ export function finishSequenceCampaign(run, definition, {
     };
   }
   if (status === "achieved") {
+    if (
+      PROOF_COHORTS.includes(stepDefinition.cohort) &&
+      !attempts.some(
+        (attempt) =>
+          attempt.status === "success" && attempt.manualQa?.status === "approved"
+      )
+    ) {
+      throw new Error(
+        "A proof campaign cannot advance without manual QA approval evidence."
+      );
+    }
     const steps = next.steps.map((step, index) =>
       index === next.currentStepIndex
         ? {
@@ -203,6 +230,57 @@ export function finishIsolationCampaign(run, {
     : { ...next, status: "waiting_for_fix" };
 }
 
+export function resumeLoopAfterManualQaApproval(run, { campaignRunId }) {
+  assertActiveCampaign(run, campaignRunId, "sequence");
+  if (
+    run.status !== "waiting_for_manual_qa" ||
+    run.pendingManualQa?.campaignRunId !== campaignRunId
+  ) {
+    throw new Error("Loop does not have the requested pending manual QA candidate.");
+  }
+  return {
+    ...run,
+    status: "running",
+    pendingManualQa: undefined,
+    campaignLinks: run.campaignLinks.map((link) =>
+      link.campaignRunId === campaignRunId
+        ? { ...link, status: "running" }
+        : link
+    ),
+  };
+}
+
+export function rejectLoopManualQa(
+  run,
+  { campaignRunId, completedAt = new Date().toISOString() }
+) {
+  assertActiveCampaign(run, campaignRunId, "sequence");
+  if (
+    run.status !== "waiting_for_manual_qa" ||
+    run.pendingManualQa?.campaignRunId !== campaignRunId
+  ) {
+    throw new Error("Loop does not have the requested pending manual QA candidate.");
+  }
+  const next = {
+    ...run,
+    status: "waiting_for_fix",
+    pendingManualQa: undefined,
+    activeCampaign: undefined,
+    campaignLinks: run.campaignLinks.map((link) =>
+      link.campaignRunId === campaignRunId
+        ? { ...link, status: "completed_not_achieved" }
+        : link
+    ),
+  };
+  return next.usage.fixCycles < next.limits.maxFixCycles
+    ? next
+    : exhaustLoop(
+        next,
+        "Manual gameplay QA failed and no fix cycles remain.",
+        completedAt
+      );
+}
+
 export function applyFixCheckpoint(run, fix) {
   if (run.usage.fixCycles >= run.limits.maxFixCycles) {
     return exhaustLoop(run, "Fix-cycle ceiling reached.");
@@ -228,6 +306,7 @@ export function applyFixCheckpoint(run, fix) {
     })),
     fixCheckpointIds: [...run.fixCheckpointIds, fix.id],
     activeCampaign: undefined,
+    pendingManualQa: undefined,
     result: undefined,
   };
 }
@@ -328,6 +407,7 @@ function finishCampaignLink(run, campaignRunId, status) {
       link.campaignRunId === campaignRunId ? { ...link, status } : link
     ),
     activeCampaign: undefined,
+    pendingManualQa: undefined,
   };
 }
 

@@ -25,8 +25,9 @@ describe("campaign dashboard data", () => {
       "mechanic-generation-campaign",
       "docs"
     );
-    const [dashboard, documentationIndex, commands] = await Promise.all([
+    const [dashboard, dashboardApp, documentationIndex, commands] = await Promise.all([
       readFile(path.join(dashboardRoot, "index.html"), "utf8"),
+      readFile(path.join(dashboardRoot, "app.js"), "utf8"),
       readFile(path.join(documentationRoot, "README.md"), "utf8"),
       readFile(path.join(documentationRoot, "commands.md"), "utf8"),
     ]);
@@ -39,6 +40,9 @@ describe("campaign dashboard data", () => {
     for (const command of [
       "validate",
       "run",
+      "review",
+      "approve",
+      "deny",
       "dashboard",
       "report",
       "publish",
@@ -58,6 +62,9 @@ describe("campaign dashboard data", () => {
       expect(commands).toContain(`npm run campaign -- loop ${command}`);
     }
     expect(dashboard).toContain('id="loops"');
+    expect(dashboard).toContain('id="manual-qa"');
+    expect(dashboardApp).toContain("Awaiting explicit verdict");
+    expect(dashboardApp).toContain("denialReason");
   });
 
   it("combines live campaigns with all legacy attempts and temporary fixes", async () => {
@@ -90,8 +97,30 @@ describe("campaign dashboard data", () => {
             providerCalls: { planning: 1, contract: 1, source: 1 },
             fixtureCalls: { planning: 0, contract: 0, source: 0 },
             durationMs: 1000,
+            manualQa: {
+              id: "manual-qa-a01-baseline",
+              path: "a01-baseline/manual-qa.json",
+              status: "approved",
+            },
           },
         ];
+      },
+      async readManualQa() {
+        return {
+          schemaVersion: "campaign-manual-qa/v1",
+          id: "manual-qa-a01-baseline",
+          campaignRunId: "campaign-1",
+          attemptId: "a01-baseline",
+          promptId: "baseline",
+          cohort: "discovery",
+          revisionKey: "revision-1",
+          status: "approved",
+          requestedAt: "2026-08-22T12:01:00.000Z",
+          decidedAt: "2026-08-22T12:05:00.000Z",
+          candidateArtifacts: [],
+          reviewSessions: [],
+          provenance: "campaign_review",
+        };
       },
     };
 
@@ -101,10 +130,92 @@ describe("campaign dashboard data", () => {
     expect(snapshot.legacyAttempts).toHaveLength(80);
     expect(snapshot.temporaryFixes).toHaveLength(32);
     expect(snapshot.stageSurvival.external_mechanic_probe).toBe(1);
+    expect(snapshot.manualQa).toMatchObject({
+      automatedCandidates: 0,
+      pending: 0,
+      approved: 1,
+      denied: 0,
+    });
     expect(snapshot.mechanics[0]).toMatchObject({
       manifestId: "p09-t17-projectile",
       discovery: "achieved",
       proven: false,
+    });
+  });
+
+  it("exposes pending candidates, approvals, denials, reasons, and review evidence", async () => {
+    const fakeStore = {
+      artifactRoot: path.join(repoRoot, ".qa", "mechanic-generation-campaign"),
+      async listRuns() {
+        return [
+          {
+            id: "campaign-pending",
+            manifestId: "p09-t17-projectile",
+            cohort: "repeatability",
+            status: "waiting_for_manual_qa",
+            createdAt: "2026-08-23T12:00:00.000Z",
+            providerModes: { planning: "actual", contract: "actual", source: "actual" },
+            revision: { revisionKey: "revision-1" },
+            model: "gpt-5.6-luna",
+          },
+        ];
+      },
+      async readAttempts() {
+        return [
+          {
+            id: "a01-baseline",
+            sequence: 1,
+            promptId: "baseline",
+            status: "awaiting_manual_qa",
+            furthestStage: "external_mechanic_probe",
+            classification: "awaiting_manual_qa",
+            providerCalls: { planning: 1, contract: 1, source: 1 },
+            manualQa: {
+              id: "manual-qa-a01-baseline",
+              path: "a01-baseline/manual-qa.json",
+              status: "pending",
+            },
+          },
+        ];
+      },
+      async readManualQa() {
+        return {
+          schemaVersion: "campaign-manual-qa/v1",
+          id: "manual-qa-a01-baseline",
+          campaignRunId: "campaign-pending",
+          attemptId: "a01-baseline",
+          promptId: "baseline",
+          cohort: "repeatability",
+          revisionKey: "revision-1",
+          status: "pending",
+          requestedAt: "2026-08-23T12:01:00.000Z",
+          candidateArtifacts: [],
+          reviewSessions: [
+            {
+              id: "review-1",
+              status: "ready",
+              runtimeReady: true,
+              providerCallsBlocked: 0,
+              artifacts: ["review-1-ready.png"],
+            },
+          ],
+          provenance: "campaign_review",
+        };
+      },
+    };
+
+    const snapshot = await buildDashboardSnapshot(repoRoot, fakeStore);
+
+    expect(snapshot.manualQa).toMatchObject({
+      automatedCandidates: 1,
+      pending: 1,
+      approved: 0,
+      denied: 0,
+    });
+    expect(snapshot.pendingManualReviews[0]).toMatchObject({
+      campaignRunId: "campaign-pending",
+      attemptId: "a01-baseline",
+      reviewSessions: [expect.objectContaining({ status: "ready" })],
     });
   });
 

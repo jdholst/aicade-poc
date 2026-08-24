@@ -1,7 +1,11 @@
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { parseCampaignAttempt, parseCampaignRun } from "./contracts.mjs";
+import {
+  parseCampaignAttempt,
+  parseCampaignManualQa,
+  parseCampaignRun,
+} from "./contracts.mjs";
 import { redactSensitive } from "./redaction.mjs";
 
 export function createCampaignStore(repoRoot) {
@@ -93,6 +97,42 @@ export function createCampaignStore(repoRoot) {
       }
       return attempts.sort((left, right) => left.sequence - right.sequence);
     },
+    async readAttempt(campaignRunId, attemptId) {
+      return parseCampaignAttempt(
+        JSON.parse(
+          await readFile(
+            path.join(
+              safeChild(safeChild(artifactRoot, campaignRunId), attemptId),
+              "attempt.json"
+            ),
+            "utf8"
+          )
+        )
+      );
+    },
+    async writeManualQa(manualQaInput) {
+      const manualQa = parseCampaignManualQa(manualQaInput);
+      const directory = safeChild(
+        safeChild(artifactRoot, manualQa.campaignRunId),
+        manualQa.attemptId
+      );
+      await mkdir(directory, { recursive: true });
+      await writeJsonAtomic(path.join(directory, "manual-qa.json"), manualQa);
+      return manualQa;
+    },
+    async readManualQa(campaignRunId, attemptId) {
+      return parseCampaignManualQa(
+        JSON.parse(
+          await readFile(
+            path.join(
+              safeChild(safeChild(artifactRoot, campaignRunId), attemptId),
+              "manual-qa.json"
+            ),
+            "utf8"
+          )
+        )
+      );
+    },
     async listRuns() {
       let entries;
       try {
@@ -147,6 +187,11 @@ export function createCampaignStore(repoRoot) {
         providerModes: run.providerModes,
         revision: run.revision,
         result: run.result,
+        manualQa: {
+          pending: attempts.filter(({ manualQa }) => manualQa?.status === "pending").length,
+          approved: attempts.filter(({ manualQa }) => manualQa?.status === "approved").length,
+          denied: attempts.filter(({ manualQa }) => manualQa?.status === "denied").length,
+        },
         attempts: attempts.map((attempt) => ({
           id: attempt.id,
           sequence: attempt.sequence,
@@ -161,6 +206,8 @@ export function createCampaignStore(repoRoot) {
           externalProbePassed: attempt.externalProbePassed,
           recordedOutcome: attempt.recordedOutcome,
           adjudicatedOutcome: attempt.adjudicatedOutcome,
+          automatedOutcome: attempt.automatedOutcome,
+          manualQa: attempt.manualQa,
           temporaryFixIds: attempt.temporaryFixIds,
           cost: attempt.cost,
           source: `.qa/mechanic-generation-campaign/${run.id}/${attempt.id}/attempt.json`,
@@ -195,4 +242,3 @@ function safeEvidenceFileName(fileName) {
   }
   return fileName;
 }
-

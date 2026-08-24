@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { runCampaign } from "./lib/browser-runner.mjs";
 import { createCampaignStore } from "./lib/campaign-store.mjs";
+import { createCampaignLoopStore } from "./lib/loop-store.mjs";
 import { startDashboardServer } from "./lib/dashboard-server.mjs";
 import {
   importLegacyAttemptReports,
@@ -17,9 +18,15 @@ import {
 } from "./lib/manifest-loader.mjs";
 import { createAttemptSchedule, resolveProviderModes } from "./lib/runner-policy.mjs";
 import { handleLoopCommand } from "./lib/loop-cli.mjs";
+import {
+  approveCampaignAttempt,
+  denyCampaignAttempt,
+} from "./lib/manual-qa.mjs";
+import { runCampaignReview } from "./lib/review-runner.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const store = createCampaignStore(repoRoot);
+const loopStore = createCampaignLoopStore(repoRoot);
 
 await main(process.argv.slice(2));
 
@@ -62,9 +69,15 @@ async function main(args) {
     const actualStages = Object.entries(providerModes)
       .filter(([, mode]) => mode === "actual")
       .map(([stage]) => stage);
-    const authorized =
+    const resume = takeOption(args, "--resume");
+    let authorized =
       takeFlag(args, "--authorize-actual") ||
       process.env.AICADE_CAMPAIGN_ACTUAL_AUTHORIZED === "1";
+    if (resume && !authorized) {
+      await store.initialize();
+      const existingRun = await store.readRun(resume);
+      authorized = existingRun.authorization.actualProviders;
+    }
     if (actualStages.length > 0 && !authorized) {
       throw new Error(
         `Campaign can submit ${schedule.length} prompt(s) with actual stages ${actualStages.join(", ")}. Re-run with --authorize-actual after campaign-level authorization.`
@@ -81,16 +94,76 @@ async function main(args) {
       providerModes,
       baseUrl: takeOption(args, "--base-url"),
       headed: takeFlag(args, "--headed"),
-      resume: takeOption(args, "--resume"),
+      resume,
       port: numberOption(args, "--port", 3117),
       attemptTimeoutMs: numberOption(
         args,
         "--attempt-timeout-ms",
         Number(process.env.AICADE_CAMPAIGN_ATTEMPT_TIMEOUT_MS ?? 300_000)
       ),
+      actualProviderAuthorized: authorized,
     });
     assertNoArguments(args);
     printRunSummary(result.run, result.attempts);
+    return;
+  }
+
+  if (command === "review") {
+    const campaignRunId = requiredOption(args, "--campaign");
+    const port = numberOption(args, "--port", 3117);
+    assertNoArguments(args);
+    await loopStore.initialize();
+    await runCampaignReview({
+      repoRoot,
+      store,
+      loopStore,
+      campaignRunId,
+      port,
+      headed: true,
+    });
+    return;
+  }
+
+  if (command === "approve") {
+    const campaignRunId = requiredOption(args, "--campaign");
+    const attemptId = requiredOption(args, "--attempt");
+    const note = takeOption(args, "--note");
+    assertNoArguments(args);
+    await Promise.all([store.initialize(), loopStore.initialize()]);
+    const result = await approveCampaignAttempt({
+      store,
+      loopStore,
+      campaignRunId,
+      attemptId,
+      note,
+    });
+    console.log(`APPROVED ${result.manualQa.id}`);
+    console.log(
+      result.run.loopId
+        ? `Resume loop: npm run campaign -- loop resume --id ${result.run.loopId}`
+        : `Resume campaign: npm run campaign -- run --manifest ${result.run.manifestPath} --cohort ${result.run.cohort} --provider-modes ${formatProviderModes(result.run.providerModes)} --resume ${result.run.id}`
+    );
+    return;
+  }
+
+  if (command === "deny") {
+    const campaignRunId = requiredOption(args, "--campaign");
+    const attemptId = requiredOption(args, "--attempt");
+    const reason = requiredOption(args, "--reason");
+    assertNoArguments(args);
+    await Promise.all([store.initialize(), loopStore.initialize()]);
+    const result = await denyCampaignAttempt({
+      store,
+      loopStore,
+      campaignRunId,
+      attemptId,
+      reason,
+    });
+    console.log(`DENIED ${result.manualQa.id}`);
+    console.log(`Reason: ${result.manualQa.denialReason}`);
+    if (result.loopRun) {
+      console.log(`Loop status: ${result.loopRun.status}`);
+    }
     return;
   }
 
@@ -225,7 +298,7 @@ function assertNoArguments(args) {
 }
 
 function formatProviderModes(modes) {
-  return Object.entries(modes).map(([stage, mode]) => `${stage}=${mode}`).join(", ");
+  return Object.entries(modes).map(([stage, mode]) => `${stage}=${mode}`).join(",");
 }
 
 function printRunSummary(run, attempts) {
@@ -237,6 +310,10 @@ function printRunSummary(run, attempts) {
     console.log(
       `${attempt.id}: ${attempt.status} at ${attempt.furthestStage} (${formatProviderModes(attempt.providerModes)})`
     );
+  }
+  if (run.pendingManualQa) {
+    console.log(`Pending manual QA: ${run.pendingManualQa.attemptId}`);
+    console.log(`Review: npm run campaign -- review --campaign ${run.id}`);
   }
 }
 
@@ -253,6 +330,9 @@ function printHelp() {
 Usage:
   npm run campaign -- validate --manifest <id-or-path> [--structure-only]
   npm run campaign -- run --manifest <id-or-path> --cohort <discovery|isolation|repeatability|variation> [options]
+  npm run campaign -- review --campaign <run-id> [--port 3117]
+  npm run campaign -- approve --campaign <run-id> --attempt <attempt-id> [--note <text>]
+  npm run campaign -- deny --campaign <run-id> --attempt <attempt-id> --reason <text>
   npm run campaign -- dashboard [--port 4310]
   npm run campaign -- report --campaign <run-id>
   npm run campaign -- publish --campaign <run-id>

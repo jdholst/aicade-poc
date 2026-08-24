@@ -32,6 +32,7 @@ function render() {
   renderSummary(campaigns, attempts);
   renderLoops();
   renderMechanics();
+  renderManualQa(attempts);
   renderStages(attempts);
   renderFailures(attempts);
   renderCampaigns(campaigns);
@@ -42,7 +43,8 @@ function render() {
 }
 
 function renderSummary(campaigns, attempts) {
-  const successes = attempts.filter(({ status }) => status === "success").length;
+  const successes = attempts.filter(isManuallyApprovedSuccess).length;
+  const candidates = attempts.filter(({ status }) => status === "awaiting_manual_qa").length;
   const activeFixes = snapshot.temporaryFixes.filter(({ state }) => state === "active").length;
   const actualCalls = attempts.reduce((sum, attempt) =>
     sum + Object.values(attempt.providerCalls ?? {}).reduce((value, count) => value + count, 0), 0);
@@ -50,11 +52,36 @@ function renderSummary(campaigns, attempts) {
   document.querySelector("#summary").innerHTML = [
     stat("Loops", snapshot.loops.length, `${snapshot.loops.filter(({ status }) => status === "achieved").length} achieved`),
     stat("Campaigns", campaigns.length, `${campaigns.filter(({ status }) => status === "achieved").length} achieved`),
-    stat("Submissions", attempts.length, `${successes} externally verified`),
+    stat("Submissions", attempts.length, `${successes} manually approved · ${candidates} pending`),
     stat("Actual calls", actualCalls, "Planning + contract + source"),
     stat("Known cost", `$${knownCost.toFixed(3)}`, "Unknown cost excluded"),
     stat("Temporary fixes", activeFixes, `${snapshot.temporaryFixes.length - activeFixes} retired`),
   ].join("");
+}
+
+function renderManualQa(attempts) {
+  const reviewed = attempts.filter(({ manualQaEvidence, manualQa }) => manualQaEvidence || manualQa);
+  document.querySelector("#manual-qa").innerHTML = reviewed.map((attempt) => {
+    const evidence = attempt.manualQaEvidence;
+    const status = evidence?.status ?? attempt.manualQa.status;
+    const reason = evidence?.denialReason;
+    const note = evidence?.approvalNote;
+    const sessions = evidence?.reviewSessions ?? [];
+    const evidenceLinks = [
+      `<a href="/artifacts/${encodeURIComponent(attempt.campaignRunId)}/${encodeURIComponent(attempt.id)}/manual-qa.json" target="_blank">manual-qa.json</a>`,
+      ...sessions.flatMap((session) => (session.artifacts ?? []).map((file) =>
+        `<a href="/artifacts/${encodeURIComponent(attempt.campaignRunId)}/${encodeURIComponent(attempt.id)}/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a>`
+      )),
+    ].join(" · ");
+    return `<tr>
+      <td><strong>${escapeHtml(attempt.id)}</strong><br><small>${escapeHtml(attempt.campaignRunId)}</small></td>
+      <td>${escapeHtml(attempt.cohort ?? evidence?.cohort ?? "unknown")}<br><small>${escapeHtml(attempt.promptId)}</small></td>
+      <td><span class="badge ${status}">${escapeHtml(status)}</span></td>
+      <td>${reason ? `<strong>Denied</strong><br><small>${escapeHtml(reason)}</small>` : note ? `<strong>Approved</strong><br><small>${escapeHtml(note)}</small>` : status === "approved" ? "Approved" : "Awaiting explicit verdict"}</td>
+      <td>${sessions.map((session) => `${escapeHtml(session.id)} · ${escapeHtml(session.status)}${session.runtimeReady ? " · ready" : ""}`).join("<br>") || "Not opened"}</td>
+      <td>${evidenceLinks}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6">${empty("No manual gameplay reviews yet.")}</td></tr>`;
 }
 
 function renderLoops() {
@@ -111,7 +138,7 @@ function renderStages(attempts) {
 }
 
 function renderFailures(attempts) {
-  const counts = attempts.filter(({ status }) => status !== "success").reduce((result, attempt) => {
+  const counts = attempts.filter(({ status }) => !["success", "awaiting_manual_qa"].includes(status)).reduce((result, attempt) => {
     result[attempt.classification ?? "unknown"] = (result[attempt.classification ?? "unknown"] ?? 0) + 1;
     return result;
   }, {});
@@ -130,8 +157,9 @@ function renderCampaigns(campaigns) {
 
 function renderAttempts(attempts) {
   document.querySelector("#attempts").innerHTML = attempts.map((attempt) => {
-    const links = (attempt.artifacts ?? []).slice(0, 4).map((file) => `<a href="/artifacts/${encodeURIComponent(attempt.campaignRunId)}/${encodeURIComponent(attempt.id)}/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a>`).join(" · ");
-    return `<tr><td><strong>${escapeHtml(attempt.id)}</strong><br><small>${escapeHtml(attempt.campaignRunId)}</small></td><td>${escapeHtml(attempt.promptId)}</td><td><span class="badge ${attempt.status}">${escapeHtml(attempt.status)}</span></td><td>${escapeHtml(humanize(attempt.furthestStage))}</td><td>${escapeHtml(humanize(attempt.classification))}${attempt.failure ? `<br><small>${escapeHtml(attempt.failure)}</small>` : ""}</td><td>${formatDuration(attempt.durationMs)}</td><td>${links || "—"}</td></tr>`;
+    const links = (attempt.artifacts ?? []).map((file) => `<a href="/artifacts/${encodeURIComponent(attempt.campaignRunId)}/${encodeURIComponent(attempt.id)}/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a>`).join(" · ");
+    const manualStatus = attempt.manualQaEvidence?.status ?? attempt.manualQa?.status;
+    return `<tr><td><strong>${escapeHtml(attempt.id)}</strong><br><small>${escapeHtml(attempt.campaignRunId)}</small></td><td>${escapeHtml(attempt.promptId)}</td><td><span class="badge ${attempt.status}">${escapeHtml(attempt.status)}</span>${manualStatus ? `<br><small>manual QA: ${escapeHtml(manualStatus)}</small>` : ""}</td><td>${escapeHtml(humanize(attempt.furthestStage))}</td><td>${escapeHtml(humanize(attempt.classification))}${attempt.failure ? `<br><small>${escapeHtml(attempt.failure)}</small>` : ""}</td><td>${formatDuration(attempt.durationMs)}</td><td>${links || "—"}</td></tr>`;
   }).join("") || `<tr><td colspan="7">${empty("No attempts in this selection.")}</td></tr>`;
 }
 
@@ -185,6 +213,7 @@ function humanize(value = "") { return value.replaceAll("_", " ").replaceAll("-"
 function formatDuration(ms = 0) { return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`; }
 function stageCounts(counts = {}) { return ["planning", "contract", "source"].map((stage) => `${stage[0].toUpperCase()}:${counts[stage] ?? 0}`).join(" "); }
 function empty(message) { return `<p class="empty">${escapeHtml(message)}</p>`; }
+function isManuallyApprovedSuccess(attempt) { return attempt.status === "success" && (attempt.manualQaEvidence?.status ?? attempt.manualQa?.status) === "approved"; }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]); }
 
 await refresh();

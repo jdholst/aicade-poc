@@ -3,6 +3,7 @@ import { z } from "zod";
 export const CAMPAIGN_MANIFEST_SCHEMA_VERSION = "campaign-manifest/v1";
 export const CAMPAIGN_RUN_SCHEMA_VERSION = "campaign-run/v1";
 export const CAMPAIGN_ATTEMPT_SCHEMA_VERSION = "campaign-attempt/v1";
+export const CAMPAIGN_MANUAL_QA_SCHEMA_VERSION = "campaign-manual-qa/v1";
 
 export const CAMPAIGN_COHORTS = [
   "discovery",
@@ -64,6 +65,125 @@ const fixtureReferenceSchema = z
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strict();
+
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const manualQaStatusSchema = z.enum(["pending", "approved", "denied"]);
+
+export const manualQaReferenceSchema = z
+  .object({
+    id: z.string().min(1),
+    path: z.string().trim().min(1),
+    status: manualQaStatusSchema,
+  })
+  .strict();
+
+export const pendingManualQaSchema = z
+  .object({
+    manualQaId: z.string().min(1),
+    campaignRunId: z.string().min(1),
+    attemptId: z.string().min(1),
+    promptId: z.string().min(1),
+    cohort: z.enum(CAMPAIGN_COHORTS),
+    revisionKey: z.string().min(1),
+    requestedAt: z.string().datetime(),
+    evidencePath: z.string().trim().min(1),
+  })
+  .strict();
+
+const candidateArtifactSchema = z
+  .object({
+    kind: z.enum(["generation_run", "game_pack"]),
+    path: z.string().trim().min(1),
+    sha256: sha256Schema,
+  })
+  .strict();
+
+const reviewSessionSchema = z
+  .object({
+    id: z.string().min(1),
+    status: z.enum([
+      "starting",
+      "ready",
+      "interrupted",
+      "runtime_failure",
+      "completed",
+    ]),
+    startedAt: z.string().datetime(),
+    readyAt: z.string().datetime().optional(),
+    completedAt: z.string().datetime().optional(),
+    runtimeReady: z.boolean(),
+    providerCallsBlocked: z.number().int().nonnegative(),
+    artifacts: z.array(z.string().trim().min(1)),
+    failure: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+export const campaignManualQaSchema = z
+  .object({
+    schemaVersion: z.literal(CAMPAIGN_MANUAL_QA_SCHEMA_VERSION),
+    id: z.string().min(1),
+    campaignRunId: z.string().min(1),
+    attemptId: z.string().min(1),
+    promptId: z.string().min(1),
+    cohort: z.enum(CAMPAIGN_COHORTS),
+    revisionKey: z.string().min(1),
+    status: manualQaStatusSchema,
+    requestedAt: z.string().datetime(),
+    decidedAt: z.string().datetime().optional(),
+    candidateArtifacts: z.array(candidateArtifactSchema).length(2),
+    reviewSessions: z.array(reviewSessionSchema),
+    approvalNote: z.string().trim().min(1).optional(),
+    denialReason: z.string().trim().min(1).optional(),
+    provenance: z.enum(["campaign_review", "legacy_assumed"]).default("campaign_review"),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    const kinds = record.candidateArtifacts.map(({ kind }) => kind);
+    for (const requiredKind of ["generation_run", "game_pack"]) {
+      if (kinds.filter((kind) => kind === requiredKind).length !== 1) {
+        context.addIssue({
+          code: "custom",
+          path: ["candidateArtifacts"],
+          message: `Manual QA requires exactly one ${requiredKind} artifact.`,
+        });
+      }
+    }
+    if (record.status === "pending" && record.decidedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["decidedAt"],
+        message: "Pending manual QA cannot have a decision timestamp.",
+      });
+    }
+    if (record.status !== "pending" && !record.decidedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["decidedAt"],
+        message: "A manual QA decision requires a decision timestamp.",
+      });
+    }
+    if (record.status === "denied" && !record.denialReason) {
+      context.addIssue({
+        code: "custom",
+        path: ["denialReason"],
+        message: "A manual QA denial requires a denial reason.",
+      });
+    }
+    if (record.status !== "denied" && record.denialReason) {
+      context.addIssue({
+        code: "custom",
+        path: ["denialReason"],
+        message: "Only denied manual QA may include a denial reason.",
+      });
+    }
+    if (record.status !== "approved" && record.approvalNote) {
+      context.addIssue({
+        code: "custom",
+        path: ["approvalNote"],
+        message: "Only approved manual QA may include an approval note.",
+      });
+    }
+  });
 
 export const campaignManifestSchema = z
   .object({
@@ -192,10 +312,12 @@ export const campaignAttemptSchema = z
     id: z.string().min(1),
     campaignRunId: z.string().min(1),
     sequence: z.number().int().positive(),
+    cohort: z.enum(CAMPAIGN_COHORTS),
     promptId: z.string().min(1),
     prompt: z.string(),
     status: z.enum([
       "success",
+      "awaiting_manual_qa",
       "pipeline_failure",
       "mechanic_incorrect",
       "infrastructure_failure",
@@ -227,8 +349,16 @@ export const campaignAttemptSchema = z
     revisionKey: z.string().min(1),
     pipelinePassed: z.boolean(),
     externalProbePassed: z.boolean(),
+    automatedOutcome: z
+      .object({
+        status: z.enum(["passed", "failed"]),
+        terminalOutcome: z.string().min(1),
+        recordedAt: z.string().datetime(),
+      })
+      .strict(),
     recordedOutcome: z.string().min(1),
     adjudicatedOutcome: z.string().min(1).optional(),
+    manualQa: manualQaReferenceSchema.optional(),
     artifacts: z.array(z.string()),
     temporaryFixIds: z.array(z.string().regex(/^TF-\d+$/)),
     cost: z
@@ -239,7 +369,53 @@ export const campaignAttemptSchema = z
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((attempt, context) => {
+    const isFullActual = Object.values(attempt.providerModes).every(
+      (mode) => mode === "actual"
+    );
+    const isProofCohort = ["discovery", "repeatability", "variation"].includes(
+      attempt.cohort
+    );
+    if (attempt.status === "awaiting_manual_qa") {
+      if (attempt.manualQa?.status !== "pending") {
+        context.addIssue({
+          code: "custom",
+          path: ["manualQa"],
+          message: "An awaiting_manual_qa attempt requires pending manual QA evidence.",
+        });
+      }
+      if (attempt.automatedOutcome.status !== "passed") {
+        context.addIssue({
+          code: "custom",
+          path: ["automatedOutcome"],
+          message: "Only an automated pass may await manual QA.",
+        });
+      }
+    }
+    if (
+      attempt.status === "success" &&
+      isFullActual &&
+      isProofCohort &&
+      attempt.manualQa?.status !== "approved"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["manualQa"],
+        message: "A full-actual proof success requires approved manual QA evidence.",
+      });
+    }
+    if (
+      attempt.classification === "manual_qa_rejected" &&
+      attempt.manualQa?.status !== "denied"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["manualQa"],
+        message: "A manual QA rejection requires denied evidence.",
+      });
+    }
+  });
 
 export const campaignRunSchema = z
   .object({
@@ -252,6 +428,7 @@ export const campaignRunSchema = z
     status: z.enum([
       "pending",
       "running",
+      "waiting_for_manual_qa",
       "interrupted",
       "achieved",
       "completed_not_achieved",
@@ -276,6 +453,13 @@ export const campaignRunSchema = z
       })
       .strict(),
     baseUrl: z.string().url(),
+    authorization: z
+      .object({
+        actualProviders: z.boolean(),
+        authorizedAt: z.string().datetime(),
+      })
+      .strict(),
+    pendingManualQa: pendingManualQaSchema.optional(),
     result: z
       .object({
         successes: z.number().int().nonnegative(),
@@ -288,7 +472,23 @@ export const campaignRunSchema = z
       .optional(),
     invalidReason: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((run, context) => {
+    if (run.status === "waiting_for_manual_qa" && !run.pendingManualQa) {
+      context.addIssue({
+        code: "custom",
+        path: ["pendingManualQa"],
+        message: "A campaign waiting for manual QA requires a pending manual QA reference.",
+      });
+    }
+    if (run.status !== "waiting_for_manual_qa" && run.pendingManualQa) {
+      context.addIssue({
+        code: "custom",
+        path: ["pendingManualQa"],
+        message: "Pending manual QA is allowed only while the campaign is waiting for manual QA.",
+      });
+    }
+  });
 
 export function parseCampaignManifest(input) {
   return campaignManifestSchema.parse(input);
@@ -302,20 +502,39 @@ export function parseCampaignRun(input) {
   return campaignRunSchema.parse(input);
 }
 
+export function parseCampaignManualQa(input) {
+  return campaignManualQaSchema.parse(input);
+}
+
 export function isFullActualSuccess(attempt) {
   return (
     attempt.status === "success" &&
     attempt.pipelinePassed === true &&
     attempt.externalProbePassed === true &&
+    attempt.manualQa?.status === "approved" &&
     Object.values(attempt.providerModes).every((mode) => mode === "actual")
   );
 }
 
 export function isDiagnosticSuccess(attempt) {
   return (
-    attempt.status === "success" &&
+    ["success", "awaiting_manual_qa"].includes(attempt.status) &&
     attempt.pipelinePassed === true &&
     attempt.externalProbePassed === true
+  );
+}
+
+export function requiresManualQa({
+  cohort,
+  providerModes,
+  pipelinePassed,
+  externalProbePassed,
+}) {
+  return (
+    ["discovery", "repeatability", "variation"].includes(cohort) &&
+    Object.values(providerModes).every((mode) => mode === "actual") &&
+    pipelinePassed === true &&
+    externalProbePassed === true
   );
 }
 
@@ -326,16 +545,25 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
   );
   const successes = attempts.filter(isFullActualSuccess).length;
   const diagnosticSuccesses = attempts.filter(isDiagnosticSuccess).length;
+  const automatedCandidates = attempts.filter(
+    (attempt) => attempt.status === "awaiting_manual_qa"
+  ).length;
   const submissions = attempts.length;
   const result = {
     cohort,
     status: "running",
     successes,
     diagnosticSuccesses,
+    automatedCandidates,
     submissions,
     qualifiesForMechanicProof: false,
     missingSuccessfulPromptIds: [],
   };
+
+  if (automatedCandidates > 0) {
+    result.status = "waiting_for_manual_qa";
+    return result;
+  }
 
   if (cohort === "discovery") {
     result.qualifiesForMechanicProof = successes >= 1;

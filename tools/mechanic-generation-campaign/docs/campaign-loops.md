@@ -8,6 +8,7 @@ Loop success and mechanic proof are different:
 - The mechanic is proven only when discovery, repeatability, and variation pass on the same final revision, model, and all-actual provider configuration.
 - Successes from separate campaign runs are never pooled.
 - Isolation never contributes to proof.
+- Every automated full-actual proof success pauses at `waiting_for_manual_qa`. Only explicit approval advances the submission or cohort.
 
 ## Definition contract
 
@@ -74,6 +75,8 @@ Dependencies and build output are never copied from the control checkout. If ins
 
 ## Failure and fix flow
 
+When a full-actual proof submission passes the automated pipeline and external probe, the loop preserves that active campaign and pauses at `waiting_for_manual_qa`. Run the review command, let the user inspect the live exact output, and record an explicit approval or denial. Approval resumes the same campaign without consuming another campaign, submission, provider-call, or fix-cycle unit. Denial records `manual_qa_rejected` and moves directly to `waiting_for_fix` without a same-revision retry.
+
 When a campaign fails, the loop checks only that campaign's failed attempts. It starts another campaign on the same revision only when every failure classification is listed by the current step and its same-revision run limit remains.
 
 Otherwise the loop enters `waiting_for_fix`. The agent may run an authorized isolation profile, then work only inside the loop worktree. A fix report must describe one clean committed revision and list passing verification. A temporary fix must also update the canonical temporary-fix ledger. The CLI verifies the report against Git before accepting it.
@@ -87,5 +90,6 @@ Every accepted fix creates a new revision cycle. All sequence steps reset to pen
 - `invalid`: frozen criteria or the worktree identity changed outside the protocol.
 - `blocked`: no safe verified in-scope pipeline fix could be produced.
 - `interrupted`: execution stopped unexpectedly and can be resumed on the same clean revision.
+- `waiting_for_manual_qa`: the exact playable candidate is ready for an explicit human verdict. This state has no timeout.
 
 The loop branch and worktree remain after every terminal state. Execution worktrees live in an adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` directory rather than beneath the control checkout, which prevents nested package roots from changing Next.js build behavior. Evidence remains in the control checkout's ignored `.qa/mechanic-generation-campaign/` directory. Review and merge worktree branches manually if appropriate.

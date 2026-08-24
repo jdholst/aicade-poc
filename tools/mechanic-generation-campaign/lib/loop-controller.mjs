@@ -136,6 +136,11 @@ export async function resumeCampaignLoop({
   if (["achieved", "blocked", "exhausted", "invalid"].includes(run.status)) {
     throw new Error(`Campaign loop ${loopId} is terminal with status ${run.status}.`);
   }
+  if (run.status === "waiting_for_manual_qa") {
+    throw new Error(
+      `Campaign loop ${loopId} is waiting for manual QA. Approve or deny the pending candidate before resuming.`
+    );
+  }
   let loaded;
   try {
     loaded = await reloadFrozenLoop({ repoRoot, run, environment });
@@ -564,6 +569,7 @@ async function executeSequence({
         campaignRunId,
         status: result.run.status,
         attempts: result.attempts,
+        pendingManualQa: result.run.pendingManualQa,
       });
       await loopStore.writeRun(state.run);
     } catch (error) {

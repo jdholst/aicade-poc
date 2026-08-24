@@ -37,6 +37,25 @@ describe("legacy campaign evidence import", () => {
     });
   });
 
+  it("marks historical recorded successes as manually approved with legacy provenance", async () => {
+    const attempts = await importLegacyAttemptReports(repoRoot);
+    const approved = attempts.filter(
+      ({ manualQa }) => manualQa?.status === "approved"
+    );
+
+    expect(approved).toHaveLength(3);
+    expect(
+      approved.every(
+        ({ manualQa }) => manualQa.provenance === "legacy_assumed"
+      )
+    ).toBe(true);
+    expect(
+      attempts
+        .filter(({ manualQa }) => manualQa?.status !== "approved")
+        .every(({ manualQa }) => manualQa?.status === "not_applicable")
+    ).toBe(true);
+  });
+
   it("normalizes all 32 temporary fixes without dropping replacement metadata", async () => {
     const fixes = await parseTemporaryFixLedger(repoRoot);
 

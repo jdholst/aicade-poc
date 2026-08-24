@@ -101,14 +101,25 @@ function parseAttemptSections(markdown, sourcePath) {
       fixResult,
     ].filter(Boolean).length;
 
+    const recordedOutcome =
+      getField(fields, "terminal outcome") ??
+      getField(fields, "result") ??
+      heading.replace(/^Attempt \d+\s*[—-]?\s*/i, "").trim();
     attempts.push({
       schemaVersion: "legacy-campaign-attempt/v1",
       id: `legacy:${sourceSlug}:a${String(attemptNumber).padStart(2, "0")}`,
       attemptNumber,
-      recordedOutcome:
-        getField(fields, "terminal outcome") ??
-        getField(fields, "result") ??
-        heading.replace(/^Attempt \d+\s*[—-]?\s*/i, "").trim(),
+      recordedOutcome,
+      manualQa: isRecordedLegacySuccess(recordedOutcome)
+        ? {
+            status: "approved",
+            provenance: "legacy_assumed",
+            note: "Imported successful evidence predates the campaign harness and is treated as manually reviewed.",
+          }
+        : {
+            status: "not_applicable",
+            provenance: "legacy_import",
+          },
       furthestStage,
       classification,
       failure,
@@ -131,6 +142,15 @@ function parseAttemptSections(markdown, sourcePath) {
   }
 
   return attempts;
+}
+
+function isRecordedLegacySuccess(outcome) {
+  return (
+    !/failed|failure|not accepted|not playable/i.test(outcome) &&
+    /succeeded|accepted and visibly playable|successful generated-mechanic project acceptance/i.test(
+      outcome
+    )
+  );
 }
 
 function applyAdjudications(markdown, sourcePath, attempts) {

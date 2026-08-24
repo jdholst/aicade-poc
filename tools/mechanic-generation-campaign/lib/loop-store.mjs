@@ -132,6 +132,11 @@ export function createCampaignLoopStore(repoRoot) {
         branch: run.worktree.branch,
         steps: run.steps,
         campaignLinks: run.campaignLinks,
+        manualQa: {
+          pending: run.status === "waiting_for_manual_qa" ? 1 : 0,
+          pendingReview: run.pendingManualQa,
+        },
+        pendingManualQa: run.pendingManualQa,
         fixes: fixes.map((fix) => ({
           id: fix.id,
           triggerCampaignRunId: fix.triggerCampaignRunId,

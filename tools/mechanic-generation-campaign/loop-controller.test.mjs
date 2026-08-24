@@ -17,6 +17,7 @@ import {
 import { createCampaignLoopStore } from "./lib/loop-store.mjs";
 import { inspectRevision } from "./lib/revision.mjs";
 import { createAttemptSchedule } from "./lib/runner-policy.mjs";
+import { resumeLoopAfterManualQaApproval } from "./lib/loop-state.mjs";
 
 const execFileAsync = promisify(execFile);
 const temporaryDirectories = [];
@@ -30,6 +31,105 @@ afterEach(async () => {
 });
 
 describe("campaign loop controller", () => {
+  it("pauses on an automated candidate and resumes the same campaign only after approval", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    let call = 0;
+    const runCampaignFn = async (input) => {
+      call += 1;
+      if (call === 1) {
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        return {
+          run: {
+            id: input.runId,
+            status: "waiting_for_manual_qa",
+            pendingManualQa: {
+              manualQaId: "manual-qa-a1",
+              campaignRunId: input.runId,
+              attemptId: "a1",
+              promptId: "baseline",
+              cohort: "discovery",
+              revisionKey: validation.revision.revisionKey,
+              requestedAt: "2026-08-23T15:01:00.000Z",
+              evidencePath: "a1/manual-qa.json",
+            },
+          },
+          attempts: [
+            {
+              id: "a1",
+              status: "awaiting_manual_qa",
+              classification: "awaiting_manual_qa",
+            },
+          ],
+        };
+      }
+      return {
+        run: { id: input.runId, status: "achieved" },
+        attempts: [{ id: "a1", status: "success", classification: "success", manualQa: { status: "approved" } }],
+      };
+    };
+    const inspectWorktreeFn = async ({ path: worktreePath, branch }) => ({
+      path: worktreePath,
+      branch,
+      head: fixture.head,
+      revisionKey: validation.revision.revisionKey,
+      dirty: false,
+      statusEntries: [],
+    });
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn,
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn,
+      now: () => new Date("2026-08-23T15:00:00.000Z"),
+    });
+
+    expect(started.run.status).toBe("waiting_for_manual_qa");
+    expect(started.run.activeCampaign?.campaignRunId).toBe(
+      started.run.pendingManualQa.campaignRunId
+    );
+    await expect(
+      resumeCampaignLoop({
+        repoRoot: fixture.repoRoot,
+        loopId: started.run.id,
+        loopStore,
+        campaignStore,
+        runCampaignFn,
+        inspectWorktreeFn,
+      })
+    ).rejects.toThrow(/approve or deny/i);
+
+    await loopStore.writeRun(
+      resumeLoopAfterManualQaApproval(started.run, {
+        campaignRunId: started.run.pendingManualQa.campaignRunId,
+      })
+    );
+    const resumed = await resumeCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      loopStore,
+      campaignStore,
+      runCampaignFn,
+      inspectWorktreeFn,
+    });
+
+    expect(resumed.run.status).toBe("achieved");
+    expect(resumed.run.usage.submissions).toBe(1);
+    expect(resumed.run.usage.campaignRuns).toBe(1);
+  });
+
   it("proves one mechanic through discovery, repeatability, and variation on one revision", async () => {
     const fixture = await createRepositoryFixture();
     let campaignNumber = 0;
@@ -52,6 +152,7 @@ describe("campaign loop controller", () => {
           id: `a${scheduled.sequence}`,
           status: "success",
           classification: "success",
+          manualQa: { status: "approved" },
         });
       }
       return {
@@ -131,6 +232,7 @@ describe("campaign loop controller", () => {
             id: "a1",
             status: succeeded ? "success" : "pipeline_failure",
             classification: succeeded ? "success" : "pipeline_failure",
+            ...(succeeded ? { manualQa: { status: "approved" } } : {}),
           },
         ],
       };

@@ -162,6 +162,14 @@ export function printLoopSummary(run) {
     console.log(`Sequence achieved: ${run.result.sequenceAchieved}`);
     console.log(`Mechanic proven: ${run.result.mechanicProven}`);
   }
+  if (run.pendingManualQa) {
+    console.log(
+      `Pending manual QA: ${run.pendingManualQa.campaignRunId}/${run.pendingManualQa.attemptId}`
+    );
+    console.log(
+      `Review: npm run campaign -- review --campaign ${run.pendingManualQa.campaignRunId}`
+    );
+  }
   if (run.invalidReason) console.log(`Invalid: ${run.invalidReason}`);
   if (run.blockedReason) console.log(`Blocked: ${run.blockedReason}`);
   if (run.exhaustionReason) console.log(`Exhausted: ${run.exhaustionReason}`);

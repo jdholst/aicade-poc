@@ -39,10 +39,10 @@ main { width: min(1600px, 94vw); margin: 2rem auto 5rem; display: grid; gap: 1.2
 .proof-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin-top: .8rem; }
 .proof-row span { border: 1px solid var(--line); padding: .45rem; color: var(--muted); font-size: .75rem; text-align: center; }
 .badge { display: inline-block; border: 1px solid currentColor; padding: .14rem .42rem; font-size: .68rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.achieved, .success, .active-proof { color: var(--green); }
-.running, .partial { color: var(--amber); }
-.invalid, .pipeline_failure, .infrastructure_failure, .mechanic_incorrect { color: var(--red); }
-.retired, .narrative_only, .missing { color: var(--muted); }
+.achieved, .success, .approved, .active-proof { color: var(--green); }
+.running, .partial, .pending, .awaiting_manual_qa, .waiting_for_manual_qa, .waiting_for_fix { color: var(--amber); }
+.invalid, .denied, .pipeline_failure, .infrastructure_failure, .mechanic_incorrect { color: var(--red); }
+.retired, .automated_only, .narrative_only, .missing { color: var(--muted); }
 .stage-list { display: grid; gap: .45rem; }
 .stage { display: grid; grid-template-columns: minmax(150px, 1fr) 4fr 2rem; gap: .7rem; align-items: center; }
 .bar { height: .55rem; background: #0b1216; border: 1px solid var(--line); }

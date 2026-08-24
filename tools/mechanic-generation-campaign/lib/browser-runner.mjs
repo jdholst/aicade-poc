@@ -3,13 +3,25 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { readCampaignBrowserStorage, latestGamePack, latestGenerationRun } from "./browser-storage.mjs";
+import {
+  latestGamePack,
+  latestGamePackRecord,
+  latestGenerationRun,
+  latestGenerationRunRecord,
+  readCampaignBrowserStorage,
+} from "./browser-storage.mjs";
 import { createCampaignStore } from "./campaign-store.mjs";
-import { CAMPAIGN_RUN_SCHEMA_VERSION, CAMPAIGN_ATTEMPT_SCHEMA_VERSION, scoreCampaign } from "./contracts.mjs";
+import {
+  CAMPAIGN_ATTEMPT_SCHEMA_VERSION,
+  CAMPAIGN_RUN_SCHEMA_VERSION,
+  requiresManualQa,
+  scoreCampaign,
+} from "./contracts.mjs";
 import { adaptGeneratedMechanicFixture, adaptPlanningFixture } from "./fixture-adapter.mjs";
 import { loadCampaignManifest, validateManifestEnvironment } from "./manifest-loader.mjs";
 import { redactSensitive } from "./redaction.mjs";
 import { inspectRevision } from "./revision.mjs";
+import { createManualQaCandidate } from "./manual-qa.mjs";
 import {
   classifyFurthestStage,
   createAttemptSchedule,
@@ -33,6 +45,7 @@ export async function runCampaign({
   providerCallBudget,
   onSubmission,
   runId,
+  actualProviderAuthorized = false,
 }) {
   const loaded = await loadCampaignManifest(manifestPath);
   const store = providedStore ?? createCampaignStore(repoRoot);
@@ -42,6 +55,14 @@ export async function runCampaign({
     providerModeOverrides ?? loaded.manifest.providerModes,
     loaded.manifest.fixtures
   );
+  if (
+    Object.values(providerModes).includes("actual") &&
+    !resume &&
+    !loopContext &&
+    !actualProviderAuthorized
+  ) {
+    throw new Error("Actual-provider campaign execution requires bounded authorization.");
+  }
   if (Object.values(providerModes).includes("actual")) {
     validateManifestEnvironment(loaded.manifest);
   }
@@ -81,6 +102,12 @@ export async function runCampaign({
           : {}),
         revision: compactRevision(revision),
         baseUrl,
+        authorization: {
+          actualProviders: Object.values(providerModes).includes("actual")
+            ? Boolean(actualProviderAuthorized || loopContext)
+            : false,
+          authorizedAt: createdAt,
+        },
       };
   validateResume(run, loaded, cohort, providerModes, revision, loopContext);
   await store.writeRun(run);
@@ -137,7 +164,7 @@ export async function runCampaign({
         return { run, attempts: await store.readAttempts(campaignRunId) };
       }
 
-      const attempt = await runBrowserAttempt({
+      const attemptResult = await runBrowserAttempt({
         browser,
         store,
         run,
@@ -150,7 +177,8 @@ export async function runCampaign({
         providerCallBudget,
         onSubmission,
       });
-      run = {
+      const attempt = attemptResult.attempt;
+      run = attemptResult.run ?? {
         ...run,
         attemptIds: [...run.attemptIds, attempt.id],
       };
@@ -171,9 +199,15 @@ export async function runCampaign({
         await store.writeRun(run);
         return { run, attempts: await store.readAttempts(campaignRunId) };
       }
+      if (attempt.status === "awaiting_manual_qa") {
+        break;
+      }
     }
 
     const attempts = await store.readAttempts(campaignRunId);
+    if (run.status === "waiting_for_manual_qa") {
+      return { run, attempts };
+    }
     const score = scoreCampaign(cohort, loaded.manifest, attempts);
     run = {
       ...run,
@@ -308,16 +342,23 @@ async function runBrowserAttempt({
   const cleanupPassed =
     pipelinePassed && /cleanup|dispose|removed|removal/i.test(JSON.stringify(gamePack?.validationEvidence ?? []));
   const externalProbePassed = probeResult.passed === true;
-  const status = pipelinePassed
+  const automatedStatus = pipelinePassed
     ? externalProbePassed
       ? "success"
       : "mechanic_incorrect"
     : terminal.kind === "infrastructure_failure"
       ? "infrastructure_failure"
       : "pipeline_failure";
+  const manualQaRequired = requiresManualQa({
+    cohort: run.cohort,
+    providerModes: run.providerModes,
+    pipelinePassed,
+    externalProbePassed,
+  });
+  const status = manualQaRequired ? "awaiting_manual_qa" : automatedStatus;
   const completedAt = new Date().toISOString();
   const failure =
-    status === "success"
+    ["success", "awaiting_manual_qa"].includes(status)
       ? undefined
       : providerBudgetExhaustedStage
         ? `${providerBudgetExhaustedStage} provider-call ceiling reached before upstream forwarding.`
@@ -327,12 +368,15 @@ async function runBrowserAttempt({
     id,
     campaignRunId: run.id,
     sequence: scheduled.sequence,
+    cohort: run.cohort,
     promptId: scheduled.promptId,
     prompt: scheduled.prompt,
     status,
     terminalOutcome:
-      status === "success"
-        ? "accepted and externally verified"
+      status === "awaiting_manual_qa"
+        ? "accepted and externally verified; awaiting manual QA"
+        : status === "success"
+          ? "accepted and externally verified"
         : status === "mechanic_incorrect"
           ? "accepted but external mechanic probe failed"
           : terminal.text,
@@ -346,7 +390,9 @@ async function runBrowserAttempt({
       cleanupPassed,
       externalProbePassed,
     }),
-    classification: providerBudgetExhaustedStage
+    classification: status === "awaiting_manual_qa"
+      ? "awaiting_manual_qa"
+      : providerBudgetExhaustedStage
       ? "provider_call_budget_exhausted"
       : classifyFailure(status, generationRun),
     ...(failure ? { failure } : {}),
@@ -359,7 +405,16 @@ async function runBrowserAttempt({
     revisionKey: run.revision.revisionKey,
     pipelinePassed,
     externalProbePassed,
-    recordedOutcome: status,
+    automatedOutcome: {
+      status: automatedStatus === "success" ? "passed" : "failed",
+      terminalOutcome:
+        automatedStatus === "success"
+          ? "accepted and externally verified"
+          : terminal.text,
+      recordedAt: completedAt,
+    },
+    recordedOutcome:
+      automatedStatus === "success" ? "automated_success" : automatedStatus,
     artifacts: ["attempt.json", "network-captures.json", "generation-run.json", "game-pack.json", "runtime-probe.json", "browser-issues.json", "terminal.png", ...(terminal.kind === "ready" && gamePack ? ["probe.png"] : [])],
     temporaryFixIds: [],
     ...(generationRun?.cost
@@ -371,15 +426,32 @@ async function runBrowserAttempt({
         }
       : { cost: { quality: "unknown" } }),
   };
-  await store.writeAttempt(attempt, {
+  const evidence = {
     "network-captures.json": networkCaptures,
     "generation-run.json": generationRun,
     "game-pack.json": gamePack,
     "runtime-probe.json": probeResult,
     "browser-issues.json": browserIssues,
-  });
+  };
+  let storedAttempt = attempt;
+  let pendingRun = null;
+  if (manualQaRequired) {
+    const candidate = await createManualQaCandidate({
+      store,
+      run,
+      attempt,
+      generationRunRecord: latestGenerationRunRecord(storage),
+      gamePackRecord: latestGamePackRecord(storage),
+      evidence,
+      requestedAt: completedAt,
+    });
+    storedAttempt = candidate.attempt;
+    pendingRun = candidate.run;
+  } else {
+    await store.writeAttempt(attempt, evidence);
+  }
   await context.close();
-  return attempt;
+  return { attempt: storedAttempt, run: pendingRun };
 }
 
 async function installProviderInterception({

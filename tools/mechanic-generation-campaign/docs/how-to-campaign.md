@@ -6,10 +6,10 @@ A campaign is one bounded cohort run for a frozen manifest, revision, model, and
 
 Use one cohort per campaign:
 
-- `discovery`: one baseline submission. It passes with one full-actual pipeline and external-probe success.
+- `discovery`: one baseline submission. An automated pass becomes a candidate; explicit gameplay approval makes it a success.
 - `isolation`: one diagnostic baseline submission with one or more fixture stages. It passes when the declared isolation question is answered and never contributes to mechanic proof.
-- `repeatability`: ten baseline submissions on one clean revision. It passes with at least eight full-actual successes.
-- `variation`: five frozen prompts with two submissions each on one clean revision. Planning must be actual. It passes with at least eight full-actual successes and at least one success for every prompt.
+- `repeatability`: ten baseline submissions on one clean revision. It passes with at least eight manually approved full-actual successes.
+- `variation`: five frozen prompts with two submissions each on one clean revision. Planning must be actual. It passes with at least eight manually approved full-actual successes and at least one approved success for every prompt.
 
 ## Freeze the campaign identity
 
@@ -44,11 +44,29 @@ Use `--base-url` to attach to a server you already control. Use `--headed` when 
 npm run campaign -- run \
   --manifest <manifest-id-or-path> \
   --cohort <cohort> \
-  --resume <campaign-id> \
-  --authorize-actual
+  --resume <campaign-id>
 ```
 
-Resume preserves prior submissions and continues only the remaining frozen schedule. The CLI rechecks actual-provider authorization when a resumed process starts. The same campaign-level human authorization remains valid only when the campaign identity and ceiling have not changed.
+Resume preserves prior submissions and continues only the remaining frozen schedule. The original campaign-level authorization is persisted and remains valid while the campaign identity, revision, provider configuration, and ceiling are unchanged.
+
+## Review every automated success
+
+An automated full-actual pipeline and probe pass is recorded as `awaiting_manual_qa`, not `success`. Open the exact frozen GenerationRun and GamePack:
+
+```bash
+npm run campaign -- review --campaign <campaign-id>
+```
+
+The review command verifies artifact hashes and revision identity, starts the candidate's production server, restores the exact IndexedDB records into a clean headed browser, blocks generation-provider requests, and reports `READY FOR MANUAL QA` only after editor mount and runtime health pass. It has no timeout and can be reopened after interruption.
+
+Record one explicit verdict:
+
+```bash
+npm run campaign -- approve --campaign <campaign-id> --attempt <attempt-id> [--note <text>]
+npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reason <text>
+```
+
+Approval changes the attempt to `success`; resume the same campaign or loop to continue. Denial records `manual_qa_rejected`. It is never retried on the same revision and sends a linked loop directly to `waiting_for_fix`.
 
 ## Interpret evidence
 
@@ -76,7 +94,9 @@ Use these classifications:
 - `runtime_pipeline_failure`: runtime activation or first-playable validation failed.
 - `semantic_runtime_failure`: the project mounted, but the external mechanic probe failed.
 - `infrastructure_failure`: the server, browser, navigation, or harness prevented a valid result.
-- `success`: the full-actual pipeline and external probe passed.
+- `awaiting_manual_qa`: automated pipeline and external probe success pending gameplay review.
+- `manual_qa_rejected`: the user denied the candidate with a required reason.
+- `success`: the exact full-actual candidate was manually approved.
 
 Preserve the originally recorded outcome. Add later adjudication separately when deeper review changes the interpretation.
 
@@ -91,7 +111,7 @@ Inspect attempt artifacts before publishing. Fixture-backed evidence answers onl
 
 ## Prove a mechanic
 
-Run discovery, repeatability, and variation as separate full-actual campaigns with the same revision, model, manifest, and provider modes. The complete proof sequence contains 21 submissions: one discovery, ten repeatability, and ten variation.
+Run discovery, repeatability, and variation as separate full-actual campaigns with the same revision, model, manifest, and provider modes. The complete proof sequence contains 21 submissions and, when every submission passes automatically, 21 manual playtests: one discovery, ten repeatability, and ten variation.
 
 A mechanic is proven only when all three cohorts pass and every counted success reaches the external mechanic probe. If source or manifest changes are needed, end the current revision cohort, implement the separately authorized fix, and begin a new proof sequence.
 

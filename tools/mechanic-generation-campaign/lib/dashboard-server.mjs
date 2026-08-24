@@ -53,10 +53,21 @@ export async function buildDashboardSnapshot(
     readJsonLines(path.join(loopStore.dataRoot ?? "", "campaign-loop-history.jsonl")),
   ]);
   const campaigns = await Promise.all(
-    runs.map(async (run) => ({
-      ...run,
-      attempts: await store.readAttempts(run.id),
-    }))
+    runs.map(async (run) => {
+      const attempts = await store.readAttempts(run.id);
+      return {
+        ...run,
+        attempts: await Promise.all(
+          attempts.map(async (attempt) => ({
+            ...attempt,
+            manualQaEvidence:
+              attempt.manualQa && typeof store.readManualQa === "function"
+                ? await store.readManualQa(run.id, attempt.id)
+                : null,
+          }))
+        ),
+      };
+    })
   );
   const allAttempts = campaigns.flatMap((campaign) => campaign.attempts);
   const loops = await Promise.all(
@@ -66,6 +77,21 @@ export async function buildDashboardSnapshot(
       fixes: await loopStore.readFixes(run.id),
     }))
   );
+  const manualQaEvidence = allAttempts
+    .map(({ manualQaEvidence }) => manualQaEvidence)
+    .filter(Boolean);
+  const pendingManualReviews = allAttempts
+    .filter(({ manualQaEvidence }) => manualQaEvidence?.status === "pending")
+    .map((attempt) => ({
+      campaignRunId: attempt.campaignRunId ?? attempt.manualQaEvidence.campaignRunId,
+      attemptId: attempt.id,
+      promptId: attempt.promptId,
+      cohort: attempt.manualQaEvidence.cohort,
+      revisionKey: attempt.manualQaEvidence.revisionKey,
+      requestedAt: attempt.manualQaEvidence.requestedAt,
+      candidateArtifacts: attempt.manualQaEvidence.candidateArtifacts,
+      reviewSessions: attempt.manualQaEvidence.reviewSessions,
+    }));
 
   return {
     schemaVersion: "campaign-dashboard/v1",
@@ -76,9 +102,20 @@ export async function buildDashboardSnapshot(
     publishedLoopHistory,
     legacyAttempts,
     temporaryFixes,
+    manualQa: {
+      automatedCandidates: allAttempts.filter(
+        ({ status }) => status === "awaiting_manual_qa"
+      ).length,
+      pending: manualQaEvidence.filter(({ status }) => status === "pending").length,
+      approved: manualQaEvidence.filter(({ status }) => status === "approved").length,
+      denied: manualQaEvidence.filter(({ status }) => status === "denied").length,
+    },
+    pendingManualReviews,
     stageSurvival: createStageSurvival(allAttempts),
     failureClasses: countBy(
-      allAttempts.filter(({ status }) => status !== "success"),
+      allAttempts.filter(
+        ({ status }) => !["success", "awaiting_manual_qa"].includes(status)
+      ),
       ({ classification }) => classification ?? "unknown"
     ),
     promptVariation: createPromptVariation(campaigns),
@@ -174,7 +211,7 @@ function createPromptVariation(campaigns) {
         campaign.attempts.reduce((groups, attempt) => {
           groups[attempt.promptId] ??= { submissions: 0, successes: 0 };
           groups[attempt.promptId].submissions += 1;
-          groups[attempt.promptId].successes += attempt.status === "success" ? 1 : 0;
+          groups[attempt.promptId].successes += isManuallyApprovedSuccess(attempt) ? 1 : 0;
           return groups;
         }, {})
       ).map(([promptId, counts]) => ({ promptId, ...counts })),
@@ -224,13 +261,30 @@ function createMechanicProof(campaigns) {
 
     for (const campaign of selectedProofCampaigns) {
       if (group[campaign.cohort] !== "missing") continue;
-      group[campaign.cohort] = campaign.status;
+      group[campaign.cohort] =
+        campaign.status === "achieved" && !campaignQualifiesForProof(campaign)
+          ? "automated_only"
+          : campaign.status;
     }
     group.proven = ["discovery", "repeatability", "variation"].every(
       (cohort) => group[cohort] === "achieved"
     );
     return group;
   });
+}
+
+function campaignQualifiesForProof(campaign) {
+  return (
+    campaign.result?.qualifiesForMechanicProof === true &&
+    campaign.attempts.some(isManuallyApprovedSuccess)
+  );
+}
+
+function isManuallyApprovedSuccess(attempt) {
+  return (
+    attempt.status === "success" &&
+    (attempt.manualQaEvidence?.status ?? attempt.manualQa?.status) === "approved"
+  );
 }
 
 function countBy(values, getKey) {

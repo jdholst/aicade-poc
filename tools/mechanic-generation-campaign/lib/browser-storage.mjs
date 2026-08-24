@@ -48,6 +48,15 @@ export function latestGenerationRun(storage) {
     )[0] ?? null;
 }
 
+export function latestGenerationRunRecord(storage) {
+  const generationRun = latestGenerationRun(storage);
+  return generationRun
+    ? storage.generationRuns.find(
+        (record) => (record.generationRun ?? record).id === generationRun.id
+      ) ?? null
+    : null;
+}
+
 export function latestGamePack(storage) {
   return storage.gamePacks
     .map((record) => record.gamePack ?? record)
@@ -56,3 +65,11 @@ export function latestGamePack(storage) {
     )[0] ?? null;
 }
 
+export function latestGamePackRecord(storage) {
+  const gamePack = latestGamePack(storage);
+  return gamePack
+    ? storage.gamePacks.find(
+        (record) => (record.gamePack ?? record).id === gamePack.id
+      ) ?? null
+    : null;
+}

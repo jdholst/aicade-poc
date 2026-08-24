@@ -4,7 +4,9 @@ import path from "node:path";
 import {
   parseCampaignManifest,
   parseCampaignAttempt,
+  parseCampaignManualQa,
   parseCampaignRun,
+  requiresManualQa,
   scoreCampaign,
 } from "./lib/contracts.mjs";
 import { redactSensitive } from "./lib/redaction.mjs";
@@ -46,6 +48,7 @@ function successAttempt(index, promptId = "baseline") {
     id: `attempt-${index}`,
     campaignRunId: "campaign-1",
     sequence: index,
+    cohort: "repeatability",
     promptId,
     prompt: "Prompt text",
     status: "success",
@@ -60,7 +63,18 @@ function successAttempt(index, promptId = "baseline") {
     revisionKey: "revision-1",
     pipelinePassed: true,
     externalProbePassed: true,
-    recordedOutcome: "success",
+    automatedOutcome: {
+      status: "passed",
+      terminalOutcome: "accepted and externally verified",
+      recordedAt: "2026-08-22T12:01:00.000Z",
+    },
+    recordedOutcome: "automated_success",
+    adjudicatedOutcome: "manual_qa_approved",
+    manualQa: {
+      id: `manual-qa-attempt-${index}`,
+      path: `attempt-${index}/manual-qa.json`,
+      status: "approved",
+    },
     artifacts: [],
     temporaryFixIds: [],
   });
@@ -153,6 +167,100 @@ describe("campaign contracts", () => {
     });
   });
 
+  it("treats an automated full-actual pass as pending until a human approves it", () => {
+    const attempt = {
+      ...successAttempt(1),
+      status: "awaiting_manual_qa",
+      classification: "awaiting_manual_qa",
+      recordedOutcome: "automated_success",
+      adjudicatedOutcome: undefined,
+      manualQa: {
+        id: "manual-qa-attempt-1",
+        path: "attempt-1/manual-qa.json",
+        status: "pending",
+      },
+    };
+
+    expect(scoreCampaign("discovery", manifest, [attempt])).toMatchObject({
+      status: "waiting_for_manual_qa",
+      successes: 0,
+      automatedCandidates: 1,
+      submissions: 1,
+      qualifiesForMechanicProof: false,
+    });
+  });
+
+  it("requires review only for full-actual proof-cohort automated passes", () => {
+    expect(
+      requiresManualQa({
+        cohort: "discovery",
+        providerModes: manifest.providerModes,
+        pipelinePassed: true,
+        externalProbePassed: true,
+      })
+    ).toBe(true);
+    expect(
+      requiresManualQa({
+        cohort: "isolation",
+        providerModes: manifest.providerModes,
+        pipelinePassed: true,
+        externalProbePassed: true,
+      })
+    ).toBe(false);
+    expect(
+      requiresManualQa({
+        cohort: "variation",
+        providerModes: { ...manifest.providerModes, planning: "fixture" },
+        pipelinePassed: true,
+        externalProbePassed: true,
+      })
+    ).toBe(false);
+  });
+
+  it("validates pending, approved, and denied manual-QA evidence conditionally", () => {
+    const base = {
+      schemaVersion: "campaign-manual-qa/v1",
+      id: "manual-qa-attempt-1",
+      campaignRunId: "campaign-1",
+      attemptId: "attempt-1",
+      promptId: "baseline",
+      cohort: "discovery",
+      revisionKey: "revision-1",
+      status: "pending",
+      requestedAt: "2026-08-22T12:01:00.000Z",
+      candidateArtifacts: [
+        {
+          kind: "generation_run",
+          path: "generation-run-storage.json",
+          sha256: "a".repeat(64),
+        },
+        {
+          kind: "game_pack",
+          path: "game-pack-storage.json",
+          sha256: "b".repeat(64),
+        },
+      ],
+      reviewSessions: [],
+    };
+
+    expect(parseCampaignManualQa(base).status).toBe("pending");
+    expect(
+      parseCampaignManualQa({
+        ...base,
+        status: "approved",
+        decidedAt: "2026-08-22T12:05:00.000Z",
+        approvalNote: "Projectile origin and cleanup are correct.",
+      }).status
+    ).toBe("approved");
+    expect(() =>
+      parseCampaignManualQa({
+        ...base,
+        status: "denied",
+        decidedAt: "2026-08-22T12:05:00.000Z",
+      })
+    ).toThrow(/denial reason/i);
+  });
+
   it("links a campaign run to an optional loop revision cycle", () => {
     const run = parseCampaignRun({
       schemaVersion: "campaign-run/v1",
@@ -174,6 +282,10 @@ describe("campaign contracts", () => {
         statusEntries: [],
       },
       baseUrl: "http://127.0.0.1:3117",
+      authorization: {
+        actualProviders: true,
+        authorizedAt: "2026-08-23T15:00:00.000Z",
+      },
       loopId: "ticket-17-loop-1",
       loopStepId: "discover",
       loopCycle: 0,
@@ -184,6 +296,52 @@ describe("campaign contracts", () => {
       loopStepId: "discover",
       loopCycle: 0,
     });
+  });
+
+  it("requires a pending-review reference when a campaign is waiting for manual QA", () => {
+    const run = {
+      schemaVersion: "campaign-run/v1",
+      id: "campaign-1",
+      manifestId: manifest.id,
+      manifestPath: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
+      manifestHash: "a".repeat(64),
+      cohort: "discovery",
+      status: "waiting_for_manual_qa",
+      createdAt: "2026-08-23T15:00:00.000Z",
+      startedAt: "2026-08-23T15:00:01.000Z",
+      model: manifest.model,
+      providerModes: manifest.providerModes,
+      attemptCeiling: 1,
+      attemptIds: ["attempt-1"],
+      revision: {
+        head: "b".repeat(40),
+        revisionKey: "c".repeat(64),
+        dirty: false,
+        statusEntries: [],
+      },
+      baseUrl: "http://127.0.0.1:3117",
+      authorization: {
+        actualProviders: true,
+        authorizedAt: "2026-08-23T15:00:00.000Z",
+      },
+    };
+
+    expect(() => parseCampaignRun(run)).toThrow(/pending manual qa/i);
+    expect(
+      parseCampaignRun({
+        ...run,
+        pendingManualQa: {
+          manualQaId: "manual-qa-attempt-1",
+          campaignRunId: "campaign-1",
+          attemptId: "attempt-1",
+          promptId: "baseline",
+          cohort: "discovery",
+          revisionKey: "c".repeat(64),
+          requestedAt: "2026-08-23T15:01:00.000Z",
+          evidencePath: "attempt-1/manual-qa.json",
+        },
+      }).status
+    ).toBe("waiting_for_manual_qa");
   });
 });
 

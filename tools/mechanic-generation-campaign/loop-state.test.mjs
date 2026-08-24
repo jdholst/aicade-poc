@@ -4,7 +4,9 @@ import {
   applyFixCheckpoint,
   createInitialLoopRun,
   finishSequenceCampaign,
+  rejectLoopManualQa,
   recordActualProviderCall,
+  resumeLoopAfterManualQaApproval,
   startLoopCampaign,
 } from "./lib/loop-state.mjs";
 
@@ -75,12 +77,146 @@ describe("campaign loop state", () => {
     run = finishSequenceCampaign(run, definition, {
       campaignRunId: "discovery-1",
       status: "achieved",
-      attempts: [{ status: "success", classification: "success" }],
+      attempts: [{ status: "success", classification: "success", manualQa: { status: "approved" } }],
     });
 
     expect(run.currentStepIndex).toBe(1);
     expect(run.steps.map(({ status }) => status)).toEqual(["achieved", "pending"]);
     expect(run.status).toBe("running");
+  });
+
+  it("refuses to advance a proof step from automated-only success evidence", () => {
+    const run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+
+    expect(() =>
+      finishSequenceCampaign(run, definition, {
+        campaignRunId: "discovery-1",
+        status: "achieved",
+        attempts: [{ status: "success", classification: "success" }],
+      })
+    ).toThrow(/manual qa/i);
+  });
+
+  it("pauses the active campaign and preserves it while manual QA is pending", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    const pendingManualQa = {
+      manualQaId: "manual-qa-attempt-1",
+      campaignRunId: "discovery-1",
+      attemptId: "attempt-1",
+      promptId: "baseline",
+      cohort: "discovery",
+      revisionKey: revisionA.revisionKey,
+      requestedAt: "2026-08-23T15:01:00.000Z",
+      evidencePath: "attempt-1/manual-qa.json",
+    };
+
+    run = finishSequenceCampaign(run, definition, {
+      campaignRunId: "discovery-1",
+      status: "waiting_for_manual_qa",
+      attempts: [{ status: "awaiting_manual_qa", classification: "awaiting_manual_qa" }],
+      pendingManualQa,
+    });
+
+    expect(run.status).toBe("waiting_for_manual_qa");
+    expect(run.activeCampaign?.campaignRunId).toBe("discovery-1");
+    expect(run.pendingManualQa).toEqual(pendingManualQa);
+    expect(run.campaignLinks[0].status).toBe("waiting_for_manual_qa");
+  });
+
+  it("sends a human denial directly to the fix cycle", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    run = finishSequenceCampaign(run, definition, {
+      campaignRunId: "discovery-1",
+      status: "completed_not_achieved",
+      attempts: [
+        {
+          status: "mechanic_incorrect",
+          classification: "manual_qa_rejected",
+          failure: "Projectile spawned at arena center.",
+        },
+      ],
+    });
+
+    expect(run.status).toBe("waiting_for_fix");
+    expect(run.activeCampaign).toBeUndefined();
+    expect(run.pendingManualQa).toBeUndefined();
+  });
+
+  it("resumes the same active campaign after approval without spending budget", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    run = finishSequenceCampaign(run, definition, {
+      campaignRunId: "discovery-1",
+      status: "waiting_for_manual_qa",
+      attempts: [],
+      pendingManualQa: {
+        manualQaId: "manual-qa-attempt-1",
+        campaignRunId: "discovery-1",
+        attemptId: "attempt-1",
+        promptId: "baseline",
+        cohort: "discovery",
+        revisionKey: revisionA.revisionKey,
+        requestedAt: "2026-08-23T15:01:00.000Z",
+        evidencePath: "attempt-1/manual-qa.json",
+      },
+    });
+    const usageBefore = structuredClone(run.usage);
+
+    const resumed = resumeLoopAfterManualQaApproval(run, {
+      campaignRunId: "discovery-1",
+    });
+
+    expect(resumed.status).toBe("running");
+    expect(resumed.activeCampaign?.campaignRunId).toBe("discovery-1");
+    expect(resumed.pendingManualQa).toBeUndefined();
+    expect(resumed.usage).toEqual(usageBefore);
+  });
+
+  it("moves a denied candidate directly to waiting_for_fix without a same-revision retry", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    run = {
+      ...run,
+      status: "waiting_for_manual_qa",
+      pendingManualQa: {
+        manualQaId: "manual-qa-attempt-1",
+        campaignRunId: "discovery-1",
+        attemptId: "attempt-1",
+        promptId: "baseline",
+        cohort: "discovery",
+        revisionKey: revisionA.revisionKey,
+        requestedAt: "2026-08-23T15:01:00.000Z",
+        evidencePath: "attempt-1/manual-qa.json",
+      },
+    };
+
+    const denied = rejectLoopManualQa(run, {
+      campaignRunId: "discovery-1",
+      completedAt: "2026-08-23T15:05:00.000Z",
+    });
+
+    expect(denied.status).toBe("waiting_for_fix");
+    expect(denied.activeCampaign).toBeUndefined();
+    expect(denied.pendingManualQa).toBeUndefined();
+    expect(denied.campaignLinks[0].status).toBe("completed_not_achieved");
   });
 
   it("retries only classifications explicitly allowed by the current step", () => {
@@ -121,7 +257,7 @@ describe("campaign loop state", () => {
     run = finishSequenceCampaign(run, definition, {
       campaignRunId: "discovery-1",
       status: "achieved",
-      attempts: [{ status: "success", classification: "success" }],
+      attempts: [{ status: "success", classification: "success", manualQa: { status: "approved" } }],
     });
     run = { ...run, status: "waiting_for_fix" };
 

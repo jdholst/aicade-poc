@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CAMPAIGN_COHORTS } from "./contracts.mjs";
+import { CAMPAIGN_COHORTS, pendingManualQaSchema } from "./contracts.mjs";
 
 export const CAMPAIGN_LOOP_MANIFEST_SCHEMA_VERSION =
   "campaign-loop-manifest/v1";
@@ -12,6 +12,7 @@ export const CAMPAIGN_LOOP_HISTORY_SCHEMA_VERSION =
 export const CAMPAIGN_LOOP_STATUSES = [
   "pending",
   "running",
+  "waiting_for_manual_qa",
   "waiting_for_fix",
   "interrupted",
   "blocked",
@@ -209,6 +210,7 @@ export const campaignLoopRunSchema = z
     campaignLinks: z.array(campaignLinkSchema),
     fixCheckpointIds: z.array(z.string().min(1)),
     activeCampaign: activeCampaignSchema.optional(),
+    pendingManualQa: pendingManualQaSchema.optional(),
     invalidReason: z.string().min(1).optional(),
     blockedReason: z.string().min(1).optional(),
     exhaustionReason: z.string().min(1).optional(),
@@ -222,7 +224,31 @@ export const campaignLoopRunSchema = z
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((run, context) => {
+    if (run.status === "waiting_for_manual_qa") {
+      if (!run.pendingManualQa) {
+        context.addIssue({
+          code: "custom",
+          path: ["pendingManualQa"],
+          message: "A loop waiting for manual QA requires a pending manual QA reference.",
+        });
+      }
+      if (!run.activeCampaign || run.activeCampaign.role !== "sequence") {
+        context.addIssue({
+          code: "custom",
+          path: ["activeCampaign"],
+          message: "A loop waiting for manual QA must preserve its active sequence campaign.",
+        });
+      }
+    } else if (run.pendingManualQa) {
+      context.addIssue({
+        code: "custom",
+        path: ["pendingManualQa"],
+        message: "Pending manual QA is allowed only while the loop is waiting for manual QA.",
+      });
+    }
+  });
 
 export const campaignLoopFixSchema = z
   .object({

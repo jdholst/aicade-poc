@@ -86,7 +86,47 @@ Side effects:
 - Sanitized attempts, network envelopes, storage records, logs, screenshots, timelines, and probe evidence are written under `.qa/mechanic-generation-campaign/`.
 - No Sparkline source or temporary-fix ledger entry is edited.
 
-Output: campaign ID, state, revision key, submission count, and a terminal line for every attempt.
+Output: campaign ID, state, revision key, submission count, and a terminal line for every attempt. A full-actual proof candidate stops at `waiting_for_manual_qa`.
+
+## Review gameplay
+
+```bash
+npm run campaign -- review --campaign <campaign-id> [--port <number>]
+```
+
+Purpose: open the exact frozen automated candidate for human gameplay review.
+
+- `--campaign <campaign-id>` is required and must be `waiting_for_manual_qa`.
+- `--port <number>` selects the candidate production-server port. Default: `3117`.
+
+The command verifies the revision and candidate hashes, starts the candidate worktree's production server, launches a headed clean browser, restores only the recorded GenerationRun and GamePack, blocks both generation-provider endpoints, and reports `READY FOR MANUAL QA` after editor mount and runtime health pass. It remains open without a timeout until a verdict or interruption. It makes zero provider calls.
+
+## Approve gameplay
+
+```bash
+npm run campaign -- approve --campaign <campaign-id> --attempt <attempt-id> [--note <text>]
+```
+
+Purpose: explicitly approve the exact pending candidate. The optional note is stored with the decision. Repeating the same verdict is idempotent; a conflicting or stale verdict fails. Approval consumes no budget and makes zero provider calls. Resume the same campaign or linked loop using the command printed by the CLI.
+
+## Deny gameplay
+
+```bash
+npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reason <text>
+```
+
+Purpose: record the candidate as `mechanic_incorrect` with classification `manual_qa_rejected`. A non-empty reason is required. A standalone campaign stops. A linked loop moves directly to `waiting_for_fix`. The command consumes no budget and makes zero provider calls.
+
+## Manual-QA v1 evidence contracts
+
+The harness modifies its existing v1 records directly:
+
+- `campaign-attempt/v1` includes the cohort, immutable automated outcome, optional manual-QA reference, `awaiting_manual_qa`, and the later human adjudication. A full-actual proof attempt cannot be `success` without an approved reference.
+- `campaign-run/v1` includes persisted actual-provider authorization, `waiting_for_manual_qa`, and the exact pending campaign, attempt, prompt, cohort, revision, and evidence identity.
+- `campaign-loop-run/v1` includes the same waiting state and pending identity while preserving the active sequence campaign.
+- `campaign-manual-qa/v1` stores `pending`, `approved`, or `denied`; request and decision timestamps; exact candidate artifact hashes; review sessions; an optional approval note; and a required denial reason.
+
+Pending-review fields are required only in waiting states. Existing legacy narrative successes are normalized as approved with `legacy_assumed` provenance. They remain historical evidence and are not mixed into current revision proof cohorts.
 
 ## Dashboard
 
@@ -174,7 +214,7 @@ npm run campaign -- loop run \
   [--headed] [--port <number>] [--attempt-timeout-ms <number>]
 ```
 
-The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, removes that worktree's `node_modules` and `.next`, runs `npm install` there, and then runs the production build before the first editor submission. It then runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_fix` or a terminal loop status. Installation or build failure stops before submission and does not consume provider-call budget.
+The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, removes that worktree's `node_modules` and `.next`, runs `npm install` there, and then runs the production build before the first editor submission. It then runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_manual_qa`, `waiting_for_fix`, or a terminal loop status. Installation or build failure stops before submission and does not consume provider-call budget.
 
 ### Resume a loop
 
@@ -191,6 +231,8 @@ npm run campaign -- loop resume --id <loop-id> --fix-report <path>
 ```
 
 A fix report is accepted only from `waiting_for_fix`. Its before and after revisions, commit, changed files, verification, trigger campaign, and durable or temporary classification must match the clean loop worktree. Temporary fixes must include their canonical ledger entries. An accepted fix increments the fix cycle and restarts the sequence from its first step.
+
+If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`; denial returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
 
 ### Run auxiliary isolation
 

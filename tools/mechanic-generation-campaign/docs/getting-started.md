@@ -42,9 +42,26 @@ npm run campaign -- run \
 
 Before running it, state the one-submission ceiling and all three provider modes, then obtain one authorization for that bounded campaign. The authorization does not cover a later campaign or a changed revision.
 
+## Review an automated candidate
+
+A full-actual proof run pauses at `waiting_for_manual_qa`. Launch the exact frozen output:
+
+```bash
+npm run campaign -- review --campaign <campaign-id>
+```
+
+Wait for `READY FOR MANUAL QA`, play the game in the headed browser, and explicitly approve or deny the attempt in another terminal:
+
+```bash
+npm run campaign -- approve --campaign <campaign-id> --attempt <attempt-id> --note "Optional note"
+npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reason "Required gameplay defect"
+```
+
+The review and verdict commands make zero provider calls. Approval lets the same frozen campaign resume without another authorization. Denial stops a standalone campaign or sends a linked loop to its fix cycle.
+
 ## Review the result
 
-The run command prints the campaign ID, status, revision key, submission count, and each attempt's terminal status and furthest stage.
+The report prints the campaign ID, status, revision key, submission count, pending review, and each attempt's terminal status and furthest stage.
 
 ```bash
 npm run campaign -- report --campaign <campaign-id>
