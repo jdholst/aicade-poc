@@ -736,6 +736,71 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain("targetInteractionsDelta");
   });
 
+  it("turns missed target interactions into bounded scheduling guidance", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "evaluation.scenarios.transient.externalObservations.0",
+          code: "external_observation_failed",
+          message:
+            'Evaluator-authored observation 0 "owned_object_lifecycle_after_action" failed. Actual: {"deltas":[{"activeDelta":0,"actorOriginCreationsDelta":1,"createdDelta":1,"destroyedDelta":1,"simulatedDistanceTraveledDelta":288,"targetInteractionsDelta":0}]}.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract: createContract(),
+      grant: createMechanicSourceGenerationGrant(
+        createGrant(
+          "object_read",
+          "object_create",
+          "object_motion_write",
+          "object_destroy",
+          "spatial_query",
+          "time_schedule"
+        )
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "When targetInteractionsDelta is zero while creation and travel are positive"
+    );
+    expect(prompt).toContain("never schedule only at the full expiry time");
+    expect(prompt).toContain(
+      "bounded interval shorter than the accepted lifetime"
+    );
+    expect(prompt).toContain("reschedule before expiry");
+  });
+
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
     const intent = createIntent();
     const repair = {
