@@ -58,6 +58,7 @@ Creator-generation planning envelope:
 - The final output instruction above is extended: return one combined creator-generation planning envelope through the provided tool, not a bare TopDownGameSpec.
 - Put the complete TopDownGameSpec in gameSpec.
 - Put one complete Mechanic Intent for the creator's material requested behavior in mechanicIntent.
+- Do not include or rewrite mechanicConnections in gameSpec for generated-mechanic planning. Return the trusted base-game content without a mechanicConnections field so trusted base-game mechanic connections remain outside the generated assembly. Put the requested generated behavior's input routing only in mechanicIntent.connections.
 - Describe requirements only; do not choose whether the mechanic is built-in, generated, a clarification failure, or a capability gap.
 - Preserve every meaningful trigger, actor, target, behavior, state change, timing rule, spatial rule, constraint, connection, stable reference, and outcome needed by that behavior.
 - Every mechanicIntent array field is required. Use [] when a category is empty.

@@ -137,6 +137,12 @@ describe("OpenAI creator-generation planning provider", () => {
     expect(requestBody.instructions).toContain(
       "include object_read when the owned object's initial position or motion depends on a bound actor's live transform"
     );
+    expect(requestBody.instructions).toContain(
+      "Do not include or rewrite mechanicConnections in gameSpec for generated-mechanic planning"
+    );
+    expect(requestBody.instructions).toContain(
+      "trusted base-game mechanic connections remain outside the generated assembly"
+    );
     expect(JSON.stringify(requestBody)).not.toContain("sk-secret");
   });
 
