@@ -824,6 +824,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "Do not repeat spatial queries, object reads, or motion writes every fixed-step tick"
     );
+    expect(prompt).toContain(
+      "Check the final swept travel segment for a target before applying expiry cleanup"
+    );
+    expect(prompt).toContain(
+      "do not destroy an owned object at the lifetime boundary before its final target interaction check"
+    );
   });
 
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
