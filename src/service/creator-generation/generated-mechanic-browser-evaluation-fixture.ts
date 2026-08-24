@@ -89,8 +89,29 @@ export function createGeneratedMechanicBrowserExecutionFixture({
   seed,
 }: CreateGeneratedMechanicBrowserExecutionFixtureInput): GeneratedMechanicBrowserExecutionFixture {
   const virtualEntities = new Map<StableId, VirtualEntityState>();
+  const actorObjectIds = exactActorObjectIds(contract, gameSpec);
+  const targetObjectIds = exactTargetObjectIds(contract, gameSpec);
+  const firstActorIndex = gameSpec.entities.findIndex(({ id }) =>
+    actorObjectIds.has(id)
+  );
+  const firstActor = gameSpec.entities[firstActorIndex];
+  const actorProofPosition = firstActor
+    ? createInitialVirtualEntityState(firstActor, firstActorIndex).position
+    : undefined;
+  let targetProofOffset = 0;
   const objects = gameSpec.entities.map((entity, index) => {
     const state = createInitialVirtualEntityState(entity, index);
+    if (
+      actorProofPosition &&
+      targetObjectIds.has(entity.id) &&
+      !actorObjectIds.has(entity.id)
+    ) {
+      targetProofOffset += 1;
+      state.position = {
+        x: actorProofPosition.x + targetProofOffset * 32,
+        y: actorProofPosition.y,
+      };
+    }
     virtualEntities.set(entity.id, state);
     const object: TrustedTopDownPhaserMechanicObject = {
       get active() {

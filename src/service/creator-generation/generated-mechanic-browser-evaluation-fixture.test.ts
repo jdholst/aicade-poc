@@ -247,7 +247,6 @@ describe("generated mechanic browser evaluation fixture", () => {
     if (!actorEntity || !targetEntity) {
       throw new Error("Expected actor and target entities.");
     }
-    const targetIndex = gameSpec.entities.indexOf(targetEntity);
     const baseContract = createContract(actorEntity.id);
     const contract: GeneratedMechanicContract = {
       ...baseContract,
@@ -301,10 +300,18 @@ describe("generated mechanic browser evaluation fixture", () => {
     if (!targetHandle) {
       throw new Error("Expected one exact target handle.");
     }
-    const targetPosition = {
-      x: 80 + targetIndex * 32,
-      y: 80 + targetIndex * 24,
-    };
+    const actorPosition = await fixture.observations.readBindingProperty(
+      "actor",
+      "position"
+    );
+    const targetPosition = await fixture.observations.readBindingProperty(
+      "target",
+      "position"
+    );
+    expect(targetPosition).toEqual({
+      x: (actorPosition as { x: number }).x + 32,
+      y: (actorPosition as { y: number }).y,
+    });
     const created = fixture.capabilityHost.invoke({
       capabilityId: "object_create",
       arguments: [
