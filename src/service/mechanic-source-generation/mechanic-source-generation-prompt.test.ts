@@ -663,6 +663,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "apply a finite nonzero capabilities.objects.writeMotion mutation to the first returned target handle"
     );
+    expect(prompt).toContain(
+      "query the exact bound target around the owned object's current observed position"
+    );
+    expect(prompt).toContain(
+      "Do not treat querying the target at its stationary location immediately after creation as an interaction"
+    );
   });
 
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
