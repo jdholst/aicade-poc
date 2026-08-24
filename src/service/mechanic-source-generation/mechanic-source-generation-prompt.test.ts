@@ -812,6 +812,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "persist the spawn position in owned-object properties"
     );
     expect(prompt).toContain("bounded swept-path check");
+    expect(prompt).toContain(
+      "center the bounded query at the current observed position"
+    );
+    expect(prompt).toContain(
+      "radius at least the accepted segment length plus the owned-object and target interaction radii"
+    );
   });
 
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
