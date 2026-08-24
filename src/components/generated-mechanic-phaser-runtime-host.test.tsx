@@ -623,19 +623,21 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    dispatchHostMessage(iframe, {
-      kind: "runtime",
-      event: {
-        type: "game-error",
-        message: "Generated callback exceeded its execution budget.",
-        issue: {
-          type: "runtime-error",
-          severity: "error",
-          recoverable: false,
+    window.setTimeout(() => {
+      dispatchHostMessage(iframe, {
+        kind: "runtime",
+        event: {
+          type: "game-error",
           message: "Generated callback exceeded its execution budget.",
+          issue: {
+            type: "runtime-error",
+            severity: "error",
+            recoverable: false,
+            message: "Generated callback exceeded its execution budget.",
+          },
         },
-      },
-    });
+      });
+    }, 25);
     act(() => vi.runAllTimers());
 
     expect(statuses.at(-1)).toEqual({
