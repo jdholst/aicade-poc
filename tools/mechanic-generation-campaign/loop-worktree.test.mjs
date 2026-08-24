@@ -29,8 +29,13 @@ async function createRepository() {
   await git(controlRoot, ["init", "-b", "master"]);
   await git(controlRoot, ["config", "user.email", "campaign@example.test"]);
   await git(controlRoot, ["config", "user.name", "Campaign Test"]);
-  await writeFile(path.join(controlRoot, ".gitignore"), ".qa\nnode_modules\n", "utf8");
+  await writeFile(
+    path.join(controlRoot, ".gitignore"),
+    ".qa\nnode_modules\n.env*\n!.env.example\n",
+    "utf8"
+  );
   await writeFile(path.join(controlRoot, "README.md"), "fixture\n", "utf8");
+  await writeFile(path.join(controlRoot, ".env.example"), "EXAMPLE=true\n", "utf8");
   await mkdir(path.join(controlRoot, "node_modules", "fixture-package"), {
     recursive: true,
   });
@@ -39,7 +44,7 @@ async function createRepository() {
     '{"name":"fixture-package"}\n',
     "utf8"
   );
-  await git(controlRoot, ["add", ".gitignore", "README.md"]);
+  await git(controlRoot, ["add", ".gitignore", "README.md", ".env.example"]);
   await git(controlRoot, ["commit", "-m", "fixture"]);
   const { stdout } = await git(controlRoot, ["rev-parse", "HEAD"]);
   return { controlRoot, head: stdout.trim() };
@@ -73,6 +78,40 @@ describe("campaign loop worktree", () => {
         "utf8"
       )
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("copies every root env file before preparing worktree dependencies", async () => {
+    const { controlRoot, head } = await createRepository();
+    const envFiles = {
+      ".env": "BASE_ENV=available\n",
+      ".env.local": "LOCAL_ENV=available\n",
+      ".env.test": "TEST_ENV=available\n",
+      ".env.development.local": "DEVELOPMENT_ENV=available\n",
+      ".env.example": "EXAMPLE=true\n",
+    };
+    await Promise.all(
+      Object.entries(envFiles).map(([name, contents]) =>
+        writeFile(path.join(controlRoot, name), contents, "utf8")
+      )
+    );
+
+    const result = await prepareLoopWorktree({
+      controlRoot,
+      loopId: "ticket-17-env-loop",
+      baseHead: head,
+      worktreeRoot: path.join(controlRoot, ".qa", "campaign-worktrees"),
+      prepareDependencies: async (worktreePath) => {
+        await Promise.all(
+          Object.entries(envFiles).map(async ([name, contents]) => {
+            await expect(readFile(path.join(worktreePath, name), "utf8")).resolves.toBe(
+              contents
+            );
+          })
+        );
+      },
+    });
+
+    expect(await inspectLoopWorktree(result)).toMatchObject({ dirty: false });
   });
 
   it("removes stale dependency and build state before installing", async () => {

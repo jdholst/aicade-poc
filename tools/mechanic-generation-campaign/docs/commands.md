@@ -214,7 +214,7 @@ npm run campaign -- loop run \
   [--headed] [--port <number>] [--attempt-timeout-ms <number>]
 ```
 
-The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, removes that worktree's `node_modules` and `.next`, runs `npm install` there, and then runs the production build before the first editor submission. It then runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_manual_qa`, `waiting_for_fix`, or a terminal loop status. Installation or build failure stops before submission and does not consume provider-call budget.
+The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, copies every repository-root `.env` and `.env.*` file from the control checkout without logging its contents, removes the worktree's `node_modules` and `.next`, runs `npm install` there, and then runs the production build before the first editor submission. It then runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_manual_qa`, `waiting_for_fix`, or a terminal loop status. Preparation, installation, or build failure stops before submission and does not consume provider-call budget.
 
 ### Resume a loop
 

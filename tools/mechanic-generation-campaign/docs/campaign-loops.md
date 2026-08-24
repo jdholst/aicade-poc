@@ -67,11 +67,12 @@ The authorization remains valid on resume because usage only decreases the remai
 
 Starting a new loop creates its linked worktree and then performs this sequence inside that worktree:
 
-1. Remove `node_modules` and `.next`.
-2. Run `npm install` to create worktree-local dependencies.
-3. Run `npm run build` before the first editor submission.
+1. Copy every repository-root `.env` and `.env.*` file from the control checkout without logging or capturing its contents.
+2. Remove `node_modules` and `.next`.
+3. Run `npm install` to create worktree-local dependencies.
+4. Run `npm run build` before the first editor submission.
 
-Dependencies and build output are never copied from the control checkout. If installation or the production build fails, the loop stops before making an editor submission or provider request. Resuming an existing loop does not recreate its worktree or repeat installation automatically.
+Dependencies and build output are never copied from the control checkout. Environment files remain ignored worktree-local configuration and are excluded from campaign evidence. If copying, installation, or the production build fails, the loop stops before making an editor submission or provider request. Resuming an existing loop does not recreate its worktree or repeat installation automatically.
 
 ## Failure and fix flow
 

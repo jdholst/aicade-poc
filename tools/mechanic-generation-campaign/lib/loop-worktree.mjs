@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, rm } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -40,8 +40,23 @@ export async function prepareLoopWorktree({
     worktreePath,
     baseHead,
   ]);
+  await copyWorktreeEnvironmentFiles(controlRoot, worktreePath);
   await prepareDependencies(worktreePath);
   return { path: worktreePath, branch };
+}
+
+async function copyWorktreeEnvironmentFiles(controlRoot, worktreePath) {
+  const entries = await readdir(controlRoot, { withFileTypes: true });
+  const envEntries = entries.filter(
+    ({ name }) => name === ".env" || name.startsWith(".env.")
+  );
+  await Promise.all(
+    envEntries.map(async ({ name }) => {
+      const sourcePath = path.join(controlRoot, name);
+      if (!(await stat(sourcePath)).isFile()) return;
+      await copyFile(sourcePath, path.join(worktreePath, name));
+    })
+  );
 }
 
 export async function resetAndInstallWorktreeDependencies(
