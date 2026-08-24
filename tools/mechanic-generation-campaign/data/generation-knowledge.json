@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 1,
-  "updatedAt": "2026-08-24T03:08:26.000Z",
+  "revision": 2,
+  "updatedAt": "2026-08-24T23:17:44.000Z",
   "entries": [
     {
       "status": "active",
@@ -194,6 +194,323 @@
       "amendments": [],
       "createdAt": "2026-08-24T03:08:25.000Z",
       "updatedAt": "2026-08-24T03:08:25.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Preserve causal runtime errors across broker closure",
+      "guidance": "When authenticated runtime failure and Worker or broker closure arrive on separate channels, give the authenticated failure a bounded precedence window before emitting generic closure while retaining a fail-closed fallback.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_activation",
+          "first_playable"
+        ],
+        "classifications": [
+          "runtime_pipeline_failure"
+        ]
+      },
+      "id": "KF-0006",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-1",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c0-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-1",
+          "stage": "first_playable",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "Authenticated causal runtime errors and remote Worker closure arrive on separate channels; immediate broker-closure failure could mask the queued causal error. Deferring generic closure handling one browser task preserves structured mechanic-general failure evidence while retaining fail-closed behavior.",
+          "observedAt": "2026-08-24T17:04:23Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-3",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c2-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-3",
+          "stage": "first_playable",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The zero-delay broker-close fallback could still outrun an authenticated fatal runtime event delivered on a later browser task, leaving first-playable evidence with only the generic Worker-close message. A bounded 100 millisecond grace lets the causal runtime event terminate immediately when present while preserving automatic fail-closed handling for a genuine broker-only closure.",
+          "observedAt": "2026-08-24T17:26:07Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Separate heartbeat and candidate execution budgets",
+      "guidance": "Keep candidate execution and termination bounds exact, but size the host heartbeat allowance for healthy browser scheduling delays and require causal runtime evidence before classifying a missed heartbeat as candidate failure.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_foundation",
+          "assembly"
+        ],
+        "classifications": [
+          "pipeline_failure"
+        ]
+      },
+      "id": "KF-0007",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-2",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c1-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-2",
+          "stage": "assembly",
+          "quality": "verified_fix",
+          "outcome": "pipeline_failure",
+          "summary": "The browser-attested realm candidate completed its first capability probe, but the runtime heartbeat missed a 50 millisecond scheduling allowance without any browser or runtime error. Earlier campaigns passed the same gate, so the fixed heartbeat policy was too narrow for a healthy but briefly delayed browser task. Increasing only the host-heartbeat allowance to 250 milliseconds preserves the 50 millisecond candidate execution and termination bounds.",
+          "observedAt": "2026-08-24T17:14:29Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Attach target proof to cleanup-capable scenarios",
+      "guidance": "For transient owned-object behavior, attach required target-interaction proof to cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0008",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c3-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c3-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Evaluator-authored target-interaction proof contradicted an early active-progress scenario while the accepted behavior destroyed the transient object on interaction.",
+          "observedAt": "2026-08-24T17:32:33.572Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-4",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c3-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-4",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "Evaluator-authored target-interaction proof was applied to every time-advancing transient lifecycle scenario. Target proof now attaches to cleanup-capable scenarios, with the first time-advancing scenario retained as a fallback when no cleanup scenario exists.",
+          "observedAt": "2026-08-24T17:41:47Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Prove transient creation before advancing time",
+      "guidance": "Use dispatch-only observations for positive transient creation and reserve time-advancing scenarios for travel, interaction, and cleanup so valid impact destruction does not contradict creation proof.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0009",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c4-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c4-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "A time-advancing progress observation expected a positive transient count after the accepted behavior had validly interacted and destroyed the object.",
+          "observedAt": "2026-08-24T17:46:51.705Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-5",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c4-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-5",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "Contract-authoring guidance now requires dispatch-only positive creation proof and reserves time-advancing scenarios for travel, interaction, and cleanup evidence.",
+          "observedAt": "2026-08-24T17:53:30Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Avoid discard-only queries in active callbacks",
+      "guidance": "Do not spend an active callback budget on a spatial query used only to confirm a binding and then discard its handle; defer the query to the later lifecycle callback that consumes it for interaction.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "first_playable"
+        ],
+        "classifications": [
+          "runtime_pipeline_failure"
+        ]
+      },
+      "id": "KF-0010",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-6",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c5-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-6",
+          "stage": "first_playable",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The admitted source exceeded the exact 8 ms active callback budget because it performed a spatial query only to confirm a required target, discarded that handle, and separately read the exact binding. Source guidance now forbids discard-only binding confirmation and moves interaction queries to the callback that consumes them.",
+          "observedAt": "2026-08-24T18:04:51Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Align deterministic targets with the actor proof path",
+      "guidance": "Place exact intent targets ahead of the first exact actor on the deterministic behavior proof path; do not use arbitrary entity-index placement that contradicts accepted actor-direction behavior.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0011",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c6-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c6-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The generated behavior created and traveled an active object but recorded zero target interactions because the deterministic target was off the accepted proof path.",
+          "observedAt": "2026-08-24T18:09:21.960Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-7",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c6-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-7",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "Exact intent targets are now placed ahead of the first exact actor on the deterministic proof path; unrelated entity positions are unchanged.",
+          "observedAt": "2026-08-24T18:15:53Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Active mechanics must materialize live runtime participants",
+      "guidance": "Every non-player entity that must be visible, observed, bound, targeted, or affected at runtime must belong to an allowed active mechanic that creates its runtime handle; spawn-zone membership alone is insufficient.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "planning",
+          "runtime_activation",
+          "first_playable"
+        ],
+        "classifications": [
+          "runtime_pipeline_failure"
+        ]
+      },
+      "id": "KF-0012",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z-isolation-planning-fixture-c0-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-isolation-planning-fixture-c0-r1",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "fixture_diagnostic",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "Entity is not referenced by any spawn zone or active mechanic.",
+          "observedAt": "2026-08-24T16:50:38.405Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-8",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c7-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+          "fixId": "fix-cycle-8",
+          "stage": "first_playable",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "Planning declared and spawned a non-player exact target but omitted every trusted active mechanic that materializes it. Spec guidance now requires every live non-player runtime participant to appear in an allowed active mechanic and states that spawn-zone membership alone is insufficient.",
+          "observedAt": "2026-08-24T18:25:40Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "updatedAt": "2026-08-24T23:17:44.000Z"
     }
   ],
   "reconciliations": [
@@ -468,6 +785,509 @@
       "createdAt": "2026-08-24T03:08:26.000Z",
       "priorManifestDigest": "5f77b7a812bb823d33be2c64996d17c3e5eda58e601f2f25e7cb50365e92d7a6",
       "resultingManifestDigest": "2d3f1846cdeff187fce97c593ff8b7dc0c568249c7a74285c17700c2d63d9834"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-loop-outcome-p09-t17-projectile-20260824t231744z",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z"
+      },
+      "consultedManifestDigest": "2d3f1846cdeff187fce97c593ff8b7dc0c568249c7a74285c17700c2d63d9834",
+      "contextDigest": "b06a240a126b7e299872dec21448c3d22e50f971433fc6aed8372c8b2021a4ef",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c0-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0006"
+          ],
+          "rationale": "The actual first-playable failure triggered the verified causal-runtime-error preservation repair."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-isolation-source-fixture-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The fixture-only clarification-policy routing failure answered its isolation question but produced no reusable pipeline diagnosis."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-isolation-planning-fixture-c0-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0012"
+          ],
+          "rationale": "The planning fixture independently exposed that a declared entity lacked a trusted active-mechanic materialization path."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-1",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0006"
+          ],
+          "rationale": "The verified fix established bounded precedence for authenticated runtime errors over generic broker closure."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c1-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0007"
+          ],
+          "rationale": "The actual assembly failure exposed a healthy browser task exceeding the host heartbeat allowance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-2",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0007"
+          ],
+          "rationale": "The verified fix separated the browser scheduling allowance from exact candidate execution and termination bounds."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c2-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted attempt summary describes target-interaction evidence and does not independently support the broker-close ordering diagnosis."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-3",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0006"
+          ],
+          "rationale": "The verified fix refined causal-error precedence with a bounded grace period while retaining fail-closed behavior."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c3-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The actual source rejection showed target proof contradicting an early active-progress scenario."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-4",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The verified fix assigned target-interaction proof to cleanup-capable scenarios with a bounded fallback."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c4-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0009"
+          ],
+          "rationale": "The actual source rejection showed that time advancement made positive transient creation proof contradictory after a valid hit."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-5",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0009"
+          ],
+          "rationale": "The verified fix separated dispatch-only creation proof from time-advancing travel, interaction, and cleanup proof."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c5-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted UI terminal summary is generic and does not itself identify the callback-budget cause."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-6",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0010"
+          ],
+          "rationale": "The verified fix identified and removed a discard-only binding-confirmation query from the active callback budget."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c6-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0011"
+          ],
+          "rationale": "The actual rejection showed compliant travel with zero interaction because the deterministic target was off the declared proof path."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-7",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0011"
+          ],
+          "rationale": "The verified fix aligned exact actor and target placement while leaving unrelated fixture positions unchanged."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c7-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted UI terminal summary is generic; the reusable runtime-materialization diagnosis is carried by the verified fix evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-8",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0012"
+          ],
+          "rationale": "The verified fix established that spawn-zone membership does not materialize a usable runtime handle."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c8-r1/missing-campaign-evidence",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The pre-run harness interruption produced no campaign record, attempt, submission, or provider evidence from which reusable generation guidance could be derived."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Preserve causal runtime errors across broker closure",
+            "guidance": "When authenticated runtime failure and Worker or broker closure arrive on separate channels, give the authenticated failure a bounded precedence window before emitting generic closure while retaining a fail-closed fallback.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            },
+            "id": "KF-0006",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-1",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c0-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-1",
+                "stage": "first_playable",
+                "quality": "verified_fix",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "Authenticated causal runtime errors and remote Worker closure arrive on separate channels; immediate broker-closure failure could mask the queued causal error. Deferring generic closure handling one browser task preserves structured mechanic-general failure evidence while retaining fail-closed behavior.",
+                "observedAt": "2026-08-24T17:04:23Z"
+              },
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-3",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c2-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-3",
+                "stage": "first_playable",
+                "quality": "verified_fix",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "The zero-delay broker-close fallback could still outrun an authenticated fatal runtime event delivered on a later browser task, leaving first-playable evidence with only the generic Worker-close message. A bounded 100 millisecond grace lets the causal runtime event terminate immediately when present while preserving automatic fail-closed handling for a genuine broker-only closure.",
+                "observedAt": "2026-08-24T17:26:07Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T23:17:44.000Z",
+            "updatedAt": "2026-08-24T23:17:44.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate heartbeat and candidate execution budgets",
+            "guidance": "Keep candidate execution and termination bounds exact, but size the host heartbeat allowance for healthy browser scheduling delays and require causal runtime evidence before classifying a missed heartbeat as candidate failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "assembly"
+              ],
+              "classifications": [
+                "pipeline_failure"
+              ]
+            },
+            "id": "KF-0007",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-2",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c1-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-2",
+                "stage": "assembly",
+                "quality": "verified_fix",
+                "outcome": "pipeline_failure",
+                "summary": "The browser-attested realm candidate completed its first capability probe, but the runtime heartbeat missed a 50 millisecond scheduling allowance without any browser or runtime error. Earlier campaigns passed the same gate, so the fixed heartbeat policy was too narrow for a healthy but briefly delayed browser task. Increasing only the host-heartbeat allowance to 250 milliseconds preserves the 50 millisecond candidate execution and termination bounds.",
+                "observedAt": "2026-08-24T17:14:29Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T23:17:44.000Z",
+            "updatedAt": "2026-08-24T23:17:44.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach required target-interaction proof to cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0008",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c3-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c3-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Evaluator-authored target-interaction proof contradicted an early active-progress scenario while the accepted behavior destroyed the transient object on interaction.",
+                "observedAt": "2026-08-24T17:32:33.572Z"
+              },
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-4",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c3-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-4",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "Evaluator-authored target-interaction proof was applied to every time-advancing transient lifecycle scenario. Target proof now attaches to cleanup-capable scenarios, with the first time-advancing scenario retained as a fallback when no cleanup scenario exists.",
+                "observedAt": "2026-08-24T17:41:47Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T23:17:44.000Z",
+            "updatedAt": "2026-08-24T23:17:44.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Prove transient creation before advancing time",
+            "guidance": "Use dispatch-only observations for positive transient creation and reserve time-advancing scenarios for travel, interaction, and cleanup so valid impact destruction does not contradict creation proof.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0009",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c4-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c4-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "A time-advancing progress observation expected a positive transient count after the accepted behavior had validly interacted and destroyed the object.",
+                "observedAt": "2026-08-24T17:46:51.705Z"
+              },
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-5",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c4-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-5",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "Contract-authoring guidance now requires dispatch-only positive creation proof and reserves time-advancing scenarios for travel, interaction, and cleanup evidence.",
+                "observedAt": "2026-08-24T17:53:30Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T23:17:44.000Z",
+            "updatedAt": "2026-08-24T23:17:44.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Avoid discard-only queries in active callbacks",
+            "guidance": "Do not spend an active callback budget on a spatial query used only to confirm a binding and then discard its handle; defer the query to the later lifecycle callback that consumes it for interaction.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "first_playable"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            },
+            "id": "KF-0010",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-6",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c5-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-6",
+                "stage": "first_playable",
+                "quality": "verified_fix",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "The admitted source exceeded the exact 8 ms active callback budget because it performed a spatial query only to confirm a required target, discarded that handle, and separately read the exact binding. Source guidance now forbids discard-only binding confirmation and moves interaction queries to the callback that consumes them.",
+                "observedAt": "2026-08-24T18:04:51Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T23:17:44.000Z",
+            "updatedAt": "2026-08-24T23:17:44.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Align deterministic targets with the actor proof path",
+            "guidance": "Place exact intent targets ahead of the first exact actor on the deterministic behavior proof path; do not use arbitrary entity-index placement that contradicts accepted actor-direction behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0011",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c6-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c6-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The generated behavior created and traveled an active object but recorded zero target interactions because the deterministic target was off the accepted proof path.",
+                "observedAt": "2026-08-24T18:09:21.960Z"
+              },
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-7",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c6-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-7",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "Exact intent targets are now placed ahead of the first exact actor on the deterministic proof path; unrelated entity positions are unchanged.",
+                "observedAt": "2026-08-24T18:15:53Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T23:17:44.000Z",
+            "updatedAt": "2026-08-24T23:17:44.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Active mechanics must materialize live runtime participants",
+            "guidance": "Every non-player entity that must be visible, observed, bound, targeted, or affected at runtime must belong to an allowed active mechanic that creates its runtime handle; spawn-zone membership alone is insufficient.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            },
+            "id": "KF-0012",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z-isolation-planning-fixture-c0-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-isolation-planning-fixture-c0-r1",
+                "attemptId": "a01-baseline",
+                "stage": "first_playable",
+                "quality": "fixture_diagnostic",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "Entity is not referenced by any spawn zone or active mechanic.",
+                "observedAt": "2026-08-24T16:50:38.405Z"
+              },
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t162928972z/fix-cycle-8",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t162928972z-discovery-c7-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t162928972z",
+                "fixId": "fix-cycle-8",
+                "stage": "first_playable",
+                "quality": "verified_fix",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "Planning declared and spawned a non-player exact target but omitted every trusted active mechanic that materializes it. Spec guidance now requires every live non-player runtime participant to appear in an allowed active mechanic and states that spawn-zone membership alone is insufficient.",
+                "observedAt": "2026-08-24T18:25:40Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T23:17:44.000Z",
+            "updatedAt": "2026-08-24T23:17:44.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-24T23:17:44.000Z",
+      "priorManifestDigest": "2d3f1846cdeff187fce97c593ff8b7dc0c568249c7a74285c17700c2d63d9834",
+      "resultingManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b"
     }
   ]
 }
