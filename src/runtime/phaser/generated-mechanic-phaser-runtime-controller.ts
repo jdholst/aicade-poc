@@ -531,9 +531,11 @@ export function createGeneratedMechanicPhaserRuntimeController({
       }
     );
     void activeBroker.closed.then((result) => {
-      if (!teardownStarted && broker === activeBroker) {
-        failClosed(result.message);
-      }
+      browserWindow.setTimeout(() => {
+        if (!teardownStarted && broker === activeBroker) {
+          failClosed(result.message);
+        }
+      }, 0);
     });
   }
   function createPendingFirstPlayableRequest(): PendingFirstPlayableRequest {
