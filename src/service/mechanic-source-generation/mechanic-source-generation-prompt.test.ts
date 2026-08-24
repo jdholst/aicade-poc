@@ -818,6 +818,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "radius at least the accepted segment length plus the owned-object and target interaction radii"
     );
+    expect(prompt).toContain(
+      "If scheduled callbacks already implement transient travel, expiry, and interaction, keep fixed_step minimal"
+    );
+    expect(prompt).toContain(
+      "Do not repeat spatial queries, object reads, or motion writes every fixed-step tick"
+    );
   });
 
   it("turns opaque-handle property access into capability-bound observation guidance", () => {
