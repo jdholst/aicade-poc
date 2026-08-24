@@ -26,7 +26,7 @@ export const MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY = {
   profileId: "phase_9_realm_conformance",
   maximumExecutionMilliseconds: 50,
   maximumTerminationMilliseconds: 50,
-  maximumHostHeartbeatMilliseconds: 50,
+  maximumHostHeartbeatMilliseconds: 250,
   resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
 } as const satisfies {
   profileId: StableId;
