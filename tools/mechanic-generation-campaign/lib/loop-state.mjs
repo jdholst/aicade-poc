@@ -1,6 +1,11 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { CAMPAIGN_LOOP_RUN_SCHEMA_VERSION } from "./loop-contracts.mjs";
+import {
+  CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION,
+  CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
+  loopBudgetAdditionsSchema,
+} from "./loop-contracts.mjs";
 
 const ACTUAL_PROVIDER_STAGES = ["planning", "contract", "source"];
 const PROOF_COHORTS = ["discovery", "repeatability", "variation"];
@@ -17,6 +22,7 @@ export function createInitialLoopRun({
   controlRoot,
   worktreePath,
   branch,
+  knowledgeManifestDigest,
 }) {
   return {
     schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
@@ -59,6 +65,12 @@ export function createInitialLoopRun({
     })),
     campaignLinks: [],
     fixCheckpointIds: [],
+    knowledgePolicy: {
+      required: true,
+      baselineManifestDigest: knowledgeManifestDigest,
+    },
+    knowledgeReconciliationIds: [],
+    budgetExtensions: [],
   };
 }
 
@@ -216,7 +228,12 @@ export function finishSequenceCampaign(run, definition, {
   if (next.usage.fixCycles < next.limits.maxFixCycles) {
     return { ...next, status: "waiting_for_fix" };
   }
-  return exhaustLoop(next, "The current step failed and no fix cycles remain.", completedAt);
+  return exhaustLoop(
+    next,
+    "The current step failed and no fix cycles remain.",
+    completedAt,
+    { status: "waiting_for_fix" }
+  );
 }
 
 export function finishIsolationCampaign(run, {
@@ -277,13 +294,20 @@ export function rejectLoopManualQa(
     : exhaustLoop(
         next,
         "Manual gameplay QA failed and no fix cycles remain.",
-        completedAt
+        completedAt,
+        { status: "waiting_for_fix" }
       );
 }
 
-export function applyFixCheckpoint(run, fix) {
+export function applyFixCheckpoint(
+  run,
+  fix,
+  { knowledgeReconciliationId } = {}
+) {
   if (run.usage.fixCycles >= run.limits.maxFixCycles) {
-    return exhaustLoop(run, "Fix-cycle ceiling reached.");
+    return exhaustLoop(run, "Fix-cycle ceiling reached.", undefined, {
+      status: "waiting_for_fix",
+    });
   }
   return {
     ...run,
@@ -305,6 +329,9 @@ export function applyFixCheckpoint(run, fix) {
       revisionKey: undefined,
     })),
     fixCheckpointIds: [...run.fixCheckpointIds, fix.id],
+    knowledgeReconciliationIds: knowledgeReconciliationId
+      ? [...run.knowledgeReconciliationIds, knowledgeReconciliationId]
+      : run.knowledgeReconciliationIds,
     activeCampaign: undefined,
     pendingManualQa: undefined,
     result: undefined,
@@ -372,13 +399,91 @@ export function invalidateLoop(run, reason, completedAt = new Date().toISOString
   };
 }
 
-export function exhaustLoop(run, reason, completedAt = new Date().toISOString()) {
+export function exhaustLoop(
+  run,
+  reason,
+  completedAt = new Date().toISOString(),
+  resume = { status: "running" }
+) {
+  const activeCampaign =
+    resume.status === "running"
+      ? resume.activeCampaign ?? run.activeCampaign
+      : undefined;
   return {
     ...run,
     status: "exhausted",
     completedAt,
     exhaustionReason: reason,
+    exhaustionResume: {
+      status: resume.status,
+      ...(activeCampaign ? { activeCampaign } : {}),
+    },
     activeCampaign: undefined,
+  };
+}
+
+export function createLoopBudgetExtensionPreview(run, additionsInput) {
+  if (run.status !== "exhausted") {
+    throw new Error(
+      `Campaign loop ${run.id} cannot be extended from status ${run.status}.`
+    );
+  }
+  const additions = loopBudgetAdditionsSchema.parse(additionsInput);
+  const resultingLimits = addLoopLimits(run.limits, additions);
+  const payload = {
+    schemaVersion: CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION,
+    loopId: run.id,
+    definitionHash: run.definitionHash,
+    loopAuthorizationHash: run.authorizationHash,
+    currentRevision: run.currentRevision,
+    usage: run.usage,
+    previousLimits: run.limits,
+    additions,
+    resultingLimits,
+    exhaustionResume: run.exhaustionResume,
+  };
+  const authorizationHash = createHash("sha256")
+    .update(
+      `campaign-loop-budget-extension-authorization/v1:${canonicalJson(payload)}`
+    )
+    .digest("hex");
+  return { ...payload, authorizationHash };
+}
+
+export function applyLoopBudgetExtension(
+  run,
+  { additions, authorization, createdAt = new Date().toISOString() }
+) {
+  const preview = createLoopBudgetExtensionPreview(run, additions);
+  if (authorization !== preview.authorizationHash) {
+    throw new Error(
+      `Loop extension authorization does not match ${preview.authorizationHash}.`
+    );
+  }
+  const resume = run.exhaustionResume;
+  return {
+    ...run,
+    schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
+    status: resume.status,
+    completedAt: undefined,
+    limits: preview.resultingLimits,
+    budgetExtensions: [
+      ...(run.budgetExtensions ?? []),
+      {
+        schemaVersion: CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION,
+        authorizationHash: preview.authorizationHash,
+        createdAt,
+        previousStatus: "exhausted",
+        previousLimits: run.limits,
+        usageAtAuthorization: run.usage,
+        additions: preview.additions,
+        resultingLimits: preview.resultingLimits,
+        resumeStatus: resume.status,
+      },
+    ],
+    exhaustionReason: undefined,
+    exhaustionResume: undefined,
+    activeCampaign: resume.activeCampaign,
   };
 }
 
@@ -443,4 +548,34 @@ function createLoopResult(steps, definition, finalRevisionKey) {
     achievedStepIds,
     finalRevisionKey,
   };
+}
+
+function addLoopLimits(limits, additions) {
+  return {
+    maxFixCycles: limits.maxFixCycles + additions.maxFixCycles,
+    maxCampaignRuns: limits.maxCampaignRuns + additions.maxCampaignRuns,
+    maxSubmissions: limits.maxSubmissions + additions.maxSubmissions,
+    maxAuxiliaryIsolationCampaigns:
+      limits.maxAuxiliaryIsolationCampaigns +
+      additions.maxAuxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        limits.actualProviderCalls[stage] + additions.actualProviderCalls[stage],
+      ])
+    ),
+  };
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }

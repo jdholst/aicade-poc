@@ -1,4 +1,11 @@
-import { appendFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -107,13 +114,6 @@ export function createCampaignLoopStore(repoRoot) {
       const fixes = await this.readFixes(loopId);
       const historyPath = path.join(dataRoot, "campaign-loop-history.jsonl");
       const existing = await readTextOrEmpty(historyPath);
-      if (
-        existing
-          .split("\n")
-          .some((line) => line.includes(`\"id\":\"${run.id}\"`))
-      ) {
-        throw new Error(`Campaign loop ${run.id} is already published.`);
-      }
       const summary = redactSensitive({
         schemaVersion: CAMPAIGN_LOOP_HISTORY_SCHEMA_VERSION,
         id: run.id,
@@ -132,6 +132,8 @@ export function createCampaignLoopStore(repoRoot) {
         branch: run.worktree.branch,
         steps: run.steps,
         campaignLinks: run.campaignLinks,
+        knowledgePolicy: run.knowledgePolicy,
+        knowledgeReconciliationIds: run.knowledgeReconciliationIds,
         manualQa: {
           pending: run.status === "waiting_for_manual_qa" ? 1 : 0,
           pendingReview: run.pendingManualQa,
@@ -155,8 +157,24 @@ export function createCampaignLoopStore(repoRoot) {
         invalidReason: run.invalidReason,
         blockedReason: run.blockedReason,
         exhaustionReason: run.exhaustionReason,
+        exhaustionResume: run.exhaustionResume,
+        budgetExtensions: run.budgetExtensions,
+        lifecycle: run.lifecycle,
       });
-      await appendFile(historyPath, `${JSON.stringify(summary)}\n`, "utf8");
+      const records = existing
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      const existingIndex = records.findIndex(({ id }) => id === run.id);
+      if (existingIndex >= 0) {
+        records[existingIndex] = summary;
+      } else {
+        records.push(summary);
+      }
+      await writeTextAtomic(
+        historyPath,
+        `${records.map((record) => JSON.stringify(record)).join("\n")}\n`
+      );
       return summary;
     },
   };
@@ -169,6 +187,12 @@ async function readDirectoryOrEmpty(directory) {
     if (error?.code === "ENOENT") return [];
     throw error;
   }
+}
+
+async function writeTextAtomic(filePath, contents) {
+  const temporaryPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
+  await writeFile(temporaryPath, contents, "utf8");
+  await rename(temporaryPath, filePath);
 }
 
 async function readTextOrEmpty(filePath) {

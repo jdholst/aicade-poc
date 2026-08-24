@@ -117,16 +117,48 @@ npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reaso
 
 Purpose: record the candidate as `mechanic_incorrect` with classification `manual_qa_rejected`. A non-empty reason is required. A standalone campaign stops. A linked loop moves directly to `waiting_for_fix`. The command consumes no budget and makes zero provider calls.
 
-## Manual-QA v1 evidence contracts
+## Manual-QA evidence contracts
 
 The harness modifies its existing v1 records directly:
 
 - `campaign-attempt/v1` includes the cohort, immutable automated outcome, optional manual-QA reference, `awaiting_manual_qa`, and the later human adjudication. A full-actual proof attempt cannot be `success` without an approved reference.
-- `campaign-run/v1` includes persisted actual-provider authorization, `waiting_for_manual_qa`, and the exact pending campaign, attempt, prompt, cohort, revision, and evidence identity.
-- `campaign-loop-run/v1` includes the same waiting state and pending identity while preserving the active sequence campaign.
+- `campaign-run/v2` includes persisted actual-provider authorization, a required compiled-knowledge baseline for new records, `waiting_for_manual_qa`, and the exact pending campaign, attempt, prompt, cohort, revision, and evidence identity. Existing v1 records are accepted with `knowledgePolicy.required: false`.
+- `campaign-loop-run/v3` includes the same waiting state, compiled-knowledge policy and accepted reconciliation IDs while preserving the active sequence campaign. Existing v1 and v2 loop records are accepted with `knowledgePolicy.required: false`.
 - `campaign-manual-qa/v1` stores `pending`, `approved`, or `denied`; request and decision timestamps; exact candidate artifact hashes; review sessions; an optional approval note; and a required denial reason.
 
 Pending-review fields are required only in waiting states. Existing legacy narrative successes are normalized as approved with `legacy_assumed` provenance. They remain historical evidence and are not mixed into current revision proof cohorts.
+
+## Compiled campaign knowledge
+
+Validate the Git-tracked canonical file:
+
+```bash
+npm run campaign -- knowledge validate
+```
+
+Report findings with optional `--status`, `--confidence`, `--applicability`, `--stage`, `--classification`, or `--manifest` filters:
+
+```bash
+npm run campaign -- knowledge report [filters]
+```
+
+Compute read-only, deterministic context for exactly one campaign or loop:
+
+```bash
+npm run campaign -- knowledge context --loop <loop-id> [--json]
+npm run campaign -- knowledge context --campaign <campaign-id> [--json]
+```
+
+The output contains the exact consulted manifest digest, context digest, applicable and related findings, and all linked evidence not reviewed by an earlier reconciliation.
+
+Apply a schema-validated proposal atomically:
+
+```bash
+npm run campaign -- knowledge reconcile --loop <loop-id> --proposal <path>
+npm run campaign -- knowledge reconcile --campaign <campaign-id> --proposal <path>
+```
+
+The proposal path must remain inside the reconciliation target. A proposal is rejected when its digests are stale, an applicable finding was not consulted, an evidence item was omitted or duplicated, confidence lacks sufficient evidence, or an operation violates revision history. Reconciliation makes no provider calls. A loop at `waiting_for_fix` writes only to its dedicated worktree. A disposed loop or standalone campaign writes to the control checkout.
 
 ## Dashboard
 
@@ -140,7 +172,7 @@ Options:
 
 - `--port <number>` selects the dashboard port. Default: `4310`.
 
-The process remains active until interrupted. It polls local campaign files, serves sanitized artifacts, makes no provider calls, and does not modify campaign evidence.
+The process remains active until interrupted. It polls local campaign files, serves sanitized artifacts, and shows canonical findings plus clearly labeled loop-local pending knowledge, amendments, reconciliations, and evidence references. It makes no provider calls and does not modify campaign evidence.
 
 ## Report
 
@@ -168,7 +200,7 @@ Arguments:
 
 - `--campaign <campaign-id>` is required and must identify an existing run.
 
-Publishing does not create a Git commit, rewrite attempt evidence, or make provider calls. Review the full attempt evidence before publishing.
+Publishing does not create a Git commit, rewrite attempt evidence, or make provider calls. New records cannot publish qualifying evidence until it is reconciled. Review the full attempt evidence before publishing.
 
 ## Import legacy evidence
 
@@ -195,7 +227,7 @@ This command makes no provider calls. It fails if source parsing or expected his
 
 ## Campaign loop commands
 
-Campaign loops coordinate several immutable campaigns for one mechanic. They use a clean dedicated `codex/campaign-loop-*` worktree in an adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` root and central ignored evidence storage in the control checkout. Keeping the execution package tree outside the control package tree avoids nested Next.js workspace-root inference. The loop never merges, pushes, deletes, or cleans up its branch automatically.
+Campaign loops coordinate several immutable campaigns for one mechanic. They use a clean dedicated `codex/campaign-loop-*` worktree in an adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` root and central ignored evidence storage in the control checkout. Keeping the execution package tree outside the control package tree avoids nested Next.js workspace-root inference. A stopped loop retains its branch and worktree until an explicit `conclude` or `discard` command. No loop command pushes or deletes a remote branch.
 
 ### Validate a loop
 
@@ -230,9 +262,40 @@ Resume after a verified fix commit:
 npm run campaign -- loop resume --id <loop-id> --fix-report <path>
 ```
 
-A fix report is accepted only from `waiting_for_fix`. Its before and after revisions, commit, changed files, verification, trigger campaign, and durable or temporary classification must match the clean loop worktree. Temporary fixes must include their canonical ledger entries. An accepted fix increments the fix cycle and restarts the sequence from its first step.
+A fix report is accepted only from `waiting_for_fix`. Its before and after revisions, commit, changed files, verification, trigger campaign, and durable or temporary classification must match the clean loop worktree. Temporary fixes must include their canonical ledger entries. Knowledge-required loops must also commit `generation-knowledge.json` with exactly one replayable fix-cycle reconciliation that accounts for the current context. An accepted fix records its `KR-*` ID, increments the fix cycle, and restarts the sequence from its first step.
 
 If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`; denial returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
+
+### Extend an exhausted loop
+
+Preview an additive budget extension:
+
+```bash
+npm run campaign -- loop extend \
+  --id <loop-id> \
+  --add-campaign-runs <number> \
+  [--add-fix-cycles <number>] \
+  [--add-submissions <number>] \
+  [--add-auxiliary-isolations <number>] \
+  [--add-planning-calls <number>] \
+  [--add-contract-calls <number>] \
+  [--add-source-calls <number>]
+```
+
+At least one addition must be positive. A preview prints usage, current ceilings, additions, resulting ceilings, the recorded resume checkpoint, and a canonical extension hash. It is read-only and makes zero provider calls.
+
+Apply the exact preview and resume:
+
+```bash
+npm run campaign -- loop extend \
+  --id <loop-id> \
+  --add-campaign-runs <number> \
+  --authorize <extension-hash> \
+  [--fix-report <path>] \
+  [--headed] [--port <number>] [--attempt-timeout-ms <number>]
+```
+
+The hash binds the loop identity, authorization, revision, usage, old ceilings, additions, resulting ceilings, and exhaustion checkpoint. It can be applied once. Only `exhausted` loops can be extended. An active campaign resumes from its recorded checkpoint. A fix-required checkpoint remains at `waiting_for_fix` unless the same command includes a valid fix report. Per-step retry limits and per-profile isolation limits remain frozen policy and cannot be extended.
 
 ### Run auxiliary isolation
 
@@ -252,13 +315,29 @@ npm run campaign -- loop block --id <loop-id> --reason <text>
 
 Use this only when the agent cannot produce a safe verified in-scope fix. The worktree and evidence remain available for review.
 
+### Conclude a loop
+
+```bash
+npm run campaign -- loop conclude --id <loop-id>
+```
+
+Concluding accepts `achieved`, `exhausted`, `blocked`, and safely verifiable `invalid` loops. It verifies that the recorded control checkout is clean, on a branch, still rooted at the recorded path, and descended from the loop base. The loop worktree must be clean, and accepted fix checkpoints must form a continuous commit chain ending at the loop branch tip. Verified fixes are merged with `--no-ff` unless they are already ancestors of the control branch. A no-fix loop skips the merge. Merge conflicts are aborted and leave the loop branch, worktree, and status available for recovery. Successful reconciliation removes the worktree and local loop branch, then records `concluded`. The command is idempotent when cleanup or merging was already completed manually.
+
+### Discard a loop
+
+```bash
+npm run campaign -- loop discard --id <loop-id> [--force]
+```
+
+Discard accepts any non-running loop state. It removes the worktree and local loop branch without merging, clears pending execution references without recording a QA verdict, preserves all run, attempt, fix, and loop evidence, and records `discarded`. Dirty worktrees or revision mismatches fail with the affected paths listed. Review those paths and issue a separate, explicit `--force` command to delete them. The command is idempotent when cleanup already happened manually.
+
 ### Report a loop
 
 ```bash
 npm run campaign -- loop report --id <loop-id>
 ```
 
-Prints status, current revision cycle, worktree branch, sequence progress, usage, remaining budgets, and proof status.
+Prints status, current revision cycle, worktree branch, sequence progress, usage, remaining budgets, extension history, lifecycle disposition, and proof status.
 
 ### Publish a loop
 
@@ -266,4 +345,4 @@ Prints status, current revision cycle, worktree branch, sequence progress, usage
 npm run campaign -- loop publish --id <loop-id>
 ```
 
-Appends a sanitized compact record to `campaign-loop-history.jsonl`. Absolute control/worktree paths and credentials are omitted. Publishing does not commit, merge, or push.
+Atomically upserts one sanitized `campaign-loop-history/v2` record by loop ID in `campaign-loop-history.jsonl`. Republish after an extension, conclusion, or discard to refresh the existing dashboard row without creating a duplicate. Absolute control/worktree paths and credentials are omitted. Publishing does not commit, merge, or push. Uncommitted published history makes the control checkout dirty and therefore blocks conclusion until it is committed or otherwise handled.

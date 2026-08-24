@@ -61,7 +61,7 @@ The values above illustrate the shape only. Choose and authorize limits for each
 
 Run validation first. Present the complete sequence, provider modes, campaign ceiling, submission ceiling, fix-cycle ceiling, isolation ceiling, and per-stage actual-provider ceilings once. Start the loop with the exact printed definition hash after authorization.
 
-The authorization remains valid on resume because usage only decreases the remaining envelope. Changing the definition, manifest, prompts, thresholds, probe, model, provider modes, or ceilings invalidates the loop.
+The authorization remains valid on ordinary resume because usage only decreases the remaining envelope. Changing the definition, manifest, prompts, thresholds, probe, model, provider modes, or original ceilings invalidates the loop. An exhausted loop can receive a separately hash-authorized additive extension without changing its frozen definition. Per-step retry limits and per-profile isolation limits remain fixed.
 
 ## Worktree preparation
 
@@ -80,9 +80,37 @@ When a full-actual proof submission passes the automated pipeline and external p
 
 When a campaign fails, the loop checks only that campaign's failed attempts. It starts another campaign on the same revision only when every failure classification is listed by the current step and its same-revision run limit remains.
 
-Otherwise the loop enters `waiting_for_fix`. The agent may run an authorized isolation profile, then work only inside the loop worktree. A fix report must describe one clean committed revision and list passing verification. A temporary fix must also update the canonical temporary-fix ledger. The CLI verifies the report against Git before accepting it.
+Otherwise the loop enters `waiting_for_fix`. The agent may run an authorized isolation profile, then work only inside the loop worktree. Before diagnosis, `knowledge context --loop <id>` selects applicable and related canonical findings and all unreconciled linked evidence. The diagnosis cites applicable `KF-*` IDs. A proposal then accounts for every evidence item and either changes compiled guidance or records an explicit no-change reason.
+
+A fix report must describe one clean committed revision and list passing verification. A temporary fix must also update the canonical temporary-fix ledger. The same commit includes the code fix and `generation-knowledge.json` with exactly one new `KR-*` reconciliation. The CLI independently reloads the prior Git version, recomputes context, replays the journal operation, and verifies the source loop, fix, trigger campaign, digests, consulted findings, and evidence dispositions before accepting the report.
 
 Every accepted fix creates a new revision cycle. All sequence steps reset to pending, while prior campaigns and fixes remain linked as historical evidence. Global usage never resets.
+
+## Knowledge gathering and use
+
+Campaign knowledge has two layers. Campaign artifacts are immutable evidence: submitted attempts, stage outcomes, isolation results, manual-QA verdicts, accepted fixes, and terminal loop outcomes remain attached to the run that produced them. `generation-knowledge.json` is the compiled interpretation of that evidence. Its `KF-*` findings may be corrected as new evidence arrives, while stable IDs and amendment history preserve what changed and why.
+
+### Gather knowledge
+
+1. A new loop records the current knowledge-manifest digest as its baseline. This identifies the compiled knowledge available when the loop began without copying it into the loop record.
+2. Campaign execution records raw evidence. A failure that triggers a fix, an approved candidate, and the final failure behind a terminal stop are qualifying evidence. Isolation results and manual-QA verdicts linked to the same interval also enter the next reconciliation context.
+3. At `waiting_for_fix`, run `knowledge context --loop <id> --json` before diagnosis. The command gathers every linked evidence item not covered by an earlier reconciliation and selects canonical findings by mechanic or manifest, pipeline stage, and failure classification. Empty stage or classification scope means the finding applies to any value in that dimension.
+4. Inspect the referenced artifacts rather than relying only on their summaries. Account for every context evidence ID exactly once as `incorporated`, `confirming`, or `not_reusable`. A `not_reusable` disposition requires a specific rationale.
+5. Prepare one reconciliation proposal using the exact manifest and context digests returned by `knowledge context`. The proposal may `add`, `amend`, `confirm`, or `retire` findings. If the evidence changes no compiled guidance, use an explicit no-change reason instead of an operation.
+6. Run `knowledge reconcile` before the fix commit. It recomputes context and rejects stale digests, omitted applicable findings, incomplete evidence coverage, invalid confidence, and revision conflicts. A successful reconciliation appends one `KR-*` journal event and atomically updates the manifest.
+7. Commit the manifest update with the corresponding code fix. After explicit conclude or discard, gather and reconcile any remaining approved success or terminal failure in the control checkout before publication.
+
+Evidence strength limits confidence. Fixture or isolation evidence can support a `hypothesis`. An actual submission or verified fix can support a finding. `confirmed` requires an approved manual-QA candidate or matching evidence from two independent actual campaigns. Confidence describes the evidence behind guidance, not whether the current loop has proven its mechanic.
+
+### Use knowledge
+
+The context output separates `applicable` findings from `related` findings. Applicable findings match the current mechanic or manifest and the stage and classification of at least one unreconciled evidence item. Related findings match the evidence dimensions but belong to another mechanic or manifest. Use them for comparison and explicitly state that they do not govern the current fix.
+
+Before editing, cite each applicable `KF-*` ID in the diagnosis and state how its current guidance affects the failure hypothesis, implementation boundary, and regression tests. The finding's evidence references provide the prior artifacts to inspect. Its scope prevents mechanic-specific behavior from being generalized to the whole pipeline, and its confidence indicates how cautiously to rely on it.
+
+When current evidence contradicts a finding, amend the existing stable ID rather than silently overwriting it or adding a duplicate. The amendment increments the revision, snapshots the previous mutable fields, and records the contradiction reason and evidence. Retire a finding when its guidance should no longer direct future work. Later contexts use the current active revision while retaining the complete history for review.
+
+The fix checkpoint enforces this use mechanically. Resume verifies that the fix commit contains exactly one matching reconciliation, every applicable finding was consulted, every context evidence item was dispositioned, and the committed manifest is the result of replaying the proposal against the prior Git version. A fix cannot be accepted when its knowledge context is missing, stale, or incomplete.
 
 ## Terminal states
 
@@ -92,5 +120,25 @@ Every accepted fix creates a new revision cycle. All sequence steps reset to pen
 - `blocked`: no safe verified in-scope pipeline fix could be produced.
 - `interrupted`: execution stopped unexpectedly and can be resumed on the same clean revision.
 - `waiting_for_manual_qa`: the exact playable candidate is ready for an explicit human verdict. This state has no timeout.
+- `concluded`: the stopped loop was reconciled with its recorded control checkout and its local worktree and branch were removed.
+- `discarded`: the stopped loop's local worktree and branch were removed without merging or recording a QA verdict.
 
-The loop branch and worktree remain after every terminal state. Execution worktrees live in an adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` directory rather than beneath the control checkout, which prevents nested package roots from changing Next.js build behavior. Evidence remains in the control checkout's ignored `.qa/mechanic-generation-campaign/` directory. Review and merge worktree branches manually if appropriate.
+The loop branch and worktree remain after a stop until an explicit lifecycle command runs. Execution worktrees live in an adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` directory rather than beneath the control checkout, which prevents nested package roots from changing Next.js build behavior. Evidence remains in the control checkout's ignored `.qa/mechanic-generation-campaign/` directory through every lifecycle action.
+
+## Post-stop session management
+
+### Extend and resume
+
+Only an `exhausted` loop can be extended. Budget additions are available for fix cycles, campaign runs, submissions, auxiliary isolation campaigns, and planning, contract, and source provider calls. At least one addition must be positive.
+
+Run `loop extend` without `--authorize` first. The read-only preview reports current usage, old ceilings, additions, resulting ceilings, the exhaustion resume checkpoint, and a canonical extension hash. It changes no evidence and makes no provider calls. Supplying that exact hash applies the extension once and resumes from the checkpoint. A loop exhausted during an active campaign continues that campaign. A loop exhausted while waiting for a fix remains there unless a verified fix report is supplied.
+
+### Conclude
+
+`loop conclude` accepts stopped `achieved`, `exhausted`, `blocked`, or safely verifiable `invalid` loops. The command verifies the recorded control checkout, base ancestry, cleanliness, loop worktree identity, and the continuous accepted-fix chain. If verified fixes are not already merged, it performs a no-fast-forward merge into the branch currently checked out at the recorded control root. If there are no fixes or the loop tip is already an ancestor, it skips the merge. A conflict is aborted without changing loop lifecycle state or deleting the session. After successful reconciliation, it removes the local worktree and branch and records `concluded` last so retries can reconcile manual or partial cleanup.
+
+### Discard
+
+`loop discard` accepts any non-running loop state. It removes the local worktree and branch without merging, preserves all campaign evidence, and records `discarded` without inferring a manual-QA verdict. Dirty or revision-mismatched work requires a separate `--force` invocation after the CLI reports the exact affected paths. Conclude and discard are idempotent when the worktree or branch was already removed manually.
+
+No lifecycle command switches the control checkout branch, pushes commits, or deletes remote branches. After disposition, remaining approved success or final terminal failure is reconciled in the control checkout before publication. This knowledge-only commit does not change the proven loop revision. Publishing after disposition atomically refreshes the loop's existing history row by ID. A dirty control checkout, including uncommitted published history, blocks conclusion.

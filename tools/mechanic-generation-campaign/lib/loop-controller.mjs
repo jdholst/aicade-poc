@@ -3,12 +3,19 @@ import path from "node:path";
 
 import { runCampaign } from "./browser-runner.mjs";
 import { createCampaignStore } from "./campaign-store.mjs";
+import {
+  createCampaignKnowledgeStore,
+  knowledgeEntriesDigest,
+} from "./knowledge.mjs";
+import { validateFixKnowledgeCheckpoint } from "./knowledge-checkpoint.mjs";
 import { loadCampaignLoopDefinition } from "./loop-definition-loader.mjs";
 import { parseCampaignLoopFix } from "./loop-contracts.mjs";
 import { createCampaignLoopStore } from "./loop-store.mjs";
 import { parseTemporaryFixLedger } from "./legacy-importer.mjs";
 import {
+  applyLoopBudgetExtension,
   createInitialLoopRun,
+  createLoopBudgetExtensionPreview,
   applyFixCheckpoint,
   blockLoop,
   exhaustLoop,
@@ -56,6 +63,7 @@ export async function startCampaignLoop({
   authorization,
   loopStore = createCampaignLoopStore(repoRoot),
   campaignStore = createCampaignStore(repoRoot),
+  knowledgeStore = createCampaignKnowledgeStore(repoRoot),
   runCampaignFn = runCampaign,
   prepareWorktreeFn = prepareLoopWorktree,
   inspectWorktreeFn = inspectLoopWorktree,
@@ -78,6 +86,9 @@ export async function startCampaignLoop({
     );
   }
   await Promise.all([loopStore.initialize(), campaignStore.initialize()]);
+  const knowledgeManifestDigest = knowledgeEntriesDigest(
+    await knowledgeStore.read()
+  );
   const createdAt = now().toISOString();
   const runId = createLoopRunId(loaded.definition.id, createdAt);
   const worktree = await prepareWorktreeFn({
@@ -102,6 +113,7 @@ export async function startCampaignLoop({
     controlRoot: repoRoot,
     worktreePath: worktree.path,
     branch: worktree.branch,
+    knowledgeManifestDigest,
   });
   await loopStore.writeRun(run);
   return executeSequence({
@@ -126,6 +138,7 @@ export async function resumeCampaignLoop({
   runCampaignFn = runCampaign,
   inspectWorktreeFn = inspectLoopWorktree,
   changedFilesFn = changedFilesBetween,
+  validateKnowledgeCheckpointFn = validateFixKnowledgeCheckpoint,
   environment = process.env,
   headed = false,
   port = 3117,
@@ -133,7 +146,16 @@ export async function resumeCampaignLoop({
 }) {
   await Promise.all([loopStore.initialize(), campaignStore.initialize()]);
   let run = await loopStore.readRun(loopId);
-  if (["achieved", "blocked", "exhausted", "invalid"].includes(run.status)) {
+  if (
+    [
+      "achieved",
+      "blocked",
+      "exhausted",
+      "invalid",
+      "concluded",
+      "discarded",
+    ].includes(run.status)
+  ) {
     throw new Error(`Campaign loop ${loopId} is terminal with status ${run.status}.`);
   }
   if (run.status === "waiting_for_manual_qa") {
@@ -164,14 +186,18 @@ export async function resumeCampaignLoop({
     const fix = parseCampaignLoopFix(
       JSON.parse(await readFile(path.resolve(fixReportPath), "utf8"))
     );
+    let knowledgeReconciliationId;
     try {
-      await validateFixCheckpoint({
+      knowledgeReconciliationId = await validateFixCheckpoint({
+        repoRoot,
         run,
         fix,
         loaded,
         worktree,
         changedFilesFn,
         campaignStore,
+        loopStore,
+        validateKnowledgeCheckpointFn,
       });
     } catch (error) {
       if (error instanceof FrozenLoopCriteriaError) {
@@ -182,7 +208,7 @@ export async function resumeCampaignLoop({
       throw error;
     }
     await loopStore.writeFix(fix);
-    run = applyFixCheckpoint(run, fix);
+    run = applyFixCheckpoint(run, fix, { knowledgeReconciliationId });
     await loopStore.writeRun(run);
   } else {
     if (fixReportPath) {
@@ -230,6 +256,55 @@ export async function resumeCampaignLoop({
     port,
     attemptTimeoutMs,
   });
+}
+
+export async function extendCampaignLoop({
+  repoRoot,
+  loopId,
+  additions,
+  authorization,
+  fixReportPath,
+  loopStore = createCampaignLoopStore(repoRoot),
+  campaignStore = createCampaignStore(repoRoot),
+  runCampaignFn = runCampaign,
+  inspectWorktreeFn = inspectLoopWorktree,
+  changedFilesFn = changedFilesBetween,
+  environment = process.env,
+  now = () => new Date(),
+  headed = false,
+  port = 3117,
+  attemptTimeoutMs,
+}) {
+  await Promise.all([loopStore.initialize(), campaignStore.initialize()]);
+  const stoppedRun = await loopStore.readRun(loopId);
+  const preview = createLoopBudgetExtensionPreview(stoppedRun, additions);
+  if (!authorization) {
+    return { run: stoppedRun, preview };
+  }
+  const extended = applyLoopBudgetExtension(stoppedRun, {
+    additions,
+    authorization,
+    createdAt: now().toISOString(),
+  });
+  await loopStore.writeRun(extended);
+  if (extended.status === "waiting_for_fix" && !fixReportPath) {
+    return { run: extended, preview };
+  }
+  const resumed = await resumeCampaignLoop({
+    repoRoot,
+    loopId,
+    fixReportPath,
+    loopStore,
+    campaignStore,
+    runCampaignFn,
+    inspectWorktreeFn,
+    changedFilesFn,
+    environment,
+    headed,
+    port,
+    attemptTimeoutMs,
+  });
+  return { ...resumed, preview };
 }
 
 async function resumeActiveIsolation({
@@ -372,7 +447,9 @@ export async function runCampaignLoopIsolation({
     profile.providerModes
   );
   if (capacityFailure) {
-    const exhausted = exhaustLoop(initialRun, capacityFailure);
+    const exhausted = exhaustLoop(initialRun, capacityFailure, undefined, {
+      status: "waiting_for_fix",
+    });
     await loopStore.writeRun(exhausted);
     return { run: exhausted };
   }
@@ -697,12 +774,15 @@ async function reloadFrozenLoop({ repoRoot, run, environment }) {
 }
 
 async function validateFixCheckpoint({
+  repoRoot,
   run,
   fix,
   loaded,
   worktree,
   changedFilesFn,
   campaignStore,
+  loopStore,
+  validateKnowledgeCheckpointFn,
 }) {
   if (fix.loopId !== run.id) {
     throw new Error(`Fix report belongs to loop ${fix.loopId}, not ${run.id}.`);
@@ -794,6 +874,14 @@ async function validateFixCheckpoint({
       );
     }
   }
+  return validateKnowledgeCheckpointFn({
+    repoRoot,
+    run,
+    fix,
+    actualChangedFiles,
+    campaignStore,
+    loopStore,
+  });
 }
 
 class FrozenLoopCriteriaError extends Error {}

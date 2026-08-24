@@ -1,0 +1,473 @@
+{
+  "schemaVersion": "campaign-knowledge/v1",
+  "revision": 1,
+  "updatedAt": "2026-08-24T03:08:26.000Z",
+  "entries": [
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Campaign worktrees must propagate their environment",
+      "guidance": "Load the isolated campaign worktree environment before build and server startup, pass it to both child processes, and preserve explicit process values.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "planning"
+        ],
+        "classifications": [
+          "provider_failure"
+        ]
+      },
+      "id": "KF-0001",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260823t204349446z/fix-cycle-1",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260823t204349446z-discovery-c0-r2",
+          "loopId": "p09-t17-projectile-proof-loop-20260823t204349446z",
+          "fixId": "fix-cycle-1",
+          "stage": "planning",
+          "quality": "verified_fix",
+          "outcome": "provider_failure",
+          "summary": "Actual planning requests failed because the isolated campaign worktree environment was not loaded into the build and server child processes. The durable campaign-runner fix loads the worktree environment and passes it to both processes while preserving explicit process values.",
+          "observedAt": "2026-08-23T21:34:18.000Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-23T21:34:18.000Z",
+      "updatedAt": "2026-08-23T21:34:18.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Moving owned objects need position-following target checks",
+      "guidance": "Query targets around the owned object current observed position on bounded recurring lifecycle checks shorter than its lifetime; reschedule while active and stop after the first hit or expiry.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0002",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260823t214017723z/fix-cycle-1",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260823t214017723z-discovery-c0-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260823t214017723z",
+          "fixId": "fix-cycle-1",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual source generation repeatedly produced a transient projectile that traveled and was cleaned up but queried and mutated the target at its stationary location immediately after creation, before the owned object could overlap the target. The durable source-generation prompt now requires target queries to follow the owned object's current observed position during scheduled or fixed-step travel, with bounded rescheduling and cleanup after the first hit or expiry.",
+          "observedAt": "2026-08-23T22:12:27.000Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-2",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c1-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+          "fixId": "fix-cycle-2",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The source repair preserved owned-object creation, actor origin, travel, and active state, but scheduled the first target query at the full projectile lifetime. The moving object passed the target between observations and targetInteractionsDelta remained zero. The durable mechanic-general source guidance now requires bounded recurring lifecycle checks shorter than the accepted lifetime, with active travel and rescheduling before expiry until the target is reached.",
+          "observedAt": "2026-08-24T02:53:44.000Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-23T22:12:27.000Z",
+      "updatedAt": "2026-08-24T02:53:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Active owned objects must survive post-action observation",
+      "guidance": "Keep active owned objects observable through the post-action lifecycle check and defer expiry cleanup until after bounded motion and target interaction can be observed.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0003",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-1",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c0-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+          "fixId": "fix-cycle-1",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual source generation created and moved an owned projectile, interacted with the target, and then destroyed it before the post-action observation. The durable mechanic-general source-generation repair guidance now requires active owned objects to remain observable through the post-action lifecycle check, with bounded motion, target interaction, and deferred expiry cleanup.",
+          "observedAt": "2026-08-24T02:43:38.000Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T02:43:38.000Z",
+      "updatedAt": "2026-08-24T02:43:38.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Negative timestamp sentinels must permit the first action",
+      "guidance": "When a last-action timestamp uses a negative sentinel for no prior action, bypass cooldown on the first accepted action and write the current time only after acceptance.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0004",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-3",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c2-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+          "fixId": "fix-cycle-3",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The source repair rejected the first logical action because it compared simulation time against a negative initial last-action sentinel as if a prior action existed. The accepted contract initializes last_fire_time_ms to -1, so the first action must bypass cooldown and write the current time only after acceptance. The durable mechanic-general timestamp guidance now makes that sentinel rule explicit and adds it to zero-creation lifecycle repair diagnosis.",
+          "observedAt": "2026-08-24T03:00:32.000Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T03:00:32.000Z",
+      "updatedAt": "2026-08-24T03:00:32.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Spatial queries must use accepted target-kind provenance",
+      "guidance": "Use the exact runtime object kind from the accepted target binding in spatial queries; never substitute a binding ID or invent an object-kind string.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0005",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-4",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c3-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+          "fixId": "fix-cycle-4",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The source repair created, moved, and cleaned up the projectile but queried an invented target object kind instead of the accepted runtime kind of the bound target. The durable mechanic-general source guidance now requires exact target-kind provenance from the accepted target binding and forbids binding IDs or invented object-kind strings in spatial queries.",
+          "observedAt": "2026-08-24T03:08:25.000Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-24T03:08:25.000Z",
+      "updatedAt": "2026-08-24T03:08:25.000Z"
+    }
+  ],
+  "reconciliations": [
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-backfill-20260824",
+      "source": {
+        "kind": "backfill"
+      },
+      "consultedManifestDigest": "5f77b7a812bb823d33be2c64996d17c3e5eda58e601f2f25e7cb50365e92d7a6",
+      "contextDigest": "5ca0a9b6752b18bbaa394faaed3b7604dfacee539dd23edab68769ccad52cad4",
+      "consultedFindingIds": [],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260823t204349446z/fix-cycle-1",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0001"
+          ],
+          "rationale": "Published fix diagnosis is reusable guidance backed by a verified durable fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260823t214017723z/fix-cycle-1",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0002"
+          ],
+          "rationale": "Published fix diagnosis is reusable guidance backed by a verified durable fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-1",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0003"
+          ],
+          "rationale": "Published fix diagnosis is reusable guidance backed by a verified durable fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-2",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0002"
+          ],
+          "rationale": "Published fix diagnosis is reusable guidance backed by a verified durable fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-3",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0004"
+          ],
+          "rationale": "Published fix diagnosis is reusable guidance backed by a verified durable fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-4",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0005"
+          ],
+          "rationale": "Published fix diagnosis is reusable guidance backed by a verified durable fix."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Campaign worktrees must propagate their environment",
+            "guidance": "Load the isolated campaign worktree environment before build and server startup, pass it to both child processes, and preserve explicit process values.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning"
+              ],
+              "classifications": [
+                "provider_failure"
+              ]
+            },
+            "id": "KF-0001",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260823t204349446z/fix-cycle-1",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260823t204349446z-discovery-c0-r2",
+                "loopId": "p09-t17-projectile-proof-loop-20260823t204349446z",
+                "fixId": "fix-cycle-1",
+                "stage": "planning",
+                "quality": "verified_fix",
+                "outcome": "provider_failure",
+                "summary": "Actual planning requests failed because the isolated campaign worktree environment was not loaded into the build and server child processes. The durable campaign-runner fix loads the worktree environment and passes it to both processes while preserving explicit process values.",
+                "observedAt": "2026-08-23T21:34:18.000Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-23T21:34:18.000Z",
+            "updatedAt": "2026-08-23T21:34:18.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Moving owned objects need position-following target checks",
+            "guidance": "Query targets around the owned object current observed position on bounded recurring lifecycle checks shorter than its lifetime; reschedule while active and stop after the first hit or expiry.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0002",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260823t214017723z/fix-cycle-1",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260823t214017723z-discovery-c0-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260823t214017723z",
+                "fixId": "fix-cycle-1",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual source generation repeatedly produced a transient projectile that traveled and was cleaned up but queried and mutated the target at its stationary location immediately after creation, before the owned object could overlap the target. The durable source-generation prompt now requires target queries to follow the owned object's current observed position during scheduled or fixed-step travel, with bounded rescheduling and cleanup after the first hit or expiry.",
+                "observedAt": "2026-08-23T22:12:27.000Z"
+              },
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-2",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c1-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+                "fixId": "fix-cycle-2",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "The source repair preserved owned-object creation, actor origin, travel, and active state, but scheduled the first target query at the full projectile lifetime. The moving object passed the target between observations and targetInteractionsDelta remained zero. The durable mechanic-general source guidance now requires bounded recurring lifecycle checks shorter than the accepted lifetime, with active travel and rescheduling before expiry until the target is reached.",
+                "observedAt": "2026-08-24T02:53:44.000Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-23T22:12:27.000Z",
+            "updatedAt": "2026-08-24T02:53:44.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Active owned objects must survive post-action observation",
+            "guidance": "Keep active owned objects observable through the post-action lifecycle check and defer expiry cleanup until after bounded motion and target interaction can be observed.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0003",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-1",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c0-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+                "fixId": "fix-cycle-1",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual source generation created and moved an owned projectile, interacted with the target, and then destroyed it before the post-action observation. The durable mechanic-general source-generation repair guidance now requires active owned objects to remain observable through the post-action lifecycle check, with bounded motion, target interaction, and deferred expiry cleanup.",
+                "observedAt": "2026-08-24T02:43:38.000Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T02:43:38.000Z",
+            "updatedAt": "2026-08-24T02:43:38.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Negative timestamp sentinels must permit the first action",
+            "guidance": "When a last-action timestamp uses a negative sentinel for no prior action, bypass cooldown on the first accepted action and write the current time only after acceptance.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0004",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-3",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c2-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+                "fixId": "fix-cycle-3",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "The source repair rejected the first logical action because it compared simulation time against a negative initial last-action sentinel as if a prior action existed. The accepted contract initializes last_fire_time_ms to -1, so the first action must bypass cooldown and write the current time only after acceptance. The durable mechanic-general timestamp guidance now makes that sentinel rule explicit and adds it to zero-creation lifecycle repair diagnosis.",
+                "observedAt": "2026-08-24T03:00:32.000Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T03:00:32.000Z",
+            "updatedAt": "2026-08-24T03:00:32.000Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Spatial queries must use accepted target-kind provenance",
+            "guidance": "Use the exact runtime object kind from the accepted target binding in spatial queries; never substitute a binding ID or invent an object-kind string.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0005",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260824t022535643z/fix-cycle-4",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260824t022535643z-discovery-c3-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260824t022535643z",
+                "fixId": "fix-cycle-4",
+                "stage": "source_generation",
+                "quality": "verified_fix",
+                "outcome": "provider_output_rejected",
+                "summary": "The source repair created, moved, and cleaned up the projectile but queried an invented target object kind instead of the accepted runtime kind of the bound target. The durable mechanic-general source guidance now requires exact target-kind provenance from the accepted target binding and forbids binding IDs or invented object-kind strings in spatial queries.",
+                "observedAt": "2026-08-24T03:08:25.000Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-24T03:08:25.000Z",
+            "updatedAt": "2026-08-24T03:08:25.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-24T03:08:26.000Z",
+      "priorManifestDigest": "5f77b7a812bb823d33be2c64996d17c3e5eda58e601f2f25e7cb50365e92d7a6",
+      "resultingManifestDigest": "2d3f1846cdeff187fce97c593ff8b7dc0c568249c7a74285c17700c2d63d9834"
+    }
+  ]
+}

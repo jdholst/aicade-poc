@@ -4,10 +4,19 @@ const campaignFilter = document.querySelector("#campaign-filter");
 const loopFilter = document.querySelector("#loop-filter");
 const fixFilter = document.querySelector("#fix-filter");
 const legacyFilter = document.querySelector("#legacy-filter");
+const knowledgeFilters = [
+  "status",
+  "confidence",
+  "applicability",
+  "stage",
+  "classification",
+  "manifest",
+].map((name) => document.querySelector(`#knowledge-${name}-filter`));
 campaignFilter.addEventListener("change", render);
 loopFilter.addEventListener("change", render);
 fixFilter.addEventListener("change", render);
 legacyFilter.addEventListener("change", render);
+knowledgeFilters.forEach((filter) => filter.addEventListener("change", render));
 
 async function refresh() {
   try {
@@ -17,6 +26,7 @@ async function refresh() {
     document.querySelector("#updated").textContent = new Date(snapshot.generatedAt).toLocaleTimeString();
     syncCampaignOptions();
     syncLoopOptions();
+    syncKnowledgeOptions();
     render();
   } catch (error) {
     document.querySelector("#updated").textContent = error.message;
@@ -31,6 +41,7 @@ function render() {
   );
   renderSummary(campaigns, attempts);
   renderLoops();
+  renderKnowledge();
   renderMechanics();
   renderManualQa(attempts);
   renderStages(attempts);
@@ -40,6 +51,64 @@ function render() {
   renderVariation(campaigns);
   renderFixes();
   renderLegacy();
+}
+
+function renderKnowledge() {
+  const openFindingIds = new Set(
+    [...document.querySelectorAll("details[data-knowledge-detail][open]")].map(
+      ({ dataset }) => dataset.knowledgeDetail
+    )
+  );
+  const reconciliationHistoryOpen = Boolean(
+    document.querySelector("#knowledge-reconciliations details[open]")
+  );
+  const [status, confidence, applicability, stage, classification, manifest] =
+    knowledgeFilters.map(({ value }) => value);
+  const findings = snapshot.knowledge.canonical.entries.filter((finding) =>
+    (status === "all" || finding.status === status) &&
+    (confidence === "all" || finding.confidence === confidence) &&
+    (applicability === "all" || finding.scope.applicability === applicability) &&
+    (stage === "all" || finding.scope.stages.length === 0 || finding.scope.stages.includes(stage)) &&
+    (classification === "all" || finding.scope.classifications.length === 0 || finding.scope.classifications.includes(classification)) &&
+    (manifest === "all" || finding.scope.applicability === "pipeline_general" || finding.scope.manifestIds.includes(manifest))
+  );
+  document.querySelector("#knowledge").innerHTML = findings.map((finding) => `
+    <article class="knowledge-card canonical">
+      <div class="knowledge-card-heading"><strong>${escapeHtml(finding.id)} · r${finding.revision}</strong><span class="badge ${finding.status}">${escapeHtml(finding.status)}</span></div>
+      <h3>${escapeHtml(finding.title)}</h3>
+      <p>${escapeHtml(finding.guidance)}</p>
+      <div class="knowledge-meta"><span>${escapeHtml(finding.confidence)}</span><span>${escapeHtml(humanize(finding.scope.applicability))}</span><span>${escapeHtml(finding.scope.stages.map(humanize).join(", ") || "any stage")}</span><span>${escapeHtml(finding.scope.classifications.map(humanize).join(", ") || "any classification")}</span></div>
+      <details data-knowledge-detail="${escapeHtml(finding.id)}"${openFindingIds.has(finding.id) ? " open" : ""}><summary>Evidence and amendment history</summary>
+        <div class="knowledge-evidence">${finding.evidence.map(renderKnowledgeEvidence).join("")}</div>
+        ${(finding.amendments ?? []).map((amendment) => `<div class="knowledge-amendment"><strong>Revision ${amendment.revision} amended</strong><p>${escapeHtml(amendment.reason)}</p><small>Previous guidance: ${escapeHtml(amendment.previous.guidance)}</small></div>`).join("") || `<small>No amendments.</small>`}
+      </details>
+    </article>
+  `).join("") || empty("No canonical findings match these filters.");
+
+  document.querySelector("#knowledge-pending").innerHTML = snapshot.knowledge.pending.map((pending) => `
+    <article class="pending-knowledge ${escapeHtml(pending.status)}">
+      <span class="badge ${escapeHtml(pending.status)}">Loop-local ${escapeHtml(pending.status)}</span>
+      <strong>${escapeHtml(pending.loopId)}</strong>
+      <small>${pending.reason ? `${escapeHtml(pending.reason)}${pending.evidenceIds?.length ? ` · ${pending.evidenceIds.length} evidence item(s)` : ""}` : `${pending.findings.length} changed finding(s) · ${pending.reconciliationIds.map(escapeHtml).join(", ") || "uncommitted manifest change"}`}</small>
+    </article>
+  `).join("");
+
+  const reconciliations = snapshot.knowledge.canonical.reconciliations;
+  document.querySelector("#knowledge-reconciliations").innerHTML = `
+    <details${reconciliationHistoryOpen ? " open" : ""}><summary>Canonical reconciliation history · ${reconciliations.length}</summary>
+      ${reconciliations.map((entry) => `<div class="reconciliation"><strong>${escapeHtml(entry.id)}</strong><span>${escapeHtml(humanize(entry.source.kind))} · ${escapeHtml(entry.createdAt)}</span><small>${entry.operations.length} operation(s)${entry.noChangeReason ? ` · ${escapeHtml(entry.noChangeReason)}` : ""}</small></div>`).join("") || `<small>No reconciliation history.</small>`}
+    </details>`;
+}
+
+function renderKnowledgeEvidence(evidence) {
+  const label = `${evidence.id} · ${humanize(evidence.outcome)}`;
+  let reference = `<span>${escapeHtml(label)} · reference unavailable</span>`;
+  if (evidence.campaignRunId && evidence.attemptId) {
+    reference = `<a href="/artifacts/${encodeURIComponent(evidence.campaignRunId)}/${encodeURIComponent(evidence.attemptId)}/attempt.json" target="_blank">${escapeHtml(label)}</a>`;
+  } else if (evidence.loopId && evidence.fixId) {
+    reference = `<a href="/artifacts/loops/${encodeURIComponent(evidence.loopId)}/fixes/${encodeURIComponent(evidence.fixId)}.json" target="_blank">${escapeHtml(label)}</a>`;
+  }
+  return `<div>${reference}<small>${escapeHtml(evidence.summary)}</small></div>`;
 }
 
 function renderSummary(campaigns, attempts) {
@@ -98,14 +167,21 @@ function renderLoops() {
     const fixLines = fixes.map((fix) =>
       `<span class="evidence-line"><a href="/artifacts/loops/${encodeURIComponent(loop.id)}/fixes/${encodeURIComponent(fix.id)}.json" target="_blank"><strong>${escapeHtml(fix.id)}</strong></a> · ${escapeHtml(fix.kind)}${fix.temporaryFixIds?.length ? ` · ${escapeHtml(fix.temporaryFixIds.join(", "))} · proposed/unmerged` : ""}</span>`
     ).join("");
+    const extensionLines = (loop.budgetExtensions ?? []).map((extension) =>
+      `<span class="evidence-line">extended · ${escapeHtml(extension.authorizationHash.slice(0, 12))} · revision ${extension.appliedAtRevision}</span>`
+    ).join("");
+    const lifecycleLine = loop.lifecycle
+      ? `<span class="evidence-line">${escapeHtml(loop.lifecycle.action)} from ${escapeHtml(loop.lifecycle.previousStatus)} · worktree and branch removed</span>`
+      : "";
+    const branch = loop.lifecycle ? `${loop.worktree.branch} · removed` : loop.worktree.branch;
     return `<tr>
-      <td><strong>${escapeHtml(loop.manifestId)}</strong><br><small>${escapeHtml(loop.id)}</small><br><small>${escapeHtml(loop.worktree.branch)}</small></td>
+      <td><strong>${escapeHtml(loop.manifestId)}</strong><br><small>${escapeHtml(loop.id)}</small><br><small>${escapeHtml(branch)}</small></td>
       <td><span class="badge ${loop.status}">${escapeHtml(loop.status)}</span>${loop.result ? `<br><small>${loop.result.mechanicProven ? "mechanic proven" : "sequence only"}</small>` : ""}</td>
       <td>${step ? `${escapeHtml(step.cohort)}<br><small>${escapeHtml(step.status)} · cycle ${loop.currentRevision.cycle}</small>` : "complete"}</td>
       <td><code>${shortHash(loop.currentRevision.revisionKey)}</code></td>
       <td>${loop.usage.campaignRuns}/${loop.limits.maxCampaignRuns} campaigns<br>${loop.usage.submissions}/${loop.limits.maxSubmissions} submissions<br>${loop.usage.fixCycles}/${loop.limits.maxFixCycles} fixes</td>
       <td>${stageCounts(loop.usage.actualProviderCalls)}<br><small>remaining ${stageCounts(loop.remaining.actualProviderCalls)}</small></td>
-      <td>${links}${fixLines || ""}${proposedTemporary.length ? `<small>${proposedTemporary.length} proposed temporary fix(es)</small>` : ""}</td>
+      <td>${links}${fixLines}${extensionLines}${lifecycleLine}${proposedTemporary.length ? `<small>${proposedTemporary.length} proposed temporary fix(es)</small>` : ""}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="7">${empty("No campaign loops yet.")}</td></tr>`;
 }
@@ -203,6 +279,20 @@ function syncLoopOptions() {
   const previous = loopFilter.value;
   loopFilter.innerHTML = `<option value="all">All loops</option>${snapshot.loops.map((loop) => `<option value="${escapeHtml(loop.id)}">${escapeHtml(loop.manifestId)} · ${escapeHtml(loop.status)}</option>`).join("")}`;
   if ([...loopFilter.options].some(({ value }) => value === previous)) loopFilter.value = previous;
+}
+
+function syncKnowledgeOptions() {
+  const findings = snapshot.knowledge.canonical.entries;
+  syncKnowledgeFilter(knowledgeFilters[3], "All stages", findings.flatMap(({ scope }) => scope.stages));
+  syncKnowledgeFilter(knowledgeFilters[4], "All classifications", findings.flatMap(({ scope }) => scope.classifications));
+  syncKnowledgeFilter(knowledgeFilters[5], "All manifests", findings.flatMap(({ scope }) => scope.manifestIds));
+}
+
+function syncKnowledgeFilter(filter, label, values) {
+  const previous = filter.value;
+  const options = [...new Set(values)].sort();
+  filter.innerHTML = `<option value="all">${label}</option>${options.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(humanize(value))}</option>`).join("")}`;
+  if ([...filter.options].some(({ value }) => value === previous)) filter.value = previous;
 }
 
 function stat(label, value, note) { return `<article class="stat"><p class="eyebrow">${label}</p><strong>${value}</strong><small>${note}</small></article>`; }

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyLoopBudgetExtension,
   applyFixCheckpoint,
+  createLoopBudgetExtensionPreview,
   createInitialLoopRun,
+  exhaustLoop,
   finishSequenceCampaign,
   rejectLoopManualQa,
   recordActualProviderCall,
@@ -64,6 +67,7 @@ function initialRun() {
     controlRoot: "/repo",
     worktreePath: "/repo/.qa/mechanic-generation-campaign-worktrees/ticket-17-loop",
     branch: "codex/campaign-loop-ticket-17-loop",
+    knowledgeManifestDigest: "6".repeat(64),
   });
 }
 
@@ -261,10 +265,14 @@ describe("campaign loop state", () => {
     });
     run = { ...run, status: "waiting_for_fix" };
 
-    const fixed = applyFixCheckpoint(run, {
-      id: "fix-cycle-1",
-      afterRevision: revisionB,
-    });
+    const fixed = applyFixCheckpoint(
+      run,
+      {
+        id: "fix-cycle-1",
+        afterRevision: revisionB,
+      },
+      { knowledgeReconciliationId: "KR-fix-cycle-1" }
+    );
 
     expect(fixed.currentRevision).toEqual({ ...revisionB, cycle: 1 });
     expect(fixed.currentStepIndex).toBe(0);
@@ -273,6 +281,7 @@ describe("campaign loop state", () => {
       "discovery-1",
     ]);
     expect(fixed.fixCheckpointIds).toEqual(["fix-cycle-1"]);
+    expect(fixed.knowledgeReconciliationIds).toEqual(["KR-fix-cycle-1"]);
     expect(fixed.usage.fixCycles).toBe(1);
   });
 
@@ -291,5 +300,89 @@ describe("campaign loop state", () => {
     expect(blocked.allowed).toBe(false);
     expect(blocked.run.status).toBe("exhausted");
     expect(blocked.run.usage.actualProviderCalls.planning).toBe(1);
+    expect(blocked.run.exhaustionResume).toMatchObject({
+      status: "running",
+    });
+  });
+
+  it("hashes additive budgets and restores the recorded fix checkpoint", () => {
+    const exhausted = exhaustLoop(
+      { ...initialRun(), status: "waiting_for_fix" },
+      "Fix-cycle ceiling reached.",
+      "2026-08-24T12:00:00.000Z",
+      { status: "waiting_for_fix" }
+    );
+    const additions = {
+      maxFixCycles: 2,
+      maxCampaignRuns: 3,
+      maxSubmissions: 4,
+      maxAuxiliaryIsolationCampaigns: 1,
+      actualProviderCalls: { planning: 5, contract: 6, source: 7 },
+    };
+
+    const preview = createLoopBudgetExtensionPreview(exhausted, additions);
+    const extended = applyLoopBudgetExtension(exhausted, {
+      additions,
+      authorization: preview.authorizationHash,
+      createdAt: "2026-08-24T12:05:00.000Z",
+    });
+
+    expect(preview.authorizationHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(preview.resultingLimits).toEqual({
+      maxFixCycles: 4,
+      maxCampaignRuns: 11,
+      maxSubmissions: 34,
+      maxAuxiliaryIsolationCampaigns: 2,
+      actualProviderCalls: { planning: 35, contract: 66, source: 67 },
+    });
+    expect(extended).toMatchObject({
+      schemaVersion: "campaign-loop-run/v3",
+      status: "waiting_for_fix",
+      limits: preview.resultingLimits,
+      budgetExtensions: [
+        {
+          authorizationHash: preview.authorizationHash,
+          previousStatus: "exhausted",
+          additions,
+          resultingLimits: preview.resultingLimits,
+        },
+      ],
+    });
+    expect(extended.completedAt).toBeUndefined();
+    expect(extended.exhaustionReason).toBeUndefined();
+    expect(extended.exhaustionResume).toBeUndefined();
+  });
+
+  it("preserves an active campaign across provider-budget exhaustion", () => {
+    const running = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    const exhausted = exhaustLoop(
+      running,
+      "planning provider-call ceiling reached.",
+      "2026-08-24T12:00:00.000Z"
+    );
+    const additions = {
+      maxFixCycles: 0,
+      maxCampaignRuns: 0,
+      maxSubmissions: 0,
+      maxAuxiliaryIsolationCampaigns: 0,
+      actualProviderCalls: { planning: 1, contract: 0, source: 0 },
+    };
+    const preview = createLoopBudgetExtensionPreview(exhausted, additions);
+    const extended = applyLoopBudgetExtension(exhausted, {
+      additions,
+      authorization: preview.authorizationHash,
+      createdAt: "2026-08-24T12:05:00.000Z",
+    });
+
+    expect(exhausted.activeCampaign).toBeUndefined();
+    expect(exhausted.exhaustionResume.activeCampaign).toEqual(
+      running.activeCampaign
+    );
+    expect(extended.status).toBe("running");
+    expect(extended.activeCampaign).toEqual(running.activeCampaign);
   });
 });

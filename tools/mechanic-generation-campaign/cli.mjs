@@ -19,6 +19,10 @@ import {
 import { createAttemptSchedule, resolveProviderModes } from "./lib/runner-policy.mjs";
 import { handleLoopCommand } from "./lib/loop-cli.mjs";
 import {
+  assertCampaignKnowledgeReconciled,
+  handleKnowledgeCommand,
+} from "./lib/knowledge-cli.mjs";
+import {
   approveCampaignAttempt,
   denyCampaignAttempt,
 } from "./lib/manual-qa.mjs";
@@ -53,6 +57,11 @@ async function main(args) {
 
   if (command === "loop") {
     await handleLoopCommand({ args, repoRoot });
+    return;
+  }
+
+  if (command === "knowledge") {
+    await handleKnowledgeCommand({ args, repoRoot });
     return;
   }
 
@@ -197,6 +206,12 @@ async function main(args) {
     await store.initialize();
     const campaignRunId = requiredOption(args, "--campaign");
     assertNoArguments(args);
+    await assertCampaignKnowledgeReconciled({
+      repoRoot,
+      campaignRunId,
+      campaignStore: store,
+      loopStore,
+    });
     const summary = await store.publish(campaignRunId);
     console.log(`Published sanitized campaign summary ${summary.id}.`);
     return;
@@ -337,7 +352,11 @@ Usage:
   npm run campaign -- report --campaign <run-id>
   npm run campaign -- publish --campaign <run-id>
   npm run campaign -- import-legacy <--check|--write>
-  npm run campaign -- loop <validate|run|resume|isolate|block|report|publish> [options]
+  npm run campaign -- knowledge validate
+  npm run campaign -- knowledge report [filters]
+  npm run campaign -- knowledge context (--loop <loop-id> | --campaign <run-id>) [--json]
+  npm run campaign -- knowledge reconcile (--loop <loop-id> | --campaign <run-id>) --proposal <path>
+  npm run campaign -- loop <validate|run|resume|extend|isolate|block|conclude|discard|report|publish> [options]
 
 Run options:
   --provider-modes planning=<actual|fixture>,contract=<actual|fixture>,source=<actual|fixture>

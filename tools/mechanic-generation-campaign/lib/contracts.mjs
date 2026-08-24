@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const CAMPAIGN_MANIFEST_SCHEMA_VERSION = "campaign-manifest/v1";
-export const CAMPAIGN_RUN_SCHEMA_VERSION = "campaign-run/v1";
+export const CAMPAIGN_RUN_SCHEMA_VERSION = "campaign-run/v2";
+const CAMPAIGN_RUN_SCHEMA_VERSION_V1 = "campaign-run/v1";
 export const CAMPAIGN_ATTEMPT_SCHEMA_VERSION = "campaign-attempt/v1";
 export const CAMPAIGN_MANUAL_QA_SCHEMA_VERSION = "campaign-manual-qa/v1";
 
@@ -67,6 +68,28 @@ const fixtureReferenceSchema = z
   .strict();
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+export const campaignKnowledgePolicySchema = z
+  .object({
+    required: z.boolean(),
+    baselineManifestDigest: sha256Schema.optional(),
+  })
+  .strict()
+  .superRefine((policy, context) => {
+    if (policy.required && !policy.baselineManifestDigest) {
+      context.addIssue({
+        code: "custom",
+        path: ["baselineManifestDigest"],
+        message: "Required knowledge policy needs a baselineManifestDigest.",
+      });
+    }
+    if (!policy.required && policy.baselineManifestDigest) {
+      context.addIssue({
+        code: "custom",
+        path: ["baselineManifestDigest"],
+        message: "A grandfathered knowledge policy cannot set a baselineManifestDigest.",
+      });
+    }
+  });
 const manualQaStatusSchema = z.enum(["pending", "approved", "denied"]);
 
 export const manualQaReferenceSchema = z
@@ -417,9 +440,8 @@ export const campaignAttemptSchema = z
     }
   });
 
-export const campaignRunSchema = z
+const campaignRunBaseSchema = z
   .object({
-    schemaVersion: z.literal(CAMPAIGN_RUN_SCHEMA_VERSION),
     id: z.string().min(1),
     manifestId: z.string().min(1),
     manifestPath: z.string().min(1),
@@ -472,8 +494,22 @@ export const campaignRunSchema = z
       .optional(),
     invalidReason: z.string().optional(),
   })
+  .strict();
+
+const campaignRunV1Schema = campaignRunBaseSchema
+  .extend({ schemaVersion: z.literal(CAMPAIGN_RUN_SCHEMA_VERSION_V1) })
   .strict()
-  .superRefine((run, context) => {
+  .superRefine(validateCampaignRunState);
+
+export const campaignRunSchema = campaignRunBaseSchema
+  .extend({
+    schemaVersion: z.literal(CAMPAIGN_RUN_SCHEMA_VERSION),
+    knowledgePolicy: campaignKnowledgePolicySchema,
+  })
+  .strict()
+  .superRefine(validateCampaignRunState);
+
+function validateCampaignRunState(run, context) {
     if (run.status === "waiting_for_manual_qa" && !run.pendingManualQa) {
       context.addIssue({
         code: "custom",
@@ -488,7 +524,7 @@ export const campaignRunSchema = z
         message: "Pending manual QA is allowed only while the campaign is waiting for manual QA.",
       });
     }
-  });
+}
 
 export function parseCampaignManifest(input) {
   return campaignManifestSchema.parse(input);
@@ -499,6 +535,14 @@ export function parseCampaignAttempt(input) {
 }
 
 export function parseCampaignRun(input) {
+  if (input?.schemaVersion === CAMPAIGN_RUN_SCHEMA_VERSION_V1) {
+    const run = campaignRunV1Schema.parse(input);
+    return campaignRunSchema.parse({
+      ...run,
+      schemaVersion: CAMPAIGN_RUN_SCHEMA_VERSION,
+      knowledgePolicy: { required: false },
+    });
+  }
   return campaignRunSchema.parse(input);
 }
 

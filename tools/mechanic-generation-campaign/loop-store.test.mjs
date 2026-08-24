@@ -59,6 +59,7 @@ async function createFixture() {
     controlRoot: repoRoot,
     worktreePath: path.join(repoRoot, ".qa", "worktrees", "ticket-17-loop"),
     branch: "codex/campaign-loop-ticket-17-loop",
+    knowledgeManifestDigest: "f".repeat(64),
   });
   return { repoRoot, store, run, revision };
 }
@@ -106,7 +107,7 @@ describe("campaign loop store", () => {
     expect((await store.listRuns()).map(({ id }) => id)).toEqual([run.id]);
   });
 
-  it("publishes a sanitized summary without control or worktree paths", async () => {
+  it("upserts one sanitized lifecycle summary without control or worktree paths", async () => {
     const { store, run } = await createFixture();
     await store.writeRun({
       ...run,
@@ -116,14 +117,39 @@ describe("campaign loop store", () => {
     });
 
     const summary = await store.publish(run.id);
+    await store.writeRun({
+      ...run,
+      status: "concluded",
+      completedAt: "2026-08-23T17:00:00.000Z",
+      lifecycle: {
+        action: "conclude",
+        previousStatus: "blocked",
+        at: "2026-08-23T17:05:00.000Z",
+        worktreeRemoved: true,
+        branchRemoved: true,
+        targetBranch: "main",
+        headBefore: run.currentRevision.head,
+        headAfter: run.currentRevision.head,
+        mergedFixes: false,
+      },
+    });
+    const updated = await store.publish(run.id);
     const history = await readFile(
       path.join(store.dataRoot, "campaign-loop-history.jsonl"),
       "utf8"
     );
+    const records = history.trim().split("\n").map((line) => JSON.parse(line));
 
-    expect(summary.schemaVersion).toBe("campaign-loop-history/v1");
+    expect(summary.schemaVersion).toBe("campaign-loop-history/v2");
+    expect(updated.status).toBe("concluded");
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      id: run.id,
+      status: "concluded",
+      lifecycle: { action: "conclude" },
+    });
     expect(history).not.toContain(run.worktree.controlRoot);
     expect(history).not.toContain(run.worktree.path);
-    await expect(store.publish(run.id)).rejects.toThrow(/already published/i);
+    await expect(store.publish(run.id)).resolves.toEqual(updated);
   });
 });

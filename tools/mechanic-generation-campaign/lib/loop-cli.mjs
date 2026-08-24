@@ -1,12 +1,18 @@
 import { createCampaignStore } from "./campaign-store.mjs";
 import {
   blockCampaignLoop,
+  extendCampaignLoop,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
   startCampaignLoop,
   validateCampaignLoop,
 } from "./loop-controller.mjs";
+import {
+  concludeCampaignLoop,
+  discardCampaignLoop,
+} from "./loop-lifecycle.mjs";
 import { createCampaignLoopStore } from "./loop-store.mjs";
+import { assertCampaignKnowledgeReconciled } from "./knowledge-cli.mjs";
 import { remainingLoopBudgets } from "./loop-state.mjs";
 
 export async function handleLoopCommand({ args, repoRoot }) {
@@ -60,6 +66,31 @@ export async function handleLoopCommand({ args, repoRoot }) {
     return;
   }
 
+  if (command === "extend") {
+    const loopId = requiredOption(args, "--id");
+    const additions = takeBudgetAdditions(args);
+    const fixReportPath = takeOption(args, "--fix-report");
+    const authorization = takeOption(args, "--authorize");
+    const options = takeRunnerOptions(args);
+    assertNoArguments(args);
+    const result = await extendCampaignLoop({
+      repoRoot,
+      loopId,
+      additions,
+      authorization,
+      fixReportPath,
+      loopStore,
+      campaignStore,
+      ...options,
+    });
+    if (!authorization) {
+      printExtensionPreview(result.preview);
+    } else {
+      printLoopSummary(result.run);
+    }
+    return;
+  }
+
   if (command === "isolate") {
     const loopId = requiredOption(args, "--id");
     const profileId = requiredOption(args, "--profile");
@@ -86,6 +117,28 @@ export async function handleLoopCommand({ args, repoRoot }) {
     return;
   }
 
+  if (command === "conclude") {
+    const loopId = requiredOption(args, "--id");
+    assertNoArguments(args);
+    const run = await concludeCampaignLoop({ repoRoot, loopId, loopStore });
+    printLoopSummary(run);
+    return;
+  }
+
+  if (command === "discard") {
+    const loopId = requiredOption(args, "--id");
+    const force = takeFlag(args, "--force");
+    assertNoArguments(args);
+    const run = await discardCampaignLoop({
+      repoRoot,
+      loopId,
+      force,
+      loopStore,
+    });
+    printLoopSummary(run);
+    return;
+  }
+
   if (command === "report") {
     await loopStore.initialize();
     const loopId = requiredOption(args, "--id");
@@ -98,6 +151,7 @@ export async function handleLoopCommand({ args, repoRoot }) {
     await loopStore.initialize();
     const loopId = requiredOption(args, "--id");
     assertNoArguments(args);
+    await assertCampaignKnowledgeReconciled({ repoRoot, loopId, loopStore });
     const summary = await loopStore.publish(loopId);
     console.log(`Published sanitized campaign-loop summary ${summary.id}.`);
     return;
@@ -132,6 +186,23 @@ function printAuthorizationEnvelope(loaded) {
   console.log(
     `Minimum proof path: ${loaded.minimums.campaignRuns} campaigns, ${loaded.minimums.submissions} submissions, ${formatStageCounts(loaded.minimums.actualProviderCalls)}`
   );
+}
+
+function printExtensionPreview(preview) {
+  console.log(`VALID LOOP EXTENSION ${preview.loopId}`);
+  console.log(`Extension hash: ${preview.authorizationHash}`);
+  console.log(`Authorization token: ${preview.authorizationHash}`);
+  console.log(
+    `Usage: ${preview.usage.campaignRuns} campaigns, ${preview.usage.submissions} submissions, ${preview.usage.fixCycles} fix cycles, ${preview.usage.auxiliaryIsolationCampaigns} auxiliary isolations`
+  );
+  console.log(
+    `Current ceilings: ${formatLoopLimits(preview.previousLimits)}`
+  );
+  console.log(`Additions: ${formatLoopLimits(preview.additions)}`);
+  console.log(
+    `Resulting ceilings: ${formatLoopLimits(preview.resultingLimits)}`
+  );
+  console.log(`Resume checkpoint: ${preview.exhaustionResume.status}`);
 }
 
 export function printLoopSummary(run) {
@@ -173,6 +244,16 @@ export function printLoopSummary(run) {
   if (run.invalidReason) console.log(`Invalid: ${run.invalidReason}`);
   if (run.blockedReason) console.log(`Blocked: ${run.blockedReason}`);
   if (run.exhaustionReason) console.log(`Exhausted: ${run.exhaustionReason}`);
+  if (run.budgetExtensions?.length) {
+    console.log(`Budget extensions: ${run.budgetExtensions.length}`);
+  }
+  if (run.lifecycle) {
+    console.log(
+      `Lifecycle: ${run.lifecycle.action} from ${run.lifecycle.previousStatus} at ${run.lifecycle.at}`
+    );
+    console.log("Worktree: removed");
+    console.log("Branch: removed");
+  }
 }
 
 function takeRunnerOptions(args) {
@@ -196,6 +277,27 @@ function formatStageCounts(counts) {
   return Object.entries(counts)
     .map(([stage, count]) => `${stage}=${count}`)
     .join(", ");
+}
+
+function formatLoopLimits(limits) {
+  return `${limits.maxCampaignRuns} campaigns, ${limits.maxSubmissions} submissions, ${limits.maxFixCycles} fix cycles, ${limits.maxAuxiliaryIsolationCampaigns} auxiliary isolations; actual ${formatStageCounts(limits.actualProviderCalls)}`;
+}
+
+function takeBudgetAdditions(args) {
+  return {
+    maxFixCycles: nonnegativeNumberOption(args, "--add-fix-cycles"),
+    maxCampaignRuns: nonnegativeNumberOption(args, "--add-campaign-runs"),
+    maxSubmissions: nonnegativeNumberOption(args, "--add-submissions"),
+    maxAuxiliaryIsolationCampaigns: nonnegativeNumberOption(
+      args,
+      "--add-auxiliary-isolations"
+    ),
+    actualProviderCalls: {
+      planning: nonnegativeNumberOption(args, "--add-planning-calls"),
+      contract: nonnegativeNumberOption(args, "--add-contract-calls"),
+      source: nonnegativeNumberOption(args, "--add-source-calls"),
+    },
+  };
 }
 
 function requiredOption(args, name) {
@@ -225,6 +327,16 @@ function numberOption(args, name, fallback) {
   return parsed;
 }
 
+function nonnegativeNumberOption(args, name) {
+  const value = takeOption(args, name);
+  if (value === undefined) return 0;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${name} must be a nonnegative integer.`);
+  }
+  return parsed;
+}
+
 function takeFlag(args, name) {
   const index = args.indexOf(name);
   if (index < 0) return false;
@@ -243,10 +355,23 @@ export function printLoopHelp() {
   npm run campaign -- loop validate --definition <path>
   npm run campaign -- loop run --definition <path> --authorize <definition-hash> [options]
   npm run campaign -- loop resume --id <loop-id> [--fix-report <path>] [options]
+  npm run campaign -- loop extend --id <loop-id> [additive budget options] [--fix-report <path>] [--authorize <extension-hash>] [options]
   npm run campaign -- loop isolate --id <loop-id> --profile <profile-id> [options]
   npm run campaign -- loop block --id <loop-id> --reason <text>
+  npm run campaign -- loop conclude --id <loop-id>
+  npm run campaign -- loop discard --id <loop-id> [--force]
   npm run campaign -- loop report --id <loop-id>
   npm run campaign -- loop publish --id <loop-id>
+
+Loop extension options:
+  --add-fix-cycles <number>
+  --add-campaign-runs <number>
+  --add-submissions <number>
+  --add-auxiliary-isolations <number>
+  --add-planning-calls <number>
+  --add-contract-calls <number>
+  --add-source-calls <number>
+  --authorize <extension-hash>      Apply the exact previewed extension and resume
 
 Loop runner options:
   --headed

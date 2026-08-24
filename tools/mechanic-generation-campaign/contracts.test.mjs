@@ -292,9 +292,61 @@ describe("campaign contracts", () => {
     });
 
     expect(run).toMatchObject({
+      schemaVersion: "campaign-run/v2",
       loopId: "ticket-17-loop-1",
       loopStepId: "discover",
       loopCycle: 0,
+      knowledgePolicy: { required: false },
+    });
+  });
+
+  it("requires a knowledge baseline on new campaign runs while grandfathering v1 records", () => {
+    const legacy = parseCampaignRun({
+      schemaVersion: "campaign-run/v1",
+      id: "campaign-legacy",
+      manifestId: manifest.id,
+      manifestPath: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
+      manifestHash: "a".repeat(64),
+      cohort: "discovery",
+      status: "pending",
+      createdAt: "2026-08-23T15:00:00.000Z",
+      model: manifest.model,
+      providerModes: manifest.providerModes,
+      attemptCeiling: 1,
+      attemptIds: [],
+      revision: {
+        head: "b".repeat(40),
+        revisionKey: "c".repeat(64),
+        dirty: false,
+        statusEntries: [],
+      },
+      baseUrl: "http://127.0.0.1:3117",
+      authorization: {
+        actualProviders: false,
+        authorizedAt: "2026-08-23T15:00:00.000Z",
+      },
+    });
+
+    expect(legacy.knowledgePolicy).toEqual({ required: false });
+    expect(() =>
+      parseCampaignRun({
+        ...legacy,
+        schemaVersion: "campaign-run/v2",
+        knowledgePolicy: { required: true },
+      })
+    ).toThrow(/baselineManifestDigest/);
+    expect(
+      parseCampaignRun({
+        ...legacy,
+        schemaVersion: "campaign-run/v2",
+        knowledgePolicy: {
+          required: true,
+          baselineManifestDigest: "d".repeat(64),
+        },
+      }).knowledgePolicy
+    ).toEqual({
+      required: true,
+      baselineManifestDigest: "d".repeat(64),
     });
   });
 

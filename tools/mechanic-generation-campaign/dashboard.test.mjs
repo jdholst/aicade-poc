@@ -8,6 +8,12 @@ import {
   dashboardContentType,
   resolveArtifactPath,
 } from "./lib/dashboard-server.mjs";
+import {
+  applyKnowledgeReconciliation,
+  createEmptyCampaignKnowledge,
+  createKnowledgeContextDigest,
+  knowledgeEntriesDigest,
+} from "./lib/knowledge.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -25,9 +31,10 @@ describe("campaign dashboard data", () => {
       "mechanic-generation-campaign",
       "docs"
     );
-    const [dashboard, dashboardApp, documentationIndex, commands] = await Promise.all([
+    const [dashboard, dashboardApp, dashboardStyles, documentationIndex, commands] = await Promise.all([
       readFile(path.join(dashboardRoot, "index.html"), "utf8"),
       readFile(path.join(dashboardRoot, "app.js"), "utf8"),
+      readFile(path.join(dashboardRoot, "styles.css"), "utf8"),
       readFile(path.join(documentationRoot, "README.md"), "utf8"),
       readFile(path.join(documentationRoot, "commands.md"), "utf8"),
     ]);
@@ -54,8 +61,11 @@ describe("campaign dashboard data", () => {
       "validate",
       "run",
       "resume",
+      "extend",
       "isolate",
       "block",
+      "conclude",
+      "discard",
       "report",
       "publish",
     ]) {
@@ -63,8 +73,101 @@ describe("campaign dashboard data", () => {
     }
     expect(dashboard).toContain('id="loops"');
     expect(dashboard).toContain('id="manual-qa"');
+    expect(dashboard).toContain('id="knowledge"');
+    expect(dashboard).toContain('id="knowledge-status-filter"');
+    expect(dashboard).toContain('id="knowledge-confidence-filter"');
+    expect(dashboard).toContain('id="knowledge-applicability-filter"');
+    expect(dashboard).toContain('id="knowledge-stage-filter"');
+    expect(dashboard).toContain('id="knowledge-classification-filter"');
+    expect(dashboard).toContain('id="knowledge-manifest-filter"');
     expect(dashboardApp).toContain("Awaiting explicit verdict");
     expect(dashboardApp).toContain("denialReason");
+    expect(dashboardApp).toContain("loop.lifecycle");
+    expect(dashboardStyles).toContain(".concluded");
+    expect(dashboardStyles).toContain(".discarded");
+  });
+
+  it("separates canonical findings from loop-local pending knowledge", async () => {
+    const canonical = createEmptyCampaignKnowledge("2026-08-24T12:00:00.000Z");
+    const context = { applicableFindingIds: [], evidence: [] };
+    context.contextDigest = createKnowledgeContextDigest(context);
+    const pending = applyKnowledgeReconciliation(
+      canonical,
+      {
+        schemaVersion: "campaign-knowledge-reconciliation/v1",
+        id: "KR-loop-pending",
+        source: {
+          kind: "fix_cycle",
+          loopId: "loop-1",
+          fixId: "fix-cycle-1",
+          triggerCampaignRunId: "campaign-1",
+        },
+        consultedManifestDigest: knowledgeEntriesDigest(canonical),
+        contextDigest: context.contextDigest,
+        consultedFindingIds: [],
+        evidenceReview: [],
+        operations: [],
+        noChangeReason: "The loop evidence adds no reusable guidance.",
+        createdAt: "2026-08-24T12:05:00.000Z",
+      },
+      context
+    );
+    const fakeStore = {
+      dataRoot: "",
+      async listRuns() { return []; },
+      async readAttempts() { return []; },
+    };
+    const fakeLoopStore = {
+      dataRoot: "",
+      async listRuns() {
+        return [{
+          id: "loop-1",
+          status: "waiting_for_fix",
+          manifestId: "manifest-1",
+          currentStepIndex: 0,
+          currentRevision: { cycle: 0, revisionKey: "a".repeat(64) },
+          worktree: { path: "/tmp/loop-1", branch: "codex/campaign-loop-loop-1" },
+          steps: [{ cohort: "discovery", status: "running" }],
+          campaignLinks: [],
+          usage: {
+            fixCycles: 0,
+            campaignRuns: 1,
+            submissions: 1,
+            auxiliaryIsolationCampaigns: 0,
+            actualProviderCalls: { planning: 1, contract: 1, source: 1 },
+          },
+          limits: {
+            maxFixCycles: 1,
+            maxCampaignRuns: 2,
+            maxSubmissions: 2,
+            maxAuxiliaryIsolationCampaigns: 0,
+            actualProviderCalls: { planning: 2, contract: 2, source: 2 },
+          },
+          knowledgePolicy: {
+            required: true,
+            baselineManifestDigest: knowledgeEntriesDigest(canonical),
+          },
+        }];
+      },
+      async readFixes() { return []; },
+    };
+
+    const snapshot = await buildDashboardSnapshot(
+      repoRoot,
+      fakeStore,
+      fakeLoopStore,
+      { async read() { return canonical; } },
+      async () => pending
+    );
+
+    expect(snapshot.knowledge.canonical).toEqual(canonical);
+    expect(snapshot.knowledge.pending).toEqual([
+      expect.objectContaining({
+        loopId: "loop-1",
+        status: "pending",
+        reconciliationIds: ["KR-loop-pending"],
+      }),
+    ]);
   });
 
   it("combines live campaigns with all legacy attempts and temporary fixes", async () => {

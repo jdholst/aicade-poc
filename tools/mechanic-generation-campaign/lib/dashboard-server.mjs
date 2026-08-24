@@ -6,6 +6,10 @@ import {
   importLegacyAttemptReports,
   parseTemporaryFixLedger,
 } from "./legacy-importer.mjs";
+import {
+  createCampaignKnowledgeStore,
+  knowledgeEntriesDigest,
+} from "./knowledge.mjs";
 import { createCampaignLoopStore } from "./loop-store.mjs";
 import { remainingLoopBudgets } from "./loop-state.mjs";
 
@@ -35,7 +39,10 @@ const PIPELINE_STAGES = [
 export async function buildDashboardSnapshot(
   repoRoot,
   store,
-  loopStore = createCampaignLoopStore(repoRoot)
+  loopStore = createCampaignLoopStore(repoRoot),
+  knowledgeStore = createCampaignKnowledgeStore(repoRoot),
+  readLoopKnowledge = (run) =>
+    createCampaignKnowledgeStore(run.worktree.path).read()
 ) {
   const [
     runs,
@@ -44,6 +51,7 @@ export async function buildDashboardSnapshot(
     temporaryFixes,
     publishedHistory,
     publishedLoopHistory,
+    canonicalKnowledge,
   ] = await Promise.all([
     store.listRuns(),
     loopStore.listRuns(),
@@ -51,6 +59,7 @@ export async function buildDashboardSnapshot(
     parseTemporaryFixLedger(repoRoot),
     readJsonLines(path.join(store.dataRoot ?? "", "campaign-history.jsonl")),
     readJsonLines(path.join(loopStore.dataRoot ?? "", "campaign-loop-history.jsonl")),
+    knowledgeStore.read(),
   ]);
   const campaigns = await Promise.all(
     runs.map(async (run) => {
@@ -77,6 +86,73 @@ export async function buildDashboardSnapshot(
       fixes: await loopStore.readFixes(run.id),
     }))
   );
+  const pendingKnowledge = (
+    await Promise.all(
+      loops
+        .filter(
+          (run) =>
+            !["concluded", "discarded"].includes(run.status)
+        )
+        .map(async (run) => {
+          if (!run.knowledgePolicy?.required) {
+            const reviewedEvidenceIds = new Set(
+              canonicalKnowledge.reconciliations.flatMap(({ evidenceReview }) =>
+                evidenceReview.map(({ evidenceId }) => evidenceId)
+              )
+            );
+            const evidenceIds = run.fixes
+              .map((fix) => `${run.id}/${fix.id}`)
+              .filter((id) => !reviewedEvidenceIds.has(id));
+            return evidenceIds.length > 0
+              ? {
+                  loopId: run.id,
+                  manifestId: run.manifestId,
+                  status: "unreconciled",
+                  reason:
+                    "Grandfathered loop evidence is not yet compiled into canonical knowledge.",
+                  evidenceIds,
+                  findings: [],
+                  reconciliationIds: [],
+                }
+              : null;
+          }
+          try {
+            const local = await readLoopKnowledge(run);
+            const canonicalDigest = knowledgeEntriesDigest(canonicalKnowledge);
+            const localDigest = knowledgeEntriesDigest(local);
+            if (canonicalDigest === localDigest) return null;
+            const canonicalRevisions = new Map(
+              canonicalKnowledge.entries.map(({ id, revision }) => [id, revision])
+            );
+            const canonicalReconciliationIds = new Set(
+              canonicalKnowledge.reconciliations.map(({ id }) => id)
+            );
+            return {
+              loopId: run.id,
+              manifestId: run.manifestId,
+              status: "pending",
+              canonicalDigest,
+              localDigest,
+              findings: local.entries.filter(
+                ({ id, revision }) => canonicalRevisions.get(id) !== revision
+              ),
+              reconciliationIds: local.reconciliations
+                .filter(({ id }) => !canonicalReconciliationIds.has(id))
+                .map(({ id }) => id),
+            };
+          } catch (error) {
+            return {
+              loopId: run.id,
+              manifestId: run.manifestId,
+              status: "unresolved",
+              reason: error instanceof Error ? error.message : String(error),
+              findings: [],
+              reconciliationIds: [],
+            };
+          }
+        })
+    )
+  ).filter(Boolean);
   const manualQaEvidence = allAttempts
     .map(({ manualQaEvidence }) => manualQaEvidence)
     .filter(Boolean);
@@ -111,6 +187,10 @@ export async function buildDashboardSnapshot(
       denied: manualQaEvidence.filter(({ status }) => status === "denied").length,
     },
     pendingManualReviews,
+    knowledge: {
+      canonical: canonicalKnowledge,
+      pending: pendingKnowledge,
+    },
     stageSurvival: createStageSurvival(allAttempts),
     failureClasses: countBy(
       allAttempts.filter(

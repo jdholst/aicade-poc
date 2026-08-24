@@ -186,6 +186,7 @@ export function createCampaignStore(repoRoot) {
         model: run.model,
         providerModes: run.providerModes,
         revision: run.revision,
+        knowledgePolicy: run.knowledgePolicy,
         result: run.result,
         manualQa: {
           pending: attempts.filter(({ manualQa }) => manualQa?.status === "pending").length,

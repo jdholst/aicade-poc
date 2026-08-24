@@ -299,6 +299,7 @@ async function attachLoop(store, campaignRun) {
     controlRoot: repoRoot,
     worktreePath: path.join(repoRoot, ".qa", "worktree"),
     branch: "codex/campaign-loop-loop-1",
+    knowledgeManifestDigest: "f".repeat(64),
   });
   loop = startLoopCampaign(loop, {
     campaignRunId: campaignRun.id,

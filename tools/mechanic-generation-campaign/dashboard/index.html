@@ -31,6 +31,23 @@
       </section>
 
       <section class="panel">
+        <div class="panel-heading knowledge-heading">
+          <div><p class="eyebrow">Compiled evidence</p><h2>Campaign knowledge</h2></div>
+          <div class="knowledge-filters">
+            <select id="knowledge-status-filter" aria-label="Filter knowledge by status"><option value="all">All statuses</option><option value="active">Active</option><option value="retired">Retired</option></select>
+            <select id="knowledge-confidence-filter" aria-label="Filter knowledge by confidence"><option value="all">All confidence</option><option value="hypothesis">Hypothesis</option><option value="supported">Supported</option><option value="confirmed">Confirmed</option></select>
+            <select id="knowledge-applicability-filter" aria-label="Filter knowledge by applicability"><option value="all">All applicability</option><option value="pipeline_general">Pipeline general</option><option value="mechanic">Mechanic</option><option value="manifest">Manifest</option></select>
+            <select id="knowledge-stage-filter" aria-label="Filter knowledge by stage"><option value="all">All stages</option></select>
+            <select id="knowledge-classification-filter" aria-label="Filter knowledge by classification"><option value="all">All classifications</option></select>
+            <select id="knowledge-manifest-filter" aria-label="Filter knowledge by manifest"><option value="all">All manifests</option></select>
+          </div>
+        </div>
+        <div id="knowledge-pending" class="knowledge-pending"></div>
+        <div id="knowledge" class="knowledge-grid"></div>
+        <div id="knowledge-reconciliations" class="knowledge-history"></div>
+      </section>
+
+      <section class="panel">
         <div class="panel-heading"><div><p class="eyebrow">Proof matrix</p><h2>Mechanics</h2></div></div>
         <div id="mechanics" class="mechanic-grid"></div>
       </section>

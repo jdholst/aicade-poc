@@ -30,4 +30,30 @@ describe("campaign manual-QA CLI", () => {
       stderr: expect.stringMatching(/Missing required option --reason/),
     });
   });
+
+  it("documents loop conclusion, additive extension, and force-gated discard", async () => {
+    const { stdout } = await execFileAsync(process.execPath, [
+      cliPath,
+      "loop",
+      "--help",
+    ]);
+
+    expect(stdout).toContain("loop conclude --id <loop-id>");
+    expect(stdout).toContain("loop extend --id <loop-id>");
+    expect(stdout).toContain("--add-fix-cycles <number>");
+    expect(stdout).toContain("--add-planning-calls <number>");
+    expect(stdout).toContain("--authorize <extension-hash>");
+    expect(stdout).toContain("loop discard --id <loop-id> [--force]");
+  });
+
+  it("documents the compiled-knowledge validation, context, reconciliation, and report commands", async () => {
+    const { stdout } = await execFileAsync(process.execPath, [cliPath, "--help"]);
+
+    expect(stdout).toContain("knowledge validate");
+    expect(stdout).toContain("knowledge report");
+    expect(stdout).toContain("knowledge context (--loop <loop-id> | --campaign <run-id>)");
+    expect(stdout).toContain(
+      "knowledge reconcile (--loop <loop-id> | --campaign <run-id>) --proposal <path>"
+    );
+  });
 });

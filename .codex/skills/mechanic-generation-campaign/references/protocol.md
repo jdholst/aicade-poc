@@ -51,7 +51,17 @@ Fixture-backed isolation may diagnose a failure while a loop is waiting for a fi
 
 A verified fix commit starts a new revision cycle and resets every sequence step. Campaign links and fix checkpoints remain append-only. Global usage does not reset.
 
-Loop terminal states are `achieved`, `exhausted`, `invalid`, and `blocked`. `interrupted` is resumable on the same clean revision, `waiting_for_manual_qa` requires an explicit user verdict, and `waiting_for_fix` is an agent action checkpoint.
+Every new standalone campaign and loop records the digest of `data/generation-knowledge.json` at creation. Older records are normalized with `knowledgePolicy.required: false` and remain readable and resumable.
+
+Before a new loop fix, read the compiled context. Applicable findings are mandatory diagnosis inputs. The context includes all linked failures, isolation results, approved prior successes, and manual-QA verdicts not reviewed by an earlier reconciliation. A reconciliation must preserve its exact manifest and context digests, consult every applicable finding, and dispose every evidence item exactly once. It either performs `add`, `amend`, `confirm`, or `retire` operations or records an explicit no-change reason.
+
+Raw campaign evidence is append-only. A contradiction changes compiled guidance under the same `KF-*` ID, increments its revision, and snapshots the previous mutable fields. A fix commit must append exactly one matching `KR-*` journal entry and include the knowledge file. Remaining terminal evidence is reconciled only after explicit conclusion or discard, so a knowledge-only control-checkout commit cannot change the revision that produced campaign proof.
+
+Loop execution terminal states are `achieved`, `exhausted`, `invalid`, and `blocked`. `interrupted` is resumable on the same clean revision, `waiting_for_manual_qa` requires an explicit user verdict, and `waiting_for_fix` is an agent action checkpoint. `concluded` and `discarded` are post-stop lifecycle states. They preserve evidence after local session cleanup.
+
+Only an `exhausted` loop can be extended. The extension is additive to global fix-cycle, campaign-run, submission, isolation, and per-stage provider-call ceilings. Previewing it is read-only and produces a canonical authorization hash. Apply only after the user explicitly authorizes that exact hash. Per-step retry and per-profile isolation policy never changes. Resume from the recorded active-campaign or fix-required exhaustion checkpoint.
+
+Conclude and discard require explicit user direction. Conclusion verifies the clean recorded control checkout and continuous accepted-fix chain, merges verified fixes when necessary, then removes the local worktree and branch. Discard removes them without merging or recording a QA verdict. Dirty or revision-mismatched discard requires a separate force approval after the exact paths are reported. Neither action pushes, switches the control branch, deletes a remote branch, or removes campaign evidence.
 
 Manual review consumes no campaign or provider budget and has no timeout. The review command restores only the frozen GenerationRun and GamePack into a clean browser context, blocks provider endpoints, verifies editor mount and runtime health, and remains open until approval, denial, or interruption. Review infrastructure failure leaves the verdict pending. Failure of the restored game to mount or remain healthy becomes `runtime_pipeline_failure`.
 

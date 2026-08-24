@@ -9,6 +9,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createCampaignStore } from "./lib/campaign-store.mjs";
 import {
+  CAMPAIGN_KNOWLEDGE_PATH,
+  applyKnowledgeReconciliation,
+  createCampaignKnowledgeStore,
+  createEmptyCampaignKnowledge,
+  createKnowledgeContextDigest,
+  knowledgeEntriesDigest,
+} from "./lib/knowledge.mjs";
+import { validateFixKnowledgeCheckpoint } from "./lib/knowledge-checkpoint.mjs";
+import {
+  extendCampaignLoop,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
   startCampaignLoop,
@@ -17,7 +27,10 @@ import {
 import { createCampaignLoopStore } from "./lib/loop-store.mjs";
 import { inspectRevision } from "./lib/revision.mjs";
 import { createAttemptSchedule } from "./lib/runner-policy.mjs";
-import { resumeLoopAfterManualQaApproval } from "./lib/loop-state.mjs";
+import {
+  exhaustLoop,
+  resumeLoopAfterManualQaApproval,
+} from "./lib/loop-state.mjs";
 
 const execFileAsync = promisify(execFile);
 const temporaryDirectories = [];
@@ -31,6 +44,215 @@ afterEach(async () => {
 });
 
 describe("campaign loop controller", () => {
+  it("previews an additive extension without mutation, then applies its exact hash once", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    let providerExecutions = 0;
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        providerExecutions += 1;
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        return {
+          run: { id: input.runId, status: "completed_not_achieved" },
+          attempts: [
+            { status: "pipeline_failure", classification: "pipeline_failure" },
+          ],
+        };
+      },
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+        path: worktreePath,
+        branch,
+        head: fixture.head,
+        revisionKey: validation.revision.revisionKey,
+        dirty: false,
+        statusEntries: [],
+      }),
+      now: () => new Date("2026-08-23T15:00:00.000Z"),
+    });
+    const exhausted = exhaustLoop(
+      started.run,
+      "The current step failed and no fix cycles remain.",
+      "2026-08-23T15:05:00.000Z",
+      { status: "waiting_for_fix" }
+    );
+    await loopStore.writeRun(exhausted);
+    const additions = {
+      maxFixCycles: 1,
+      maxCampaignRuns: 2,
+      maxSubmissions: 2,
+      maxAuxiliaryIsolationCampaigns: 0,
+      actualProviderCalls: { planning: 2, contract: 2, source: 2 },
+    };
+
+    const previewed = await extendCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: exhausted.id,
+      additions,
+      loopStore,
+      campaignStore,
+    });
+
+    expect(previewed.preview.authorizationHash).toMatch(/^[a-f0-9]{64}$/);
+    expect((await loopStore.readRun(exhausted.id)).limits).toEqual(
+      exhausted.limits
+    );
+    expect(providerExecutions).toBe(1);
+
+    await expect(
+      extendCampaignLoop({
+        repoRoot: fixture.repoRoot,
+        loopId: exhausted.id,
+        additions,
+        authorization: "0".repeat(64),
+        loopStore,
+        campaignStore,
+      })
+    ).rejects.toThrow(/authorization does not match/i);
+    expect((await loopStore.readRun(exhausted.id)).limits).toEqual(
+      exhausted.limits
+    );
+
+    const applied = await extendCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: exhausted.id,
+      additions,
+      authorization: previewed.preview.authorizationHash,
+      loopStore,
+      campaignStore,
+      now: () => new Date("2026-08-23T15:10:00.000Z"),
+    });
+
+    expect(applied.run.status).toBe("waiting_for_fix");
+    expect(applied.run.budgetExtensions).toHaveLength(1);
+    expect(applied.run.limits).toEqual(previewed.preview.resultingLimits);
+    expect(providerExecutions).toBe(1);
+    await expect(
+      extendCampaignLoop({
+        repoRoot: fixture.repoRoot,
+        loopId: exhausted.id,
+        additions,
+        authorization: previewed.preview.authorizationHash,
+        loopStore,
+        campaignStore,
+      })
+    ).rejects.toThrow(/cannot be extended/i);
+  });
+
+  it("extends provider capacity and resumes the recorded active campaign", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const campaignCalls = [];
+    const runCampaignFn = async (input) => {
+      campaignCalls.push({ runId: input.runId, resume: input.resume });
+      await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+      if (campaignCalls.length === 1) {
+        expect(await input.providerCallBudget.consume("planning")).toBe(true);
+        expect(await input.providerCallBudget.consume("planning")).toBe(true);
+        expect(await input.providerCallBudget.consume("planning")).toBe(false);
+        return {
+          run: { id: input.runId, status: "completed_not_achieved" },
+          attempts: [],
+        };
+      }
+      for (const stage of ["planning", "contract", "source"]) {
+        expect(await input.providerCallBudget.consume(stage)).toBe(true);
+      }
+      return {
+        run: { id: input.runId, status: "achieved" },
+        attempts: [
+          {
+            id: "a1",
+            status: "success",
+            classification: "success",
+            manualQa: { status: "approved" },
+          },
+        ],
+      };
+    };
+    const inspectWorktreeFn = async ({ path: worktreePath, branch }) => ({
+      path: worktreePath,
+      branch,
+      head: fixture.head,
+      revisionKey: validation.revision.revisionKey,
+      dirty: false,
+      statusEntries: [],
+    });
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn,
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn,
+    });
+    expect(started.run).toMatchObject({
+      status: "exhausted",
+      exhaustionResume: {
+        status: "running",
+        activeCampaign: {
+          campaignRunId: campaignCalls[0].runId,
+          role: "sequence",
+        },
+      },
+    });
+
+    const additions = {
+      maxFixCycles: 0,
+      maxCampaignRuns: 0,
+      maxSubmissions: 0,
+      maxAuxiliaryIsolationCampaigns: 0,
+      actualProviderCalls: { planning: 1, contract: 0, source: 0 },
+    };
+    const previewed = await extendCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      additions,
+      loopStore,
+      campaignStore,
+    });
+    const resumed = await extendCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      additions,
+      authorization: previewed.preview.authorizationHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn,
+      inspectWorktreeFn,
+    });
+
+    expect(resumed.run.status).toBe("achieved");
+    expect(campaignCalls).toHaveLength(2);
+    expect(campaignCalls[1]).toEqual({
+      runId: campaignCalls[0].runId,
+      resume: campaignCalls[0].runId,
+    });
+  });
+
   it("pauses on an automated candidate and resumes the same campaign only after approval", async () => {
     const fixture = await createRepositoryFixture({ singleStepFix: true });
     const loopStore = createCampaignLoopStore(fixture.repoRoot);
@@ -258,12 +480,54 @@ describe("campaign loop controller", () => {
     });
     expect(started.run.status).toBe("waiting_for_fix");
 
+    const knowledgeStore = createCampaignKnowledgeStore(fixture.repoRoot);
+    const beforeKnowledge = await knowledgeStore.read();
+    const knowledgeContext = {
+      applicableFindingIds: [],
+      evidence: [{ id: "failure-campaign/a1" }],
+    };
+    knowledgeContext.contextDigest = createKnowledgeContextDigest(knowledgeContext);
+    await knowledgeStore.write(
+      applyKnowledgeReconciliation(
+        beforeKnowledge,
+        {
+          schemaVersion: "campaign-knowledge-reconciliation/v1",
+          id: "KR-fix-cycle-1",
+          source: {
+            kind: "fix_cycle",
+            loopId: started.run.id,
+            fixId: "fix-cycle-1",
+            triggerCampaignRunId: started.run.campaignLinks[0].campaignRunId,
+          },
+          consultedManifestDigest: knowledgeEntriesDigest(beforeKnowledge),
+          contextDigest: knowledgeContext.contextDigest,
+          consultedFindingIds: [],
+          evidenceReview: [
+            {
+              evidenceId: "failure-campaign/a1",
+              disposition: "not_reusable",
+              findingIds: [],
+              rationale: "The synthetic controller failure has no reusable diagnosis.",
+            },
+          ],
+          operations: [],
+          noChangeReason: "The synthetic controller failure adds no reusable guidance.",
+          createdAt: "2026-08-23T15:55:00.000Z",
+        },
+        knowledgeContext
+      )
+    );
+
     await writeFile(
       path.join(fixture.repoRoot, "src", "pipeline.txt"),
       "verified pipeline fix\n",
       "utf8"
     );
-    await git(fixture.repoRoot, ["add", "src/pipeline.txt"]);
+    await git(fixture.repoRoot, [
+      "add",
+      "src/pipeline.txt",
+      CAMPAIGN_KNOWLEDGE_PATH,
+    ]);
     await git(fixture.repoRoot, ["commit", "-m", "Fix pipeline"]);
     const afterRevision = await inspectRevision(fixture.repoRoot);
     const fixReportPath = path.join(fixture.repoRoot, ".qa", "fix-cycle-1.json");
@@ -278,7 +542,7 @@ describe("campaign loop controller", () => {
         diagnosis: "The pipeline rejected a mechanic-general valid result.",
         kind: "durable",
         temporaryFixIds: [],
-        changedFiles: ["src/pipeline.txt"],
+        changedFiles: ["src/pipeline.txt", CAMPAIGN_KNOWLEDGE_PATH],
         verification: [
           {
             command: "npm test",
@@ -308,6 +572,11 @@ describe("campaign loop controller", () => {
       campaignStore,
       runCampaignFn,
       inspectWorktreeFn,
+      validateKnowledgeCheckpointFn: (input) =>
+        validateFixKnowledgeCheckpoint({
+          ...input,
+          buildContextFn: async () => knowledgeContext,
+        }),
     });
 
     expect(resumed.run.status).toBe("achieved");
@@ -320,6 +589,9 @@ describe("campaign loop controller", () => {
     });
     expect(resumed.run.campaignLinks).toHaveLength(2);
     expect(await loopStore.readFixes(started.run.id)).toHaveLength(1);
+    expect(resumed.run.knowledgeReconciliationIds).toEqual([
+      "KR-fix-cycle-1",
+    ]);
   });
 
   it("runs a bounded fixture-backed isolation without advancing proof", async () => {
@@ -422,6 +694,13 @@ async function createRepositoryFixture({
   await writeFile(path.join(repoRoot, ".gitignore"), ".qa\nnode_modules\n", "utf8");
   await mkdir(path.join(repoRoot, "src"), { recursive: true });
   await writeFile(path.join(repoRoot, "src", "pipeline.txt"), "original\n", "utf8");
+  const knowledgePath = path.join(repoRoot, CAMPAIGN_KNOWLEDGE_PATH);
+  await mkdir(path.dirname(knowledgePath), { recursive: true });
+  await writeFile(
+    knowledgePath,
+    `${JSON.stringify(createEmptyCampaignKnowledge("2026-08-23T14:00:00.000Z"), null, 2)}\n`,
+    "utf8"
+  );
   const harnessRoot = path.join(repoRoot, "tools", "harness");
   const manifestDirectory = path.join(harnessRoot, "manifests");
   await mkdir(manifestDirectory, { recursive: true });

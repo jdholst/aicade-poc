@@ -12,6 +12,10 @@ import {
 } from "./browser-storage.mjs";
 import { createCampaignStore } from "./campaign-store.mjs";
 import {
+  createCampaignKnowledgeStore,
+  knowledgeEntriesDigest,
+} from "./knowledge.mjs";
+import {
   CAMPAIGN_ATTEMPT_SCHEMA_VERSION,
   CAMPAIGN_RUN_SCHEMA_VERSION,
   requiresManualQa,
@@ -41,6 +45,7 @@ export async function runCampaign({
   port = 3117,
   attemptTimeoutMs = Number(process.env.AICADE_CAMPAIGN_ATTEMPT_TIMEOUT_MS ?? 300_000),
   store: providedStore,
+  knowledgeStore: providedKnowledgeStore,
   loopContext,
   providerCallBudget,
   onSubmission,
@@ -50,6 +55,8 @@ export async function runCampaign({
   const loaded = await loadCampaignManifest(manifestPath);
   const store = providedStore ?? createCampaignStore(repoRoot);
   await store.initialize();
+  const knowledgeStore =
+    providedKnowledgeStore ?? createCampaignKnowledgeStore(repoRoot);
   const providerModes = resolveProviderModes(
     cohort,
     providerModeOverrides ?? loaded.manifest.providerModes,
@@ -78,6 +85,9 @@ export async function runCampaign({
     resume ?? runId ?? createCampaignRunId(loaded.manifest.id, cohort, createdAt);
   const baseUrl = attachedBaseUrl ?? createLoopbackBaseUrl(port);
   const schedule = createAttemptSchedule(cohort, loaded.manifest.prompts);
+  const baselineManifestDigest = resume
+    ? undefined
+    : knowledgeEntriesDigest(await knowledgeStore.read());
   let run = resume
     ? await store.readRun(resume)
     : {
@@ -93,6 +103,10 @@ export async function runCampaign({
         providerModes,
         attemptCeiling: schedule.length,
         attemptIds: [],
+        knowledgePolicy: {
+          required: true,
+          baselineManifestDigest,
+        },
         ...(loopContext
           ? {
               loopId: loopContext.loopId,
