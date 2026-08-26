@@ -643,6 +643,9 @@ export function createCampaignActivityTracker(now = () => Date.now()) {
   };
 }
 
+const ACCEPTED_PROJECT_TERMINAL_RECEIPT =
+  "Generated, evaluated, and accepted a playable mechanic project.";
+
 export async function waitForTerminalEditorState(
   page,
   timeoutMs,
@@ -658,18 +661,19 @@ export async function waitForTerminalEditorState(
     }
     try {
       await page.waitForFunction(
-        () => {
+        (acceptedReceipt) => {
           const lines = document.body.innerText
             .split("\n")
             .map((line) => line.trim());
           return (
             lines.includes("Ready") ||
+            lines.includes(acceptedReceipt) ||
             lines.includes("An error has occurred.") ||
             lines.includes("GENERATION STOPPED") ||
             document.body.innerText.includes("The runtime could not be prepared.")
           );
         },
-        undefined,
+        ACCEPTED_PROJECT_TERMINAL_RECEIPT,
         { timeout: Math.min(pollIntervalMs, remainingMs) }
       );
       break;
@@ -681,8 +685,13 @@ export async function waitForTerminalEditorState(
   }
   const text = await page.locator("body").innerText();
   const lines = text.split("\n").map((line) => line.trim());
-  return lines.includes("Ready")
-    ? { kind: "ready", text: "Ready" }
+  const readyReceipt = lines.includes("Ready")
+    ? "Ready"
+    : lines.includes(ACCEPTED_PROJECT_TERMINAL_RECEIPT)
+      ? ACCEPTED_PROJECT_TERMINAL_RECEIPT
+      : undefined;
+  return readyReceipt
+    ? { kind: "ready", text: readyReceipt }
     : { kind: "generation_failure", text: compactTerminalText(text) };
 }
 

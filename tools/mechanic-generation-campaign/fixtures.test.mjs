@@ -147,6 +147,35 @@ describe("provider request resolution", () => {
     }
   });
 
+  it("recognizes the accepted playable-project receipt as a ready terminal", async () => {
+    let predicateSource = "";
+    let predicateArgument;
+    const acceptedReceipt =
+      "Generated, evaluated, and accepted a playable mechanic project.";
+    const page = {
+      waitForFunction: vi.fn(async (predicate, argument) => {
+        predicateSource = String(predicate);
+        predicateArgument = argument;
+      }),
+      locator: vi.fn(() => ({
+        innerText: vi.fn(async () =>
+          [
+            "Runtime is running in the sandbox.",
+            acceptedReceipt,
+            "SANDBOXED GENERATED MECHANIC",
+          ].join("\n")
+        ),
+      })),
+    };
+
+    await expect(waitForTerminalEditorState(page, 50)).resolves.toEqual({
+      kind: "ready",
+      text: acceptedReceipt,
+    });
+    expect(predicateSource).toContain("acceptedReceipt");
+    expect(predicateArgument).toBe(acceptedReceipt);
+  });
+
   it("uses the project's normal production build in linked campaign worktrees", () => {
     expect(productionBuildArguments()).toEqual(["run", "build"]);
   });

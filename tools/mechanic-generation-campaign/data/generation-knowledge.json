@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 7,
-  "updatedAt": "2026-08-26T18:30:13.000Z",
+  "revision": 8,
+  "updatedAt": "2026-08-26T19:08:45.000Z",
   "entries": [
     {
       "status": "active",
@@ -714,6 +714,41 @@
       ],
       "createdAt": "2026-08-26T18:02:23.000Z",
       "updatedAt": "2026-08-26T18:30:13.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Recognize the accepted editor receipt as a campaign terminal",
+      "guidance": "Treat the exact editor receipt 'Generated, evaluated, and accepted a playable mechanic project.' as a ready terminal alongside the legacy exact line 'Ready'. Terminal recognition only stops waiting; campaign success must still require a succeeded persisted GenerationRun, a GamePack, healthy mounted runtime, manual-QA eligibility, and the external mechanic probe.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "editor_mount"
+        ],
+        "classifications": [
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0016",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "All actual provider stages completed and a no-provider browser replay reached the accepted playable-project receipt with the sandbox runtime mounted, but the campaign waiter ignored that current success terminal and expired after five minutes without further progress.",
+          "observedAt": "2026-08-26T18:57:03.173Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T19:08:45.000Z",
+      "updatedAt": "2026-08-26T19:08:45.000Z"
     }
   ],
   "reconciliations": [
@@ -1880,6 +1915,84 @@
       "createdAt": "2026-08-26T18:30:13.000Z",
       "priorManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480",
       "resultingManifestDigest": "5a79746c73c63cd0d404bb505d653d332fb191d09474657c96f45a79228f7e4e"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t190845z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-6",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1"
+      },
+      "consultedManifestDigest": "5a79746c73c63cd0d404bb505d653d332fb191d09474657c96f45a79228f7e4e",
+      "contextDigest": "6c9407ae081e7305b0330c75194f26d472bee06eaebeaa3adf519be1b4d7463a",
+      "consultedFindingIds": [
+        "KF-0013",
+        "KF-0015"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-5",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "The accepted worktree runner renewed its no-progress allowance through the planning, contract, and source responses, then emitted the precise five-minute no-progress classification after the last response."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0016"
+          ],
+          "rationale": "Captured-response browser replay showed the editor had generated, evaluated, accepted, persisted, and mounted the playable project while the campaign waiter continued waiting only because the current editor no longer renders the obsolete exact line Ready."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Recognize the accepted editor receipt as a campaign terminal",
+            "guidance": "Treat the exact editor receipt 'Generated, evaluated, and accepted a playable mechanic project.' as a ready terminal alongside the legacy exact line 'Ready'. Terminal recognition only stops waiting; campaign success must still require a succeeded persisted GenerationRun, a GamePack, healthy mounted runtime, manual-QA eligibility, and the external mechanic probe.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0016",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1",
+                "attemptId": "a01-baseline",
+                "stage": "editor_mount",
+                "quality": "actual_submission",
+                "outcome": "infrastructure_failure",
+                "summary": "All actual provider stages completed and a no-provider browser replay reached the accepted playable-project receipt with the sandbox runtime mounted, but the campaign waiter ignored that current success terminal and expired after five minutes without further progress.",
+                "observedAt": "2026-08-26T18:57:03.173Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T19:08:45.000Z",
+            "updatedAt": "2026-08-26T19:08:45.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T19:08:45.000Z",
+      "priorManifestDigest": "5a79746c73c63cd0d404bb505d653d332fb191d09474657c96f45a79228f7e4e",
+      "resultingManifestDigest": "8eff5f497aab9ab3c232f509c5e8437724befcf36aa605245b9bddd347d47b43"
     }
   ]
 }
