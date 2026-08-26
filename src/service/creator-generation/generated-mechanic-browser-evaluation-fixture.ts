@@ -781,14 +781,15 @@ export function createGeneratedMechanicExternalObservations(
     );
     const cleanupScenarios = timeAdvancingScenarios.filter(
       (scenario) =>
-        !scenario.observations.some(
+        scenario.observations.some(
           (observation) =>
             observation.kind === "owned_object_count" &&
             contract.ownedObjects.some(
               ({ id }) => id === observation.archetypeId
             ) &&
-            observation.operator !== "at_most" &&
-            observation.value > 0
+            (observation.operator === "equals" ||
+              observation.operator === "at_most") &&
+            observation.value === 0
         )
     );
     for (const scenario of
