@@ -376,6 +376,6 @@ Loop extension options:
 Loop runner options:
   --headed
   --port <number>                  Dedicated production server port, default 3117
-  --attempt-timeout-ms <number>    Terminal timeout per editor submission, default 300000
+  --attempt-timeout-ms <number>    No-progress timeout per editor submission, default 300000
 `);
 }

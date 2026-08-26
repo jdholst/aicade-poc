@@ -279,6 +279,7 @@ async function runBrowserAttempt({
   const actualResponseCaptures = new Map();
   const responseCaptureTasks = new Set();
   const browserIssues = [];
+  const terminalActivity = createCampaignActivityTracker();
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
   });
@@ -299,6 +300,7 @@ async function runBrowserAttempt({
     actualResponseCaptures,
     responseCaptureTasks,
     providerCallBudget,
+    onActivity: () => terminalActivity.record(),
     onProviderBudgetExhausted: (stage) => {
       providerBudgetExhaustedStage = stage;
     },
@@ -328,8 +330,13 @@ async function runBrowserAttempt({
       sequence: scheduled.sequence,
       promptId: scheduled.promptId,
     });
+    terminalActivity.record();
     await page.getByRole("button", { name: "Build the project" }).click();
-    terminal = await waitForTerminalEditorState(page, attemptTimeoutMs);
+    terminal = await waitForTerminalEditorState(
+      page,
+      attemptTimeoutMs,
+      terminalActivity
+    );
     await page.screenshot({
       path: path.join(attemptDirectory, "terminal.png"),
       fullPage: true,
@@ -478,16 +485,18 @@ async function installProviderInterception({
   actualResponseCaptures,
   responseCaptureTasks,
   providerCallBudget,
+  onActivity,
   onProviderBudgetExhausted,
 }) {
   page.on("response", (response) => {
     const capture = actualResponseCaptures.get(response.request());
     if (!capture) return;
-    const task = captureActualResponse(response, capture);
+    const task = captureActualResponse(response, capture).finally(onActivity);
     responseCaptureTasks.add(task);
     void task.finally(() => responseCaptureTasks.delete(task));
   });
   await page.route("**/api/creator-generation-planning", async (route) => {
+    onActivity();
     const result = await resolveInterceptedRoute({
       route,
       stage: "planning",
@@ -502,6 +511,7 @@ async function installProviderInterception({
     if (result?.blocked) onProviderBudgetExhausted?.(result.stage);
   });
   await page.route("**/api/generated-mechanic-provider", async (route) => {
+    onActivity();
     const requestBody = route.request().postDataJSON();
     const stage = requestBody.stage;
     if (!['contract', 'source'].includes(stage)) {
@@ -621,20 +631,54 @@ async function enterControlledText(locator, value) {
   await locator.pressSequentially(value);
 }
 
-async function waitForTerminalEditorState(page, timeoutMs) {
-  await page.waitForFunction(
-    () => {
-      const lines = document.body.innerText.split("\n").map((line) => line.trim());
-      return (
-        lines.includes("Ready") ||
-        lines.includes("An error has occurred.") ||
-        lines.includes("GENERATION STOPPED") ||
-        document.body.innerText.includes("The runtime could not be prepared.")
-      );
+export function createCampaignActivityTracker(now = () => Date.now()) {
+  let lastActivityAt = now();
+  return {
+    record() {
+      lastActivityAt = now();
     },
-    undefined,
-    { timeout: timeoutMs }
-  );
+    elapsedMs() {
+      return now() - lastActivityAt;
+    },
+  };
+}
+
+export async function waitForTerminalEditorState(
+  page,
+  timeoutMs,
+  activity = createCampaignActivityTracker()
+) {
+  const pollIntervalMs = Math.min(1_000, timeoutMs);
+  while (true) {
+    const remainingMs = timeoutMs - activity.elapsedMs();
+    if (remainingMs <= 0) {
+      throw new Error(
+        `Campaign editor made no terminal or provider progress for ${timeoutMs}ms.`
+      );
+    }
+    try {
+      await page.waitForFunction(
+        () => {
+          const lines = document.body.innerText
+            .split("\n")
+            .map((line) => line.trim());
+          return (
+            lines.includes("Ready") ||
+            lines.includes("An error has occurred.") ||
+            lines.includes("GENERATION STOPPED") ||
+            document.body.innerText.includes("The runtime could not be prepared.")
+          );
+        },
+        undefined,
+        { timeout: Math.min(pollIntervalMs, remainingMs) }
+      );
+      break;
+    } catch (error) {
+      if (!/timeout/i.test(error instanceof Error ? error.message : String(error))) {
+        throw error;
+      }
+    }
+  }
   const text = await page.locator("body").innerText();
   const lines = text.split("\n").map((line) => line.trim());
   return lines.includes("Ready")

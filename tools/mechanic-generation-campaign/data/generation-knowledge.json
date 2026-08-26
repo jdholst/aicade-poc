@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 3,
-  "updatedAt": "2026-08-26T17:17:03.000Z",
+  "revision": 4,
+  "updatedAt": "2026-08-26T17:41:54.000Z",
   "entries": [
     {
       "status": "active",
@@ -561,6 +561,41 @@
       "amendments": [],
       "createdAt": "2026-08-24T23:17:44.000Z",
       "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Measure campaign terminal timeout from provider progress",
+      "guidance": "Treat the campaign editor terminal timeout as a no-progress allowance: renew it when a provider request starts or its response completes, and classify infrastructure timeout only after the full allowance passes without provider or terminal progress.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "editor_mount"
+        ],
+        "classifications": [
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0013",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "Five successful actual-provider responses were recorded before the campaign editor hit its single 300-second terminal wall-clock limit and lost the still-active repair path without structured generation evidence.",
+          "observedAt": "2026-08-26T17:32:36.194Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T17:41:54.000Z",
+      "updatedAt": "2026-08-26T17:41:54.000Z"
     }
   ],
   "reconciliations": [
@@ -1405,6 +1440,100 @@
       "createdAt": "2026-08-26T17:17:03.000Z",
       "priorManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b",
       "resultingManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t174154z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1"
+      },
+      "consultedManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432",
+      "contextDigest": "bcead0969098693a3f0ce518ca6608c530a79e2c30d413da702226041fd42601",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-1",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The verified fix aligned handoff target-interaction verification with the cleanup-capable scenario policy already compiled in KF-0008."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0013"
+          ],
+          "rationale": "The actual submission received five successful provider responses across planning, contract, and source repair, then hit the single 300-second terminal wall-clock limit before the remaining repair path could finish or record structured generation evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-isolation-source-fixture-c1-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The fixture source referenced private state dash_active while the actual contract exposed cooldown_until, so its deterministic type rejection does not confirm or contradict the applicable source-behavior findings."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-isolation-contract-fixture-c1-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The fixture contract referenced shoot_action outside the trusted action catalog and stopped before any actual source call, so it does not provide reusable evidence about the actual source repair or terminal wait."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Measure campaign terminal timeout from provider progress",
+            "guidance": "Treat the campaign editor terminal timeout as a no-progress allowance: renew it when a provider request starts or its response completes, and classify infrastructure timeout only after the full allowance passes without provider or terminal progress.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0013",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1",
+                "attemptId": "a01-baseline",
+                "stage": "editor_mount",
+                "quality": "actual_submission",
+                "outcome": "infrastructure_failure",
+                "summary": "Five successful actual-provider responses were recorded before the campaign editor hit its single 300-second terminal wall-clock limit and lost the still-active repair path without structured generation evidence.",
+                "observedAt": "2026-08-26T17:32:36.194Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T17:41:54.000Z",
+            "updatedAt": "2026-08-26T17:41:54.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T17:41:54.000Z",
+      "priorManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432",
+      "resultingManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9"
     }
   ]
 }

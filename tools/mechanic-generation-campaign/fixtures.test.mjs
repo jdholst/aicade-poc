@@ -6,9 +6,11 @@ import {
   resolveProviderRequest,
 } from "./lib/fixture-adapter.mjs";
 import {
+  createCampaignActivityTracker,
   productionBuildArguments,
   resolveInterceptedRoute,
   summarizeAttemptFailure,
+  waitForTerminalEditorState,
 } from "./lib/browser-runner.mjs";
 
 const request = {
@@ -109,6 +111,42 @@ describe("fixture correlation", () => {
 });
 
 describe("provider request resolution", () => {
+  it("renews the terminal idle allowance when provider progress is recorded", async () => {
+    vi.useFakeTimers();
+    try {
+      let ready = false;
+      const page = {
+        waitForFunction: vi.fn(
+          async (_predicate, _argument, { timeout }) =>
+            new Promise((resolve, reject) => {
+              setTimeout(
+                () =>
+                  ready
+                    ? resolve()
+                    : reject(new Error(`Timeout ${timeout}ms exceeded.`)),
+                timeout
+              );
+            })
+        ),
+        locator: vi.fn(() => ({
+          innerText: vi.fn(async () => (ready ? "Ready" : "Building")),
+        })),
+      };
+      const activity = createCampaignActivityTracker();
+
+      const terminal = waitForTerminalEditorState(page, 50, activity);
+      await vi.advanceTimersByTimeAsync(40);
+      activity.record();
+      await vi.advanceTimersByTimeAsync(30);
+      ready = true;
+      await vi.advanceTimersByTimeAsync(30);
+
+      await expect(terminal).resolves.toEqual({ kind: "ready", text: "Ready" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("uses the project's normal production build in linked campaign worktrees", () => {
     expect(productionBuildArguments()).toEqual(["run", "build"]);
   });
