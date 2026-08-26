@@ -154,6 +154,9 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "Use only those exact binding property IDs in scenario binding_property observations"
     );
     expect(prompt).toContain(
+      "Generated source cannot deactivate or destroy bound objects"
+    );
+    expect(prompt).toContain(
       "Use time_schedule plus a scheduled lifecycle callback for one-shot delayed transitions"
     );
     expect(prompt).toContain(

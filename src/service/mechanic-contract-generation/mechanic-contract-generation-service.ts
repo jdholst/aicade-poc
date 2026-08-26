@@ -361,8 +361,34 @@ function generatedContractIntentLineageIssues(
     }
   }
   appendTransientLifetimeFinalCountIssues(intent, contract, issues);
+  appendUnsupportedBoundDeactivationIssues(contract, issues);
 
   return issues;
+}
+
+function appendUnsupportedBoundDeactivationIssues(
+  contract: GeneratedMechanicContract,
+  issues: ContractValidationEvidence["issues"]
+): void {
+  contract.scenarios.forEach((scenario, scenarioIndex) => {
+    scenario.observations.forEach((observation, observationIndex) => {
+      if (
+        observation.kind !== "binding_property" ||
+        observation.property !== "active" ||
+        !(
+          (observation.operator === "equals" && observation.value === false) ||
+          (observation.operator === "not_equals" && observation.value === true)
+        )
+      ) {
+        return;
+      }
+      issues.push({
+        path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
+        code: "contradiction",
+        message: `Generated mechanic scenario "${scenario.id}" cannot require bound object "${observation.bindingId}" to become inactive because generated source cannot deactivate bound objects. Observe an admitted mutable motion property or rely on evaluator-authored target-interaction evidence instead.`,
+      });
+    });
+  });
 }
 
 function appendTransientLifetimeFinalCountIssues(

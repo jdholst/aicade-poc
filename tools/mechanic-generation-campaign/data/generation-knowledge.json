@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 4,
-  "updatedAt": "2026-08-26T17:41:54.000Z",
+  "revision": 5,
+  "updatedAt": "2026-08-26T17:53:34.000Z",
   "entries": [
     {
       "status": "active",
@@ -596,6 +596,42 @@
       "amendments": [],
       "createdAt": "2026-08-26T17:41:54.000Z",
       "updatedAt": "2026-08-26T17:41:54.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Do not require generated source to deactivate bound objects",
+      "guidance": "Reject contract observations that require a bound object's active property to become false. Generated source may mutate admitted bound motion and produce authenticated target-interaction evidence, while object destruction applies only to mechanic-owned objects.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0014",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual source repairs passed creation, travel, target interaction, and cleanup but exhausted because the accepted contract required enemy_binding active to equal false, an unavailable mutation for a bound object.",
+          "observedAt": "2026-08-26T17:47:01.115Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T17:53:34.000Z",
+      "updatedAt": "2026-08-26T17:53:34.000Z"
     }
   ],
   "reconciliations": [
@@ -1534,6 +1570,90 @@
       "createdAt": "2026-08-26T17:41:54.000Z",
       "priorManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432",
       "resultingManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t175334z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1"
+      },
+      "consultedManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9",
+      "contextDigest": "b4f495cf67de0a89356ea315cc8296c9dc3238ed7e99bd4641b5359a8d87367d",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0013"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-2",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0013"
+          ],
+          "rationale": "The verified campaign-runner fix implemented the KF-0013 no-progress timeout rule and preserved a structured outcome for the next multi-provider repair path."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0014"
+          ],
+          "rationale": "Actual source repairs satisfied the authenticated owned-object creation, travel, target-interaction, and cleanup path, but could not satisfy a model-declared requirement that a bound target become inactive because the admitted host can destroy only mechanic-owned objects."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Do not require generated source to deactivate bound objects",
+            "guidance": "Reject contract observations that require a bound object's active property to become false. Generated source may mutate admitted bound motion and produce authenticated target-interaction evidence, while object destruction applies only to mechanic-owned objects.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0014",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual source repairs passed creation, travel, target interaction, and cleanup but exhausted because the accepted contract required enemy_binding active to equal false, an unavailable mutation for a bound object.",
+                "observedAt": "2026-08-26T17:47:01.115Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T17:53:34.000Z",
+            "updatedAt": "2026-08-26T17:53:34.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T17:53:34.000Z",
+      "priorManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9",
+      "resultingManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255"
     }
   ]
 }
