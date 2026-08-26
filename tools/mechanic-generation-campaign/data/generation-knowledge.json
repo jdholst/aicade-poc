@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 2,
-  "updatedAt": "2026-08-24T23:17:44.000Z",
+  "revision": 3,
+  "updatedAt": "2026-08-26T17:17:03.000Z",
   "entries": [
     {
       "status": "active",
@@ -285,21 +285,23 @@
       "status": "active",
       "confidence": "supported",
       "title": "Attach target proof to cleanup-capable scenarios",
-      "guidance": "For transient owned-object behavior, attach required target-interaction proof to cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists.",
+      "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof on cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
           "source_generation",
-          "deterministic_evaluation"
+          "deterministic_evaluation",
+          "assembly"
         ],
         "classifications": [
-          "provider_output_rejected"
+          "provider_output_rejected",
+          "pipeline_failure"
         ]
       },
       "id": "KF-0008",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -323,11 +325,59 @@
           "outcome": "provider_output_rejected",
           "summary": "Evaluator-authored target-interaction proof was applied to every time-advancing transient lifecycle scenario. Target proof now attaches to cleanup-capable scenarios, with the first time-advancing scenario retained as a fallback when no cleanup scenario exists.",
           "observedAt": "2026-08-24T17:41:47Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1",
+          "attemptId": "a01-baseline",
+          "stage": "assembly",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "An accepted repaired source produced an authentic passed deterministic-evaluation receipt, but handoff rejected it because active-progress evidence omitted target interaction while cleanup scenarios carried that proof.",
+          "observedAt": "2026-08-26T16:59:01.103Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-26T17:17:03.000Z",
+          "reason": "Actual assembly evidence showed that cleanup-capable target-interaction policy must govern downstream handoff verification as well as evaluator-authored observations.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach required target-interaction proof to cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1",
+              "attemptId": "a01-baseline",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "An accepted repaired source produced an authentic passed deterministic-evaluation receipt, but handoff rejected it because active-progress evidence omitted target interaction while cleanup scenarios carried that proof.",
+              "observedAt": "2026-08-26T16:59:01.103Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-24T23:17:44.000Z"
+      "updatedAt": "2026-08-26T17:17:03.000Z"
     },
     {
       "status": "active",
@@ -1288,6 +1338,73 @@
       "createdAt": "2026-08-24T23:17:44.000Z",
       "priorManifestDigest": "2d3f1846cdeff187fce97c593ff8b7dc0c568249c7a74285c17700c2d63d9834",
       "resultingManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t171703z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1"
+      },
+      "consultedManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b",
+      "contextDigest": "8b3e36d4cd31063aff4ddb1fc0ad3dbcf4c34d28d9a3f8d77ec21bdeb6f70a5f",
+      "consultedFindingIds": [
+        "KF-0007",
+        "KF-0008"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The actual submission showed that downstream handoff verification rejected an authentic passed evaluator receipt because it globally required target-interaction proof from an active-progress scenario instead of honoring the cleanup-capable scenario policy."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0008",
+          "expectedRevision": 1,
+          "reason": "Actual assembly evidence showed that cleanup-capable target-interaction policy must govern downstream handoff verification as well as evaluator-authored observations.",
+          "changes": {
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof on cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1",
+              "attemptId": "a01-baseline",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "An accepted repaired source produced an authentic passed deterministic-evaluation receipt, but handoff rejected it because active-progress evidence omitted target interaction while cleanup scenarios carried that proof.",
+              "observedAt": "2026-08-26T16:59:01.103Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T17:17:03.000Z",
+      "priorManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b",
+      "resultingManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432"
     }
   ]
 }
