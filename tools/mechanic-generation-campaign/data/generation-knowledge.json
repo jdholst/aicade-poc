@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 10,
-  "updatedAt": "2026-08-26T19:49:52Z",
+  "revision": 11,
+  "updatedAt": "2026-08-26T20:52:09Z",
   "entries": [
     {
       "status": "active",
@@ -535,7 +535,7 @@
         ]
       },
       "id": "KF-0011",
-      "revision": 2,
+      "revision": 3,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -570,6 +570,18 @@
           "outcome": "runtime_pipeline_failure",
           "summary": "The returned Game Spec spawned the player at center (105, 300) and enemy at center (660, 300), 555 pixels apart, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. Deterministic evaluation passed only because its fixture relocated the target to 32 pixels ahead of the actor; mounted first-playable cleanup then reported zero target interactions.",
           "observedAt": "2026-08-26T19:36:57.120Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-8",
+          "stage": "runtime_activation",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "KF-0006, KF-0008, KF-0009, KF-0010, KF-0011, and KF-0012 were the complete applicable finding set, with no related findings. The actual candidate passed source generation and deterministic evaluation, where the target fixture was placed 32 pixels ahead of the actor, but failed first-playable in the returned runtime layout. The player spawn center was (105, 300) and the enemy spawn center was (660, 300), a 555-pixel separation, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. The source therefore created at the actor, moved, and cleaned up correctly but could not possibly reach the live target. The durable planning fix requires the combined Game Spec and Mechanic Intent to make finite-lifetime target travel mutually reachable: declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with at least 64 pixels of interaction headroom, or the compatible target spawn must move nearer. The append-only reconciliation extends KF-0011 from deterministic placement through planning and first-playable runtime geometry.",
+          "observedAt": "2026-08-26T19:54:42Z"
         }
       ],
       "amendments": [
@@ -608,10 +620,50 @@
               "observedAt": "2026-08-26T19:36:57.120Z"
             }
           ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-08-26T20:52:09Z",
+          "reason": "A verified planning fix independently applies the existing reachability guidance to returned Game Spec spawn geometry.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Align deterministic and runtime targets with the actor proof path",
+            "guidance": "For finite-lifetime moving owned objects that must interact with a target, align both deterministic proof placement and returned Game Spec spawn geometry with the actor proof path. The declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with bounded interaction headroom, or a compatible target spawn must move nearer. Do not rely on deterministic target relocation, unrelated target movement, or source behavior outside the declared travel budget.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "source_generation",
+                "deterministic_evaluation",
+                "first_playable"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-8",
+              "stage": "runtime_activation",
+              "quality": "verified_fix",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "KF-0006, KF-0008, KF-0009, KF-0010, KF-0011, and KF-0012 were the complete applicable finding set, with no related findings. The actual candidate passed source generation and deterministic evaluation, where the target fixture was placed 32 pixels ahead of the actor, but failed first-playable in the returned runtime layout. The player spawn center was (105, 300) and the enemy spawn center was (660, 300), a 555-pixel separation, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. The source therefore created at the actor, moved, and cleaned up correctly but could not possibly reach the live target. The durable planning fix requires the combined Game Spec and Mechanic Intent to make finite-lifetime target travel mutually reachable: declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with at least 64 pixels of interaction headroom, or the compatible target spawn must move nearer. The append-only reconciliation extends KF-0011 from deterministic placement through planning and first-playable runtime geometry.",
+              "observedAt": "2026-08-26T19:54:42Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-26T19:49:52Z"
+      "updatedAt": "2026-08-26T20:52:09Z"
     },
     {
       "status": "active",
@@ -849,6 +901,41 @@
       "amendments": [],
       "createdAt": "2026-08-26T19:08:45.000Z",
       "updatedAt": "2026-08-26T19:08:45.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Callback repairs must preserve the exact lifecycle checklist",
+      "guidance": "Treat the contract-derived required callback checklist as a closed set during initial generation and repair. Remove callback kinds absent from the checklist, add missing required kinds, and retain exactly one of each required kind. Apply fixed-step implementation guidance only when fixed_step is present in that exact checklist.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0017",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Source candidate callback kind \"fixed_step\" must occur exactly once and be declared by the accepted contract.",
+          "observedAt": "2026-08-26T20:00:12.549Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T20:52:09Z",
+      "updatedAt": "2026-08-26T20:52:09Z"
     }
   ],
   "reconciliations": [
@@ -2242,6 +2329,112 @@
       "createdAt": "2026-08-26T19:49:52Z",
       "priorManifestDigest": "3d3392fad0e1982603333a4ce3b78ae3cecc20358ab796d26650ebdfb190e999",
       "resultingManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t205209z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-9",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1"
+      },
+      "consultedManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4",
+      "contextDigest": "d0821fa18b99454b4b71303edd5d231af02276ba879488484e5739a36845365c",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0012",
+        "KF-0014"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0011"
+          ],
+          "rationale": "The verified planning fix confirms that deterministic and returned-runtime actor-target geometry must both fit the accepted finite travel budget."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0017"
+          ],
+          "rationale": "The actual source repairs repeatedly retained an undeclared fixed_step callback despite a contract-derived checklist that excluded it, exposing contradictory generic repair guidance."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0011",
+          "expectedRevision": 2,
+          "confidence": "supported",
+          "reason": "A verified planning fix independently applies the existing reachability guidance to returned Game Spec spawn geometry.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-8",
+              "stage": "runtime_activation",
+              "quality": "verified_fix",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "KF-0006, KF-0008, KF-0009, KF-0010, KF-0011, and KF-0012 were the complete applicable finding set, with no related findings. The actual candidate passed source generation and deterministic evaluation, where the target fixture was placed 32 pixels ahead of the actor, but failed first-playable in the returned runtime layout. The player spawn center was (105, 300) and the enemy spawn center was (660, 300), a 555-pixel separation, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. The source therefore created at the actor, moved, and cleaned up correctly but could not possibly reach the live target. The durable planning fix requires the combined Game Spec and Mechanic Intent to make finite-lifetime target travel mutually reachable: declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with at least 64 pixels of interaction headroom, or the compatible target spawn must move nearer. The append-only reconciliation extends KF-0011 from deterministic placement through planning and first-playable runtime geometry.",
+              "observedAt": "2026-08-26T19:54:42Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Callback repairs must preserve the exact lifecycle checklist",
+            "guidance": "Treat the contract-derived required callback checklist as a closed set during initial generation and repair. Remove callback kinds absent from the checklist, add missing required kinds, and retain exactly one of each required kind. Apply fixed-step implementation guidance only when fixed_step is present in that exact checklist.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0017",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Source candidate callback kind \"fixed_step\" must occur exactly once and be declared by the accepted contract.",
+                "observedAt": "2026-08-26T20:00:12.549Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T20:52:09Z",
+            "updatedAt": "2026-08-26T20:52:09Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T20:52:09Z",
+      "priorManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4",
+      "resultingManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f"
     }
   ]
 }

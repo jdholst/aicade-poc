@@ -188,6 +188,76 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).not.toContain("evaluator tests");
   });
 
+  it("removes callback kinds that are absent from the accepted lifecycle checklist", () => {
+    const intent = createIntent();
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      lifecycle: {
+        callbacks: ["install", "scheduled"],
+        fixedStep: false,
+        dispose: true,
+      },
+    };
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_2",
+      issues: [
+        {
+          path: "callbacks",
+          code: "callback_coverage_mismatch",
+          message:
+            'Source candidate callback kind "fixed_step" must occur exactly once and be declared by the accepted contract.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract,
+      grant: createMechanicSourceGenerationGrant(createGrant("state_write")),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 3,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_3",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      `Exact required source callback kinds JSON:\n${JSON.stringify(
+        ["install", "scheduled", "dispose"],
+        null,
+        2
+      )}`
+    );
+    expect(prompt).toContain(
+      "When callback_coverage_mismatch names a callback kind absent from the exact required checklist, remove every callback of that kind"
+    );
+    expect(prompt).toContain(
+      "Only when fixed_step appears in the exact required checklist"
+    );
+  });
+
   it("names forbidden constructor authority and turns its rejection into exact repair guidance", () => {
     const intent = createIntent();
     const baseInput = {
@@ -825,7 +895,7 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "radius at least the accepted segment length plus the owned-object and target interaction radii"
     );
     expect(prompt).toContain(
-      "If scheduled callbacks already implement transient travel, expiry, and interaction, keep fixed_step minimal"
+      "Only when fixed_step appears in the exact required checklist and scheduled callbacks already implement transient travel, expiry, and interaction, keep fixed_step minimal"
     );
     expect(prompt).toContain(
       "Do not repeat spatial queries, object reads, or motion writes every fixed-step tick"
