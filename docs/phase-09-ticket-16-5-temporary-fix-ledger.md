@@ -361,6 +361,17 @@ This ledger records expedient fixes accepted to improve real-provider end-to-end
 - Removal criteria: transient cleanup horizons are structurally represented and contract validation can reject contradictory final counts without inspecting config-key suffixes.
 - Current coverage: red-to-green public contract-generation service regression for a 1200 ms accepted lifetime and a positive final count after 1200 ms; a public prompt-builder regression covers exact post-lifetime repair guidance; shorter active-progress scenarios remain covered by the evaluator's four-state lifecycle regressions.
 
+### TF-33 — Active-loop campaign timeout override
+
+- Status: active one-session campaign-runner policy; remove after this loop is concluded
+- Motivated by: `p09-t17-projectile-proof-loop-20260826t165320275z` discovery cycles 1 and 3. Both full-actual submissions received continuing provider-stage responses but the control checkout's 300-second wall-clock terminal wait expired before structured repair completion.
+- Current shortcut: resume this one persisted loop with `--attempt-timeout-ms 600000`. Provider-call, campaign, submission, fix, and isolation ceilings remain unchanged, and the override changes no attempt or provider evidence. The loop worktree already contains the durable progress-aware runner fix, but the active CLI process loads campaign harness code from the control checkout until conclusion merges accepted fixes.
+- Risk: a truly stalled editor can remain attached for up to ten minutes before the existing infrastructure-failure path records it. The larger wall-clock allowance is session policy rather than progress-aware behavior.
+- Current guardrails: the override is explicit on each resume, bounded at 600000 ms, and does not change provider limits, retry policy, proof thresholds, or human QA. The browser runner still records every submission, request count, response capture, terminal result, and timeout.
+- Robust replacement: run campaign orchestration from the accepted loop revision or load its harness implementation from the linked worktree, then use the committed provider-progress renewal logic so the configured timeout measures inactivity rather than total repair duration.
+- Removal criteria: this loop is concluded and its accepted progress-aware runner is present in the control checkout, or the campaign CLI otherwise executes the accepted loop revision's harness code.
+- Current coverage: red-to-green activity-renewal runner regression, 103 campaign-tool tests, lint, production build, and live evidence that the unchanged control runner still emits the old `page.waitForFunction` 300000 ms timeout.
+
 ## Fixes deliberately not classified as band-aids
 
 The following changes address trusted infrastructure invariants and should remain even after the temporary entries above are replaced:

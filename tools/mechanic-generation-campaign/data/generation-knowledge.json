@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 5,
-  "updatedAt": "2026-08-26T17:53:34.000Z",
+  "revision": 6,
+  "updatedAt": "2026-08-26T18:02:23.000Z",
   "entries": [
     {
       "status": "active",
@@ -632,6 +632,41 @@
       "amendments": [],
       "createdAt": "2026-08-26T17:53:34.000Z",
       "updatedAt": "2026-08-26T17:53:34.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Active loop orchestration uses the control campaign harness",
+      "guidance": "Campaign application builds use the accepted linked-worktree revision, but the active loop CLI and browser runner are loaded from the control checkout. A worktree-only harness fix cannot govern that session until conclusion; use an explicit bounded runner option as temporary policy when needed.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "editor_mount"
+        ],
+        "classifications": [
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0015",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "The active control-run harness emitted its old page.waitForFunction 300000 ms timeout even though the accepted linked-worktree revision contained the progress-aware terminal wait implementation.",
+          "observedAt": "2026-08-26T18:01:18.264Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T18:02:23.000Z",
+      "updatedAt": "2026-08-26T18:02:23.000Z"
     }
   ],
   "reconciliations": [
@@ -1654,6 +1689,87 @@
       "createdAt": "2026-08-26T17:53:34.000Z",
       "priorManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9",
       "resultingManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t180223z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-4",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1"
+      },
+      "consultedManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255",
+      "contextDigest": "9364d755e1da79df19eae4680a0eca1741fc21937c1048c21147710f0b474e45",
+      "consultedFindingIds": [
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0013",
+        "KF-0014"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-3",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0014"
+          ],
+          "rationale": "The verified contract-admission fix implemented the KF-0014 ownership boundary while preserving the KF-0008, KF-0009, and KF-0011 deterministic proof rules."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "The unchanged control checkout again emitted the old 300-second page.waitForFunction timeout even though the accepted loop revision contains the progress-aware runner, proving that active loop orchestration loads harness code from the control checkout rather than the linked worktree."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Active loop orchestration uses the control campaign harness",
+            "guidance": "Campaign application builds use the accepted linked-worktree revision, but the active loop CLI and browser runner are loaded from the control checkout. A worktree-only harness fix cannot govern that session until conclusion; use an explicit bounded runner option as temporary policy when needed.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0015",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1",
+                "attemptId": "a01-baseline",
+                "stage": "editor_mount",
+                "quality": "actual_submission",
+                "outcome": "infrastructure_failure",
+                "summary": "The active control-run harness emitted its old page.waitForFunction 300000 ms timeout even though the accepted linked-worktree revision contained the progress-aware terminal wait implementation.",
+                "observedAt": "2026-08-26T18:01:18.264Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T18:02:23.000Z",
+            "updatedAt": "2026-08-26T18:02:23.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T18:02:23.000Z",
+      "priorManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255",
+      "resultingManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480"
     }
   ]
 }

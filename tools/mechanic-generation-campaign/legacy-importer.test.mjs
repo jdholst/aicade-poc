@@ -56,11 +56,11 @@ describe("legacy campaign evidence import", () => {
     ).toBe(true);
   });
 
-  it("normalizes all 32 temporary fixes without dropping replacement metadata", async () => {
+  it("normalizes all 33 temporary fixes without dropping replacement metadata", async () => {
     const fixes = await parseTemporaryFixLedger(repoRoot);
 
-    expect(fixes).toHaveLength(32);
-    expect(new Set(fixes.map((fix) => fix.id)).size).toBe(32);
+    expect(fixes).toHaveLength(33);
+    expect(new Set(fixes.map((fix) => fix.id)).size).toBe(33);
     expect(fixes.find((fix) => fix.id === "TF-28")).toMatchObject({
       state: "retired",
       robustReplacement: expect.stringMatching(/mechanic-generation-campaign/i),

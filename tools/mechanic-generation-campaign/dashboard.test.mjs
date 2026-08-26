@@ -231,7 +231,7 @@ describe("campaign dashboard data", () => {
 
     expect(snapshot.campaigns).toHaveLength(1);
     expect(snapshot.legacyAttempts).toHaveLength(80);
-    expect(snapshot.temporaryFixes).toHaveLength(32);
+    expect(snapshot.temporaryFixes).toHaveLength(33);
     expect(snapshot.stageSurvival.external_mechanic_probe).toBe(1);
     expect(snapshot.manualQa).toMatchObject({
       automatedCandidates: 0,

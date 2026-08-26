@@ -220,7 +220,7 @@ Purpose: normalize the historical attempt reports and temporary-fix ledger while
 
 Exactly one flag is required:
 
-- `--check` parses and validates the expected 80 attempts and 32 temporary fixes without writing.
+- `--check` parses and validates the expected 80 attempts and 33 temporary fixes without writing.
 - `--write` regenerates `legacy-attempts.jsonl` and `legacy-temporary-fixes.jsonl`.
 
 This command makes no provider calls. It fails if source parsing or expected historical record counts change.
