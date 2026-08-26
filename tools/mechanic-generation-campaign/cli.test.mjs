@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
+
+import { replicateFrozenLoopDefinition } from "./lib/loop-cli.mjs";
 
 const execFileAsync = promisify(execFile);
 const cliPath = path.join(import.meta.dirname, "cli.mjs");
@@ -103,6 +105,37 @@ describe("campaign manual-QA CLI", () => {
       ).toBe(true);
     } finally {
       await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("copies the exact frozen definition into the accepted execution root", async () => {
+    const stateRoot = await mkdtemp(
+      path.join(tmpdir(), "campaign-loop-source-root-")
+    );
+    const executionRoot = await mkdtemp(
+      path.join(tmpdir(), "campaign-loop-execution-root-")
+    );
+    try {
+      const definitionPath = path.join(".qa", "frozen-loop.json");
+      const sourcePath = path.join(stateRoot, definitionPath);
+      await mkdir(path.dirname(sourcePath), { recursive: true });
+      await writeFile(sourcePath, '{"definition":"exact"}\n', "utf8");
+
+      const destinationPath = await replicateFrozenLoopDefinition({
+        repoRoot: executionRoot,
+        stateRoot,
+        definitionPath,
+      });
+
+      expect(destinationPath).toBe(path.join(executionRoot, definitionPath));
+      expect(await readFile(destinationPath, "utf8")).toBe(
+        '{"definition":"exact"}\n'
+      );
+    } finally {
+      await Promise.all([
+        rm(stateRoot, { recursive: true, force: true }),
+        rm(executionRoot, { recursive: true, force: true }),
+      ]);
     }
   });
 

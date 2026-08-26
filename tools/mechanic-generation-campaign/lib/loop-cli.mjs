@@ -1,9 +1,11 @@
+import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { createCampaignStore } from "./campaign-store.mjs";
 import {
   blockCampaignLoop,
   extendCampaignLoop,
+  recoverCampaignLoop,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
   startCampaignLoop,
@@ -24,8 +26,8 @@ export async function handleLoopCommand({ args, repoRoot }) {
     printLoopHelp();
     return;
   }
-  if (stateRootOption && command !== "resume") {
-    throw new Error("--state-root is available only for loop resume.");
+  if (stateRootOption && !["recover", "resume"].includes(command)) {
+    throw new Error("--state-root is available only for loop recover or resume.");
   }
   const stateRoot = stateRootOption ? path.resolve(stateRootOption) : repoRoot;
   const loopStore = createCampaignLoopStore(stateRoot);
@@ -61,6 +63,12 @@ export async function handleLoopCommand({ args, repoRoot }) {
     const fixReportPath = takeOption(args, "--fix-report");
     const options = takeRunnerOptions(args);
     assertNoArguments(args);
+    await prepareFrozenLoopDefinition({
+      repoRoot,
+      stateRoot,
+      loopId,
+      loopStore,
+    });
     const result = await resumeCampaignLoop({
       repoRoot,
       loopId,
@@ -68,6 +76,24 @@ export async function handleLoopCommand({ args, repoRoot }) {
       loopStore,
       campaignStore,
       ...options,
+    });
+    printLoopSummary(result.run);
+    return;
+  }
+
+  if (command === "recover") {
+    const loopId = requiredOption(args, "--id");
+    assertNoArguments(args);
+    await prepareFrozenLoopDefinition({
+      repoRoot,
+      stateRoot,
+      loopId,
+      loopStore,
+    });
+    const result = await recoverCampaignLoop({
+      repoRoot,
+      loopId,
+      loopStore,
     });
     printLoopSummary(result.run);
     return;
@@ -167,6 +193,46 @@ export async function handleLoopCommand({ args, repoRoot }) {
   throw new Error(
     `Unknown campaign loop command "${command}". Run npm run campaign -- loop --help.`
   );
+}
+
+async function prepareFrozenLoopDefinition({
+  repoRoot,
+  stateRoot,
+  loopId,
+  loopStore,
+}) {
+  if (path.resolve(repoRoot) === path.resolve(stateRoot)) {
+    return;
+  }
+  await loopStore.initialize();
+  const run = await loopStore.readRun(loopId);
+  await replicateFrozenLoopDefinition({
+    repoRoot,
+    stateRoot,
+    definitionPath: run.definitionPath,
+  });
+}
+
+export async function replicateFrozenLoopDefinition({
+  repoRoot,
+  stateRoot,
+  definitionPath,
+}) {
+  const sourcePath = resolveWithinRoot(stateRoot, definitionPath);
+  const destinationPath = resolveWithinRoot(repoRoot, definitionPath);
+  await mkdir(path.dirname(destinationPath), { recursive: true });
+  await copyFile(sourcePath, destinationPath);
+  return destinationPath;
+}
+
+function resolveWithinRoot(root, relativePath) {
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, relativePath);
+  const relative = path.relative(resolvedRoot, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Frozen loop definition path escaped its repository root.");
+  }
+  return resolved;
 }
 
 function printAuthorizationEnvelope(loaded) {
@@ -361,6 +427,7 @@ export function printLoopHelp() {
   console.log(`Campaign loop commands:
   npm run campaign -- loop validate --definition <path>
   npm run campaign -- loop run --definition <path> --authorize <definition-hash> [options]
+  npm run campaign -- loop recover --id <loop-id> --state-root <path>
   npm run campaign -- loop resume --id <loop-id> [--fix-report <path>] [options]
   npm run campaign -- loop extend --id <loop-id> [additive budget options] [--fix-report <path>] [--authorize <extension-hash>] [options]
   npm run campaign -- loop isolate --id <loop-id> --profile <profile-id> [options]
@@ -384,6 +451,6 @@ Loop runner options:
   --headed
   --port <number>                  Dedicated production server port, default 3117
   --attempt-timeout-ms <number>    No-progress timeout per editor submission, default 300000
-  --state-root <path>              Resume from an accepted loop worktree while persisting state at this control-checkout root
+  --state-root <path>              Recover or resume from an accepted loop worktree while persisting state at this control root and copying its exact frozen definition into the worktree
 `);
 }

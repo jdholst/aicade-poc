@@ -19,6 +19,7 @@ import {
 import { validateFixKnowledgeCheckpoint } from "./lib/knowledge-checkpoint.mjs";
 import {
   extendCampaignLoop,
+  recoverCampaignLoop,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
   startCampaignLoop,
@@ -29,6 +30,7 @@ import { inspectRevision } from "./lib/revision.mjs";
 import { createAttemptSchedule } from "./lib/runner-policy.mjs";
 import {
   exhaustLoop,
+  invalidateLoop,
   resumeLoopAfterManualQaApproval,
 } from "./lib/loop-state.mjs";
 
@@ -44,6 +46,76 @@ afterEach(async () => {
 });
 
 describe("campaign loop controller", () => {
+  it("recovers an exact frozen-definition lookup failure at a derivable fix checkpoint", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        return {
+          run: { id: input.runId, status: "completed_not_achieved" },
+          attempts: [
+            { status: "pipeline_failure", classification: "pipeline_failure" },
+          ],
+        };
+      },
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+        path: worktreePath,
+        branch,
+        head: fixture.head,
+        revisionKey: validation.revision.revisionKey,
+        dirty: false,
+        statusEntries: [],
+      }),
+      now: () => new Date("2026-08-23T15:00:00.000Z"),
+    });
+    await loopStore.writeRun(
+      invalidateLoop(
+        started.run,
+        "Frozen loop definition or criteria can no longer be loaded: ENOENT"
+      )
+    );
+
+    const recovered = await recoverCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      loopStore,
+      environment: process.env,
+    });
+
+    expect(recovered.run.status).toBe("waiting_for_fix");
+    await expect(
+      resumeCampaignLoop({
+        repoRoot: fixture.repoRoot,
+        loopId: started.run.id,
+        loopStore,
+        campaignStore,
+        inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+          path: worktreePath,
+          branch,
+          head: fixture.head,
+          revisionKey: validation.revision.revisionKey,
+          dirty: false,
+          statusEntries: [],
+        }),
+      })
+    ).rejects.toThrow(/requires --fix-report/i);
+  });
+
   it("previews an additive extension without mutation, then applies its exact hash once", async () => {
     const fixture = await createRepositoryFixture({ singleStepFix: true });
     const loopStore = createCampaignLoopStore(fixture.repoRoot);
