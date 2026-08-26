@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 9,
-  "updatedAt": "2026-08-26T19:29:12Z",
+  "revision": 10,
+  "updatedAt": "2026-08-26T19:49:52Z",
   "entries": [
     {
       "status": "active",
@@ -517,22 +517,25 @@
     {
       "status": "active",
       "confidence": "supported",
-      "title": "Align deterministic targets with the actor proof path",
-      "guidance": "Place exact intent targets ahead of the first exact actor on the deterministic behavior proof path; do not use arbitrary entity-index placement that contradicts accepted actor-direction behavior.",
+      "title": "Align deterministic and runtime targets with the actor proof path",
+      "guidance": "For finite-lifetime moving owned objects that must interact with a target, align both deterministic proof placement and returned Game Spec spawn geometry with the actor proof path. The declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with bounded interaction headroom, or a compatible target spawn must move nearer. Do not rely on deterministic target relocation, unrelated target movement, or source behavior outside the declared travel budget.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
+          "planning",
           "source_generation",
-          "deterministic_evaluation"
+          "deterministic_evaluation",
+          "first_playable"
         ],
         "classifications": [
-          "provider_output_rejected"
+          "provider_output_rejected",
+          "runtime_pipeline_failure"
         ]
       },
       "id": "KF-0011",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -556,11 +559,59 @@
           "outcome": "provider_output_rejected",
           "summary": "Exact intent targets are now placed ahead of the first exact actor on the deterministic proof path; unrelated entity positions are unchanged.",
           "observedAt": "2026-08-24T18:15:53Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The returned Game Spec spawned the player at center (105, 300) and enemy at center (660, 300), 555 pixels apart, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. Deterministic evaluation passed only because its fixture relocated the target to 32 pixels ahead of the actor; mounted first-playable cleanup then reported zero target interactions.",
+          "observedAt": "2026-08-26T19:36:57.120Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-26T19:49:52Z",
+          "reason": "Actual first-playable evidence proved that deterministic target alignment is insufficient when the returned runtime spawn geometry exceeds the accepted finite travel budget.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Align deterministic targets with the actor proof path",
+            "guidance": "Place exact intent targets ahead of the first exact actor on the deterministic behavior proof path; do not use arbitrary entity-index placement that contradicts accepted actor-direction behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The returned Game Spec spawned the player at center (105, 300) and enemy at center (660, 300), 555 pixels apart, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. Deterministic evaluation passed only because its fixture relocated the target to 32 pixels ahead of the actor; mounted first-playable cleanup then reported zero target interactions.",
+              "observedAt": "2026-08-26T19:36:57.120Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-24T23:17:44.000Z"
+      "updatedAt": "2026-08-26T19:49:52Z"
     },
     {
       "status": "active",
@@ -2110,6 +2161,87 @@
       "createdAt": "2026-08-26T19:29:12Z",
       "priorManifestDigest": "8eff5f497aab9ab3c232f509c5e8437724befcf36aa605245b9bddd347d47b43",
       "resultingManifestDigest": "3d3392fad0e1982603333a4ce3b78ae3cecc20358ab796d26650ebdfb190e999"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t194952z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-8",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1"
+      },
+      "consultedManifestDigest": "3d3392fad0e1982603333a4ce3b78ae3cecc20358ab796d26650ebdfb190e999",
+      "contextDigest": "219d69657687d2677072dde79da61d187562050ba6663842bb7a482d63c177f0",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-7",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The verified explicit-cleanup selection fix allowed the next actual source candidate to pass deterministic evaluation and reach first-playable, confirming that the neutral travel scenario no longer carried cleanup-only target proof."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0011"
+          ],
+          "rationale": "Deterministic evaluation placed the target 32 pixels ahead of the actor and passed, while the returned Game Spec spawned the same actor and target 555 pixels apart against a declared 288-pixel lifetime travel budget. First-playable therefore observed creation, actor origin, motion, and cleanup but no possible target interaction."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0011",
+          "expectedRevision": 1,
+          "reason": "Actual first-playable evidence proved that deterministic target alignment is insufficient when the returned runtime spawn geometry exceeds the accepted finite travel budget.",
+          "changes": {
+            "title": "Align deterministic and runtime targets with the actor proof path",
+            "guidance": "For finite-lifetime moving owned objects that must interact with a target, align both deterministic proof placement and returned Game Spec spawn geometry with the actor proof path. The declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with bounded interaction headroom, or a compatible target spawn must move nearer. Do not rely on deterministic target relocation, unrelated target movement, or source behavior outside the declared travel budget.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "source_generation",
+                "deterministic_evaluation",
+                "first_playable"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The returned Game Spec spawned the player at center (105, 300) and enemy at center (660, 300), 555 pixels apart, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. Deterministic evaluation passed only because its fixture relocated the target to 32 pixels ahead of the actor; mounted first-playable cleanup then reported zero target interactions.",
+              "observedAt": "2026-08-26T19:36:57.120Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T19:49:52Z",
+      "priorManifestDigest": "3d3392fad0e1982603333a4ce3b78ae3cecc20358ab796d26650ebdfb190e999",
+      "resultingManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4"
     }
   ]
 }

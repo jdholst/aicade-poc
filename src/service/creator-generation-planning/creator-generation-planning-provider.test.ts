@@ -99,6 +99,12 @@ describe("OpenAI creator-generation planning provider", () => {
       "bounded speed, duration, distance, count, and cooldown values"
     );
     expect(requestBody.instructions).toContain(
+      "strictly greater than the center-to-center distance between the selected actor and target spawn zones"
+    );
+    expect(requestBody.instructions).toContain(
+      "keep at least 64 pixels of interaction headroom"
+    );
+    expect(requestBody.instructions).toContain(
       '"minimumSpeedMultiplier": 2'
     );
     expect(requestBody.instructions).toContain(
