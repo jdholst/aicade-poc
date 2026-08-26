@@ -264,6 +264,8 @@ npm run campaign -- loop resume --id <loop-id> --fix-report <path>
 
 A fix report is accepted only from `waiting_for_fix`. Its before and after revisions, commit, changed files, verification, trigger campaign, and durable or temporary classification must match the clean loop worktree. Temporary fixes must include their canonical ledger entries. Knowledge-required loops must also commit `generation-knowledge.json` with exactly one replayable fix-cycle reconciliation that accounts for the current context. An accepted fix records its `KR-*` ID, increments the fix cycle, and restarts the sequence from its first step.
 
+If the accepted revision contains a campaign-runner correction that the control checkout does not yet contain, execute the accepted worktree's CLI and add `--state-root <control-checkout-path>` to `loop resume`. The worktree then supplies both application and orchestration code while the original control checkout remains the persisted campaign and loop evidence root. `--state-root` is accepted only by `loop resume`.
+
 If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`; denial returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
 
 ### Extend an exhausted loop

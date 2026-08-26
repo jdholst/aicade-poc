@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { createCampaignStore } from "./campaign-store.mjs";
 import {
   blockCampaignLoop,
@@ -16,13 +18,18 @@ import { assertCampaignKnowledgeReconciled } from "./knowledge-cli.mjs";
 import { remainingLoopBudgets } from "./loop-state.mjs";
 
 export async function handleLoopCommand({ args, repoRoot }) {
+  const stateRootOption = takeOption(args, "--state-root");
   const command = args.shift();
   if (!command || ["help", "--help", "-h"].includes(command)) {
     printLoopHelp();
     return;
   }
-  const loopStore = createCampaignLoopStore(repoRoot);
-  const campaignStore = createCampaignStore(repoRoot);
+  if (stateRootOption && command !== "resume") {
+    throw new Error("--state-root is available only for loop resume.");
+  }
+  const stateRoot = stateRootOption ? path.resolve(stateRootOption) : repoRoot;
+  const loopStore = createCampaignLoopStore(stateRoot);
+  const campaignStore = createCampaignStore(stateRoot);
 
   if (command === "validate") {
     const definitionPath = requiredOption(args, "--definition");
@@ -377,5 +384,6 @@ Loop runner options:
   --headed
   --port <number>                  Dedicated production server port, default 3117
   --attempt-timeout-ms <number>    No-progress timeout per editor submission, default 300000
+  --state-root <path>              Resume from an accepted loop worktree while persisting state at this control-checkout root
 `);
 }

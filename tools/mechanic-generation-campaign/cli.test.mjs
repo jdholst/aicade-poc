@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -44,6 +46,64 @@ describe("campaign manual-QA CLI", () => {
     expect(stdout).toContain("--add-planning-calls <number>");
     expect(stdout).toContain("--authorize <extension-hash>");
     expect(stdout).toContain("loop discard --id <loop-id> [--force]");
+  });
+
+  it("documents accepted-worktree resume against a persisted state root", async () => {
+    const { stdout } = await execFileAsync(process.execPath, [
+      cliPath,
+      "loop",
+      "--help",
+    ]);
+
+    expect(stdout).toContain("--state-root <path>");
+    expect(stdout).toContain("accepted loop worktree");
+  });
+
+  it("uses the explicit persisted state root for loop resume", async () => {
+    const stateRoot = await mkdtemp(
+      path.join(tmpdir(), "campaign-loop-state-root-")
+    );
+    try {
+      let stderr = "";
+      try {
+        await execFileAsync(process.execPath, [
+          cliPath,
+          "loop",
+          "resume",
+          "--id",
+          "missing-loop",
+          "--state-root",
+          stateRoot,
+        ]);
+      } catch (error) {
+        stderr = error.stderr;
+      }
+
+      expect(stderr).toContain(
+        path.join(
+          stateRoot,
+          ".qa",
+          "mechanic-generation-campaign",
+          "loops",
+          "missing-loop",
+          "loop-run.json"
+        )
+      );
+      expect(
+        (
+          await stat(
+            path.join(
+              stateRoot,
+              ".qa",
+              "mechanic-generation-campaign",
+              "loops"
+            )
+          )
+        ).isDirectory()
+      ).toBe(true);
+    } finally {
+      await rm(stateRoot, { recursive: true, force: true });
+    }
   });
 
   it("documents the compiled-knowledge validation, context, reconciliation, and report commands", async () => {

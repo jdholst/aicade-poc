@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 6,
-  "updatedAt": "2026-08-26T18:02:23.000Z",
+  "revision": 7,
+  "updatedAt": "2026-08-26T18:30:13.000Z",
   "entries": [
     {
       "status": "active",
@@ -637,7 +637,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Active loop orchestration uses the control campaign harness",
-      "guidance": "Campaign application builds use the accepted linked-worktree revision, but the active loop CLI and browser runner are loaded from the control checkout. A worktree-only harness fix cannot govern that session until conclusion; use an explicit bounded runner option as temporary policy when needed.",
+      "guidance": "Campaign application builds and loop orchestration should both use the accepted linked-worktree revision. When the control checkout does not yet contain an accepted runner fix, invoke the accepted worktree CLI with --state-root pointing to the control checkout so application and harness code use the accepted revision while campaign evidence remains in the original persisted store. Do not substitute an increasingly large aggregate wall-clock timeout for provider-progress renewal.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -650,7 +650,7 @@
         ]
       },
       "id": "KF-0015",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -662,11 +662,58 @@
           "outcome": "infrastructure_failure",
           "summary": "The active control-run harness emitted its old page.waitForFunction 300000 ms timeout even though the accepted linked-worktree revision contained the progress-aware terminal wait implementation.",
           "observedAt": "2026-08-26T18:01:18.264Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "The control runner captured successful planning, contract, and all three source responses before its fixed 600-second total terminal wait expired, demonstrating that aggregate timeout growth does not provide the accepted provider-progress semantics.",
+          "observedAt": "2026-08-26T18:21:19.655Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-26T18:30:13.000Z",
+          "reason": "The longer actual attempt proved that a fixed aggregate timeout is not a reliable substitute for the accepted progress-aware runner and established a safe persisted-state execution path.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Active loop orchestration uses the control campaign harness",
+            "guidance": "Campaign application builds use the accepted linked-worktree revision, but the active loop CLI and browser runner are loaded from the control checkout. A worktree-only harness fix cannot govern that session until conclusion; use an explicit bounded runner option as temporary policy when needed.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1",
+              "attemptId": "a01-baseline",
+              "stage": "editor_mount",
+              "quality": "actual_submission",
+              "outcome": "infrastructure_failure",
+              "summary": "The control runner captured successful planning, contract, and all three source responses before its fixed 600-second total terminal wait expired, demonstrating that aggregate timeout growth does not provide the accepted provider-progress semantics.",
+              "observedAt": "2026-08-26T18:21:19.655Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-26T18:02:23.000Z",
-      "updatedAt": "2026-08-26T18:02:23.000Z"
+      "updatedAt": "2026-08-26T18:30:13.000Z"
     }
   ],
   "reconciliations": [
@@ -1770,6 +1817,69 @@
       "createdAt": "2026-08-26T18:02:23.000Z",
       "priorManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255",
       "resultingManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t183013z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-5",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1"
+      },
+      "consultedManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480",
+      "contextDigest": "c044a1e4dac6a592e1dc2719f49a7dd74dea26917098f95a7529faa4d8f5d478",
+      "consultedFindingIds": [
+        "KF-0013",
+        "KF-0015"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-4",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "The verified temporary policy preserved the existing provider and proof ceilings while confirming that the active session still used the control checkout's total wall-clock terminal wait."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "All five actual planning, contract, and source responses were captured before the control runner emitted its 600-second total wall-clock timeout. Because individual provider requests are independently bounded and progress-aware waiting is already accepted in the loop revision, the safe session bridge is to run the accepted worktree CLI against the original persisted state root rather than continue increasing one aggregate timeout."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0015",
+          "expectedRevision": 1,
+          "reason": "The longer actual attempt proved that a fixed aggregate timeout is not a reliable substitute for the accepted progress-aware runner and established a safe persisted-state execution path.",
+          "changes": {
+            "guidance": "Campaign application builds and loop orchestration should both use the accepted linked-worktree revision. When the control checkout does not yet contain an accepted runner fix, invoke the accepted worktree CLI with --state-root pointing to the control checkout so application and harness code use the accepted revision while campaign evidence remains in the original persisted store. Do not substitute an increasingly large aggregate wall-clock timeout for provider-progress renewal."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1",
+              "attemptId": "a01-baseline",
+              "stage": "editor_mount",
+              "quality": "actual_submission",
+              "outcome": "infrastructure_failure",
+              "summary": "The control runner captured successful planning, contract, and all three source responses before its fixed 600-second total terminal wait expired, demonstrating that aggregate timeout growth does not provide the accepted provider-progress semantics.",
+              "observedAt": "2026-08-26T18:21:19.655Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T18:30:13.000Z",
+      "priorManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480",
+      "resultingManifestDigest": "5a79746c73c63cd0d404bb505d653d332fb191d09474657c96f45a79228f7e4e"
     }
   ]
 }
