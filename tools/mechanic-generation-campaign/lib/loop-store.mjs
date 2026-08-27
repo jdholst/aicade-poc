@@ -134,8 +134,9 @@ export function createCampaignLoopStore(repoRoot) {
         campaignLinks: run.campaignLinks,
         knowledgePolicy: run.knowledgePolicy,
         knowledgeReconciliationIds: run.knowledgeReconciliationIds,
+        campaignRepairs: run.campaignRepairs,
         manualQa: {
-          pending: run.status === "waiting_for_manual_qa" ? 1 : 0,
+          pending: run.pendingManualQa ? 1 : 0,
           pendingReview: run.pendingManualQa,
         },
         pendingManualQa: run.pendingManualQa,

@@ -7,8 +7,10 @@ import {
   createInitialLoopRun,
   exhaustLoop,
   finishSequenceCampaign,
+  pauseLoopForCampaignRepair,
   rejectLoopManualQa,
   recordActualProviderCall,
+  resumeLoopAfterCampaignRepair,
   resumeLoopAfterManualQaApproval,
   startLoopCampaign,
 } from "./lib/loop-state.mjs";
@@ -191,6 +193,106 @@ describe("campaign loop state", () => {
     expect(resumed.usage).toEqual(usageBefore);
   });
 
+  it("pauses a frozen manual-QA candidate for an out-of-band campaign repair without spending budget", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    const pendingManualQa = {
+      manualQaId: "manual-qa-attempt-1",
+      campaignRunId: "discovery-1",
+      attemptId: "attempt-1",
+      promptId: "baseline",
+      cohort: "discovery",
+      revisionKey: revisionA.revisionKey,
+      requestedAt: "2026-08-23T15:01:00.000Z",
+      evidencePath: "attempt-1/manual-qa.json",
+    };
+    run = finishSequenceCampaign(run, definition, {
+      campaignRunId: "discovery-1",
+      status: "waiting_for_manual_qa",
+      attempts: [],
+      pendingManualQa,
+    });
+    const usageBefore = structuredClone(run.usage);
+    const revisionBefore = structuredClone(run.currentRevision);
+
+    const paused = pauseLoopForCampaignRepair(run, {
+      id: "campaign-repair-1",
+      reason: "The manual-review iframe detector rejected a mounted candidate.",
+      detectedAt: "2026-08-23T15:02:00.000Z",
+    });
+
+    expect(paused.status).toBe("waiting_for_campaign_repair");
+    expect(paused.activeCampaign).toEqual(run.activeCampaign);
+    expect(paused.pendingManualQa).toEqual(pendingManualQa);
+    expect(paused.currentRevision).toEqual(revisionBefore);
+    expect(paused.usage).toEqual(usageBefore);
+    expect(paused.campaignRepairs).toEqual([
+      {
+        id: "campaign-repair-1",
+        campaignRunId: "discovery-1",
+        reason: "The manual-review iframe detector rejected a mounted candidate.",
+        detectedAt: "2026-08-23T15:02:00.000Z",
+        resumeStatus: "waiting_for_manual_qa",
+        status: "pending",
+        creditedUsage: {
+          campaignRuns: 0,
+          submissions: 0,
+          auxiliaryIsolationCampaigns: 0,
+          actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+        },
+      },
+    ]);
+  });
+
+  it("resumes the exact manual-QA checkpoint after an out-of-band campaign repair", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    run = finishSequenceCampaign(run, definition, {
+      campaignRunId: "discovery-1",
+      status: "waiting_for_manual_qa",
+      attempts: [],
+      pendingManualQa: {
+        manualQaId: "manual-qa-attempt-1",
+        campaignRunId: "discovery-1",
+        attemptId: "attempt-1",
+        promptId: "baseline",
+        cohort: "discovery",
+        revisionKey: revisionA.revisionKey,
+        requestedAt: "2026-08-23T15:01:00.000Z",
+        evidencePath: "attempt-1/manual-qa.json",
+      },
+    });
+    run = pauseLoopForCampaignRepair(run, {
+      id: "campaign-repair-1",
+      reason: "The review detector failed.",
+      detectedAt: "2026-08-23T15:02:00.000Z",
+    });
+    const usageBefore = structuredClone(run.usage);
+    const revisionBefore = structuredClone(run.currentRevision);
+
+    const resumed = resumeLoopAfterCampaignRepair(run, {
+      completedAt: "2026-08-23T15:03:00.000Z",
+    });
+
+    expect(resumed.status).toBe("waiting_for_manual_qa");
+    expect(resumed.activeCampaign?.campaignRunId).toBe("discovery-1");
+    expect(resumed.pendingManualQa?.attemptId).toBe("attempt-1");
+    expect(resumed.currentRevision).toEqual(revisionBefore);
+    expect(resumed.usage).toEqual(usageBefore);
+    expect(resumed.campaignLinks[0].status).toBe("waiting_for_manual_qa");
+    expect(resumed.campaignRepairs[0]).toMatchObject({
+      id: "campaign-repair-1",
+      status: "completed",
+      completedAt: "2026-08-23T15:03:00.000Z",
+    });
+  });
+
   it("moves a denied candidate directly to waiting_for_fix without a same-revision retry", () => {
     let run = startLoopCampaign(initialRun(), {
       campaignRunId: "discovery-1",
@@ -336,7 +438,7 @@ describe("campaign loop state", () => {
       actualProviderCalls: { planning: 35, contract: 66, source: 67 },
     });
     expect(extended).toMatchObject({
-      schemaVersion: "campaign-loop-run/v3",
+      schemaVersion: "campaign-loop-run/v4",
       status: "waiting_for_fix",
       limits: preview.resultingLimits,
       budgetExtensions: [

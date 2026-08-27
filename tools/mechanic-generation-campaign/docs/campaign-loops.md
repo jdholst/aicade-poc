@@ -80,6 +80,12 @@ When a full-actual proof submission passes the automated pipeline and external p
 
 When a campaign fails, the loop checks only that campaign's failed attempts. It starts another campaign on the same revision only when every failure classification is listed by the current step and its same-revision run limit remains.
 
+A defect owned by `tools/mechanic-generation-campaign/` does not enter the Sparkline fix flow. A thrown campaign-runner defect pauses at `waiting_for_campaign_repair`, preserves the active candidate and Sparkline revision, and credits the invalidated campaign, submission, isolation, and Sparkline-attributed provider usage. Gross actual-provider calls remain append-only and continue to enforce the authorization ceiling. Repair and verify the campaign tool in the control checkout, then run `loop resume` without a fix report. This does not consume a fix cycle or reset proof.
+
+The browser runner treats `Runtime is running in the sandbox.` plus a generated iframe with source as the runtime-ready contract. A terminal-state timeout preserves the observed editor snapshot as infrastructure evidence and aborts the campaign immediately. A linked loop enters `waiting_for_campaign_repair` instead of starting the next scheduled submission.
+
+Manual-review detector failures follow the same path and leave the exact verdict candidate pending. The user may still explicitly approve or deny that candidate while repair is pending. The harness never converts its own failure into a gameplay denial.
+
 Otherwise the loop enters `waiting_for_fix`. The agent may run an authorized isolation profile, then work only inside the loop worktree. Before diagnosis, `knowledge context --loop <id>` selects applicable and related canonical findings and all unreconciled linked evidence. The diagnosis cites applicable `KF-*` IDs. A proposal then accounts for every evidence item and either changes compiled guidance or records an explicit no-change reason.
 
 A fix report must describe one clean committed revision and list passing verification. A temporary fix must also update the canonical temporary-fix ledger. The same commit includes the code fix and `generation-knowledge.json` with exactly one new `KR-*` reconciliation. The CLI independently reloads the prior Git version, recomputes context, replays the journal operation, and verifies the source loop, fix, trigger campaign, digests, consulted findings, and evidence dispositions before accepting the report.
@@ -120,6 +126,7 @@ The fix checkpoint enforces this use mechanically. Resume verifies that the fix 
 - `blocked`: no safe verified in-scope pipeline fix could be produced.
 - `interrupted`: execution stopped unexpectedly and can be resumed on the same clean revision.
 - `waiting_for_manual_qa`: the exact playable candidate is ready for an explicit human verdict. This state has no timeout.
+- `waiting_for_campaign_repair`: campaign orchestration is paused while `tools/mechanic-generation-campaign/` is repaired outside Sparkline budgets; the active candidate and revision remain frozen.
 - `concluded`: the stopped loop was reconciled with its recorded control checkout and its local worktree and branch were removed.
 - `discarded`: the stopped loop's local worktree and branch were removed without merging or recording a QA verdict.
 

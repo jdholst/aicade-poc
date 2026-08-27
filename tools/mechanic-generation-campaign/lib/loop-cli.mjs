@@ -2,6 +2,7 @@ import { createCampaignStore } from "./campaign-store.mjs";
 import {
   blockCampaignLoop,
   extendCampaignLoop,
+  pauseCampaignLoopForRepair,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
   startCampaignLoop,
@@ -117,6 +118,23 @@ export async function handleLoopCommand({ args, repoRoot }) {
     return;
   }
 
+  if (command === "repair-campaign") {
+    const loopId = requiredOption(args, "--id");
+    const reason = requiredOption(args, "--reason");
+    const campaignRunId = takeOption(args, "--campaign");
+    assertNoArguments(args);
+    const result = await pauseCampaignLoopForRepair({
+      repoRoot,
+      loopId,
+      campaignRunId,
+      reason,
+      loopStore,
+      campaignStore,
+    });
+    printLoopSummary(result.run);
+    return;
+  }
+
   if (command === "conclude") {
     const loopId = requiredOption(args, "--id");
     assertNoArguments(args);
@@ -218,7 +236,10 @@ export function printLoopSummary(run) {
     `Usage: ${run.usage.campaignRuns}/${run.limits.maxCampaignRuns} campaigns, ${run.usage.submissions}/${run.limits.maxSubmissions} submissions, ${run.usage.fixCycles}/${run.limits.maxFixCycles} fix cycles`
   );
   console.log(
-    `Actual-provider usage: ${formatStageCounts(run.usage.actualProviderCalls)}`
+    `Sparkline-attributed actual-provider usage: ${formatStageCounts(run.usage.actualProviderCalls)}`
+  );
+  console.log(
+    `Gross actual-provider usage: ${formatStageCounts(run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls)}`
   );
   console.log(
     `Actual-provider remaining: ${formatStageCounts(remaining.actualProviderCalls)}`
@@ -239,6 +260,14 @@ export function printLoopSummary(run) {
     );
     console.log(
       `Review: npm run campaign -- review --campaign ${run.pendingManualQa.campaignRunId}`
+    );
+  }
+  if (run.campaignRepairs?.length) {
+    const pendingRepairs = run.campaignRepairs.filter(
+      ({ status }) => status === "pending"
+    ).length;
+    console.log(
+      `Campaign repairs: ${run.campaignRepairs.length} (${pendingRepairs} pending)`
     );
   }
   if (run.invalidReason) console.log(`Invalid: ${run.invalidReason}`);
@@ -357,6 +386,7 @@ export function printLoopHelp() {
   npm run campaign -- loop resume --id <loop-id> [--fix-report <path>] [options]
   npm run campaign -- loop extend --id <loop-id> [additive budget options] [--fix-report <path>] [--authorize <extension-hash>] [options]
   npm run campaign -- loop isolate --id <loop-id> --profile <profile-id> [options]
+  npm run campaign -- loop repair-campaign --id <loop-id> --reason <text> [--campaign <run-id>]
   npm run campaign -- loop block --id <loop-id> --reason <text>
   npm run campaign -- loop conclude --id <loop-id>
   npm run campaign -- loop discard --id <loop-id> [--force]

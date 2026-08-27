@@ -3,9 +3,8 @@ import { access, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { readCampaignBrowserStorage } from "./browser-storage.mjs";
-import { parseCampaignAttempt, parseCampaignRun } from "./contracts.mjs";
 import { verifyManualQaCandidate } from "./manual-qa.mjs";
-import { rejectLoopManualQa } from "./loop-state.mjs";
+import { pauseLoopForCampaignRepair } from "./loop-state.mjs";
 import { inspectRevision } from "./revision.mjs";
 
 export async function installReviewProviderBlocking(page, counter = { count: 0 }) {
@@ -252,20 +251,18 @@ export async function runCampaignReview({
     } else if (replayStarted && error instanceof CandidateRuntimeError) {
       session = {
         ...session,
-        status: "runtime_failure",
+        status: "campaign_repair_required",
         completedAt: now().toISOString(),
         runtimeReady: false,
         providerCallsBlocked: blocked.count,
         failure,
       };
       await replaceReviewSession(store, manualQa, session);
-      await recordReviewRuntimeFailure({
-        store,
+      await pauseReviewForCampaignRepair({
         loopStore,
         run,
-        attempt,
         reason: failure,
-        completedAt: session.completedAt,
+        detectedAt: session.completedAt,
       });
     } else {
       session = {
@@ -351,44 +348,25 @@ async function replaceReviewSession(store, originalManualQa, session) {
   });
 }
 
-async function recordReviewRuntimeFailure({
-  store,
+export async function pauseReviewForCampaignRepair({
   loopStore,
   run,
-  attempt,
   reason,
-  completedAt,
+  detectedAt = new Date().toISOString(),
 }) {
-  const failedAttempt = parseCampaignAttempt({
-    ...attempt,
-    status: "pipeline_failure",
-    terminalOutcome: "manual review replay failed runtime validation",
-    classification: "runtime_pipeline_failure",
-    failure: reason,
-    adjudicatedOutcome: "review_runtime_failure",
-  });
-  const failedRun = parseCampaignRun({
-    ...run,
-    status: "completed_not_achieved",
-    completedAt,
-    pendingManualQa: undefined,
-    result: {
-      successes: 0,
-      diagnosticSuccesses: 0,
-      submissions: run.attemptIds.length,
-      qualifiesForMechanicProof: false,
-      missingSuccessfulPromptIds: [],
-    },
-  });
-  await store.writeAttempt(failedAttempt);
-  await store.writeRun(failedRun);
-  if (run.loopId) {
-    if (!loopStore) throw new Error("Loop-linked review runtime failure requires loop storage.");
-    const loopRun = await loopStore.readRun(run.loopId);
-    await loopStore.writeRun(
-      rejectLoopManualQa(loopRun, { campaignRunId: run.id, completedAt })
-    );
+  if (!run.loopId) return null;
+  if (!loopStore) {
+    throw new Error("Loop-linked campaign repair requires loop storage.");
   }
+  const loopRun = await loopStore.readRun(run.loopId);
+  if (loopRun.status === "waiting_for_campaign_repair") return loopRun;
+  const paused = pauseLoopForCampaignRepair(loopRun, {
+    id: `campaign-repair-${(loopRun.campaignRepairs ?? []).length + 1}`,
+    reason,
+    detectedAt,
+  });
+  await loopStore.writeRun(paused);
+  return paused;
 }
 
 async function waitForDecision(store, campaignRunId, attemptId) {

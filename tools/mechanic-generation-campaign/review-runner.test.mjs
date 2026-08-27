@@ -8,9 +8,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { readCampaignBrowserStorage } from "./lib/browser-storage.mjs";
 import {
   installReviewProviderBlocking,
+  pauseReviewForCampaignRepair,
   restoreCandidateStorage,
   waitForRestoredCandidateRuntime,
 } from "./lib/review-runner.mjs";
+import {
+  createInitialLoopRun,
+  finishSequenceCampaign,
+  startLoopCampaign,
+} from "./lib/loop-state.mjs";
 import {
   createSuccessfulGenerationRunFixture,
   createValidatedGamePackFixture,
@@ -23,6 +29,91 @@ afterEach(async () => {
 });
 
 describe("manual QA candidate replay", () => {
+  it("pauses a linked loop for campaign repair without changing the frozen verdict candidate", async () => {
+    const definition = {
+      sequence: [{ id: "discovery", cohort: "discovery" }],
+      limits: {
+        maxFixCycles: 1,
+        maxCampaignRuns: 2,
+        maxSubmissions: 2,
+        maxAuxiliaryIsolationCampaigns: 0,
+        actualProviderCalls: { planning: 2, contract: 2, source: 2 },
+      },
+    };
+    let loop = createInitialLoopRun({
+      definition,
+      definitionPath: "/repo/.qa/loop.json",
+      definitionHash: "1".repeat(64),
+      authorizationHash: "2".repeat(64),
+      campaign: {
+        manifest: { id: "projectile" },
+        manifestPath: "/repo/tools/mechanic-generation-campaign/manifests/projectile.json",
+        manifestHash: "3".repeat(64),
+      },
+      runId: "projectile-loop-20260827t000000000z",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      revision: { head: "a".repeat(40), revisionKey: "4".repeat(64) },
+      controlRoot: "/repo",
+      worktreePath: "/repo/.qa/worktree",
+      branch: "codex/campaign-loop-projectile-loop",
+      knowledgeManifestDigest: "5".repeat(64),
+    });
+    loop = startLoopCampaign(loop, {
+      campaignRunId: "campaign-1",
+      role: "sequence",
+      stepId: "discovery",
+    });
+    const pendingManualQa = {
+      manualQaId: "manual-qa-a1",
+      campaignRunId: "campaign-1",
+      attemptId: "a1",
+      promptId: "baseline",
+      cohort: "discovery",
+      revisionKey: "4".repeat(64),
+      requestedAt: "2026-08-27T00:01:00.000Z",
+      evidencePath: "a1/manual-qa.json",
+    };
+    loop = finishSequenceCampaign(loop, definition, {
+      campaignRunId: "campaign-1",
+      status: "waiting_for_manual_qa",
+      attempts: [],
+      pendingManualQa,
+    });
+    const campaignRun = {
+      id: "campaign-1",
+      loopId: loop.id,
+      status: "waiting_for_manual_qa",
+      pendingManualQa,
+    };
+    const loopStore = {
+      async readRun() {
+        return loop;
+      },
+      async writeRun(next) {
+        loop = next;
+      },
+    };
+
+    await pauseReviewForCampaignRepair({
+      loopStore,
+      run: campaignRun,
+      reason: "The iframe detector rejected a mounted candidate.",
+      detectedAt: "2026-08-27T00:02:00.000Z",
+    });
+
+    expect(campaignRun).toMatchObject({
+      status: "waiting_for_manual_qa",
+      pendingManualQa,
+    });
+    expect(loop.status).toBe("waiting_for_campaign_repair");
+    expect(loop.pendingManualQa).toEqual(pendingManualQa);
+    expect(loop.campaignRepairs[0]).toMatchObject({
+      campaignRunId: "campaign-1",
+      resumeStatus: "waiting_for_manual_qa",
+      status: "pending",
+    });
+  });
+
   it("restores exact IndexedDB records and blocks every generation-provider request", async () => {
     let upstreamRequests = 0;
     const server = createServer((request, response) => {

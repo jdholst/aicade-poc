@@ -180,7 +180,10 @@ async function decideCampaignAttempt({
   if (run.loopId && !loopStore) {
     throw new Error("A loop-linked manual QA verdict requires the campaign loop store.");
   }
-  assertPendingCandidate(run, attempt, manualQa);
+  const linkedLoop = run.loopId
+    ? await loopStore.readRun(run.loopId)
+    : undefined;
+  assertPendingCandidate(run, attempt, manualQa, linkedLoop);
   await verifyManualQaCandidate(store, manualQa);
 
   const decidedManualQa = parseCampaignManualQa({
@@ -287,12 +290,23 @@ function assertArtifactIdentity(run, attempt, manualQa) {
   }
 }
 
-function assertPendingCandidate(run, attempt, manualQa) {
-  if (
+function assertPendingCandidate(run, attempt, manualQa, linkedLoop) {
+  const campaignCandidateIsStale =
     run.status !== "waiting_for_manual_qa" ||
     run.pendingManualQa?.attemptId !== attempt.id ||
-    run.pendingManualQa?.manualQaId !== manualQa.id
-  ) {
+    run.pendingManualQa?.manualQaId !== manualQa.id;
+  const repairPending =
+    linkedLoop?.status === "waiting_for_campaign_repair" &&
+    linkedLoop.activeCampaign?.campaignRunId === run.id &&
+    linkedLoop.pendingManualQa?.attemptId === attempt.id &&
+    linkedLoop.pendingManualQa?.manualQaId === manualQa.id &&
+    linkedLoop.campaignRepairs?.some(
+      (repair) =>
+        repair.status === "pending" &&
+        repair.campaignRunId === run.id &&
+        repair.resumeStatus === "waiting_for_manual_qa"
+    );
+  if (campaignCandidateIsStale && !repairPending) {
     throw new Error("Manual QA verdict is stale or does not match the pending candidate.");
   }
 }
@@ -311,6 +325,7 @@ async function updateLinkedLoop({
   const updated = verdict === "approved"
     ? resumeLoopAfterManualQaApproval(loopRun, {
         campaignRunId: campaignRun.id,
+        completedAt: decidedAt,
       })
     : rejectLoopManualQa(loopRun, {
         campaignRunId: campaignRun.id,

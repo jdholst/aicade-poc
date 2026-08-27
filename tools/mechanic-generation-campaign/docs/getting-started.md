@@ -57,7 +57,9 @@ npm run campaign -- approve --campaign <campaign-id> --attempt <attempt-id> --no
 npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reason "Required gameplay defect"
 ```
 
-The review and verdict commands make zero provider calls. Approval lets the same frozen campaign resume without another authorization. Denial stops a standalone campaign or sends a linked loop to its fix cycle.
+The review and verdict commands make zero provider calls. Approval lets the same frozen campaign resume without another authorization. Denial stops a standalone campaign or sends a linked loop to its fix cycle. A campaign-tool or review-detector defect instead pauses at `waiting_for_campaign_repair`; repair the tool in the control checkout and resume without a Sparkline fix cycle or regenerated candidate.
+
+Campaign browser readiness requires `Runtime is running in the sandbox.` and a generated iframe with source. If that observation times out, the attempt retains the editor snapshot and a linked loop stops at `waiting_for_campaign_repair` before another submission.
 
 ## Review the result
 

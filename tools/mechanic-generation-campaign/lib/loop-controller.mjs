@@ -22,8 +22,10 @@ import {
   finishIsolationCampaign,
   finishSequenceCampaign,
   invalidateLoop,
+  pauseLoopForCampaignRepair,
   recordActualProviderCall,
   recordLoopSubmission,
+  resumeLoopAfterCampaignRepair,
   startLoopCampaign,
 } from "./loop-state.mjs";
 import {
@@ -163,6 +165,29 @@ export async function resumeCampaignLoop({
       `Campaign loop ${loopId} is waiting for manual QA. Approve or deny the pending candidate before resuming.`
     );
   }
+  const worktree = await inspectWorktreeFn({
+    path: run.worktree.path,
+    branch: run.worktree.branch,
+  });
+  if (run.status === "waiting_for_campaign_repair") {
+    if (fixReportPath) {
+      throw new Error("Campaign-tool repair resumes without a Sparkline fix report.");
+    }
+    if (
+      worktree.dirty ||
+      worktree.head !== run.currentRevision.head ||
+      worktree.revisionKey !== run.currentRevision.revisionKey
+    ) {
+      throw new Error(
+        "Campaign-tool repair cannot change the frozen Sparkline worktree revision."
+      );
+    }
+    run = resumeLoopAfterCampaignRepair(run);
+    await loopStore.writeRun(run);
+    if (run.status === "waiting_for_manual_qa") {
+      return { run };
+    }
+  }
   let loaded;
   try {
     loaded = await reloadFrozenLoop({ repoRoot, run, environment });
@@ -174,10 +199,6 @@ export async function resumeCampaignLoop({
     }
     throw error;
   }
-  const worktree = await inspectWorktreeFn({
-    path: run.worktree.path,
-    branch: run.worktree.branch,
-  });
 
   if (run.status === "waiting_for_fix") {
     if (!fixReportPath) {
@@ -231,6 +252,9 @@ export async function resumeCampaignLoop({
   }
 
   if (run.status === "exhausted") {
+    return { run };
+  }
+  if (run.status === "waiting_for_manual_qa") {
     return { run };
   }
   if (run.activeCampaign?.role === "isolation") {
@@ -360,12 +384,10 @@ async function resumeActiveIsolation({
     return { run: state.run, campaign: result };
   } catch (error) {
     if (state.run.status !== "exhausted") {
-      state.run = {
-        ...state.run,
-        status: "interrupted",
-        completedAt: new Date().toISOString(),
-        invalidReason: error instanceof Error ? error.message : String(error),
-      };
+      state.run = pauseLoopForCampaignRepair(state.run, {
+        id: `campaign-repair-${(state.run.campaignRepairs ?? []).length + 1}`,
+        reason: error instanceof Error ? error.message : String(error),
+      });
       await loopStore.writeRun(state.run);
     }
     throw error;
@@ -503,12 +525,10 @@ export async function runCampaignLoopIsolation({
     return { run: state.run, campaign: result };
   } catch (error) {
     if (state.run.status !== "exhausted") {
-      state.run = {
-        ...state.run,
-        status: "interrupted",
-        completedAt: new Date().toISOString(),
-        invalidReason: error instanceof Error ? error.message : String(error),
-      };
+      state.run = pauseLoopForCampaignRepair(state.run, {
+        id: `campaign-repair-${(state.run.campaignRepairs ?? []).length + 1}`,
+        reason: error instanceof Error ? error.message : String(error),
+      });
       await loopStore.writeRun(state.run);
     }
     throw error;
@@ -529,6 +549,134 @@ export async function blockCampaignLoop({
   const blocked = blockLoop(run, reason);
   await loopStore.writeRun(blocked);
   return blocked;
+}
+
+export async function pauseCampaignLoopForRepair({
+  repoRoot,
+  loopId,
+  campaignRunId,
+  reason,
+  loopStore = createCampaignLoopStore(repoRoot),
+  campaignStore = createCampaignStore(repoRoot),
+  now = () => new Date(),
+}) {
+  await loopStore.initialize();
+  let run = await loopStore.readRun(loopId);
+  let priorTerminal;
+  if (!run.activeCampaign && campaignRunId) {
+    await campaignStore.initialize?.();
+    priorTerminal = {
+      status: run.status,
+      reason:
+        run.exhaustionReason ??
+        run.invalidReason ??
+        run.blockedReason ??
+        "Campaign-tool failure was previously recorded as terminal.",
+      ...(run.blockedReason ? { blockedReason: run.blockedReason } : {}),
+      ...(run.exhaustionReason
+        ? { exhaustionReason: run.exhaustionReason }
+        : {}),
+      ...(run.invalidReason ? { invalidReason: run.invalidReason } : {}),
+    };
+    run = await restoreTerminalPendingCandidate({
+      run,
+      campaignRunId,
+      campaignStore,
+    });
+  }
+  if (!run.activeCampaign) {
+    throw new Error(
+      `Campaign loop ${loopId} has no active campaign to repair; pass --campaign for terminal recovery.`
+    );
+  }
+  if (
+    campaignRunId &&
+    run.activeCampaign.campaignRunId !== campaignRunId
+  ) {
+    throw new Error(
+      `Campaign ${campaignRunId} is not the active repair candidate.`
+    );
+  }
+  if (!["running", "interrupted", "waiting_for_manual_qa"].includes(run.status)) {
+    throw new Error(
+      `Campaign loop ${loopId} cannot enter campaign repair from status ${run.status}.`
+    );
+  }
+  const repaired = pauseLoopForCampaignRepair(run, {
+    id: `campaign-repair-${(run.campaignRepairs ?? []).length + 1}`,
+    reason,
+    detectedAt: now().toISOString(),
+    priorTerminal,
+  });
+  await loopStore.writeRun(repaired);
+  return { run: repaired };
+}
+
+async function restoreTerminalPendingCandidate({
+  run,
+  campaignRunId,
+  campaignStore,
+}) {
+  if (!["blocked", "exhausted", "invalid"].includes(run.status)) {
+    throw new Error(
+      `Campaign loop ${run.id} cannot recover a pending candidate from status ${run.status}.`
+    );
+  }
+  const [campaignRun, attempts] = await Promise.all([
+    campaignStore.readRun(campaignRunId),
+    campaignStore.readAttempts(campaignRunId),
+  ]);
+  if (campaignRun.loopId !== run.id) {
+    throw new Error(`Campaign ${campaignRunId} is not linked to loop ${run.id}.`);
+  }
+  const attempt = attempts.find(({ manualQa }) => manualQa?.status === "pending");
+  if (!attempt) {
+    throw new Error(`Campaign ${campaignRunId} has no pending manual-QA candidate.`);
+  }
+  const manualQa = await campaignStore.readManualQa(campaignRunId, attempt.id);
+  if (manualQa.status !== "pending") {
+    throw new Error(`Manual QA candidate ${manualQa.id} is already ${manualQa.status}.`);
+  }
+  const link = run.campaignLinks.find(
+    ({ campaignRunId: linkedId }) => linkedId === campaignRunId
+  );
+  if (!link || link.revisionKey !== run.currentRevision.revisionKey) {
+    throw new Error(
+      `Campaign ${campaignRunId} does not match the loop's current revision.`
+    );
+  }
+  const activeCampaign = {
+    campaignRunId,
+    role: link.role,
+    ...(link.stepId ? { stepId: link.stepId } : {}),
+    ...(link.profileId ? { profileId: link.profileId } : {}),
+  };
+  const pendingManualQa = {
+    manualQaId: manualQa.id,
+    campaignRunId,
+    attemptId: attempt.id,
+    promptId: attempt.promptId,
+    cohort: campaignRun.cohort,
+    revisionKey: attempt.revisionKey,
+    requestedAt: manualQa.requestedAt,
+    evidencePath: attempt.manualQa.path,
+  };
+  return {
+    ...run,
+    status: "waiting_for_manual_qa",
+    completedAt: undefined,
+    activeCampaign,
+    pendingManualQa,
+    exhaustionReason: undefined,
+    exhaustionResume: undefined,
+    invalidReason: undefined,
+    blockedReason: undefined,
+    campaignLinks: run.campaignLinks.map((entry) =>
+      entry.campaignRunId === campaignRunId
+        ? { ...entry, status: "waiting_for_manual_qa" }
+        : entry
+    ),
+  };
 }
 
 async function executeSequence({
@@ -651,12 +799,10 @@ async function executeSequence({
       await loopStore.writeRun(state.run);
     } catch (error) {
       if (state.run.status !== "exhausted") {
-        state.run = {
-          ...state.run,
-          status: "interrupted",
-          completedAt: new Date().toISOString(),
-          invalidReason: error instanceof Error ? error.message : String(error),
-        };
+        state.run = pauseLoopForCampaignRepair(state.run, {
+          id: `campaign-repair-${(state.run.campaignRepairs ?? []).length + 1}`,
+          reason: error instanceof Error ? error.message : String(error),
+        });
         await loopStore.writeRun(state.run);
       }
       throw error;
@@ -697,7 +843,7 @@ function campaignCapacityFailure(run, submissionCount, providerModes) {
   for (const stage of ACTUAL_PROVIDER_STAGES) {
     if (
       providerModes[stage] === "actual" &&
-      run.usage.actualProviderCalls[stage] + submissionCount >
+      (run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls)[stage] + submissionCount >
         run.limits.actualProviderCalls[stage]
     ) {
       return `Remaining ${stage} provider-call budget cannot contain the next complete campaign.`;
@@ -713,7 +859,7 @@ function continuationCapacityFailure(run, submissionCount, providerModes) {
   for (const stage of ACTUAL_PROVIDER_STAGES) {
     if (
       providerModes[stage] === "actual" &&
-      run.usage.actualProviderCalls[stage] + submissionCount >
+      (run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls)[stage] + submissionCount >
         run.limits.actualProviderCalls[stage]
     ) {
       return `Remaining ${stage} provider-call budget cannot contain the interrupted campaign.`;

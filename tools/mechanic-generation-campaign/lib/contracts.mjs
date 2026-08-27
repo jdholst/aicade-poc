@@ -129,6 +129,7 @@ const reviewSessionSchema = z
       "ready",
       "interrupted",
       "runtime_failure",
+      "campaign_repair_required",
       "completed",
     ]),
     startedAt: z.string().datetime(),

@@ -197,6 +197,7 @@ export async function runCampaign({
         attemptIds: [...run.attemptIds, attempt.id],
       };
       await store.writeRun(run);
+      requireCampaignAttemptContinuation(attempt);
 
       if (attempt.classification === "provider_call_budget_exhausted") {
         break;
@@ -329,7 +330,7 @@ async function runBrowserAttempt({
       promptId: scheduled.promptId,
     });
     await page.getByRole("button", { name: "Build the project" }).click();
-    terminal = await waitForTerminalEditorState(page, attemptTimeoutMs);
+    terminal = await waitForCampaignEditorTerminalState(page, attemptTimeoutMs);
     await page.screenshot({
       path: path.join(attemptDirectory, "terminal.png"),
       fullPage: true,
@@ -621,25 +622,54 @@ async function enterControlledText(locator, value) {
   await locator.pressSequentially(value);
 }
 
-async function waitForTerminalEditorState(page, timeoutMs) {
-  await page.waitForFunction(
-    () => {
-      const lines = document.body.innerText.split("\n").map((line) => line.trim());
-      return (
-        lines.includes("Ready") ||
-        lines.includes("An error has occurred.") ||
-        lines.includes("GENERATION STOPPED") ||
-        document.body.innerText.includes("The runtime could not be prepared.")
-      );
-    },
-    undefined,
-    { timeout: timeoutMs }
-  );
-  const text = await page.locator("body").innerText();
-  const lines = text.split("\n").map((line) => line.trim());
-  return lines.includes("Ready")
-    ? { kind: "ready", text: "Ready" }
-    : { kind: "generation_failure", text: compactTerminalText(text) };
+export async function waitForCampaignEditorTerminalState(page, timeoutMs) {
+  try {
+    await page.waitForFunction(
+      () => {
+        const iframe = document.querySelector("iframe");
+        const lines = document.body.innerText
+          .split("\n")
+          .map((line) => line.trim());
+        return (
+          (lines.includes("Runtime is running in the sandbox.") &&
+            iframe instanceof HTMLIFrameElement &&
+            Boolean(iframe.getAttribute("srcdoc")?.trim())) ||
+          lines.includes("An error has occurred.") ||
+          lines.includes("GENERATION STOPPED") ||
+          document.body.innerText.includes("The runtime could not be prepared.")
+        );
+      },
+      undefined,
+      { timeout: timeoutMs }
+    );
+  } catch (error) {
+    const state = await inspectCampaignEditorState(page);
+    return {
+      kind: "infrastructure_failure",
+      text: `Campaign editor did not reach a terminal state: ${JSON.stringify(state)}. ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+  const state = await inspectCampaignEditorState(page);
+  return state.runtimeReady && state.iframeHasSource
+    ? { kind: "ready", text: "Runtime is running in the sandbox." }
+    : { kind: "generation_failure", text: compactTerminalText(state.body) };
+}
+
+async function inspectCampaignEditorState(page) {
+  return page.evaluate(() => {
+    const iframe = document.querySelector("iframe");
+    const lines = document.body.innerText
+      .split("\n")
+      .map((line) => line.trim());
+    return {
+      body: document.body.innerText.slice(0, 4_000),
+      runtimeReady: lines.includes("Runtime is running in the sandbox."),
+      iframeCount: document.querySelectorAll("iframe").length,
+      iframeHasSource: Boolean(iframe?.getAttribute("srcdoc")?.trim()),
+    };
+  });
 }
 
 async function loadFixtures(fixturePaths) {
@@ -686,6 +716,22 @@ function compactRevision(revision) {
 
 function zeroStageCounts() {
   return { planning: 0, contract: 0, source: 0 };
+}
+
+export class CampaignInfrastructureFailureError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "CampaignInfrastructureFailureError";
+  }
+}
+
+export function requireCampaignAttemptContinuation(attempt) {
+  if (attempt.classification !== "infrastructure_failure") return;
+  throw new CampaignInfrastructureFailureError(
+    `Campaign ${attempt.campaignRunId} attempt ${attempt.id} requires out-of-band repair: ${
+      attempt.failure ?? attempt.terminalOutcome
+    }`
+  );
 }
 
 function createCampaignRunId(manifestId, cohort, createdAt) {

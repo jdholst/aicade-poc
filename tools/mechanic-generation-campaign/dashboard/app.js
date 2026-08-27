@@ -170,6 +170,9 @@ function renderLoops() {
     const extensionLines = (loop.budgetExtensions ?? []).map((extension) =>
       `<span class="evidence-line">extended · ${escapeHtml(extension.authorizationHash.slice(0, 12))} · revision ${extension.appliedAtRevision}</span>`
     ).join("");
+    const repairLines = (loop.campaignRepairs ?? []).map((repair) =>
+      `<span class="evidence-line">campaign repair · ${escapeHtml(repair.id)} · ${escapeHtml(repair.status)} · credited ${repair.creditedUsage.campaignRuns} campaign(s), ${repair.creditedUsage.submissions} submission(s)</span>`
+    ).join("");
     const lifecycleLine = loop.lifecycle
       ? `<span class="evidence-line">${escapeHtml(loop.lifecycle.action)} from ${escapeHtml(loop.lifecycle.previousStatus)} · worktree and branch removed</span>`
       : "";
@@ -180,8 +183,8 @@ function renderLoops() {
       <td>${step ? `${escapeHtml(step.cohort)}<br><small>${escapeHtml(step.status)} · cycle ${loop.currentRevision.cycle}</small>` : "complete"}</td>
       <td><code>${shortHash(loop.currentRevision.revisionKey)}</code></td>
       <td>${loop.usage.campaignRuns}/${loop.limits.maxCampaignRuns} campaigns<br>${loop.usage.submissions}/${loop.limits.maxSubmissions} submissions<br>${loop.usage.fixCycles}/${loop.limits.maxFixCycles} fixes</td>
-      <td>${stageCounts(loop.usage.actualProviderCalls)}<br><small>remaining ${stageCounts(loop.remaining.actualProviderCalls)}</small></td>
-      <td>${links}${fixLines}${extensionLines}${lifecycleLine}${proposedTemporary.length ? `<small>${proposedTemporary.length} proposed temporary fix(es)</small>` : ""}</td>
+      <td><small>Sparkline</small> ${stageCounts(loop.usage.actualProviderCalls)}<br><small>Gross ${stageCounts(loop.usage.grossActualProviderCalls ?? loop.usage.actualProviderCalls)}<br>remaining ${stageCounts(loop.remaining.actualProviderCalls)}</small></td>
+      <td>${links}${fixLines}${repairLines}${extensionLines}${lifecycleLine}${proposedTemporary.length ? `<small>${proposedTemporary.length} proposed temporary fix(es)</small>` : ""}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="7">${empty("No campaign loops yet.")}</td></tr>`;
 }

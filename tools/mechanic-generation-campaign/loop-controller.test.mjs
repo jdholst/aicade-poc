@@ -19,6 +19,7 @@ import {
 import { validateFixKnowledgeCheckpoint } from "./lib/knowledge-checkpoint.mjs";
 import {
   extendCampaignLoop,
+  pauseCampaignLoopForRepair,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
   startCampaignLoop,
@@ -352,6 +353,285 @@ describe("campaign loop controller", () => {
     expect(resumed.run.usage.campaignRuns).toBe(1);
   });
 
+  it("resumes an out-of-band campaign repair at the preserved manual-QA checkpoint without provider work", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const inspectWorktreeFn = async ({ path: worktreePath, branch }) => ({
+      path: worktreePath,
+      branch,
+      head: fixture.head,
+      revisionKey: validation.revision.revisionKey,
+      dirty: false,
+      statusEntries: [],
+    });
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        return {
+          run: {
+            id: input.runId,
+            status: "waiting_for_manual_qa",
+            pendingManualQa: {
+              manualQaId: "manual-qa-a1",
+              campaignRunId: input.runId,
+              attemptId: "a1",
+              promptId: "baseline",
+              cohort: "discovery",
+              revisionKey: validation.revision.revisionKey,
+              requestedAt: "2026-08-23T15:01:00.000Z",
+              evidencePath: "a1/manual-qa.json",
+            },
+          },
+          attempts: [
+            {
+              id: "a1",
+              status: "awaiting_manual_qa",
+              classification: "awaiting_manual_qa",
+            },
+          ],
+        };
+      },
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn,
+      now: () => new Date("2026-08-23T15:00:00.000Z"),
+    });
+    const { run: paused } = await pauseCampaignLoopForRepair({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      loopStore,
+      reason: "The manual-review detector failed.",
+      now: () => new Date("2026-08-23T15:02:00.000Z"),
+    });
+    const usageBefore = structuredClone(paused.usage);
+    await rm(fixture.definitionPath);
+
+    const resumed = await resumeCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: paused.id,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async () => {
+        throw new Error("Provider campaign must not run while manual QA is pending.");
+      },
+      inspectWorktreeFn,
+    });
+
+    expect(resumed.run.status).toBe("waiting_for_manual_qa");
+    expect(resumed.run.pendingManualQa?.attemptId).toBe("a1");
+    expect(resumed.run.usage).toEqual(usageBefore);
+    expect(resumed.run.campaignRepairs[0].status).toBe("completed");
+  });
+
+  it("classifies a thrown campaign-runner defect as out-of-band repair instead of a Sparkline fix", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+
+    await expect(
+      startCampaignLoop({
+        repoRoot: fixture.repoRoot,
+        definitionPath: fixture.definitionPath,
+        authorization: validation.definitionHash,
+        loopStore,
+        campaignStore,
+        runCampaignFn: async (input) => {
+          await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+          expect(await input.providerCallBudget.consume("planning")).toBe(true);
+          throw new Error("campaign browser adapter crashed");
+        },
+        prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+          path: controlRoot,
+          branch: `codex/campaign-loop-${loopId}`,
+        }),
+        inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+          path: worktreePath,
+          branch,
+          head: fixture.head,
+          revisionKey: validation.revision.revisionKey,
+          dirty: false,
+          statusEntries: [],
+        }),
+        now: () => new Date("2026-08-23T15:00:00.000Z"),
+      })
+    ).rejects.toThrow(/browser adapter crashed/i);
+
+    const [paused] = await loopStore.listRuns();
+    expect(paused.status).toBe("waiting_for_campaign_repair");
+    expect(paused.activeCampaign?.role).toBe("sequence");
+    expect(paused.currentRevision.cycle).toBe(0);
+    expect(paused.usage).toMatchObject({
+      fixCycles: 0,
+      campaignRuns: 0,
+      submissions: 0,
+      actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+      grossActualProviderCalls: { planning: 1, contract: 0, source: 0 },
+    });
+    expect(paused.campaignRepairs[0]).toMatchObject({
+      id: "campaign-repair-1",
+      reason: "campaign browser adapter crashed",
+      resumeStatus: "running",
+      status: "pending",
+      creditedUsage: {
+        campaignRuns: 1,
+        submissions: 1,
+        auxiliaryIsolationCampaigns: 0,
+        actualProviderCalls: { planning: 1, contract: 0, source: 0 },
+      },
+    });
+  });
+
+  it("recovers a terminal loop around the exact still-pending candidate without extending budgets", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => ({
+        run: {
+          id: input.runId,
+          status: "waiting_for_manual_qa",
+          pendingManualQa: {
+            manualQaId: "manual-qa-a1",
+            campaignRunId: input.runId,
+            attemptId: "a1",
+            promptId: "baseline",
+            cohort: "discovery",
+            revisionKey: validation.revision.revisionKey,
+            requestedAt: "2026-08-23T15:01:00.000Z",
+            evidencePath: "a1/manual-qa.json",
+          },
+        },
+        attempts: [
+          {
+            id: "a1",
+            status: "awaiting_manual_qa",
+            classification: "awaiting_manual_qa",
+          },
+        ],
+      }),
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+        path: worktreePath,
+        branch,
+        head: fixture.head,
+        revisionKey: validation.revision.revisionKey,
+        dirty: false,
+        statusEntries: [],
+      }),
+      now: () => new Date("2026-08-23T15:00:00.000Z"),
+    });
+    const campaignRunId = started.run.pendingManualQa.campaignRunId;
+    const usageBefore = structuredClone(started.run.usage);
+    const stale = exhaustLoop(
+      {
+        ...started.run,
+        status: "waiting_for_fix",
+        activeCampaign: undefined,
+        pendingManualQa: undefined,
+        campaignLinks: started.run.campaignLinks.map((link) => ({
+          ...link,
+          status: "completed_not_achieved",
+        })),
+      },
+      "Manual gameplay QA failed and no fix cycles remain.",
+      "2026-08-23T15:03:00.000Z",
+      { status: "waiting_for_fix" }
+    );
+    stale.invalidReason = "The frozen loop definition could not be reloaded.";
+    await loopStore.writeRun(stale);
+    const recoveryCampaignStore = {
+      async readRun() {
+        return {
+          id: campaignRunId,
+          loopId: started.run.id,
+          loopStepId: "discovery",
+          cohort: "discovery",
+          revision: {
+            head: fixture.head,
+            revisionKey: validation.revision.revisionKey,
+          },
+        };
+      },
+      async readAttempts() {
+        return [
+          {
+            id: "a1",
+            promptId: "baseline",
+            revisionKey: validation.revision.revisionKey,
+            manualQa: {
+              id: "manual-qa-a1",
+              path: "a1/manual-qa.json",
+              status: "pending",
+            },
+          },
+        ];
+      },
+      async readManualQa() {
+        return {
+          id: "manual-qa-a1",
+          status: "pending",
+          requestedAt: "2026-08-23T15:01:00.000Z",
+        };
+      },
+    };
+
+    const { run: recovered } = await pauseCampaignLoopForRepair({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      campaignRunId,
+      reason: "The review iframe detector misclassified the frozen candidate.",
+      loopStore,
+      campaignStore: recoveryCampaignStore,
+      now: () => new Date("2026-08-23T15:04:00.000Z"),
+    });
+
+    expect(recovered.status).toBe("waiting_for_campaign_repair");
+    expect(recovered.activeCampaign?.campaignRunId).toBe(campaignRunId);
+    expect(recovered.pendingManualQa?.attemptId).toBe("a1");
+    expect(recovered.usage).toEqual(usageBefore);
+    expect(recovered.exhaustionReason).toBeUndefined();
+    expect(recovered.exhaustionResume).toBeUndefined();
+    expect(recovered.campaignRepairs[0]).toMatchObject({
+      campaignRunId,
+      resumeStatus: "waiting_for_manual_qa",
+      status: "pending",
+      priorTerminal: {
+        status: "exhausted",
+        reason: "Manual gameplay QA failed and no fix cycles remain.",
+        exhaustionReason: "Manual gameplay QA failed and no fix cycles remain.",
+        invalidReason: "The frozen loop definition could not be reloaded.",
+      },
+    });
+  });
+
   it("proves one mechanic through discovery, repeatability, and variation on one revision", async () => {
     const fixture = await createRepositoryFixture();
     let campaignNumber = 0;
@@ -679,6 +959,81 @@ describe("campaign loop controller", () => {
         inspectWorktreeFn,
       })
     ).rejects.toThrow(/isolation.*ceiling/i);
+  });
+
+  it("credits an isolation campaign back when the campaign runner throws", async () => {
+    const fixture = await createRepositoryFixture({
+      singleStepFix: true,
+      withIsolation: true,
+    });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const inspectWorktreeFn = async ({ path: worktreePath, branch }) => ({
+      path: worktreePath,
+      branch,
+      head: fixture.head,
+      revisionKey: validation.revision.revisionKey,
+      dirty: false,
+      statusEntries: [],
+    });
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        for (const stage of ["planning", "contract", "source"]) {
+          expect(await input.providerCallBudget.consume(stage)).toBe(true);
+        }
+        return {
+          run: { id: input.runId, status: "completed_not_achieved" },
+          attempts: [{ status: "pipeline_failure", classification: "pipeline_failure" }],
+        };
+      },
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn,
+    });
+
+    await expect(
+      runCampaignLoopIsolation({
+        repoRoot: fixture.repoRoot,
+        loopId: started.run.id,
+        profileId: "planning-fixture",
+        loopStore,
+        campaignStore,
+        runCampaignFn: async (input) => {
+          await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+          expect(await input.providerCallBudget.consume("contract")).toBe(true);
+          throw new Error("isolation browser adapter crashed");
+        },
+        inspectWorktreeFn,
+      })
+    ).rejects.toThrow(/isolation browser adapter crashed/i);
+
+    const paused = await loopStore.readRun(started.run.id);
+    expect(paused.status).toBe("waiting_for_campaign_repair");
+    expect(paused.usage).toMatchObject({
+      campaignRuns: 1,
+      submissions: 1,
+      auxiliaryIsolationCampaigns: 0,
+      actualProviderCalls: { planning: 1, contract: 1, source: 1 },
+      grossActualProviderCalls: { planning: 1, contract: 2, source: 1 },
+    });
+    expect(paused.campaignRepairs[0].creditedUsage).toMatchObject({
+      campaignRuns: 1,
+      submissions: 1,
+      auxiliaryIsolationCampaigns: 1,
+      actualProviderCalls: { planning: 0, contract: 1, source: 0 },
+    });
   });
 });
 

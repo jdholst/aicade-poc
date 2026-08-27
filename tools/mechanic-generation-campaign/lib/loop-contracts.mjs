@@ -8,9 +8,10 @@ import {
 
 export const CAMPAIGN_LOOP_MANIFEST_SCHEMA_VERSION =
   "campaign-loop-manifest/v1";
-export const CAMPAIGN_LOOP_RUN_SCHEMA_VERSION = "campaign-loop-run/v3";
+export const CAMPAIGN_LOOP_RUN_SCHEMA_VERSION = "campaign-loop-run/v4";
 const CAMPAIGN_LOOP_RUN_SCHEMA_VERSION_V1 = "campaign-loop-run/v1";
 const CAMPAIGN_LOOP_RUN_SCHEMA_VERSION_V2 = "campaign-loop-run/v2";
+const CAMPAIGN_LOOP_RUN_SCHEMA_VERSION_V3 = "campaign-loop-run/v3";
 export const CAMPAIGN_LOOP_FIX_SCHEMA_VERSION = "campaign-loop-fix/v1";
 export const CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION =
   "campaign-loop-budget-extension/v1";
@@ -21,6 +22,7 @@ export const CAMPAIGN_LOOP_STATUSES = [
   "pending",
   "running",
   "waiting_for_manual_qa",
+  "waiting_for_campaign_repair",
   "waiting_for_fix",
   "interrupted",
   "blocked",
@@ -207,8 +209,63 @@ const activeCampaignSchema = z
     role: z.enum(["sequence", "isolation"]),
     stepId: stableIdSchema.optional(),
     profileId: stableIdSchema.optional(),
+    budgetCheckpoint: z
+      .object({
+        campaignRuns: z.number().int().nonnegative(),
+        submissions: z.number().int().nonnegative(),
+        auxiliaryIsolationCampaigns: z.number().int().nonnegative(),
+        actualProviderCalls: stageCountsSchema,
+      })
+      .strict()
+      .optional(),
   })
   .strict();
+
+const campaignRepairSchema = z
+  .object({
+    id: stableIdSchema,
+    campaignRunId: z.string().min(1),
+    reason: z.string().trim().min(1),
+    detectedAt: z.string().datetime(),
+    resumeStatus: z.enum(["running", "waiting_for_manual_qa"]),
+    status: z.enum(["pending", "completed"]),
+    completedAt: z.string().datetime().optional(),
+    creditedUsage: z
+      .object({
+        campaignRuns: z.number().int().nonnegative(),
+        submissions: z.number().int().nonnegative(),
+        auxiliaryIsolationCampaigns: z.number().int().nonnegative(),
+        actualProviderCalls: stageCountsSchema,
+      })
+      .strict(),
+    priorTerminal: z
+      .object({
+        status: z.enum(["blocked", "exhausted", "invalid"]),
+        reason: z.string().trim().min(1),
+        blockedReason: z.string().trim().min(1).optional(),
+        exhaustionReason: z.string().trim().min(1).optional(),
+        invalidReason: z.string().trim().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((repair, context) => {
+    if (repair.status === "pending" && repair.completedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["completedAt"],
+        message: "A pending campaign repair cannot be completed.",
+      });
+    }
+    if (repair.status === "completed" && !repair.completedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["completedAt"],
+        message: "A completed campaign repair requires its completion time.",
+      });
+    }
+  });
 
 const usageSchema = z
   .object({
@@ -217,6 +274,7 @@ const usageSchema = z
     submissions: z.number().int().nonnegative(),
     auxiliaryIsolationCampaigns: z.number().int().nonnegative(),
     actualProviderCalls: stageCountsSchema,
+    grossActualProviderCalls: stageCountsSchema.optional(),
   })
   .strict();
 
@@ -350,9 +408,9 @@ const campaignLoopRunV2Schema = campaignLoopRunBaseSchema
   .strict()
   .superRefine(validateCurrentLoopState);
 
-export const campaignLoopRunSchema = campaignLoopRunBaseSchema
+const campaignLoopRunV3Schema = campaignLoopRunBaseSchema
   .extend({
-    schemaVersion: z.literal(CAMPAIGN_LOOP_RUN_SCHEMA_VERSION),
+    schemaVersion: z.literal(CAMPAIGN_LOOP_RUN_SCHEMA_VERSION_V3),
     budgetExtensions: z.array(budgetExtensionSchema),
     exhaustionResume: exhaustionResumeSchema.optional(),
     lifecycle: lifecycleSchema.optional(),
@@ -362,8 +420,31 @@ export const campaignLoopRunSchema = campaignLoopRunBaseSchema
   .strict()
   .superRefine(validateCurrentLoopState);
 
+export const campaignLoopRunSchema = campaignLoopRunBaseSchema
+  .extend({
+    schemaVersion: z.literal(CAMPAIGN_LOOP_RUN_SCHEMA_VERSION),
+    budgetExtensions: z.array(budgetExtensionSchema),
+    exhaustionResume: exhaustionResumeSchema.optional(),
+    lifecycle: lifecycleSchema.optional(),
+    knowledgePolicy: campaignKnowledgePolicySchema,
+    knowledgeReconciliationIds: z.array(z.string().regex(/^KR-/)),
+    campaignRepairs: z.array(campaignRepairSchema),
+  })
+  .strict()
+  .superRefine(validateCurrentLoopState);
+
 function validateCurrentLoopState(run, context) {
     validateManualQaState(run, context);
+    if (
+      run.schemaVersion === CAMPAIGN_LOOP_RUN_SCHEMA_VERSION &&
+      !run.usage.grossActualProviderCalls
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["usage", "grossActualProviderCalls"],
+        message: "A v4 loop run requires gross actual-provider usage.",
+      });
+    }
     if (run.status === "exhausted" && !run.exhaustionResume) {
       context.addIssue({
         code: "custom",
@@ -406,7 +487,35 @@ function validateCurrentLoopState(run, context) {
 }
 
 function validateManualQaState(run, context) {
-  if (run.status === "waiting_for_manual_qa") {
+  const pendingRepair = run.campaignRepairs?.filter(
+    ({ status }) => status === "pending"
+  ) ?? [];
+  if (run.status === "waiting_for_campaign_repair") {
+    if (pendingRepair.length !== 1) {
+      context.addIssue({
+        code: "custom",
+        path: ["campaignRepairs"],
+        message: "A loop waiting for campaign repair requires exactly one pending repair.",
+      });
+    }
+    if (!run.activeCampaign) {
+      context.addIssue({
+        code: "custom",
+        path: ["activeCampaign"],
+        message: "A loop waiting for campaign repair must preserve its active campaign.",
+      });
+    }
+  } else if (pendingRepair.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["campaignRepairs"],
+      message: "A pending campaign repair is allowed only while waiting for campaign repair.",
+    });
+  }
+  const repairResumesManualQa =
+    run.status === "waiting_for_campaign_repair" &&
+    pendingRepair[0]?.resumeStatus === "waiting_for_manual_qa";
+  if (run.status === "waiting_for_manual_qa" || repairResumesManualQa) {
     if (!run.pendingManualQa) {
       context.addIssue({
         code: "custom",
@@ -503,6 +612,15 @@ export function parseCampaignLoopRun(input) {
   if (input?.schemaVersion === CAMPAIGN_LOOP_RUN_SCHEMA_VERSION_V2) {
     return migrateLegacyLoopRun(campaignLoopRunV2Schema.parse(input));
   }
+  if (input?.schemaVersion === CAMPAIGN_LOOP_RUN_SCHEMA_VERSION_V3) {
+    const run = campaignLoopRunV3Schema.parse(input);
+    return campaignLoopRunSchema.parse({
+      ...run,
+      schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
+      usage: withGrossProviderUsage(run.usage),
+      campaignRepairs: [],
+    });
+  }
   return campaignLoopRunSchema.parse(input);
 }
 
@@ -510,9 +628,19 @@ function migrateLegacyLoopRun(run) {
   return campaignLoopRunSchema.parse({
     ...run,
     schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
+    usage: withGrossProviderUsage(run.usage),
     knowledgePolicy: { required: false },
     knowledgeReconciliationIds: [],
+    campaignRepairs: [],
   });
+}
+
+function withGrossProviderUsage(usage) {
+  return {
+    ...usage,
+    grossActualProviderCalls:
+      usage.grossActualProviderCalls ?? { ...usage.actualProviderCalls },
+  };
 }
 
 export function parseCampaignLoopFix(input) {

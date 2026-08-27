@@ -123,7 +123,7 @@ The harness modifies its existing v1 records directly:
 
 - `campaign-attempt/v1` includes the cohort, immutable automated outcome, optional manual-QA reference, `awaiting_manual_qa`, and the later human adjudication. A full-actual proof attempt cannot be `success` without an approved reference.
 - `campaign-run/v2` includes persisted actual-provider authorization, a required compiled-knowledge baseline for new records, `waiting_for_manual_qa`, and the exact pending campaign, attempt, prompt, cohort, revision, and evidence identity. Existing v1 records are accepted with `knowledgePolicy.required: false`.
-- `campaign-loop-run/v3` includes the same waiting state, compiled-knowledge policy and accepted reconciliation IDs while preserving the active sequence campaign. Existing v1 and v2 loop records are accepted with `knowledgePolicy.required: false`.
+- `campaign-loop-run/v4` adds `waiting_for_campaign_repair`, campaign-repair evidence, Sparkline-attributed provider usage, and a separate gross actual-provider ledger. Existing v1 through v3 records are migrated without losing evidence; legacy provider usage becomes both attributed and gross usage.
 - `campaign-manual-qa/v1` stores `pending`, `approved`, or `denied`; request and decision timestamps; exact candidate artifact hashes; review sessions; an optional approval note; and a required denial reason.
 
 Pending-review fields are required only in waiting states. Existing legacy narrative successes are normalized as approved with `legacy_assumed` provenance. They remain historical evidence and are not mixed into current revision proof cohorts.
@@ -246,7 +246,7 @@ npm run campaign -- loop run \
   [--headed] [--port <number>] [--attempt-timeout-ms <number>]
 ```
 
-The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, copies every repository-root `.env` and `.env.*` file from the control checkout without logging its contents, removes the worktree's `node_modules` and `.next`, runs `npm install` there, and then runs the production build before the first editor submission. It then runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_manual_qa`, `waiting_for_fix`, or a terminal loop status. Preparation, installation, or build failure stops before submission and does not consume provider-call budget.
+The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, copies every repository-root `.env` and `.env.*` file from the control checkout without logging its contents, removes the worktree's `node_modules` and `.next`, runs `npm install` there, and then runs the production build before the first editor submission. It then runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_manual_qa`, `waiting_for_fix`, `waiting_for_campaign_repair`, or a terminal loop status. Browser infrastructure failures preserve their observed editor state and stop before another scheduled submission. Preparation, installation, or build failure stops before submission and does not consume provider-call budget.
 
 ### Resume a loop
 
@@ -265,6 +265,29 @@ npm run campaign -- loop resume --id <loop-id> --fix-report <path>
 A fix report is accepted only from `waiting_for_fix`. Its before and after revisions, commit, changed files, verification, trigger campaign, and durable or temporary classification must match the clean loop worktree. Temporary fixes must include their canonical ledger entries. Knowledge-required loops must also commit `generation-knowledge.json` with exactly one replayable fix-cycle reconciliation that accounts for the current context. An accepted fix records its `KR-*` ID, increments the fix cycle, and restarts the sequence from its first step.
 
 If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`; denial returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
+
+If a loop is `waiting_for_campaign_repair`, repair and verify `tools/mechanic-generation-campaign/` in the control checkout, then run `loop resume`. The command restores the preserved `running` or `waiting_for_manual_qa` checkpoint without a fix report, fix-cycle charge, revision change, or proof reset.
+
+### Repair the campaign tool outside loop budgets
+
+Pause an active loop after diagnosing a campaign-tool defect:
+
+```bash
+npm run campaign -- loop repair-campaign \
+  --id <loop-id> \
+  --reason "<campaign-tool defect>"
+```
+
+Recover a terminal loop when an older harness version misclassified an exact still-pending candidate:
+
+```bash
+npm run campaign -- loop repair-campaign \
+  --id <loop-id> \
+  --campaign <campaign-run-id> \
+  --reason "<campaign-tool defect>"
+```
+
+The terminal recovery verifies the linked current revision and pending manual-QA identity before restoring it. Neither form makes provider calls or extends a budget. Invalidated campaign, submission, isolation, and Sparkline-attributed provider usage is credited back. Actual calls remain in the gross ledger and still count against the authorized provider ceiling. Runtime readiness is the exact editor message `Runtime is running in the sandbox.` plus a generated iframe with source; the campaign runner records the observed editor state when that contract times out.
 
 ### Extend an exhausted loop
 

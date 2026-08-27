@@ -34,7 +34,7 @@ If sources disagree, use the shallower stage and report the disagreement.
 - `pipeline_failure`: trusted orchestration, correlation, validation, evaluation, assembly, handoff, or persistence failed.
 - `runtime_pipeline_failure`: runtime activation or first-playable validation failed.
 - `semantic_runtime_failure`: the pipeline accepted and mounted, but the external mechanic probe failed.
-- `infrastructure_failure`: server, browser, navigation, or harness failure prevented a valid result.
+- `infrastructure_failure`: external server, browser, or navigation infrastructure prevented a valid result. Preserve the diagnostic attempt, stop the campaign immediately, and handle a linked loop through the budget-neutral campaign-repair lifecycle instead of advancing to another submission.
 - `awaiting_manual_qa`: the full-actual pipeline and external probe passed, exact replay artifacts were frozen, and a human verdict is pending.
 - `manual_qa_rejected`: the user denied the candidate and supplied the gameplay defect. It is a mechanic failure and is not retryable on the same revision.
 - `success`: the full-actual pipeline and external probe passed and the user explicitly approved the exact replayed candidate.
@@ -49,6 +49,8 @@ An achieved custom sequence is not automatically mechanic proof. Proof still req
 
 Fixture-backed isolation may diagnose a failure while a loop is waiting for a fix. It consumes the loop's campaign, submission, isolation, and applicable provider-call budgets but does not advance a proof step.
 
+Campaign-tool defects are repaired outside the loop's Sparkline budget. A thrown campaign-runner defect or persisted infrastructure failure moves the loop to `waiting_for_campaign_repair`, preserves the candidate revision, and credits the invalidated campaign, submission, isolation, and Sparkline-attributed provider usage. Gross actual-provider calls remain append-only and enforce the authorization ceiling. Repair `tools/mechanic-generation-campaign/` in the control checkout, then resume without a fix report or proof reset. Runtime readiness requires the exact editor message `Runtime is running in the sandbox.` plus a generated iframe with source; timeout evidence includes the observed editor state.
+
 A verified fix commit starts a new revision cycle and resets every sequence step. Campaign links and fix checkpoints remain append-only. Global usage does not reset.
 
 Every new standalone campaign and loop records the digest of `data/generation-knowledge.json` at creation. Older records are normalized with `knowledgePolicy.required: false` and remain readable and resumable.
@@ -57,13 +59,13 @@ Before a new loop fix, read the compiled context. Applicable findings are mandat
 
 Raw campaign evidence is append-only. A contradiction changes compiled guidance under the same `KF-*` ID, increments its revision, and snapshots the previous mutable fields. A fix commit must append exactly one matching `KR-*` journal entry and include the knowledge file. Remaining terminal evidence is reconciled only after explicit conclusion or discard, so a knowledge-only control-checkout commit cannot change the revision that produced campaign proof.
 
-Loop execution terminal states are `achieved`, `exhausted`, `invalid`, and `blocked`. `interrupted` is resumable on the same clean revision, `waiting_for_manual_qa` requires an explicit user verdict, and `waiting_for_fix` is an agent action checkpoint. `concluded` and `discarded` are post-stop lifecycle states. They preserve evidence after local session cleanup.
+Loop execution terminal states are `achieved`, `exhausted`, `invalid`, and `blocked`. `interrupted` is resumable on the same clean revision, `waiting_for_manual_qa` requires an explicit user verdict, `waiting_for_campaign_repair` preserves the active campaign while the control-checkout tool is repaired, and `waiting_for_fix` is a Sparkline-fix checkpoint. `concluded` and `discarded` are post-stop lifecycle states. They preserve evidence after local session cleanup.
 
 Only an `exhausted` loop can be extended. The extension is additive to global fix-cycle, campaign-run, submission, isolation, and per-stage provider-call ceilings. Previewing it is read-only and produces a canonical authorization hash. Apply only after the user explicitly authorizes that exact hash. Per-step retry and per-profile isolation policy never changes. Resume from the recorded active-campaign or fix-required exhaustion checkpoint.
 
 Conclude and discard require explicit user direction. Conclusion verifies the clean recorded control checkout and continuous accepted-fix chain, merges verified fixes when necessary, then removes the local worktree and branch. Discard removes them without merging or recording a QA verdict. Dirty or revision-mismatched discard requires a separate force approval after the exact paths are reported. Neither action pushes, switches the control branch, deletes a remote branch, or removes campaign evidence.
 
-Manual review consumes no campaign or provider budget and has no timeout. The review command restores only the frozen GenerationRun and GamePack into a clean browser context, blocks provider endpoints, verifies editor mount and runtime health, and remains open until approval, denial, or interruption. Review infrastructure failure leaves the verdict pending. Failure of the restored game to mount or remain healthy becomes `runtime_pipeline_failure`.
+Manual review consumes no campaign or provider budget and has no timeout. The review command restores only the frozen GenerationRun and GamePack into a clean browser context, blocks provider endpoints, verifies editor mount and runtime health, and remains open until approval, denial, or interruption. A detector or harness exception leaves the verdict pending and moves a linked loop to `waiting_for_campaign_repair`. Only an explicit human denial turns observed gameplay into `manual_qa_rejected` Sparkline evidence.
 
 Loop execution worktrees live under the adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` root. Campaign evidence remains under the control checkout's ignored `.qa/mechanic-generation-campaign/` root. Never move a loop worktree beneath the control checkout because nested package roots can change production build behavior.
 

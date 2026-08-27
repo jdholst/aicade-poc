@@ -107,33 +107,39 @@ describe("campaign loop definitions", () => {
 });
 
 describe("campaign loop run contracts", () => {
-  it("loads a v1 run as a v3 run without losing evidence", () => {
+  it("loads a v1 run as a v4 run without losing evidence", () => {
     const run = parseCampaignLoopRun(validV1Run());
 
     expect(run).toMatchObject({
-      schemaVersion: "campaign-loop-run/v3",
+      schemaVersion: "campaign-loop-run/v4",
       status: "exhausted",
       budgetExtensions: [],
       exhaustionResume: { status: "waiting_for_fix" },
       knowledgePolicy: { required: false },
       knowledgeReconciliationIds: [],
+      campaignRepairs: [],
+      usage: {
+        grossActualProviderCalls: { planning: 2, contract: 2, source: 2 },
+      },
     });
     expect(run.campaignLinks).toHaveLength(1);
   });
 
-  it("grandfathers v2 records and requires a knowledge baseline on v3 records", () => {
+  it("grandfathers v2 records and requires a knowledge baseline on v4 records", () => {
     const legacyFields = { ...parseCampaignLoopRun(validV1Run()) };
     delete legacyFields.knowledgePolicy;
     delete legacyFields.knowledgeReconciliationIds;
+    delete legacyFields.campaignRepairs;
     const migrated = parseCampaignLoopRun({
       ...legacyFields,
       schemaVersion: "campaign-loop-run/v2",
     });
 
     expect(migrated).toMatchObject({
-      schemaVersion: "campaign-loop-run/v3",
+      schemaVersion: "campaign-loop-run/v4",
       knowledgePolicy: { required: false },
       knowledgeReconciliationIds: [],
+      campaignRepairs: [],
     });
     expect(() =>
       parseCampaignLoopRun({
@@ -168,6 +174,59 @@ describe("campaign loop run contracts", () => {
         },
       }).status
     ).toBe("discarded");
+  });
+
+  it("persists a budget-neutral campaign repair around the exact active candidate", () => {
+    const legacy = parseCampaignLoopRun(validV1Run());
+    const pendingManualQa = {
+      manualQaId: "manual-qa-attempt-1",
+      campaignRunId: "campaign-1",
+      attemptId: "attempt-1",
+      promptId: "baseline",
+      cohort: "discovery",
+      revisionKey: "5".repeat(64),
+      requestedAt: "2026-08-24T11:20:00.000Z",
+      evidencePath: "attempt-1/manual-qa.json",
+    };
+
+    const run = parseCampaignLoopRun({
+      ...legacy,
+      schemaVersion: "campaign-loop-run/v4",
+      status: "waiting_for_campaign_repair",
+      completedAt: undefined,
+      exhaustionReason: undefined,
+      exhaustionResume: undefined,
+      activeCampaign: {
+        campaignRunId: "campaign-1",
+        role: "sequence",
+        stepId: "discover",
+      },
+      pendingManualQa,
+      campaignLinks: legacy.campaignLinks.map((link) => ({
+        ...link,
+        status: "waiting_for_campaign_repair",
+      })),
+      campaignRepairs: [
+        {
+          id: "campaign-repair-1",
+          campaignRunId: "campaign-1",
+          reason: "The campaign review detector rejected a mounted candidate.",
+          detectedAt: "2026-08-24T11:21:00.000Z",
+          resumeStatus: "waiting_for_manual_qa",
+          status: "pending",
+          creditedUsage: {
+            campaignRuns: 0,
+            submissions: 0,
+            auxiliaryIsolationCampaigns: 0,
+            actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+          },
+        },
+      ],
+    });
+
+    expect(run.status).toBe("waiting_for_campaign_repair");
+    expect(run.pendingManualQa).toEqual(pendingManualQa);
+    expect(run.campaignRepairs).toHaveLength(1);
   });
 });
 

@@ -63,6 +63,7 @@ describe("campaign dashboard data", () => {
       "resume",
       "extend",
       "isolate",
+      "repair-campaign",
       "block",
       "conclude",
       "discard",
@@ -83,6 +84,8 @@ describe("campaign dashboard data", () => {
     expect(dashboardApp).toContain("Awaiting explicit verdict");
     expect(dashboardApp).toContain("denialReason");
     expect(dashboardApp).toContain("loop.lifecycle");
+    expect(dashboardApp).toContain("grossActualProviderCalls");
+    expect(dashboardApp).toContain("campaign repair");
     expect(dashboardStyles).toContain(".concluded");
     expect(dashboardStyles).toContain(".discarded");
   });

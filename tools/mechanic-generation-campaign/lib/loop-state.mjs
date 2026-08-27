@@ -49,6 +49,7 @@ export function createInitialLoopRun({
       submissions: 0,
       auxiliaryIsolationCampaigns: 0,
       actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+      grossActualProviderCalls: { planning: 0, contract: 0, source: 0 },
     },
     limits: definition.limits,
     worktree: {
@@ -65,6 +66,7 @@ export function createInitialLoopRun({
     })),
     campaignLinks: [],
     fixCheckpointIds: [],
+    campaignRepairs: [],
     knowledgePolicy: {
       required: true,
       baselineManifestDigest: knowledgeManifestDigest,
@@ -88,6 +90,7 @@ export function startLoopCampaign(run, {
     return exhaustLoop(run, "Global campaign-run ceiling reached.");
   }
 
+  const budgetCheckpoint = createCampaignUsageCheckpoint(run.usage);
   const link = {
     campaignRunId,
     role,
@@ -112,6 +115,7 @@ export function startLoopCampaign(run, {
       role,
       ...(stepId ? { stepId } : {}),
       ...(profileId ? { profileId } : {}),
+      budgetCheckpoint,
     },
     campaignLinks: [...run.campaignLinks, link],
   };
@@ -247,22 +251,115 @@ export function finishIsolationCampaign(run, {
     : { ...next, status: "waiting_for_fix" };
 }
 
-export function resumeLoopAfterManualQaApproval(run, { campaignRunId }) {
-  assertActiveCampaign(run, campaignRunId, "sequence");
+export function resumeLoopAfterManualQaApproval(
+  run,
+  { campaignRunId, completedAt }
+) {
+  const pendingRun = run.status === "waiting_for_campaign_repair"
+    ? resumeLoopAfterCampaignRepair(run, { completedAt })
+    : run;
+  assertActiveCampaign(pendingRun, campaignRunId, "sequence");
   if (
-    run.status !== "waiting_for_manual_qa" ||
-    run.pendingManualQa?.campaignRunId !== campaignRunId
+    pendingRun.status !== "waiting_for_manual_qa" ||
+    pendingRun.pendingManualQa?.campaignRunId !== campaignRunId
   ) {
     throw new Error("Loop does not have the requested pending manual QA candidate.");
   }
   return {
-    ...run,
+    ...pendingRun,
     status: "running",
     pendingManualQa: undefined,
-    campaignLinks: run.campaignLinks.map((link) =>
+    campaignLinks: pendingRun.campaignLinks.map((link) =>
       link.campaignRunId === campaignRunId
         ? { ...link, status: "running" }
         : link
+    ),
+  };
+}
+
+export function pauseLoopForCampaignRepair(
+  run,
+  { id, reason, detectedAt = new Date().toISOString(), priorTerminal }
+) {
+  if (!run.activeCampaign) {
+    throw new Error("A campaign repair requires an active campaign.");
+  }
+  if (!reason?.trim()) {
+    throw new Error("A campaign repair requires a reason.");
+  }
+  if (run.status === "waiting_for_campaign_repair") {
+    throw new Error("The campaign loop is already waiting for a campaign repair.");
+  }
+  const resumeStatus =
+    run.status === "waiting_for_manual_qa" ? "waiting_for_manual_qa" : "running";
+  const creditedUsage = resumeStatus === "running"
+    ? createCampaignRepairCredit(run.usage, run.activeCampaign.budgetCheckpoint)
+    : emptyCampaignRepairCredit();
+  return {
+    ...run,
+    status: "waiting_for_campaign_repair",
+    completedAt: undefined,
+    usage: applyCampaignRepairCredit(run.usage, creditedUsage),
+    campaignLinks: run.campaignLinks.map((link) =>
+      link.campaignRunId === run.activeCampaign.campaignRunId
+        ? { ...link, status: "waiting_for_campaign_repair" }
+        : link
+    ),
+    campaignRepairs: [
+      ...(run.campaignRepairs ?? []),
+      {
+        id,
+        campaignRunId: run.activeCampaign.campaignRunId,
+        reason: reason.trim(),
+        detectedAt,
+        resumeStatus,
+        status: "pending",
+        creditedUsage,
+        ...(priorTerminal ? { priorTerminal } : {}),
+      },
+    ],
+  };
+}
+
+export function resumeLoopAfterCampaignRepair(
+  run,
+  { completedAt = new Date().toISOString() } = {}
+) {
+  if (run.status !== "waiting_for_campaign_repair") {
+    throw new Error("The campaign loop is not waiting for a campaign repair.");
+  }
+  const pendingRepairs = (run.campaignRepairs ?? []).filter(
+    ({ status }) => status === "pending"
+  );
+  if (pendingRepairs.length !== 1) {
+    throw new Error("The campaign loop requires exactly one pending campaign repair.");
+  }
+  const [repair] = pendingRepairs;
+  if (run.activeCampaign?.campaignRunId !== repair.campaignRunId) {
+    throw new Error("The pending campaign repair does not match the active campaign.");
+  }
+  return {
+    ...run,
+    status: repair.resumeStatus,
+    completedAt: undefined,
+    usage: repair.resumeStatus === "running"
+      ? {
+          ...run.usage,
+          campaignRuns: run.usage.campaignRuns + 1,
+          auxiliaryIsolationCampaigns:
+            run.usage.auxiliaryIsolationCampaigns +
+            (run.activeCampaign.role === "isolation" ? 1 : 0),
+        }
+      : run.usage,
+    campaignLinks: run.campaignLinks.map((link) =>
+      link.campaignRunId === repair.campaignRunId
+        ? { ...link, status: repair.resumeStatus }
+        : link
+    ),
+    campaignRepairs: run.campaignRepairs.map((entry) =>
+      entry.id === repair.id
+        ? { ...entry, status: "completed", completedAt }
+        : entry
     ),
   };
 }
@@ -271,19 +368,22 @@ export function rejectLoopManualQa(
   run,
   { campaignRunId, completedAt = new Date().toISOString() }
 ) {
-  assertActiveCampaign(run, campaignRunId, "sequence");
+  const pendingRun = run.status === "waiting_for_campaign_repair"
+    ? resumeLoopAfterCampaignRepair(run, { completedAt })
+    : run;
+  assertActiveCampaign(pendingRun, campaignRunId, "sequence");
   if (
-    run.status !== "waiting_for_manual_qa" ||
-    run.pendingManualQa?.campaignRunId !== campaignRunId
+    pendingRun.status !== "waiting_for_manual_qa" ||
+    pendingRun.pendingManualQa?.campaignRunId !== campaignRunId
   ) {
     throw new Error("Loop does not have the requested pending manual QA candidate.");
   }
   const next = {
-    ...run,
+    ...pendingRun,
     status: "waiting_for_fix",
     pendingManualQa: undefined,
     activeCampaign: undefined,
-    campaignLinks: run.campaignLinks.map((link) =>
+    campaignLinks: pendingRun.campaignLinks.map((link) =>
       link.campaignRunId === campaignRunId
         ? { ...link, status: "completed_not_achieved" }
         : link
@@ -355,10 +455,9 @@ export function recordActualProviderCall(run, stage) {
   if (!ACTUAL_PROVIDER_STAGES.includes(stage)) {
     throw new Error(`Unknown provider stage ${stage}.`);
   }
-  if (
-    run.usage.actualProviderCalls[stage] >=
-    run.limits.actualProviderCalls[stage]
-  ) {
+  const grossActualProviderCalls =
+    run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls;
+  if (grossActualProviderCalls[stage] >= run.limits.actualProviderCalls[stage]) {
     return {
       allowed: false,
       run: exhaustLoop(run, `${stage} provider-call ceiling reached.`),
@@ -373,6 +472,10 @@ export function recordActualProviderCall(run, stage) {
         actualProviderCalls: {
           ...run.usage.actualProviderCalls,
           [stage]: run.usage.actualProviderCalls[stage] + 1,
+        },
+        grossActualProviderCalls: {
+          ...grossActualProviderCalls,
+          [stage]: grossActualProviderCalls[stage] + 1,
         },
       },
     },
@@ -499,7 +602,57 @@ export function remainingLoopBudgets(run) {
       ACTUAL_PROVIDER_STAGES.map((stage) => [
         stage,
         run.limits.actualProviderCalls[stage] -
-          run.usage.actualProviderCalls[stage],
+          (run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls)[stage],
+      ])
+    ),
+  };
+}
+
+function createCampaignUsageCheckpoint(usage) {
+  return {
+    campaignRuns: usage.campaignRuns,
+    submissions: usage.submissions,
+    auxiliaryIsolationCampaigns: usage.auxiliaryIsolationCampaigns,
+    actualProviderCalls: { ...usage.actualProviderCalls },
+  };
+}
+
+function emptyCampaignRepairCredit() {
+  return {
+    campaignRuns: 0,
+    submissions: 0,
+    auxiliaryIsolationCampaigns: 0,
+    actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+  };
+}
+
+function createCampaignRepairCredit(usage, checkpoint) {
+  if (!checkpoint) return emptyCampaignRepairCredit();
+  return {
+    campaignRuns: usage.campaignRuns - checkpoint.campaignRuns,
+    submissions: usage.submissions - checkpoint.submissions,
+    auxiliaryIsolationCampaigns:
+      usage.auxiliaryIsolationCampaigns - checkpoint.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        usage.actualProviderCalls[stage] - checkpoint.actualProviderCalls[stage],
+      ])
+    ),
+  };
+}
+
+function applyCampaignRepairCredit(usage, credit) {
+  return {
+    ...usage,
+    campaignRuns: usage.campaignRuns - credit.campaignRuns,
+    submissions: usage.submissions - credit.submissions,
+    auxiliaryIsolationCampaigns:
+      usage.auxiliaryIsolationCampaigns - credit.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        usage.actualProviderCalls[stage] - credit.actualProviderCalls[stage],
       ])
     ),
   };

@@ -6,9 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createCampaignStore } from "./lib/campaign-store.mjs";
 import { createCampaignLoopStore } from "./lib/loop-store.mjs";
+import { pauseCampaignLoopForRepair } from "./lib/loop-controller.mjs";
 import {
   createInitialLoopRun,
+  exhaustLoop,
   finishSequenceCampaign,
+  pauseLoopForCampaignRepair,
   startLoopCampaign,
 } from "./lib/loop-state.mjs";
 import {
@@ -254,6 +257,114 @@ describe("manual gameplay QA", () => {
 
     expect(denied.loopRun.status).toBe("waiting_for_fix");
     expect(denied.loopRun.usage).toEqual(deniedBefore.usage);
+  });
+
+  it("accepts an explicit verdict for the preserved candidate while campaign repair is pending", async () => {
+    const fixture = await createPendingStore();
+    const loopStore = await attachLoop(fixture.store, fixture.run);
+    const before = await loopStore.readRun("loop-1");
+    await loopStore.writeRun(
+      pauseLoopForCampaignRepair(before, {
+        id: "campaign-repair-1",
+        reason: "The review detector failed.",
+        detectedAt: "2026-08-23T15:02:00.000Z",
+      })
+    );
+
+    const approved = await approveCampaignAttempt({
+      store: fixture.store,
+      loopStore,
+      campaignRunId: "campaign-1",
+      attemptId: "a01-baseline",
+      note: "The frozen candidate works in manual review.",
+      decidedAt: "2026-08-23T15:05:00.000Z",
+    });
+
+    expect(approved.attempt.adjudicatedOutcome).toBe("manual_qa_approved");
+    expect(approved.loopRun.status).toBe("running");
+    expect(approved.loopRun.activeCampaign?.campaignRunId).toBe("campaign-1");
+    expect(approved.loopRun.campaignRepairs[0]).toMatchObject({
+      status: "completed",
+      completedAt: "2026-08-23T15:05:00.000Z",
+    });
+    expect(approved.loopRun.usage).toEqual(before.usage);
+  });
+
+  it("adjudicates a legacy review false negative after terminal campaign repair recovery", async () => {
+    const fixture = await createPendingStore();
+    const loopStore = await attachLoop(fixture.store, fixture.run);
+    const pendingLoop = await loopStore.readRun("loop-1");
+    const attempt = await fixture.store.readAttempt(
+      "campaign-1",
+      "a01-baseline"
+    );
+    const run = await fixture.store.readRun("campaign-1");
+    await fixture.store.writeAttempt({
+      ...attempt,
+      status: "pipeline_failure",
+      terminalOutcome: "manual review replay failed runtime validation",
+      classification: "runtime_pipeline_failure",
+      failure: "The review iframe detector rejected a mounted candidate.",
+      adjudicatedOutcome: "review_runtime_failure",
+    });
+    await fixture.store.writeRun({
+      ...run,
+      status: "completed_not_achieved",
+      completedAt: "2026-08-23T15:03:00.000Z",
+      pendingManualQa: undefined,
+      result: {
+        successes: 0,
+        diagnosticSuccesses: 0,
+        submissions: 1,
+        qualifiesForMechanicProof: false,
+        missingSuccessfulPromptIds: [],
+      },
+    });
+    await loopStore.writeRun(
+      exhaustLoop(
+        {
+          ...pendingLoop,
+          status: "waiting_for_fix",
+          activeCampaign: undefined,
+          pendingManualQa: undefined,
+          campaignLinks: pendingLoop.campaignLinks.map((link) => ({
+            ...link,
+            status: "completed_not_achieved",
+          })),
+        },
+        "Manual gameplay QA failed and no fix cycles remain.",
+        "2026-08-23T15:03:00.000Z",
+        { status: "waiting_for_fix" }
+      )
+    );
+
+    await pauseCampaignLoopForRepair({
+      repoRoot: path.resolve(fixture.store.artifactRoot, "../.."),
+      loopId: "loop-1",
+      campaignRunId: "campaign-1",
+      reason: "The review iframe detector misclassified the frozen candidate.",
+      loopStore,
+      campaignStore: fixture.store,
+      now: () => new Date("2026-08-23T15:04:00.000Z"),
+    });
+    const approved = await approveCampaignAttempt({
+      store: fixture.store,
+      loopStore,
+      campaignRunId: "campaign-1",
+      attemptId: "a01-baseline",
+      note: "The exact frozen candidate passed manual gameplay review.",
+      decidedAt: "2026-08-23T15:05:00.000Z",
+    });
+
+    expect(approved.attempt).toMatchObject({
+      status: "success",
+      recordedOutcome: "automated_success",
+      adjudicatedOutcome: "manual_qa_approved",
+      manualQa: { status: "approved" },
+    });
+    expect(approved.loopRun.status).toBe("running");
+    expect(approved.loopRun.usage).toEqual(pendingLoop.usage);
+    expect(approved.loopRun.campaignRepairs[0].status).toBe("completed");
   });
 });
 
