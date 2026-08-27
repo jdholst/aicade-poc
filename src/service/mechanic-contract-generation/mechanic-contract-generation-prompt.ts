@@ -173,6 +173,8 @@ Contract rules:
 - For every accepted intent configuration entry, declare an object field with the exact same key and set its DSL default to the exact accepted scalar value so Final Game Spec materialization cannot substitute it.
 - Every privateState initialValue and every scenario state setup or state_equals value must match the exact declared private-state value type above. For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker.
 - Scenario setup is evaluated before the install callback or any generated source runs. Every state_equals setup assertion must use the exact initialValue of its matching privateState declaration; setup cannot assume an install-time mutation.
+- After an accepted action writes private state, every final state_equals observation must match that write or a later write caused by an explicit reachable callback. Never require the initial sentinel after an action that updates the state unless accepted behavior explicitly resets it before observations run.
+- Advancing beyond a *_until deadline does not reset the stored deadline to its initial sentinel. It only makes the deadline elapsed; omit the final state_equals observation or assert the deterministic written deadline unless accepted behavior includes an explicit reset.
 - Use only trusted stable references from the supplied catalog.
 - Keep resource expectations within the selected budget and active constraints.
 - Declare deterministic Behavior Scenario DSL setup, actions, time or events, and observable outcomes; scenarios are evidence proposals, not executable self-tests.

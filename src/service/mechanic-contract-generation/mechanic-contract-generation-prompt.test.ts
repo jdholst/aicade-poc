@@ -138,6 +138,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "Every privateState initialValue and every scenario state setup or state_equals value must match"
     );
+    expect(prompt).toContain(
+      "After an accepted action writes private state, every final state_equals observation must match that write"
+    );
+    expect(prompt).toContain(
+      "Advancing beyond a *_until deadline does not reset the stored deadline to its initial sentinel"
+    );
     expect(prompt).toContain('"resourceBudgetProfile": "phase_9_fixed_budget"');
     expect(prompt).toContain(
       '"requiredIndependentEffectCapability": "object_motion_write"'

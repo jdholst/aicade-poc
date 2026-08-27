@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 11,
-  "updatedAt": "2026-08-26T20:52:09Z",
+  "revision": 12,
+  "updatedAt": "2026-08-27T02:17:03Z",
   "entries": [
     {
       "status": "active",
@@ -919,7 +919,7 @@
         ]
       },
       "id": "KF-0017",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -931,11 +931,96 @@
           "outcome": "provider_output_rejected",
           "summary": "Source candidate callback kind \"fixed_step\" must occur exactly once and be declared by the accepted contract.",
           "observedAt": "2026-08-26T20:00:12.549Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-9",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted contract set fixedStep false and its exact required callback checklist excluded fixed_step. The initial actual source candidate respected that callback set but used ungranted state_read; all three actual repair candidates then added and retained an undeclared no-op fixed_step callback. The generic source prompt simultaneously rendered the exact closed checklist and an unconditional instruction to keep fixed_step minimal whenever scheduled callbacks implemented lifecycle behavior, while callback_coverage_mismatch repair lacked an explicit remove-when-undeclared rule. This contradictory mechanic-general guidance explains the repeated provider output rejection. KF-0002, KF-0003, KF-0004, KF-0005, KF-0006, KF-0008, KF-0009, KF-0011, KF-0012, and KF-0014 were consulted; they constrain projectile lifecycle, geometry, runtime evidence, and contract observation behavior but do not govern callback-set coverage. The durable fix qualifies fixed_step guidance by the exact contract-derived checklist and tells callback repair to remove undeclared kinds, add missing required kinds, and retain exactly one of each required kind without weakening validation.",
+          "observedAt": "2026-08-26T20:54:26Z"
+        }
+      ],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T02:17:03Z",
+          "reason": "All actual cycle-9 source candidates obeyed the closed callback checklist after the verified prompt repair.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Callback repairs must preserve the exact lifecycle checklist",
+            "guidance": "Treat the contract-derived required callback checklist as a closed set during initial generation and repair. Remove callback kinds absent from the checklist, add missing required kinds, and retain exactly one of each required kind. Apply fixed-step implementation guidance only when fixed_step is present in that exact checklist.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-9",
+              "stage": "source_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted contract set fixedStep false and its exact required callback checklist excluded fixed_step. The initial actual source candidate respected that callback set but used ungranted state_read; all three actual repair candidates then added and retained an undeclared no-op fixed_step callback. The generic source prompt simultaneously rendered the exact closed checklist and an unconditional instruction to keep fixed_step minimal whenever scheduled callbacks implemented lifecycle behavior, while callback_coverage_mismatch repair lacked an explicit remove-when-undeclared rule. This contradictory mechanic-general guidance explains the repeated provider output rejection. KF-0002, KF-0003, KF-0004, KF-0005, KF-0006, KF-0008, KF-0009, KF-0011, KF-0012, and KF-0014 were consulted; they constrain projectile lifecycle, geometry, runtime evidence, and contract observation behavior but do not govern callback-set coverage. The durable fix qualifies fixed_step guidance by the exact contract-derived checklist and tells callback repair to remove undeclared kinds, add missing required kinds, and retain exactly one of each required kind without weakening validation.",
+              "observedAt": "2026-08-26T20:54:26Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T20:52:09Z",
+      "updatedAt": "2026-08-27T02:17:03Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Post-action state observations must reflect accepted writes",
+      "guidance": "After an accepted action writes private state, final state observations must match that write or a later write caused by an explicit reachable callback. Advancing beyond a *_until deadline changes admission because the deadline is elapsed but does not reset the stored deadline to its initial sentinel; omit that final state assertion or assert the deterministic written value unless accepted behavior explicitly resets it.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0018",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Model-declared observation 1 \"state_equals\" failed. Assertion: {\"kind\":\"state_equals\",\"stateId\":\"cooldown_until\",\"value\":-1}. Actual: 250.",
+          "observedAt": "2026-08-26T21:00:00.100Z"
         }
       ],
       "amendments": [],
-      "createdAt": "2026-08-26T20:52:09Z",
-      "updatedAt": "2026-08-26T20:52:09Z"
+      "createdAt": "2026-08-27T02:17:03Z",
+      "updatedAt": "2026-08-27T02:17:03Z"
     }
   ],
   "reconciliations": [
@@ -2435,6 +2520,112 @@
       "createdAt": "2026-08-26T20:52:09Z",
       "priorManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4",
       "resultingManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t021703z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-10",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1"
+      },
+      "consultedManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f",
+      "contextDigest": "27bfbcca71081a71f446c0ca2e864b553f3f95d6553cc4fb1a6b9e1baa55c0c7",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0017"
+          ],
+          "rationale": "The verified source prompt repair caused every actual cycle-9 candidate to preserve the exact contract-derived callback checklist, independently confirming the lifecycle-checklist guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0018"
+          ],
+          "rationale": "The contract required cooldown_until to return to its initial -1 sentinel after an accepted action had deterministically written a deadline, although no accepted callback reset that state."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0017",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "All actual cycle-9 source candidates obeyed the closed callback checklist after the verified prompt repair.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-9",
+              "stage": "source_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted contract set fixedStep false and its exact required callback checklist excluded fixed_step. The initial actual source candidate respected that callback set but used ungranted state_read; all three actual repair candidates then added and retained an undeclared no-op fixed_step callback. The generic source prompt simultaneously rendered the exact closed checklist and an unconditional instruction to keep fixed_step minimal whenever scheduled callbacks implemented lifecycle behavior, while callback_coverage_mismatch repair lacked an explicit remove-when-undeclared rule. This contradictory mechanic-general guidance explains the repeated provider output rejection. KF-0002, KF-0003, KF-0004, KF-0005, KF-0006, KF-0008, KF-0009, KF-0011, KF-0012, and KF-0014 were consulted; they constrain projectile lifecycle, geometry, runtime evidence, and contract observation behavior but do not govern callback-set coverage. The durable fix qualifies fixed_step guidance by the exact contract-derived checklist and tells callback repair to remove undeclared kinds, add missing required kinds, and retain exactly one of each required kind without weakening validation.",
+              "observedAt": "2026-08-26T20:54:26Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Post-action state observations must reflect accepted writes",
+            "guidance": "After an accepted action writes private state, final state observations must match that write or a later write caused by an explicit reachable callback. Advancing beyond a *_until deadline changes admission because the deadline is elapsed but does not reset the stored deadline to its initial sentinel; omit that final state assertion or assert the deterministic written value unless accepted behavior explicitly resets it.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0018",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Model-declared observation 1 \"state_equals\" failed. Assertion: {\"kind\":\"state_equals\",\"stateId\":\"cooldown_until\",\"value\":-1}. Actual: 250.",
+                "observedAt": "2026-08-26T21:00:00.100Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T02:17:03Z",
+            "updatedAt": "2026-08-27T02:17:03Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T02:17:03Z",
+      "priorManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f",
+      "resultingManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea"
     }
   ]
 }
