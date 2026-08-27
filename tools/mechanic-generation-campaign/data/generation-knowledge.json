@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 14,
-  "updatedAt": "2026-08-27T02:56:41Z",
+  "revision": 15,
+  "updatedAt": "2026-08-27T06:12:49Z",
   "entries": [
     {
       "status": "active",
@@ -1173,6 +1173,43 @@
       ],
       "createdAt": "2026-08-27T02:17:03Z",
       "updatedAt": "2026-08-27T02:34:18Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Separate callback active-work and Worker-delivery budgets",
+      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Give the host watchdog a separate bounded allowance for Worker delivery and suspension acknowledgement that remains below the outer conformance deadline. Do not charge capability transport or healthy suspension acknowledgement as generated active work.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_activation",
+          "first_playable"
+        ],
+        "classifications": [
+          "runtime_pipeline_failure"
+        ]
+      },
+      "id": "KF-0019",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-12",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c11-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-12",
+          "stage": "runtime_activation",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "Cycle 11 proved the cycle-11 contract fix worked: the initial time-advancing positive count was rejected, contract repair was accepted, the initial actual source passed deterministic evaluation, and Final Game Spec assembly succeeded. First-playable then failed before fire_action was reported as dispatched with callback_milliseconds exceeded 8. The accepted logical_action callback performs only bounded straight-line scalar work before its first awaited capabilities.time.now call, contains no loop or spatial query, and had already passed the executor-backed deterministic evaluation. The browser controller's outer callback watchdog allowed the exact 8ms active-work budget plus only 16ms for the executor Worker's suspension acknowledgement. Under this run's slow browser scheduling, that 24ms outer timer could expire before the trusted measured suspension signal arrived and synthesize an overrun even though capability transport is not generated active work. KF-0008 and KF-0009 were confirmed because contract repair enforced cleanup-capable time-advancing evidence and dispatch-only creation proof. KF-0010 was satisfied because the action callback made no discard-only query. KF-0006's causal runtime error precedence worked in the rendered first-playable evidence and was not the cause. KF-0011 and KF-0012 govern geometry and live participants but the action failed before those paths could be tested. The durable bounded fix increases only Worker-delivery grace from 16ms to 32ms, making the outer watchdog 40ms for an 8ms active budget while retaining exact executor enforcement at 8ms and staying below the 50ms conformance execution deadline.",
+          "observedAt": "2026-08-27T02:58:15Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-27T06:12:49Z",
+      "updatedAt": "2026-08-27T06:12:49Z"
     }
   ],
   "reconciliations": [
@@ -2928,6 +2965,161 @@
       "createdAt": "2026-08-27T02:56:41Z",
       "priorManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7",
       "resultingManifestDigest": "00629c83986d9daa0a5a5b5a7a86ed26900e6d22d652ab240d02f2eb82d516f3"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-loop-p09-t17-projectile-20260827t061249z",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z"
+      },
+      "consultedManifestDigest": "00629c83986d9daa0a5a5b5a7a86ed26900e6d22d652ab240d02f2eb82d516f3",
+      "contextDigest": "801fc124d9fa1e860589a8866971af151ad9d4837a02a2e19c8b43062ead492d",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0006",
+        "KF-0007",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012",
+        "KF-0013",
+        "KF-0014",
+        "KF-0015",
+        "KF-0016",
+        "KF-0017",
+        "KF-0018"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-12",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "The verified fix separates exact generated callback active-work enforcement from bounded host-side Worker delivery and suspension acknowledgement, preserving the execution budget while preventing healthy transport delay from being misclassified as generated overrun."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c12-r1/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0002",
+            "KF-0003",
+            "KF-0011",
+            "KF-0012"
+          ],
+          "rationale": "Manual QA observed visible projectile travel, target impact, and disposal in the mounted game, confirming the existing guidance for current-position target checks, cleanup, reachable runtime geometry, and live runtime participants."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This editor timeout was invalidated and credited as campaign-tool infrastructure evidence. The repaired readiness and campaign-repair lifecycle now own it, so it must not produce Sparkline generation guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a02-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The attempt proves observable evidence drift for identical inputs but does not isolate the source of nondeterminism. Without a verified diagnosis or fix, it cannot support reusable generation guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a03-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The unknown asset ID is an exact terminal symptom, but this exhausted loop did not isolate whether planning, asset projection, or assembly introduced it and produced no verified fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a04-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted generic assembly summary does not identify a causal issue that can direct a future fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a05-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted generic assembly summary does not identify a causal issue that can direct a future fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a06-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted generic assembly summary does not identify a causal issue that can direct a future fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a07-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted generic assembly summary does not identify a causal issue that can direct a future fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a08-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The attempt records travel, cleanup, and zero target interactions, but its summary lacks the runtime geometry and callback trace needed to distinguish reachability, query timing, and target-binding causes. Existing findings describe those possibilities, but this evidence does not select one."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a09-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted generic first-playable summary does not identify a causal issue that can direct a future fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-repeatability-c12-r1/a10-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted generic assembly summary does not identify a causal issue that can direct a future fix."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Give the host watchdog a separate bounded allowance for Worker delivery and suspension acknowledgement that remains below the outer conformance deadline. Do not charge capability transport or healthy suspension acknowledgement as generated active work.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            },
+            "id": "KF-0019",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-12",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c11-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+                "fixId": "fix-cycle-12",
+                "stage": "runtime_activation",
+                "quality": "verified_fix",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "Cycle 11 proved the cycle-11 contract fix worked: the initial time-advancing positive count was rejected, contract repair was accepted, the initial actual source passed deterministic evaluation, and Final Game Spec assembly succeeded. First-playable then failed before fire_action was reported as dispatched with callback_milliseconds exceeded 8. The accepted logical_action callback performs only bounded straight-line scalar work before its first awaited capabilities.time.now call, contains no loop or spatial query, and had already passed the executor-backed deterministic evaluation. The browser controller's outer callback watchdog allowed the exact 8ms active-work budget plus only 16ms for the executor Worker's suspension acknowledgement. Under this run's slow browser scheduling, that 24ms outer timer could expire before the trusted measured suspension signal arrived and synthesize an overrun even though capability transport is not generated active work. KF-0008 and KF-0009 were confirmed because contract repair enforced cleanup-capable time-advancing evidence and dispatch-only creation proof. KF-0010 was satisfied because the action callback made no discard-only query. KF-0006's causal runtime error precedence worked in the rendered first-playable evidence and was not the cause. KF-0011 and KF-0012 govern geometry and live participants but the action failed before those paths could be tested. The durable bounded fix increases only Worker-delivery grace from 16ms to 32ms, making the outer watchdog 40ms for an 8ms active budget while retaining exact executor enforcement at 8ms and staying below the 50ms conformance execution deadline.",
+                "observedAt": "2026-08-27T02:58:15Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T06:12:49Z",
+            "updatedAt": "2026-08-27T06:12:49Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T06:12:49Z",
+      "priorManifestDigest": "00629c83986d9daa0a5a5b5a7a86ed26900e6d22d652ab240d02f2eb82d516f3",
+      "resultingManifestDigest": "fbb0955a309c36fccb8ca37a403e3f0bfb82d6c02f92f59ef0cdfeadd1078e6a"
     }
   ]
 }
