@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 13,
-  "updatedAt": "2026-08-27T02:34:18Z",
+  "revision": 14,
+  "updatedAt": "2026-08-27T02:56:41Z",
   "entries": [
     {
       "status": "active",
@@ -301,7 +301,7 @@
         ]
       },
       "id": "KF-0008",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -347,6 +347,18 @@
           "outcome": "provider_output_rejected",
           "summary": "The evaluator required target interaction on both the explicit zero-count cleanup scenario and a separate 100 ms travel scenario with no owned-object-count assertion. The travel scenario observed active creation and 36 units of motion but correctly had zero target interactions, exhausting all four source attempts against the misapplied proof.",
           "observedAt": "2026-08-26T19:20:01.693Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-11",
+          "stage": "contract_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+          "observedAt": "2026-08-27T02:38:24Z"
         }
       ],
       "amendments": [
@@ -423,10 +435,49 @@
               "observedAt": "2026-08-26T19:20:01.693Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-08-27T02:56:41Z",
+          "reason": "Verified contract admission now rejects time-advancing positive-count evidence that cannot remain cleanup-capable.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. Use the first time-advancing scenario only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-26T19:29:12Z"
+      "updatedAt": "2026-08-27T02:56:41Z"
     },
     {
       "status": "active",
@@ -447,7 +498,7 @@
         ]
       },
       "id": "KF-0009",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -471,11 +522,62 @@
           "outcome": "provider_output_rejected",
           "summary": "Contract-authoring guidance now requires dispatch-only positive creation proof and reserves time-advancing scenarios for travel, interaction, and cleanup evidence.",
           "observedAt": "2026-08-24T17:53:30Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-11",
+          "stage": "contract_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+          "observedAt": "2026-08-27T02:38:24Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T02:56:41Z",
+          "reason": "Verified contract admission now reserves positive transient count evidence for dispatch-only scenarios.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Prove transient creation before advancing time",
+            "guidance": "Use dispatch-only observations for positive transient creation and reserve time-advancing scenarios for travel, interaction, and cleanup so valid impact destruction does not contradict creation proof.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-24T23:17:44.000Z"
+      "updatedAt": "2026-08-27T02:56:41Z"
     },
     {
       "status": "active",
@@ -2742,6 +2844,90 @@
       "createdAt": "2026-08-27T02:34:18Z",
       "priorManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea",
       "resultingManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t025641z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-12",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c11-r1"
+      },
+      "consultedManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7",
+      "contextDigest": "f22539981b73aa3d32b55595ad288b83049d2b3ceee1265393b20208664532c3",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0008",
+            "KF-0009"
+          ],
+          "rationale": "The verified contract admission fix independently enforces cleanup-capable time-advancing evidence and dispatch-only positive transient creation proof."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c11-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted attempt summary repeats the repaired initial contract contradiction even though contract repair, source generation, deterministic evaluation, and Final Game Spec assembly succeeded before a different first-playable callback watchdog failure. It does not faithfully summarize the terminal failure and cannot support a durable finding."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0008",
+          "expectedRevision": 3,
+          "confidence": "supported",
+          "reason": "Verified contract admission now rejects time-advancing positive-count evidence that cannot remain cleanup-capable.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
+        },
+        {
+          "type": "confirm",
+          "findingId": "KF-0009",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "Verified contract admission now reserves positive transient count evidence for dispatch-only scenarios.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T02:56:41Z",
+      "priorManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7",
+      "resultingManifestDigest": "00629c83986d9daa0a5a5b5a7a86ed26900e6d22d652ab240d02f2eb82d516f3"
     }
   ]
 }
