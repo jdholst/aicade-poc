@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 23,
-  "updatedAt": "2026-08-27T23:16:34Z",
+  "revision": 24,
+  "updatedAt": "2026-08-27T23:46:42Z",
   "entries": [
     {
       "status": "active",
@@ -262,7 +262,7 @@
         ]
       },
       "id": "KF-0007",
-      "revision": 2,
+      "revision": 3,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -286,6 +286,18 @@
           "outcome": "pipeline_failure",
           "summary": "The callback probe returned exact structured resource-limit evidence at 51.3 milliseconds without runtime-heartbeat evidence, while every later probe did receive a heartbeat. The following resource probe timed out during termination and replacement, so readiness must be established before the fixed probe sequence begins.",
           "observedAt": "2026-08-27T22:33:03.373Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-8",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-8",
+          "stage": "deterministic_evaluation",
+          "quality": "verified_fix",
+          "outcome": "pipeline_failure",
+          "summary": "Cycle 8 added a trusted exact runtime identity acknowledgement under a separate fixed initialization deadline before any conformance probe while retaining the exact 50 millisecond execution, 50 millisecond termination, and 250 millisecond heartbeat budgets.",
+          "observedAt": "2026-08-27T23:19:44Z"
         }
       ],
       "amendments": [
@@ -324,10 +336,47 @@
               "observedAt": "2026-08-27T22:33:03.373Z"
             }
           ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-08-27T23:46:42Z",
+          "reason": "The verified cycle-8 initialization repair preserved the fixed per-probe limits, and the next all-actual campaign advanced beyond the runtime foundation to first-playable checks.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate heartbeat and candidate execution budgets",
+            "guidance": "Require the browser runtime to acknowledge the exact protocol version, session identity, and runtime identity from the captured opaque-origin window before dispatching any conformance probe, under a separate fixed initialization deadline. After readiness, retain the exact 50 millisecond execution, 50 millisecond termination, and 250 millisecond heartbeat budgets per probe. Require causal runtime evidence before classifying a missed heartbeat as candidate failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "assembly"
+              ],
+              "classifications": [
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-8",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "Cycle 8 added a trusted exact runtime identity acknowledgement under a separate fixed initialization deadline before any conformance probe while retaining the exact 50 millisecond execution, 50 millisecond termination, and 250 millisecond heartbeat budgets.",
+              "observedAt": "2026-08-27T23:19:44Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-27T23:16:34Z"
+      "updatedAt": "2026-08-27T23:46:42Z"
     },
     {
       "status": "active",
@@ -1776,7 +1825,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Campaign summaries prefer terminal structured evidence",
-      "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage, so repaired planning or source issues cannot mask a later foundation, evaluation, assembly, or runtime failure.",
+      "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage. When a repaired provider-stage issue and a later first-playable runtime failure coexist, preserve the repaired issue as history but report the terminal runtime receipt as the campaign failure.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -1784,11 +1833,12 @@
         "stages": [],
         "classifications": [
           "pipeline_failure",
-          "infrastructure_failure"
+          "infrastructure_failure",
+          "runtime_pipeline_failure"
         ]
       },
       "id": "KF-0022",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -1800,11 +1850,57 @@
           "outcome": "pipeline_failure",
           "summary": "The campaign attempt reported a repaired planning issue and assembly stage even though the persisted GenerationRun showed planning repair succeeded and the terminal failure occurred in the pre-source runtime foundation gate.",
           "observedAt": "2026-08-27T19:40:54.413Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c8-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c8-r1",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The initial source failed its cleanup scenario with zero target interactions, source repair 2 and the final Game Spec were accepted, and first-playable then failed because the iframe controller terminated the parent SES Worker. The attempt classification and furthest stage were terminally correct, but its failure text retained the earlier repaired source issue.",
+          "observedAt": "2026-08-27T23:25:15.708Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T23:46:42Z",
+          "reason": "The exhausted loop's final actual attempt repaired its initial source rejection and accepted the final Game Spec before a first-playable Worker termination, yet the attempt failure text repeated the repaired source issue. The finding must explicitly cover runtime_pipeline_failure and preserve terminal runtime evidence as authoritative.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Campaign summaries prefer terminal structured evidence",
+            "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage, so repaired planning or source issues cannot mask a later foundation, evaluation, assembly, or runtime failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c8-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c8-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The initial source failed its cleanup scenario with zero target interactions, source repair 2 and the final Game Spec were accepted, and first-playable then failed because the iframe controller terminated the parent SES Worker. The attempt classification and furthest stage were terminally correct, but its failure text retained the earlier repaired source issue.",
+              "observedAt": "2026-08-27T23:25:15.708Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-27T20:00:02Z",
-      "updatedAt": "2026-08-27T20:00:02Z"
+      "updatedAt": "2026-08-27T23:46:42Z"
     },
     {
       "status": "active",
@@ -1912,8 +2008,19 @@
         ]
       },
       "id": "KF-0024",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_foundation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "After the callback probe settled correctly, resource_consecutive_failures timed out because executor replacement remained coupled to its bounded termination response. Later probes inherited the depleted or still-replacing pool state.",
+          "observedAt": "2026-08-27T22:33:03.373Z"
+        },
         {
           "kind": "loop_fix",
           "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-7",
@@ -1927,20 +2034,59 @@
           "observedAt": "2026-08-27T22:27:54Z"
         },
         {
-          "kind": "campaign_attempt",
-          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-8",
           "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
-          "attemptId": "a01-baseline",
-          "stage": "runtime_foundation",
-          "quality": "actual_submission",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-8",
+          "stage": "deterministic_evaluation",
+          "quality": "verified_fix",
           "outcome": "pipeline_failure",
-          "summary": "After the callback probe settled correctly, resource_consecutive_failures timed out because executor replacement remained coupled to its bounded termination response. Later probes inherited the depleted or still-replacing pool state.",
-          "observedAt": "2026-08-27T22:33:03.373Z"
+          "summary": "Cycle 8 synchronously terminated the matched executor, returned its exact response before replacement Worker construction, tracked one shared replacement readiness flight, preserved a warm conformance reserve, and restored the runtime pool one executor at a time.",
+          "observedAt": "2026-08-27T23:19:44Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T23:46:42Z",
+          "reason": "The verified cycle-8 replacement repair returned exact termination responses before replacement construction, enforced one observable replacement flight, and restored bounded runtime capacity without widening termination limits.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate termination response from executor replacement readiness",
+            "guidance": "Return the exact bounded termination response after synchronously terminating the matched executor without waiting for replacement construction. Track replacement as one shared readiness flight. Preserve one warm executor for conformance, count idle and active executors together for runtime capacity, and restore capacity one executor at a time. Requests that need capacity must join the current flight so replacement failures remain observable and no untracked executor starts.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "assembly"
+              ],
+              "classifications": [
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-8",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "Cycle 8 synchronously terminated the matched executor, returned its exact response before replacement Worker construction, tracked one shared replacement readiness flight, preserved a warm conformance reserve, and restored the runtime pool one executor at a time.",
+              "observedAt": "2026-08-27T23:19:44Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-27T23:16:34Z",
-      "updatedAt": "2026-08-27T23:16:34Z"
+      "updatedAt": "2026-08-27T23:46:42Z"
     }
   ],
   "reconciliations": [
@@ -4670,6 +4816,127 @@
       "createdAt": "2026-08-27T23:16:34Z",
       "priorManifestDigest": "dff18c0ad0688e1a8d69f5adf6db0ea7b829ca64aac947e65ff4c016f7a7a119",
       "resultingManifestDigest": "ff1fca41e9488c7ba9839f465beb67a713ab6542b10acad3af1c5525ea00feef"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-loop-outcome-p09-t17-projectile-20260827t234642z",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z"
+      },
+      "consultedManifestDigest": "ff1fca41e9488c7ba9839f465beb67a713ab6542b10acad3af1c5525ea00feef",
+      "contextDigest": "e59759ff2fcbf80e7caa876fb99352aa302b8443ed650a3a4d3026469d8987f2",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0007",
+        "KF-0008",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012",
+        "KF-0019",
+        "KF-0022",
+        "KF-0023",
+        "KF-0024"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-8",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0007",
+            "KF-0024"
+          ],
+          "rationale": "The clean verified cycle-8 fix established exact runtime initialization acknowledgement before probe dispatch and separated bounded termination responses from single-flight executor replacement readiness. The following actual campaign passed the runtime foundation and reached planning, contract, repaired source, final-spec assembly, and first-playable checks, so it did not contradict either foundation finding."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c8-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0022"
+          ],
+          "rationale": "The terminal GenerationRun shows the initial source was rejected for zero target interactions, the second source was accepted, the final Game Spec was accepted, and first-playable then failed because the iframe controller terminated the parent SES Worker. The attempt classification and furthest stage correctly say runtime_pipeline_failure and first_playable, but its failure text repeats the earlier repaired source issue. KF-0022 therefore governs the reusable conclusion and needs runtime_pipeline_failure in scope. KF-0006 cannot be strengthened because no authenticated causal error accompanied the generic Worker termination. KF-0008 correctly attached target proof to the explicit 1,100 millisecond cleanup scenario. KF-0010 was not contradicted because the repaired source's owned-object query controlled duplicate creation rather than discarding a binding confirmation. KF-0011 was not contradicted because the declared 396-unit travel budget exceeded the approximately 300-unit spawn-center distance. KF-0012 was satisfied because the enemy belonged to the active enemy-chase mechanic. KF-0019 cannot be applied causally without structured callback-limit evidence. KF-0023 was not exercised because the artifacts report no replay divergence and retained the initial source failure for repair."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0007",
+          "expectedRevision": 2,
+          "confidence": "supported",
+          "reason": "The verified cycle-8 initialization repair preserved the fixed per-probe limits, and the next all-actual campaign advanced beyond the runtime foundation to first-playable checks.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-8",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "Cycle 8 added a trusted exact runtime identity acknowledgement under a separate fixed initialization deadline before any conformance probe while retaining the exact 50 millisecond execution, 50 millisecond termination, and 250 millisecond heartbeat budgets.",
+              "observedAt": "2026-08-27T23:19:44Z"
+            }
+          ]
+        },
+        {
+          "type": "confirm",
+          "findingId": "KF-0024",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "The verified cycle-8 replacement repair returned exact termination responses before replacement construction, enforced one observable replacement flight, and restored bounded runtime capacity without widening termination limits.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-8",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "Cycle 8 synchronously terminated the matched executor, returned its exact response before replacement Worker construction, tracked one shared replacement readiness flight, preserved a warm conformance reserve, and restored the runtime pool one executor at a time.",
+              "observedAt": "2026-08-27T23:19:44Z"
+            }
+          ]
+        },
+        {
+          "type": "amend",
+          "findingId": "KF-0022",
+          "expectedRevision": 1,
+          "reason": "The exhausted loop's final actual attempt repaired its initial source rejection and accepted the final Game Spec before a first-playable Worker termination, yet the attempt failure text repeated the repaired source issue. The finding must explicitly cover runtime_pipeline_failure and preserve terminal runtime evidence as authoritative.",
+          "changes": {
+            "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage. When a repaired provider-stage issue and a later first-playable runtime failure coexist, preserve the repaired issue as history but report the terminal runtime receipt as the campaign failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c8-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c8-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The initial source failed its cleanup scenario with zero target interactions, source repair 2 and the final Game Spec were accepted, and first-playable then failed because the iframe controller terminated the parent SES Worker. The attempt classification and furthest stage were terminally correct, but its failure text retained the earlier repaired source issue.",
+              "observedAt": "2026-08-27T23:25:15.708Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T23:46:42Z",
+      "priorManifestDigest": "ff1fca41e9488c7ba9839f465beb67a713ab6542b10acad3af1c5525ea00feef",
+      "resultingManifestDigest": "30ff57b45190fc22367e7ba6813b64f6a24de477a9cdc8f1e1d1ff59dfbb3f3f"
     }
   ]
 }
