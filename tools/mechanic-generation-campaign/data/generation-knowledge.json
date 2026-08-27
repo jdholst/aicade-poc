@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 20,
-  "updatedAt": "2026-08-27T20:00:02Z",
+  "revision": 21,
+  "updatedAt": "2026-08-27T20:26:24Z",
   "entries": [
     {
       "status": "active",
@@ -1290,7 +1290,7 @@
         ]
       },
       "id": "KF-0019",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -1337,6 +1337,18 @@
           "outcome": "runtime_pipeline_failure",
           "summary": "Callback metering and the host watchdog now remain suspended through trusted response decoding and internal Promise forwarding and resume immediately before the generated continuation, with the exact 8 millisecond budget unchanged.",
           "observedAt": "2026-08-27T19:36:54Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-5",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-5",
+          "stage": "runtime_foundation",
+          "quality": "verified_fix",
+          "outcome": "pipeline_failure",
+          "summary": "The foundation fixture now constructs an authenticated generated lifecycle program, compiling trusted admitted callback source outside the unchanged 8 millisecond invocation meter while retaining the bounded outer deadline and containment checks.",
+          "observedAt": "2026-08-27T20:03:05Z"
         }
       ],
       "amendments": [
@@ -1423,10 +1435,49 @@
               "observedAt": "2026-08-27T19:40:54.413Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-08-27T20:26:24Z",
+          "reason": "The accepted cycle-5 fix and the next actual campaign confirmed that the authenticated foundation path preserves the exact callback budget while allowing the pipeline to advance to source evaluation.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted compilation or bridge work.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "pipeline_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-5",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-5",
+              "stage": "runtime_foundation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "The foundation fixture now constructs an authenticated generated lifecycle program, compiling trusted admitted callback source outside the unchanged 8 millisecond invocation meter while retaining the bounded outer deadline and containment checks.",
+              "observedAt": "2026-08-27T20:03:05Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T06:12:49Z",
-      "updatedAt": "2026-08-27T20:00:02Z"
+      "updatedAt": "2026-08-27T20:26:24Z"
     },
     {
       "status": "active",
@@ -1635,6 +1686,43 @@
       "amendments": [],
       "createdAt": "2026-08-27T20:00:02Z",
       "updatedAt": "2026-08-27T20:00:02Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Replay-side failures must reach repair evidence",
+      "guidance": "When deterministic replay differs, retain the fail-closed mismatch and project failures from each differing replay scenario into artifact-scoped repair evidence under replay-specific paths. Include runtime, setup, declared-observation, and evaluator-observation failures without duplicating identical replay scenarios or widening resource budgets.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "pipeline_failure"
+        ]
+      },
+      "id": "KF-0023",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "All four actual source attempts were rejected, and the terminal candidate persisted only a generic nondeterministic replay issue even though complete first-pass and replay scenario evidence existed inside the evaluation receipt. The continuation boundary omitted the replay scenarios from artifact-scoped repair evidence.",
+          "observedAt": "2026-08-27T20:11:49.622Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-27T20:26:24Z",
+      "updatedAt": "2026-08-27T20:26:24Z"
     }
   ],
   "reconciliations": [
@@ -4031,6 +4119,117 @@
       "createdAt": "2026-08-27T20:00:02Z",
       "priorManifestDigest": "b2ba1364019712b0aee5e45d86980a306ddc06e6daa5c9e1ac315940ea2e063d",
       "resultingManifestDigest": "c3b10d98498335f570e026053f9bd01bce30d64317ab727e98aaf62572a67138"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t202624z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+        "fixId": "fix-cycle-6",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1"
+      },
+      "consultedManifestDigest": "c3b10d98498335f570e026053f9bd01bce30d64317ab727e98aaf62572a67138",
+      "contextDigest": "ce18dd9749416fee2391f05ae3675c8dc9e825ef49ae601715395ba70e6da188",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-5",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "The verified cycle-5 fix moved trusted compilation for the foundation fixture onto the authenticated generated-admitted path while retaining the exact 8 millisecond invocation budget and the bounded outer deadline. Campaign c5 then passed the foundation and reached actual contract and source evaluation."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0023"
+          ],
+          "rationale": "The terminal source attempt satisfied the applicable contract and existing generation guidance but persisted only a generic replay mismatch. The evaluator retained complete replay scenarios, while the continuation boundary projected failures only from the first scenario pass and discarded replay-side runtime and observation evidence needed for a bounded repair."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0019",
+          "expectedRevision": 3,
+          "confidence": "supported",
+          "reason": "The accepted cycle-5 fix and the next actual campaign confirmed that the authenticated foundation path preserves the exact callback budget while allowing the pipeline to advance to source evaluation.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-5",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-5",
+              "stage": "runtime_foundation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "The foundation fixture now constructs an authenticated generated lifecycle program, compiling trusted admitted callback source outside the unchanged 8 millisecond invocation meter while retaining the bounded outer deadline and containment checks.",
+              "observedAt": "2026-08-27T20:03:05Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Replay-side failures must reach repair evidence",
+            "guidance": "When deterministic replay differs, retain the fail-closed mismatch and project failures from each differing replay scenario into artifact-scoped repair evidence under replay-specific paths. Include runtime, setup, declared-observation, and evaluator-observation failures without duplicating identical replay scenarios or widening resource budgets.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            },
+            "id": "KF-0023",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "All four actual source attempts were rejected, and the terminal candidate persisted only a generic nondeterministic replay issue even though complete first-pass and replay scenario evidence existed inside the evaluation receipt. The continuation boundary omitted the replay scenarios from artifact-scoped repair evidence.",
+                "observedAt": "2026-08-27T20:11:49.622Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T20:26:24Z",
+            "updatedAt": "2026-08-27T20:26:24Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T20:26:24Z",
+      "priorManifestDigest": "c3b10d98498335f570e026053f9bd01bce30d64317ab727e98aaf62572a67138",
+      "resultingManifestDigest": "f4cf375b070c1ff987e59c83645a0a7776258d9782ea8ee127b6e75383bdce0b"
     }
   ]
 }

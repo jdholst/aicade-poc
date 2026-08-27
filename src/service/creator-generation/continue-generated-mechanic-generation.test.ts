@@ -664,6 +664,370 @@ describe("createContinueGeneratedMechanicGeneration", () => {
     });
   });
 
+  it("projects replay-only runtime failures under their scenario paths", async () => {
+    const fixture = createInputFixture();
+    const { repository: generationRunRepository } =
+      createGenerationRunTestRepository();
+    await generationRunRepository.create(
+      generationRunSchema.parse({
+        id: GENERATION_RUN_ID,
+        operationType: "generate",
+        status: "running",
+        createdAt: CREATED_AT,
+        startedAt: CREATED_AT,
+        request: { summary: fixture.input.context.requestSummary },
+        runtimeKind: "phaser",
+        templateId: fixture.baseGameSpec.template.id,
+        attempts: [],
+      })
+    );
+    const firstScenario = {
+      scenarioId: "projectile_travels_and_expires",
+      seed: 2,
+      outcome: "passed" as const,
+      setup: [],
+      steps: [],
+      declaredObservations: [],
+      externalObservations: [],
+      issues: [],
+    };
+    const longScenarioId = `projectile_hits_enemy_${"x".repeat(260)}`;
+    const longRuntimeMessage = `Evaluation runtime artifact mismatch: ${"x".repeat(600)}`;
+    const secondScenario = {
+      ...firstScenario,
+      scenarioId: longScenarioId,
+    };
+    const thirdScenario = {
+      ...firstScenario,
+      scenarioId: "projectile_misses_enemy",
+    };
+    const identicalScenario = {
+      ...firstScenario,
+      scenarioId: "projectile_remains_idle",
+    };
+    const evaluation: GeneratedMechanicEvaluationResult = {
+      outcome: "failed",
+      evidence: {
+        schemaVersion: "generated_mechanic_evaluation/v1",
+        fixtureId: `evaluation_${GENERATION_RUN_ID}_1`,
+        contractId: fixture.project.dependency.contract.id,
+        sourceArtifactId: fixture.project.dependency.sourceArtifact.id,
+        scenarios: [
+          firstScenario,
+          secondScenario,
+          thirdScenario,
+          identicalScenario,
+        ],
+        issues: [],
+        replay: {
+          matched: false,
+          replayScenarios: [
+            {
+              ...firstScenario,
+              outcome: "failed",
+              issues: [
+                {
+                  path: "scenarios.projectile_travels_and_expires",
+                  code: "runtime_execution_failed",
+                  message: "Resource callback_milliseconds exceeded 8 with 9.",
+                },
+              ],
+            },
+            {
+              ...secondScenario,
+              outcome: "failed",
+              issues: [
+                {
+                  path: "runtime.sourceArtifactId",
+                  code: "runtime_artifact_mismatch",
+                  message: longRuntimeMessage,
+                },
+              ],
+            },
+            {
+              ...thirdScenario,
+              outcome: "failed",
+              issues: [
+                {
+                  path: "runtime.sourceArtifactId",
+                  code: "runtime_artifact_mismatch",
+                  message: "",
+                },
+              ],
+            },
+            identicalScenario,
+          ],
+          issue: {
+            code: "nondeterministic_replay",
+            message:
+              "Identical mechanic evaluation inputs produced different observable evidence.",
+          },
+        },
+      },
+    };
+    const generateContract: typeof generateMechanicContract = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          contract: fixture.project.dependency.contract,
+          grant: fixture.project.dependency.sourceArtifact.grant,
+        },
+      })
+    );
+    const generateSource: typeof generateBuildAndExecuteMechanicSource = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          artifact: fixture.project.dependency.sourceArtifact,
+          execution: {
+            callbackId:
+              fixture.project.dependency.sourceArtifact.callbacks[0]!.id,
+            result: {
+              executionId: `source_execution_${GENERATION_RUN_ID}_1`,
+              outcome: "completed",
+            },
+          },
+        },
+      })
+    );
+    const runPipeline = vi.fn(async ({ dependencies }) => {
+      const foundation = await dependencies.runFoundation();
+      if (!foundation.success) {
+        throw new Error("Expected the passing foundation fixture.");
+      }
+      const contract = await dependencies.runContract({
+        attemptNumber: 1,
+        kind: "initial",
+      });
+      if (!contract.success) {
+        throw new Error("Expected the accepted contract fixture.");
+      }
+      const source = await dependencies.runSourceAndEvaluation({
+        attemptNumber: 1,
+        foundation: foundation.data,
+        contract: contract.data.value,
+        kind: "initial",
+      });
+
+      expect(source).toMatchObject({
+        success: false,
+        evidence: {
+          responsibleStage: "source",
+          issues: [
+            {
+              path: "evaluation.replay.scenarios.0",
+              code: "runtime_execution_failed",
+              message: "Resource callback_milliseconds exceeded 8 with 9.",
+            },
+            {
+              path: "evaluation.replay.scenarios.1.runtime.sourceArtifactId",
+              code: "runtime_artifact_mismatch",
+            },
+            {
+              path: "evaluation.replay.scenarios.2.runtime.sourceArtifactId",
+              code: "runtime_artifact_mismatch",
+              message: "Evaluation failure did not include a message.",
+            },
+            {
+              path: "evaluation.replay",
+              code: "nondeterministic_replay",
+            },
+          ],
+        },
+      });
+      if (!source.success) {
+        const boundedIssue = source.evidence.issues[1]!;
+        expect(boundedIssue.path.length).toBeLessThanOrEqual(240);
+        expect(boundedIssue.message).toHaveLength(500);
+        expect(boundedIssue.message).toMatch(/\.\.\.$/);
+      }
+      return {
+        outcome: "rejected" as const,
+        evidence: {
+          stage: "repair_exhausted" as const,
+          issues: source.success ? [] : source.evidence.issues,
+        },
+      };
+    });
+    const continueGeneration = createContinueGeneratedMechanicGeneration({
+      services: {
+        generationRunRepository,
+        gamePackRepository: {
+          compareAndSwap: vi.fn(),
+          load: vi.fn(),
+        },
+        createFoundation: async () => createPassedFoundation(),
+        createContractProvider: vi.fn(() => vi.fn()),
+        createSourceProvider: vi.fn(() => vi.fn()),
+        generateContract,
+        generateSource,
+        evaluateArtifact: vi.fn(async () => evaluation),
+        runPipeline,
+      },
+    });
+
+    await expect(continueGeneration(fixture.input)).resolves.toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "repair_exhausted" },
+    });
+  });
+
+  it("routes replay-only setup failures back to contract repair", async () => {
+    const fixture = createInputFixture();
+    const { repository: generationRunRepository } =
+      createGenerationRunTestRepository();
+    await generationRunRepository.create(
+      generationRunSchema.parse({
+        id: GENERATION_RUN_ID,
+        operationType: "generate",
+        status: "running",
+        createdAt: CREATED_AT,
+        startedAt: CREATED_AT,
+        request: { summary: fixture.input.context.requestSummary },
+        runtimeKind: "phaser",
+        templateId: fixture.baseGameSpec.template.id,
+        attempts: [],
+      })
+    );
+    const firstScenario = {
+      scenarioId: "projectile_travels_and_expires",
+      seed: 2,
+      outcome: "passed" as const,
+      setup: [],
+      steps: [],
+      declaredObservations: [],
+      externalObservations: [],
+      issues: [],
+    };
+    const evaluation: GeneratedMechanicEvaluationResult = {
+      outcome: "failed",
+      evidence: {
+        schemaVersion: "generated_mechanic_evaluation/v1",
+        fixtureId: `evaluation_${GENERATION_RUN_ID}_1`,
+        contractId: fixture.project.dependency.contract.id,
+        sourceArtifactId: fixture.project.dependency.sourceArtifact.id,
+        scenarios: [firstScenario],
+        issues: [],
+        replay: {
+          matched: false,
+          replayScenarios: [
+            {
+              ...firstScenario,
+              outcome: "failed",
+              setup: [
+                {
+                  kind: "state_equals",
+                  passed: false,
+                  actual: false,
+                  assertion: {
+                    kind: "state_equals",
+                    stateId: "fire_ready",
+                    value: true,
+                  },
+                },
+              ],
+            },
+          ],
+          issue: {
+            code: "nondeterministic_replay",
+            message:
+              "Identical mechanic evaluation inputs produced different observable evidence.",
+          },
+        },
+      },
+    };
+    const generateContract: typeof generateMechanicContract = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          contract: fixture.project.dependency.contract,
+          grant: fixture.project.dependency.sourceArtifact.grant,
+        },
+      })
+    );
+    const generateSource: typeof generateBuildAndExecuteMechanicSource = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          artifact: fixture.project.dependency.sourceArtifact,
+          execution: {
+            callbackId:
+              fixture.project.dependency.sourceArtifact.callbacks[0]!.id,
+            result: {
+              executionId: `source_execution_${GENERATION_RUN_ID}_1`,
+              outcome: "completed",
+            },
+          },
+        },
+      })
+    );
+    const runPipeline = vi.fn(async ({ dependencies }) => {
+      const foundation = await dependencies.runFoundation();
+      if (!foundation.success) {
+        throw new Error("Expected the passing foundation fixture.");
+      }
+      const contract = await dependencies.runContract({
+        attemptNumber: 1,
+        kind: "initial",
+      });
+      if (!contract.success) {
+        throw new Error("Expected the accepted contract fixture.");
+      }
+      const source = await dependencies.runSourceAndEvaluation({
+        attemptNumber: 1,
+        foundation: foundation.data,
+        contract: contract.data.value,
+        kind: "initial",
+      });
+
+      expect(source).toMatchObject({
+        success: false,
+        evidence: {
+          responsibleStage: "contract",
+          issues: [
+            {
+              path:
+                "evaluation.replay.scenarios.0.setup.0",
+              code: "setup_observation_failed",
+            },
+            {
+              path: "evaluation.replay",
+              code: "nondeterministic_replay",
+            },
+          ],
+        },
+      });
+      return {
+        outcome: "rejected" as const,
+        evidence: {
+          stage: "repair_exhausted" as const,
+          issues: source.success ? [] : source.evidence.issues,
+        },
+      };
+    });
+    const continueGeneration = createContinueGeneratedMechanicGeneration({
+      services: {
+        generationRunRepository,
+        gamePackRepository: {
+          compareAndSwap: vi.fn(),
+          load: vi.fn(),
+        },
+        createFoundation: async () => createPassedFoundation(),
+        createContractProvider: vi.fn(() => vi.fn()),
+        createSourceProvider: vi.fn(() => vi.fn()),
+        generateContract,
+        generateSource,
+        evaluateArtifact: vi.fn(async () => evaluation),
+        runPipeline,
+      },
+    });
+
+    await expect(continueGeneration(fixture.input)).resolves.toMatchObject({
+      outcome: "rejected",
+      evidence: { stage: "repair_exhausted" },
+    });
+  });
+
   it("cannot overwrite a terminal cancellation with a late repair result", async () => {
     const fixture = createInputFixture();
     const { repository: generationRunRepository } =

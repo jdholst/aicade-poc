@@ -45,7 +45,10 @@ import {
 import { isOpenAIModelId, type OpenAIModelId } from "@/utils/openai-utils";
 
 import type { ContinueGeneratedMechanicGenerationInput } from "./creator-game-generation-dispatcher";
-import { createEvaluationObservationFailureMessage } from "./evaluation-repair-evidence";
+import {
+  boundEvaluationRepairIssueMessage,
+  createEvaluationObservationFailureMessage,
+} from "./evaluation-repair-evidence";
 import {
   createBrowserRuntimeFoundation,
   type BrowserRuntimeFoundation,
@@ -706,72 +709,39 @@ function evaluationIssues(
     ...evaluation.evidence.issues,
   ];
   for (const scenario of evaluation.evidence.scenarios) {
-    const issueCountBeforeScenario = issues.length;
-    issues.push(...scenario.issues);
-    scenario.setup.forEach((entry, index) => {
-      if (entry.passed) {
-        return;
-      }
-      issues.push({
-        path: `evaluation.scenarios.${scenario.scenarioId}.setup.${index}`,
-        code: "setup_observation_failed",
-        message: createEvaluationObservationFailureMessage({
-          label: "Scenario setup",
-          index,
-          kind: entry.kind,
-          assertion: entry.assertion,
-          actual: entry.actual,
-        }),
-      });
+    appendScenarioEvaluationIssues({
+      issues,
+      scenario,
+      scenarioPath: `evaluation.scenarios.${scenario.scenarioId}`,
+      scopeRuntimeIssuesToScenario: false,
+      scenarioLabel: "Scenario",
     });
-    scenario.declaredObservations.forEach((entry, index) => {
-      if (entry.passed) {
-        return;
-      }
-      issues.push({
-        path: `evaluation.scenarios.${scenario.scenarioId}.declaredObservations.${index}`,
-        code: "declared_observation_failed",
-        message: createEvaluationObservationFailureMessage({
-          label: "Model-declared observation",
-          index,
-          kind: entry.kind,
-          assertion: entry.assertion,
-          actual: entry.actual,
-        }),
-      });
-    });
-    scenario.externalObservations.forEach((entry, index) => {
-      if (entry.passed) {
-        return;
-      }
-      issues.push({
-        path: `evaluation.scenarios.${scenario.scenarioId}.externalObservations.${index}`,
-        code: "external_observation_failed",
-        message: createEvaluationObservationFailureMessage({
-          label: "Evaluator-authored observation",
-          index,
-          kind: entry.kind,
-          assertion: entry.assertion,
-          actual: entry.actual,
-        }),
-      });
-    });
-    if (
-      scenario.outcome === "failed" &&
-      issues.length === issueCountBeforeScenario
-    ) {
-      issues.push({
-        path: `evaluation.scenarios.${scenario.scenarioId}`,
-        code: "deterministic_evaluation_failed",
-        message: `Scenario "${scenario.scenarioId}" failed independent observable evaluation.`,
-      });
-    }
   }
   if (evaluation.evidence.replay?.issue) {
+    evaluation.evidence.replay.replayScenarios.forEach(
+      (replayScenario, index) => {
+        const firstScenario = evaluation.evidence.scenarios[index];
+        if (
+          firstScenario !== undefined &&
+          JSON.stringify(firstScenario) === JSON.stringify(replayScenario)
+        ) {
+          return;
+        }
+        appendScenarioEvaluationIssues({
+          issues,
+          scenario: replayScenario,
+          scenarioPath: `evaluation.replay.scenarios.${index}`,
+          scopeRuntimeIssuesToScenario: true,
+          scenarioLabel: "Replay scenario",
+        });
+      }
+    );
     issues.push({
       path: "evaluation.replay",
       code: evaluation.evidence.replay.issue.code,
-      message: evaluation.evidence.replay.issue.message,
+      message: boundEvaluationRepairIssueMessage(
+        evaluation.evidence.replay.issue.message
+      ),
     });
   }
   if (issues.length === 0) {
@@ -785,10 +755,124 @@ function evaluationIssues(
   return Object.freeze(issues.map((issue) => Object.freeze(issue)));
 }
 
+function appendScenarioEvaluationIssues({
+  issues,
+  scenario,
+  scenarioPath,
+  scopeRuntimeIssuesToScenario,
+  scenarioLabel,
+}: Readonly<{
+  issues: ArtifactScopedRepairIssue[];
+  scenario: GeneratedMechanicEvaluationResult["evidence"]["scenarios"][number];
+  scenarioPath: string;
+  scopeRuntimeIssuesToScenario: boolean;
+  scenarioLabel: "Scenario" | "Replay scenario";
+}>): void {
+  const issueCountBeforeScenario = issues.length;
+  issues.push(
+    ...scenario.issues.map((issue) => ({
+      ...issue,
+      path: scopeRuntimeIssuesToScenario
+        ? scopeScenarioRuntimeIssuePath({
+            issuePath: issue.path,
+            scenarioId: scenario.scenarioId,
+            scenarioPath,
+          })
+        : issue.path,
+      message: scopeRuntimeIssuesToScenario
+        ? boundEvaluationRepairIssueMessage(issue.message)
+        : issue.message,
+    }))
+  );
+  scenario.setup.forEach((entry, index) => {
+    if (entry.passed) {
+      return;
+    }
+    issues.push({
+      path: `${scenarioPath}.setup.${index}`,
+      code: "setup_observation_failed",
+      message: createEvaluationObservationFailureMessage({
+        label: "Scenario setup",
+        index,
+        kind: entry.kind,
+        assertion: entry.assertion,
+        actual: entry.actual,
+      }),
+    });
+  });
+  scenario.declaredObservations.forEach((entry, index) => {
+    if (entry.passed) {
+      return;
+    }
+    issues.push({
+      path: `${scenarioPath}.declaredObservations.${index}`,
+      code: "declared_observation_failed",
+      message: createEvaluationObservationFailureMessage({
+        label: "Model-declared observation",
+        index,
+        kind: entry.kind,
+        assertion: entry.assertion,
+        actual: entry.actual,
+      }),
+    });
+  });
+  scenario.externalObservations.forEach((entry, index) => {
+    if (entry.passed) {
+      return;
+    }
+    issues.push({
+      path: `${scenarioPath}.externalObservations.${index}`,
+      code: "external_observation_failed",
+      message: createEvaluationObservationFailureMessage({
+        label: "Evaluator-authored observation",
+        index,
+        kind: entry.kind,
+        assertion: entry.assertion,
+        actual: entry.actual,
+      }),
+    });
+  });
+  if (
+    scenario.outcome === "failed" &&
+    issues.length === issueCountBeforeScenario
+  ) {
+    issues.push({
+      path: scenarioPath,
+      code: "deterministic_evaluation_failed",
+      message: boundEvaluationRepairIssueMessage(
+        `${scenarioLabel} "${scenario.scenarioId}" failed independent observable evaluation.`
+      ),
+    });
+  }
+}
+
+function scopeScenarioRuntimeIssuePath({
+  issuePath,
+  scenarioId,
+  scenarioPath,
+}: Readonly<{
+  issuePath: string;
+  scenarioId: string;
+  scenarioPath: string;
+}>): string {
+  const rawScenarioPath = `scenarios.${scenarioId}`;
+  if (issuePath === rawScenarioPath) {
+    return scenarioPath;
+  }
+  if (issuePath.startsWith(`${rawScenarioPath}.`)) {
+    return `${scenarioPath}${issuePath.slice(rawScenarioPath.length)}`;
+  }
+  return `${scenarioPath}.${issuePath}`;
+}
+
 function evaluationFailureResponsibleStage(
   evaluation: GeneratedMechanicEvaluationResult
 ): "contract" | "source" {
-  return evaluation.evidence.scenarios.some(
+  const evaluatedScenarios = [
+    ...evaluation.evidence.scenarios,
+    ...(evaluation.evidence.replay?.replayScenarios ?? []),
+  ];
+  return evaluatedScenarios.some(
     (scenario) => scenario.setup.some(({ passed }) => !passed)
   )
     ? "contract"

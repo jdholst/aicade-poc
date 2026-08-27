@@ -1,6 +1,14 @@
 const ARTIFACT_SCOPED_REPAIR_MESSAGE_MAXIMUM = 500;
 const EVALUATION_VALUE_MAXIMUM = 180;
 
+export function boundEvaluationRepairIssueMessage(message: string): string {
+  const nonemptyMessage =
+    message.trim().length > 0
+      ? message
+      : "Evaluation failure did not include a message.";
+  return truncate(nonemptyMessage, ARTIFACT_SCOPED_REPAIR_MESSAGE_MAXIMUM);
+}
+
 export function createEvaluationObservationFailureMessage(input: {
   label:
     | "Scenario setup"
@@ -19,7 +27,7 @@ export function createEvaluationObservationFailureMessage(input: {
       ? summarizeOwnedObjectLifecycleActual(input.actual) ?? input.actual
       : input.actual;
   const message = `${input.label} ${input.index} "${input.kind}" failed. Assertion: ${boundedJson(input.assertion)}. Actual: ${boundedJson(actual)}.`;
-  return truncate(message, ARTIFACT_SCOPED_REPAIR_MESSAGE_MAXIMUM);
+  return boundEvaluationRepairIssueMessage(message);
 }
 
 function summarizeOwnedObjectLifecycleActual(
