@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 15,
-  "updatedAt": "2026-08-27T06:12:49Z",
+  "revision": 16,
+  "updatedAt": "2026-08-27T18:11:12Z",
   "entries": [
     {
       "status": "active",
@@ -1210,6 +1210,42 @@
       "amendments": [],
       "createdAt": "2026-08-27T06:12:49Z",
       "updatedAt": "2026-08-27T06:12:49Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Trusted state observations stay outside generated grants",
+      "guidance": "Keep trusted evaluation observation authority separate from the generated mechanic capability grant. Read declared private state through a trusted host observation seam; require state_read in contract capabilities only when generated source behaviorally needs and uses it.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0020",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c0-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c0-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Mechanic capability \"state_read\" was not granted.",
+          "observedAt": "2026-08-27T17:47:13.773Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-27T18:11:12Z",
+      "updatedAt": "2026-08-27T18:11:12Z"
     }
   ],
   "reconciliations": [
@@ -3120,6 +3156,84 @@
       "createdAt": "2026-08-27T06:12:49Z",
       "priorManifestDigest": "00629c83986d9daa0a5a5b5a7a86ed26900e6d22d652ab240d02f2eb82d516f3",
       "resultingManifestDigest": "fbb0955a309c36fccb8ca37a403e3f0bfb82d6c02f92f59ef0cdfeadd1078e6a"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t181112z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c0-r1"
+      },
+      "consultedManifestDigest": "fbb0955a309c36fccb8ca37a403e3f0bfb82d6c02f92f59ef0cdfeadd1078e6a",
+      "contextDigest": "a23e0baf3fdcde3bb8abbe61ddb6bf7f4411c925e7790bc1b79af6106b57fa5d",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c0-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0020"
+          ],
+          "rationale": "The actual submission exposed a reusable authority-boundary defect: trusted deterministic evaluation attempted to observe declared private state through the generated mechanic capability grant and failed when behavior did not justify state_read authority for source."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Trusted state observations stay outside generated grants",
+            "guidance": "Keep trusted evaluation observation authority separate from the generated mechanic capability grant. Read declared private state through a trusted host observation seam; require state_read in contract capabilities only when generated source behaviorally needs and uses it.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0020",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c0-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c0-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Mechanic capability \"state_read\" was not granted.",
+                "observedAt": "2026-08-27T17:47:13.773Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T18:11:12Z",
+            "updatedAt": "2026-08-27T18:11:12Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T18:11:12Z",
+      "priorManifestDigest": "fbb0955a309c36fccb8ca37a403e3f0bfb82d6c02f92f59ef0cdfeadd1078e6a",
+      "resultingManifestDigest": "9ea63f77bbf21ba7fc26222e4a0c3c9db71660f40ab8242ec0d2ece626107bc7"
     }
   ]
 }

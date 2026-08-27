@@ -26,6 +26,7 @@ export type CreateMechanicPrivateStateHostInput = {
 export type MechanicPrivateStateHost = {
   readonly usedBytes: number;
   readonly resourceBudget: Readonly<MechanicExecutionRealmResourceBudget>;
+  readDeclaredState(stateId: StableId): JsonValue;
   createCapabilityHost(
     delegate: MechanicExecutionRealmCapabilityHost
   ): MechanicExecutionRealmCapabilityHost;
@@ -142,6 +143,10 @@ export function createMechanicPrivateStateHost({
     resourceBudget: admittedResourceBudget,
     get usedBytes() {
       return usedBytes;
+    },
+    readDeclaredState: (stateId) => {
+      requireActive();
+      return requireEntry(stateId).value;
     },
     createCapabilityHost,
     dispose: () => {

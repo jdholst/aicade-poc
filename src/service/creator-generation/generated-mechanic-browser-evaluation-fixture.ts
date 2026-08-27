@@ -206,12 +206,7 @@ export function createGeneratedMechanicBrowserExecutionFixture({
         );
       },
       readDeclaredState: async (stateId: StableId) =>
-        requireJsonResult(
-          await capabilityHost.invoke({
-            capabilityId: "state_read",
-            arguments: [stateId],
-          })
-        ),
+        privateState.readDeclaredState(stateId),
       readBindingProperty: async (
         bindingId: StableId,
         property: StableId
@@ -1016,13 +1011,4 @@ function readVirtualEntityProperty(
         `Generated mechanic evaluation property "${property}" is declared but not implemented by the top-down host.`
       );
   }
-}
-
-function requireJsonResult(
-  result: Awaited<ReturnType<MechanicExecutionRealmCapabilityHost["invoke"]>>
-): JsonValue {
-  if (result.kind !== "json") {
-    throw new TypeError("Generated mechanic state observation must be JSON.");
-  }
-  return result.value;
 }

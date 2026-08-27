@@ -71,6 +71,42 @@ describe("generated mechanic browser evaluation fixture", () => {
     await fixture.dispose();
   });
 
+  it("lets trusted evaluation observe declared state without granting generated source state-read authority", async () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const baseContract = createContract(gameSpec.entities[0].id);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      capabilities: baseContract.capabilities.filter(
+        (capabilityId) => capabilityId !== "state_read"
+      ),
+    };
+    const grantResult = createMechanicCapabilityGrant({
+      contract,
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+    });
+    if (!grantResult.success) {
+      throw new Error("Expected the write-only state grant to be admitted.");
+    }
+    const fixture = createGeneratedMechanicBrowserExecutionFixture({
+      contract,
+      gameSpec,
+      grant: grantResult.data,
+      resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
+      seed: 7,
+    });
+
+    await fixture.capabilityHost.invoke({
+      capabilityId: "state_write",
+      arguments: ["dash_count", 1],
+    });
+
+    await expect(
+      fixture.observations.readDeclaredState("dash_count")
+    ).resolves.toBe(1);
+
+    await fixture.dispose();
+  });
+
   it("evaluates declared owned objects through create, query, motion, and destroy", async () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const contract: GeneratedMechanicContract = {
