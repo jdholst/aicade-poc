@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 17,
-  "updatedAt": "2026-08-27T18:33:19Z",
+  "revision": 18,
+  "updatedAt": "2026-08-27T18:59:57Z",
   "entries": [
     {
       "status": "active",
@@ -1106,7 +1106,7 @@
         ]
       },
       "id": "KF-0018",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -1141,6 +1141,18 @@
           "outcome": "provider_output_rejected",
           "summary": "Model-declared observation 2 \"state_equals\" failed. Assertion: {\"kind\":\"state_equals\",\"stateId\":\"cooldown_until\",\"value\":-1}. Actual: 400.",
           "observedAt": "2026-08-27T18:20:18.650Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-2",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c1-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-2",
+          "stage": "deterministic_evaluation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "KF-0018 directly governed the failure: the accepted repaired contract established cooldown_until = 400 after fire_action in a dispatch-only scenario, then required the same action path to end at the initial -1 sentinel in three time-advancing scenarios. All four actual source attempts wrote 400 and failed those same contract-owned observations, confirming KF-0018 across a second independent campaign. KF-0004 confirms that a negative deadline sentinel permits the first action and is replaced only after acceptance. KF-0017's exact callback checklist was satisfied, and the KF-0020 trusted observation boundary from fix cycle 1 worked because evaluation read the actual value without widening source authority. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 governed secondary projectile motion, target, evidence, geometry, cleanup, and bound-object observations but did not explain the repeated deadline mismatch. There were no related findings and no isolation was needed. The durable mechanic-general fix rejects only a witnessed *_until contradiction: a dispatch-only scenario must prove the same action writes a noninitial deadline before a time-advancing scenario with the same initial setup can be rejected for requiring the initial sentinel again.",
+          "observedAt": "2026-08-27T18:38:27Z"
         }
       ],
       "amendments": [
@@ -1216,10 +1228,47 @@
               "observedAt": "2026-08-27T18:20:18.650Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-08-27T18:59:57Z",
+          "reason": "The verified cycle-2 contract admission rule now rejects the witnessed post-action deadline-sentinel contradiction before source generation.",
+          "previous": {
+            "status": "active",
+            "confidence": "confirmed",
+            "title": "Post-action state observations must reflect accepted writes",
+            "guidance": "After an accepted action writes private state, final state observations must match that write or a later write caused by an explicit reachable callback. Advancing beyond a *_until deadline changes admission because the deadline is elapsed but does not reset the stored deadline to its initial sentinel; omit that final state assertion or assert the deterministic written value unless accepted behavior explicitly resets it.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-2",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c1-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-2",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "KF-0018 directly governed the failure: the accepted repaired contract established cooldown_until = 400 after fire_action in a dispatch-only scenario, then required the same action path to end at the initial -1 sentinel in three time-advancing scenarios. All four actual source attempts wrote 400 and failed those same contract-owned observations, confirming KF-0018 across a second independent campaign. KF-0004 confirms that a negative deadline sentinel permits the first action and is replaced only after acceptance. KF-0017's exact callback checklist was satisfied, and the KF-0020 trusted observation boundary from fix cycle 1 worked because evaluation read the actual value without widening source authority. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 governed secondary projectile motion, target, evidence, geometry, cleanup, and bound-object observations but did not explain the repeated deadline mismatch. There were no related findings and no isolation was needed. The durable mechanic-general fix rejects only a witnessed *_until contradiction: a dispatch-only scenario must prove the same action writes a noninitial deadline before a time-advancing scenario with the same initial setup can be rejected for requiring the initial sentinel again.",
+              "observedAt": "2026-08-27T18:38:27Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T02:17:03Z",
-      "updatedAt": "2026-08-27T18:33:19Z"
+      "updatedAt": "2026-08-27T18:59:57Z"
     },
     {
       "status": "active",
@@ -1343,6 +1392,43 @@
       ],
       "createdAt": "2026-08-27T18:11:12Z",
       "updatedAt": "2026-08-27T18:33:19Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Campaign completion requires exact runtime readiness",
+      "guidance": "Treat generic Ready labels and accepted-project receipts as progress, not campaign completion. A browser campaign is runtime-ready only when the editor displays the exact runtime-ready receipt and the generated iframe has nonempty source. Keep waiting until that condition or an explicit failure, and when repaired generation succeeded, report the live probe or terminal failure instead of a stale rejected-attempt issue.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "editor_mount",
+          "runtime_health"
+        ],
+        "classifications": [
+          "pipeline_failure",
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0021",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "Identical mechanic evaluation inputs produced different observable evidence.",
+          "observedAt": "2026-08-27T18:42:30.086Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-27T18:59:57Z",
+      "updatedAt": "2026-08-27T18:59:57Z"
     }
   ],
   "reconciliations": [
@@ -3420,6 +3506,109 @@
       "createdAt": "2026-08-27T18:33:19Z",
       "priorManifestDigest": "9ea63f77bbf21ba7fc26222e4a0c3c9db71660f40ab8242ec0d2ece626107bc7",
       "resultingManifestDigest": "6fd00406c4ab0b960c267adaeddf53de6c99d2720e748601e74d33fe42dc058a"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t185957z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1"
+      },
+      "consultedManifestDigest": "6fd00406c4ab0b960c267adaeddf53de6c99d2720e748601e74d33fe42dc058a",
+      "contextDigest": "5cdc8748ef1711b36068bae78543764e2d90f57cf662541a56f19f0f11c62e96",
+      "consultedFindingIds": [
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0018",
+        "KF-0020"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-2",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0018"
+          ],
+          "rationale": "The verified mechanic-general contract admission fix implements the confirmed rule that post-action deadline observations cannot require the initial sentinel after the accepted action writes a deadline."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0021"
+          ],
+          "rationale": "Persisted actual-run artifacts show that generation and artifact-scoped repair succeeded, a Game Pack was present, and the iframe was mounted while the editor still displayed Booting runtime. The activity-aware campaign wait stopped on generic Ready or the accepted-project receipt before exact runtime readiness, skipped the external probe, and then reported a stale rejected repair issue instead of the live editor state."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0018",
+          "expectedRevision": 3,
+          "confidence": "confirmed",
+          "reason": "The verified cycle-2 contract admission rule now rejects the witnessed post-action deadline-sentinel contradiction before source generation.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-2",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c1-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-2",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "KF-0018 directly governed the failure: the accepted repaired contract established cooldown_until = 400 after fire_action in a dispatch-only scenario, then required the same action path to end at the initial -1 sentinel in three time-advancing scenarios. All four actual source attempts wrote 400 and failed those same contract-owned observations, confirming KF-0018 across a second independent campaign. KF-0004 confirms that a negative deadline sentinel permits the first action and is replaced only after acceptance. KF-0017's exact callback checklist was satisfied, and the KF-0020 trusted observation boundary from fix cycle 1 worked because evaluation read the actual value without widening source authority. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 governed secondary projectile motion, target, evidence, geometry, cleanup, and bound-object observations but did not explain the repeated deadline mismatch. There were no related findings and no isolation was needed. The durable mechanic-general fix rejects only a witnessed *_until contradiction: a dispatch-only scenario must prove the same action writes a noninitial deadline before a time-advancing scenario with the same initial setup can be rejected for requiring the initial sentinel again.",
+              "observedAt": "2026-08-27T18:38:27Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Campaign completion requires exact runtime readiness",
+            "guidance": "Treat generic Ready labels and accepted-project receipts as progress, not campaign completion. A browser campaign is runtime-ready only when the editor displays the exact runtime-ready receipt and the generated iframe has nonempty source. Keep waiting until that condition or an explicit failure, and when repaired generation succeeded, report the live probe or terminal failure instead of a stale rejected-attempt issue.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount",
+                "runtime_health"
+              ],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0021",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1",
+                "attemptId": "a01-baseline",
+                "stage": "editor_mount",
+                "quality": "actual_submission",
+                "outcome": "pipeline_failure",
+                "summary": "Identical mechanic evaluation inputs produced different observable evidence.",
+                "observedAt": "2026-08-27T18:42:30.086Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T18:59:57Z",
+            "updatedAt": "2026-08-27T18:59:57Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T18:59:57Z",
+      "priorManifestDigest": "6fd00406c4ab0b960c267adaeddf53de6c99d2720e748601e74d33fe42dc058a",
+      "resultingManifestDigest": "fc9fafc4c157e809c566aa3f59dbeda1fc11731facd24b6a2dc073c29ff9d877"
     }
   ]
 }

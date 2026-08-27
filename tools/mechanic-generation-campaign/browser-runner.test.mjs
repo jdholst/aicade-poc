@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CampaignInfrastructureFailureError,
+  createCampaignActivityTracker,
   requireCampaignAttemptContinuation,
   waitForCampaignEditorTerminalState,
 } from "./lib/browser-runner.mjs";
@@ -16,6 +17,39 @@ describe("campaign browser runner", () => {
 
     const terminal = await waitForCampaignEditorTerminalState(page, 1_000);
 
+    expect(terminal).toEqual({
+      kind: "ready",
+      text: "Runtime is running in the sandbox.",
+    });
+  });
+
+  it("keeps waiting after project acceptance until the runtime is ready", async () => {
+    installEditorDocument({
+      bodyText: [
+        "Ready",
+        "Generated, evaluated, and accepted a playable mechanic project.",
+        "Booting runtime...",
+      ].join("\n"),
+      iframeSource: "<!doctype html><title>Generated game</title>",
+    });
+    const page = createPageDouble({
+      afterUnmetWait: () =>
+        installEditorDocument({
+          bodyText: [
+            "Generated, evaluated, and accepted a playable mechanic project.",
+            "Runtime is running in the sandbox.",
+          ].join("\n"),
+          iframeSource: "<!doctype html><title>Generated game</title>",
+        }),
+    });
+
+    const terminal = await waitForCampaignEditorTerminalState(
+      page,
+      1_000,
+      createCampaignActivityTracker()
+    );
+
+    expect(page.waitCalls).toBe(2);
     expect(terminal).toEqual({
       kind: "ready",
       text: "Runtime is running in the sandbox.",
@@ -57,16 +91,29 @@ describe("campaign browser runner", () => {
   });
 });
 
-function createPageDouble({ waitError } = {}) {
+function createPageDouble({ waitError, afterUnmetWait } = {}) {
+  let waitCalls = 0;
   return {
+    get waitCalls() {
+      return waitCalls;
+    },
     async waitForFunction(predicate) {
+      waitCalls += 1;
       if (waitError) throw waitError;
       if (!predicate()) {
+        afterUnmetWait?.();
         throw new Error("page.waitForFunction: Timeout 1000ms exceeded.");
       }
     },
     async evaluate(operation) {
       return operation();
+    },
+    locator() {
+      return {
+        async innerText() {
+          return document.body.innerText;
+        },
+      };
     },
   };
 }
