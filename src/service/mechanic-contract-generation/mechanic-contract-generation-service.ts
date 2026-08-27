@@ -361,8 +361,34 @@ function generatedContractIntentLineageIssues(
     }
   }
   appendTransientLifetimeFinalCountIssues(intent, contract, issues);
+  appendUnsupportedBoundDeactivationIssues(contract, issues);
 
   return issues;
+}
+
+function appendUnsupportedBoundDeactivationIssues(
+  contract: GeneratedMechanicContract,
+  issues: ContractValidationEvidence["issues"]
+): void {
+  contract.scenarios.forEach((scenario, scenarioIndex) => {
+    scenario.observations.forEach((observation, observationIndex) => {
+      if (
+        observation.kind !== "binding_property" ||
+        observation.property !== "active" ||
+        !(
+          (observation.operator === "equals" && observation.value === false) ||
+          (observation.operator === "not_equals" && observation.value === true)
+        )
+      ) {
+        return;
+      }
+      issues.push({
+        path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
+        code: "contradiction",
+        message: `Generated mechanic scenario "${scenario.id}" cannot require bound object "${observation.bindingId}" to become inactive because generated source cannot deactivate bound objects. Observe an admitted mutable motion property or rely on evaluator-authored target-interaction evidence instead.`,
+      });
+    });
+  });
 }
 
 function appendTransientLifetimeFinalCountIssues(
@@ -388,10 +414,8 @@ function appendTransientLifetimeFinalCountIssues(
         ? [value]
         : []
   );
-  if (acceptedLifetimes.length === 0) {
-    return;
-  }
-  const acceptedLifetime = Math.min(...acceptedLifetimes);
+  const acceptedLifetime =
+    acceptedLifetimes.length > 0 ? Math.min(...acceptedLifetimes) : undefined;
   const ownedObjectIds = new Set(contract.ownedObjects.map(({ id }) => id));
 
   contract.scenarios.forEach((scenario, scenarioIndex) => {
@@ -408,7 +432,7 @@ function appendTransientLifetimeFinalCountIssues(
           step.kind === "advance_time" ? total + step.milliseconds : total,
         0
       );
-    if (advancedMilliseconds < acceptedLifetime) {
+    if (advancedMilliseconds <= 0) {
       return;
     }
     scenario.observations.forEach((observation, observationIndex) => {
@@ -420,10 +444,15 @@ function appendTransientLifetimeFinalCountIssues(
       ) {
         return;
       }
+      const message =
+        acceptedLifetime !== undefined &&
+        advancedMilliseconds >= acceptedLifetime
+          ? `Generated mechanic scenario "${scenario.id}" advances ${advancedMilliseconds}ms after its action, meeting or exceeding the accepted transient lifetime ${acceptedLifetime}ms. Its final owned-object count cannot require an active "${observation.archetypeId}"; declare final count 0 or end the scenario before cleanup.`
+          : `Generated mechanic scenario "${scenario.id}" is a time-advancing scenario and cannot require a positive final count for transient owned object "${observation.archetypeId}" because target interaction or cleanup may validly destroy it before final observations. Prove positive creation in a separate dispatch-only scenario and use time-advancing scenarios for travel, interaction, and cleanup.`;
       issues.push({
         path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
         code: "contradiction",
-        message: `Generated mechanic scenario "${scenario.id}" advances ${advancedMilliseconds}ms after its action, meeting or exceeding the accepted transient lifetime ${acceptedLifetime}ms. Its final owned-object count cannot require an active "${observation.archetypeId}"; declare final count 0 or end the scenario before cleanup.`,
+        message,
       });
     });
   });

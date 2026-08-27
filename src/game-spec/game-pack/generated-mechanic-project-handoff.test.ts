@@ -274,12 +274,13 @@ describe("generated mechanic project handoff", () => {
     });
   });
 
-  it("accepts authentic full, active-progress, immediate-creation, and unchanged owned-object lifecycle evidence", async () => {
+  it("accepts target interaction proof on cleanup without requiring it from active progress", async () => {
     const context = await createHandoffTestContext();
     const contract: GeneratedMechanicContract = {
       ...context.contract,
       intentLineage: {
         ...context.contract.intentLineage!,
+        targets: ["enemy"],
         spatialRules: ["spawn_owned_object_at_actor_position"],
       },
       ownedObjects: [
@@ -386,6 +387,7 @@ describe("generated mechanic project handoff", () => {
             archetypeIds: ["projectile"],
             actionId: "move",
             requireActorOrigin: true,
+            requireTargetInteraction: true,
           },
         },
         {
@@ -453,6 +455,7 @@ describe("generated mechanic project handoff", () => {
               activity.active = 0;
               activity.destroyed = 1;
               activity.simulatedDistanceTraveled = 12;
+              activity.targetInteractions = 1;
             } else if (scenarioId === "projectile_progress") {
               activity.simulatedDistanceTraveled = 12;
             }

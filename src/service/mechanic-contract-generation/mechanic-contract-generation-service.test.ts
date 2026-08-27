@@ -328,6 +328,73 @@ describe("generateMechanicContract", () => {
     });
   });
 
+  it("rejects a contract that requires generated source to deactivate a bound target", async () => {
+    const targetIntent: MechanicIntent = {
+      ...intent,
+      targets: ["enemy"],
+      references: [{ kind: "entity", id: "enemy" }],
+    };
+    const result = await generateMechanicContract({
+      intent: targetIntent,
+      admittedRequest: {
+        resolution: { ...resolution, intentId: targetIntent.id },
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      referenceCatalog: {
+        ...validationContext.referenceCatalog,
+        entity: ["enemy"],
+      },
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        bindings: [
+          {
+            id: "enemy_binding",
+            referenceKind: "entity",
+            cardinality: "one",
+            objectIds: ["enemy"],
+          },
+        ],
+        scenarios: [
+          {
+            id: "action_affects_enemy",
+            seed: 7,
+            setup: [
+              { kind: "binding_present", bindingId: "enemy_binding" },
+            ],
+            steps: [{ kind: "dispatch_action", actionId: "toggle" }],
+            observations: [
+              {
+                kind: "binding_property",
+                bindingId: "enemy_binding",
+                property: "active",
+                operator: "equals",
+                value: false,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          expect.objectContaining({
+            path: "scenarios.0.observations.0",
+            code: "contradiction",
+            message: expect.stringContaining("cannot deactivate bound objects"),
+          }),
+        ],
+      },
+    });
+  });
+
   it("rejects a same-key contract that substitutes the creator's configuration value", async () => {
     const configuredIntent: MechanicIntent = {
       ...intent,
@@ -378,7 +445,18 @@ describe("generateMechanicContract", () => {
     });
   });
 
-  it("rejects a positive final owned-object count after the accepted transient lifetime", async () => {
+  it.each([
+    {
+      advancedMilliseconds: 100,
+      expectedMessage: "time-advancing scenario",
+    },
+    {
+      advancedMilliseconds: 1200,
+      expectedMessage: "accepted transient lifetime 1200ms",
+    },
+  ])(
+    "rejects a positive final owned-object count after advancing $advancedMilliseconds ms",
+    async ({ advancedMilliseconds, expectedMessage }) => {
     const transientIntent: MechanicIntent = {
       ...intent,
       ownedObjects: ["projectile"],
@@ -449,7 +527,7 @@ describe("generateMechanicContract", () => {
             ],
             steps: [
               { kind: "dispatch_action", actionId: "toggle" },
-              { kind: "advance_time", milliseconds: 1200 },
+              { kind: "advance_time", milliseconds: advancedMilliseconds },
             ],
             observations: [
               {
@@ -473,14 +551,13 @@ describe("generateMechanicContract", () => {
           expect.objectContaining({
             path: "scenarios.0.observations.0",
             code: "contradiction",
-            message: expect.stringContaining(
-              "accepted transient lifetime 1200ms"
-            ),
+            message: expect.stringContaining(expectedMessage),
           }),
         ],
       },
     });
-  });
+    }
+  );
 
   it("stamps exact trusted semantic lineage and ignores provider-authored substitutions", async () => {
     const semanticIntent: MechanicIntent = {

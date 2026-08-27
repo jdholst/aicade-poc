@@ -138,6 +138,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "Every privateState initialValue and every scenario state setup or state_equals value must match"
     );
+    expect(prompt).toContain(
+      "After an accepted action writes private state, every final state_equals observation must match that write"
+    );
+    expect(prompt).toContain(
+      "Advancing beyond a *_until deadline does not reset the stored deadline to its initial sentinel"
+    );
     expect(prompt).toContain('"resourceBudgetProfile": "phase_9_fixed_budget"');
     expect(prompt).toContain(
       '"requiredIndependentEffectCapability": "object_motion_write"'
@@ -152,6 +158,9 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "Use only those exact binding property IDs in scenario binding_property observations"
+    );
+    expect(prompt).toContain(
+      "Generated source cannot deactivate or destroy bound objects"
     );
     expect(prompt).toContain(
       "Use time_schedule plus a scheduled lifecycle callback for one-shot delayed transitions"

@@ -220,7 +220,7 @@ Purpose: normalize the historical attempt reports and temporary-fix ledger while
 
 Exactly one flag is required:
 
-- `--check` parses and validates the expected 80 attempts and 32 temporary fixes without writing.
+- `--check` parses and validates the expected 80 attempts and 33 temporary fixes without writing.
 - `--write` regenerates `legacy-attempts.jsonl` and `legacy-temporary-fixes.jsonl`.
 
 This command makes no provider calls. It fails if source parsing or expected historical record counts change.
@@ -263,6 +263,16 @@ npm run campaign -- loop resume --id <loop-id> --fix-report <path>
 ```
 
 A fix report is accepted only from `waiting_for_fix`. Its before and after revisions, commit, changed files, verification, trigger campaign, and durable or temporary classification must match the clean loop worktree. Temporary fixes must include their canonical ledger entries. Knowledge-required loops must also commit `generation-knowledge.json` with exactly one replayable fix-cycle reconciliation that accounts for the current context. An accepted fix records its `KR-*` ID, increments the fix cycle, and restarts the sequence from its first step.
+
+If the accepted revision contains a campaign-runner correction that the control checkout does not yet contain, execute the accepted worktree's CLI and add `--state-root <control-checkout-path>` to `loop resume`. The worktree then supplies both application and orchestration code while the original control checkout remains the persisted campaign and loop evidence root. Before validation, the CLI copies the exact ignored frozen definition from that state root into the worktree; manifest and probe resolution remain inside the accepted repository. `--state-root` is accepted only by `loop recover` and `loop resume`.
+
+If an earlier accepted-worktree invocation marked the loop invalid only because it looked for frozen criteria under the worktree, recover the exact prior fix checkpoint before resuming:
+
+```bash
+npm run campaign -- loop recover --id <loop-id> --state-root <control-checkout-path>
+```
+
+Recovery fails unless the persisted loop is invalid for a frozen-definition lookup failure, the exact definition hashes still match, and the last sequence evidence derives `waiting_for_fix`. It makes no provider calls and does not accept a fix report; the normal resume command still validates the clean fix commit and knowledge reconciliation.
 
 If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`; denial returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
 

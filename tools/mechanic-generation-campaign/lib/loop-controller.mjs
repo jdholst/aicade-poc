@@ -282,6 +282,54 @@ export async function resumeCampaignLoop({
   });
 }
 
+export async function recoverCampaignLoop({
+  repoRoot,
+  loopId,
+  loopStore = createCampaignLoopStore(repoRoot),
+  environment = process.env,
+}) {
+  await loopStore.initialize();
+  const run = await loopStore.readRun(loopId);
+  if (run.status !== "invalid") {
+    throw new Error(
+      `Campaign loop ${loopId} can recover only from status invalid.`
+    );
+  }
+  if (
+    !run.invalidReason?.startsWith(
+      "Frozen loop definition or criteria can no longer be loaded:"
+    )
+  ) {
+    throw new Error(
+      "Campaign loop recovery is limited to frozen-definition lookup failures."
+    );
+  }
+  await reloadFrozenLoop({ repoRoot, run, environment });
+  const currentStep = run.steps[run.currentStepIndex];
+  const lastSequenceCampaign = [...run.campaignLinks]
+    .reverse()
+    .find(({ role }) => role === "sequence");
+  if (
+    currentStep?.status !== "running" ||
+    lastSequenceCampaign?.stepId !== currentStep.id ||
+    lastSequenceCampaign.status !== "completed_not_achieved" ||
+    lastSequenceCampaign.revisionKey !== run.currentRevision.revisionKey ||
+    run.pendingManualQa
+  ) {
+    throw new Error(
+      "Invalid loop evidence does not derive an exact waiting_for_fix checkpoint."
+    );
+  }
+  const recovered = {
+    ...run,
+    status: "waiting_for_fix",
+    completedAt: undefined,
+    activeCampaign: undefined,
+  };
+  await loopStore.writeRun(recovered);
+  return { run: recovered };
+}
+
 export async function extendCampaignLoop({
   repoRoot,
   loopId,

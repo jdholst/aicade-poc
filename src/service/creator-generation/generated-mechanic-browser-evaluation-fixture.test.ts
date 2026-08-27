@@ -888,7 +888,7 @@ describe("generated mechanic browser evaluation fixture", () => {
     ]);
   });
 
-  it("assigns target interaction proof to cleanup when progress and cleanup scenarios coexist", () => {
+  it("assigns target interaction proof only to explicit cleanup when progress, travel, and cleanup scenarios coexist", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const actorEntity = gameSpec.entities.find(({ role }) => role === "player");
     const targetEntity = gameSpec.entities.find(({ role }) => role !== "player");
@@ -960,6 +960,15 @@ describe("generated mechanic browser evaluation fixture", () => {
         },
         {
           ...baseContract.scenarios[0]!,
+          id: "scenario_dash_travel_window",
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 100 },
+          ],
+          observations: [],
+        },
+        {
+          ...baseContract.scenarios[0]!,
           id: "scenario_dash_cleanup",
           steps: [
             { kind: "dispatch_action", actionId: "move" },
@@ -985,6 +994,15 @@ describe("generated mechanic browser evaluation fixture", () => {
         scenarioId: "scenario_dash_progress",
         observation: {
           kind: "owned_object_lifecycle_progress_after_action",
+          archetypeIds: ["transient_effect"],
+          actionId: "move",
+        },
+      },
+      {
+        id: "external_scenario_dash_travel_window_owned_object_lifecycle_after_action",
+        scenarioId: "scenario_dash_travel_window",
+        observation: {
+          kind: "owned_object_lifecycle_after_action",
           archetypeIds: ["transient_effect"],
           actionId: "move",
         },

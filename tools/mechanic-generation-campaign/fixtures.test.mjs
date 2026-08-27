@@ -6,9 +6,11 @@ import {
   resolveProviderRequest,
 } from "./lib/fixture-adapter.mjs";
 import {
+  createCampaignActivityTracker,
   productionBuildArguments,
   resolveInterceptedRoute,
   summarizeAttemptFailure,
+  waitForTerminalEditorState,
 } from "./lib/browser-runner.mjs";
 
 const request = {
@@ -109,6 +111,71 @@ describe("fixture correlation", () => {
 });
 
 describe("provider request resolution", () => {
+  it("renews the terminal idle allowance when provider progress is recorded", async () => {
+    vi.useFakeTimers();
+    try {
+      let ready = false;
+      const page = {
+        waitForFunction: vi.fn(
+          async (_predicate, _argument, { timeout }) =>
+            new Promise((resolve, reject) => {
+              setTimeout(
+                () =>
+                  ready
+                    ? resolve()
+                    : reject(new Error(`Timeout ${timeout}ms exceeded.`)),
+                timeout
+              );
+            })
+        ),
+        locator: vi.fn(() => ({
+          innerText: vi.fn(async () => (ready ? "Ready" : "Building")),
+        })),
+      };
+      const activity = createCampaignActivityTracker();
+
+      const terminal = waitForTerminalEditorState(page, 50, activity);
+      await vi.advanceTimersByTimeAsync(40);
+      activity.record();
+      await vi.advanceTimersByTimeAsync(30);
+      ready = true;
+      await vi.advanceTimersByTimeAsync(30);
+
+      await expect(terminal).resolves.toEqual({ kind: "ready", text: "Ready" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recognizes the accepted playable-project receipt as a ready terminal", async () => {
+    let predicateSource = "";
+    let predicateArgument;
+    const acceptedReceipt =
+      "Generated, evaluated, and accepted a playable mechanic project.";
+    const page = {
+      waitForFunction: vi.fn(async (predicate, argument) => {
+        predicateSource = String(predicate);
+        predicateArgument = argument;
+      }),
+      locator: vi.fn(() => ({
+        innerText: vi.fn(async () =>
+          [
+            "Runtime is running in the sandbox.",
+            acceptedReceipt,
+            "SANDBOXED GENERATED MECHANIC",
+          ].join("\n")
+        ),
+      })),
+    };
+
+    await expect(waitForTerminalEditorState(page, 50)).resolves.toEqual({
+      kind: "ready",
+      text: acceptedReceipt,
+    });
+    expect(predicateSource).toContain("acceptedReceipt");
+    expect(predicateArgument).toBe(acceptedReceipt);
+  });
+
   it("uses the project's normal production build in linked campaign worktrees", () => {
     expect(productionBuildArguments()).toEqual(["run", "build"]);
   });

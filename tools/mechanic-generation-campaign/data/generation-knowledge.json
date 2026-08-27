@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 2,
-  "updatedAt": "2026-08-24T23:17:44.000Z",
+  "revision": 14,
+  "updatedAt": "2026-08-27T02:56:41Z",
   "entries": [
     {
       "status": "active",
@@ -285,21 +285,23 @@
       "status": "active",
       "confidence": "supported",
       "title": "Attach target proof to cleanup-capable scenarios",
-      "guidance": "For transient owned-object behavior, attach required target-interaction proof to cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists.",
+      "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. Use the first time-advancing scenario only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
           "source_generation",
-          "deterministic_evaluation"
+          "deterministic_evaluation",
+          "assembly"
         ],
         "classifications": [
-          "provider_output_rejected"
+          "provider_output_rejected",
+          "pipeline_failure"
         ]
       },
       "id": "KF-0008",
-      "revision": 1,
+      "revision": 4,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -323,11 +325,159 @@
           "outcome": "provider_output_rejected",
           "summary": "Evaluator-authored target-interaction proof was applied to every time-advancing transient lifecycle scenario. Target proof now attaches to cleanup-capable scenarios, with the first time-advancing scenario retained as a fallback when no cleanup scenario exists.",
           "observedAt": "2026-08-24T17:41:47Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1",
+          "attemptId": "a01-baseline",
+          "stage": "assembly",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "An accepted repaired source produced an authentic passed deterministic-evaluation receipt, but handoff rejected it because active-progress evidence omitted target interaction while cleanup scenarios carried that proof.",
+          "observedAt": "2026-08-26T16:59:01.103Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The evaluator required target interaction on both the explicit zero-count cleanup scenario and a separate 100 ms travel scenario with no owned-object-count assertion. The travel scenario observed active creation and 36 units of motion but correctly had zero target interactions, exhausting all four source attempts against the misapplied proof.",
+          "observedAt": "2026-08-26T19:20:01.693Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-11",
+          "stage": "contract_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+          "observedAt": "2026-08-27T02:38:24Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-26T17:17:03.000Z",
+          "reason": "Actual assembly evidence showed that cleanup-capable target-interaction policy must govern downstream handoff verification as well as evaluator-authored observations.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach required target-interaction proof to cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1",
+              "attemptId": "a01-baseline",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "An accepted repaired source produced an authentic passed deterministic-evaluation receipt, but handoff rejected it because active-progress evidence omitted target interaction while cleanup scenarios carried that proof.",
+              "observedAt": "2026-08-26T16:59:01.103Z"
+            }
+          ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-08-26T19:29:12Z",
+          "reason": "Actual provider evidence showed that absence of positive owned-object count does not establish cleanup capability; cleanup proof must be explicit before target-interaction evidence is attached there.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof on cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The evaluator required target interaction on both the explicit zero-count cleanup scenario and a separate 100 ms travel scenario with no owned-object-count assertion. The travel scenario observed active creation and 36 units of motion but correctly had zero target interactions, exhausting all four source attempts against the misapplied proof.",
+              "observedAt": "2026-08-26T19:20:01.693Z"
+            }
+          ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-08-27T02:56:41Z",
+          "reason": "Verified contract admission now rejects time-advancing positive-count evidence that cannot remain cleanup-capable.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. Use the first time-advancing scenario only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-24T23:17:44.000Z"
+      "updatedAt": "2026-08-27T02:56:41Z"
     },
     {
       "status": "active",
@@ -348,7 +498,7 @@
         ]
       },
       "id": "KF-0009",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -372,11 +522,62 @@
           "outcome": "provider_output_rejected",
           "summary": "Contract-authoring guidance now requires dispatch-only positive creation proof and reserves time-advancing scenarios for travel, interaction, and cleanup evidence.",
           "observedAt": "2026-08-24T17:53:30Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-11",
+          "stage": "contract_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+          "observedAt": "2026-08-27T02:38:24Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T02:56:41Z",
+          "reason": "Verified contract admission now reserves positive transient count evidence for dispatch-only scenarios.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Prove transient creation before advancing time",
+            "guidance": "Use dispatch-only observations for positive transient creation and reserve time-advancing scenarios for travel, interaction, and cleanup so valid impact destruction does not contradict creation proof.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-24T23:17:44.000Z"
+      "updatedAt": "2026-08-27T02:56:41Z"
     },
     {
       "status": "active",
@@ -418,22 +619,25 @@
     {
       "status": "active",
       "confidence": "supported",
-      "title": "Align deterministic targets with the actor proof path",
-      "guidance": "Place exact intent targets ahead of the first exact actor on the deterministic behavior proof path; do not use arbitrary entity-index placement that contradicts accepted actor-direction behavior.",
+      "title": "Align deterministic and runtime targets with the actor proof path",
+      "guidance": "For finite-lifetime moving owned objects that must interact with a target, align both deterministic proof placement and returned Game Spec spawn geometry with the actor proof path. The declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with bounded interaction headroom, or a compatible target spawn must move nearer. Do not rely on deterministic target relocation, unrelated target movement, or source behavior outside the declared travel budget.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
+          "planning",
           "source_generation",
-          "deterministic_evaluation"
+          "deterministic_evaluation",
+          "first_playable"
         ],
         "classifications": [
-          "provider_output_rejected"
+          "provider_output_rejected",
+          "runtime_pipeline_failure"
         ]
       },
       "id": "KF-0011",
-      "revision": 1,
+      "revision": 3,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -457,11 +661,111 @@
           "outcome": "provider_output_rejected",
           "summary": "Exact intent targets are now placed ahead of the first exact actor on the deterministic proof path; unrelated entity positions are unchanged.",
           "observedAt": "2026-08-24T18:15:53Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The returned Game Spec spawned the player at center (105, 300) and enemy at center (660, 300), 555 pixels apart, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. Deterministic evaluation passed only because its fixture relocated the target to 32 pixels ahead of the actor; mounted first-playable cleanup then reported zero target interactions.",
+          "observedAt": "2026-08-26T19:36:57.120Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-8",
+          "stage": "runtime_activation",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "KF-0006, KF-0008, KF-0009, KF-0010, KF-0011, and KF-0012 were the complete applicable finding set, with no related findings. The actual candidate passed source generation and deterministic evaluation, where the target fixture was placed 32 pixels ahead of the actor, but failed first-playable in the returned runtime layout. The player spawn center was (105, 300) and the enemy spawn center was (660, 300), a 555-pixel separation, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. The source therefore created at the actor, moved, and cleaned up correctly but could not possibly reach the live target. The durable planning fix requires the combined Game Spec and Mechanic Intent to make finite-lifetime target travel mutually reachable: declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with at least 64 pixels of interaction headroom, or the compatible target spawn must move nearer. The append-only reconciliation extends KF-0011 from deterministic placement through planning and first-playable runtime geometry.",
+          "observedAt": "2026-08-26T19:54:42Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-26T19:49:52Z",
+          "reason": "Actual first-playable evidence proved that deterministic target alignment is insufficient when the returned runtime spawn geometry exceeds the accepted finite travel budget.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Align deterministic targets with the actor proof path",
+            "guidance": "Place exact intent targets ahead of the first exact actor on the deterministic behavior proof path; do not use arbitrary entity-index placement that contradicts accepted actor-direction behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The returned Game Spec spawned the player at center (105, 300) and enemy at center (660, 300), 555 pixels apart, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. Deterministic evaluation passed only because its fixture relocated the target to 32 pixels ahead of the actor; mounted first-playable cleanup then reported zero target interactions.",
+              "observedAt": "2026-08-26T19:36:57.120Z"
+            }
+          ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-08-26T20:52:09Z",
+          "reason": "A verified planning fix independently applies the existing reachability guidance to returned Game Spec spawn geometry.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Align deterministic and runtime targets with the actor proof path",
+            "guidance": "For finite-lifetime moving owned objects that must interact with a target, align both deterministic proof placement and returned Game Spec spawn geometry with the actor proof path. The declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with bounded interaction headroom, or a compatible target spawn must move nearer. Do not rely on deterministic target relocation, unrelated target movement, or source behavior outside the declared travel budget.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "source_generation",
+                "deterministic_evaluation",
+                "first_playable"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-8",
+              "stage": "runtime_activation",
+              "quality": "verified_fix",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "KF-0006, KF-0008, KF-0009, KF-0010, KF-0011, and KF-0012 were the complete applicable finding set, with no related findings. The actual candidate passed source generation and deterministic evaluation, where the target fixture was placed 32 pixels ahead of the actor, but failed first-playable in the returned runtime layout. The player spawn center was (105, 300) and the enemy spawn center was (660, 300), a 555-pixel separation, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. The source therefore created at the actor, moved, and cleaned up correctly but could not possibly reach the live target. The durable planning fix requires the combined Game Spec and Mechanic Intent to make finite-lifetime target travel mutually reachable: declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with at least 64 pixels of interaction headroom, or the compatible target spawn must move nearer. The append-only reconciliation extends KF-0011 from deterministic placement through planning and first-playable runtime geometry.",
+              "observedAt": "2026-08-26T19:54:42Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-24T23:17:44.000Z"
+      "updatedAt": "2026-08-26T20:52:09Z"
     },
     {
       "status": "active",
@@ -511,6 +815,364 @@
       "amendments": [],
       "createdAt": "2026-08-24T23:17:44.000Z",
       "updatedAt": "2026-08-24T23:17:44.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Measure campaign terminal timeout from provider progress",
+      "guidance": "Treat the campaign editor terminal timeout as a no-progress allowance: renew it when a provider request starts or its response completes, and classify infrastructure timeout only after the full allowance passes without provider or terminal progress.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "editor_mount"
+        ],
+        "classifications": [
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0013",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "Five successful actual-provider responses were recorded before the campaign editor hit its single 300-second terminal wall-clock limit and lost the still-active repair path without structured generation evidence.",
+          "observedAt": "2026-08-26T17:32:36.194Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T17:41:54.000Z",
+      "updatedAt": "2026-08-26T17:41:54.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Do not require generated source to deactivate bound objects",
+      "guidance": "Reject contract observations that require a bound object's active property to become false. Generated source may mutate admitted bound motion and produce authenticated target-interaction evidence, while object destruction applies only to mechanic-owned objects.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0014",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual source repairs passed creation, travel, target interaction, and cleanup but exhausted because the accepted contract required enemy_binding active to equal false, an unavailable mutation for a bound object.",
+          "observedAt": "2026-08-26T17:47:01.115Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T17:53:34.000Z",
+      "updatedAt": "2026-08-26T17:53:34.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Active loop orchestration uses the control campaign harness",
+      "guidance": "Campaign application builds and loop orchestration should both use the accepted linked-worktree revision. When the control checkout does not yet contain an accepted runner fix, invoke the accepted worktree CLI with --state-root pointing to the control checkout so application and harness code use the accepted revision while campaign evidence remains in the original persisted store. Do not substitute an increasingly large aggregate wall-clock timeout for provider-progress renewal.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "editor_mount"
+        ],
+        "classifications": [
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0015",
+      "revision": 2,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "The active control-run harness emitted its old page.waitForFunction 300000 ms timeout even though the accepted linked-worktree revision contained the progress-aware terminal wait implementation.",
+          "observedAt": "2026-08-26T18:01:18.264Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "The control runner captured successful planning, contract, and all three source responses before its fixed 600-second total terminal wait expired, demonstrating that aggregate timeout growth does not provide the accepted provider-progress semantics.",
+          "observedAt": "2026-08-26T18:21:19.655Z"
+        }
+      ],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-26T18:30:13.000Z",
+          "reason": "The longer actual attempt proved that a fixed aggregate timeout is not a reliable substitute for the accepted progress-aware runner and established a safe persisted-state execution path.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Active loop orchestration uses the control campaign harness",
+            "guidance": "Campaign application builds use the accepted linked-worktree revision, but the active loop CLI and browser runner are loaded from the control checkout. A worktree-only harness fix cannot govern that session until conclusion; use an explicit bounded runner option as temporary policy when needed.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1",
+              "attemptId": "a01-baseline",
+              "stage": "editor_mount",
+              "quality": "actual_submission",
+              "outcome": "infrastructure_failure",
+              "summary": "The control runner captured successful planning, contract, and all three source responses before its fixed 600-second total terminal wait expired, demonstrating that aggregate timeout growth does not provide the accepted provider-progress semantics.",
+              "observedAt": "2026-08-26T18:21:19.655Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T18:02:23.000Z",
+      "updatedAt": "2026-08-26T18:30:13.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Recognize the accepted editor receipt as a campaign terminal",
+      "guidance": "Treat the exact editor receipt 'Generated, evaluated, and accepted a playable mechanic project.' as a ready terminal alongside the legacy exact line 'Ready'. Terminal recognition only stops waiting; campaign success must still require a succeeded persisted GenerationRun, a GamePack, healthy mounted runtime, manual-QA eligibility, and the external mechanic probe.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "editor_mount"
+        ],
+        "classifications": [
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0016",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1",
+          "attemptId": "a01-baseline",
+          "stage": "editor_mount",
+          "quality": "actual_submission",
+          "outcome": "infrastructure_failure",
+          "summary": "All actual provider stages completed and a no-provider browser replay reached the accepted playable-project receipt with the sandbox runtime mounted, but the campaign waiter ignored that current success terminal and expired after five minutes without further progress.",
+          "observedAt": "2026-08-26T18:57:03.173Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-26T19:08:45.000Z",
+      "updatedAt": "2026-08-26T19:08:45.000Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Callback repairs must preserve the exact lifecycle checklist",
+      "guidance": "Treat the contract-derived required callback checklist as a closed set during initial generation and repair. Remove callback kinds absent from the checklist, add missing required kinds, and retain exactly one of each required kind. Apply fixed-step implementation guidance only when fixed_step is present in that exact checklist.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0017",
+      "revision": 2,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Source candidate callback kind \"fixed_step\" must occur exactly once and be declared by the accepted contract.",
+          "observedAt": "2026-08-26T20:00:12.549Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-9",
+          "stage": "source_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted contract set fixedStep false and its exact required callback checklist excluded fixed_step. The initial actual source candidate respected that callback set but used ungranted state_read; all three actual repair candidates then added and retained an undeclared no-op fixed_step callback. The generic source prompt simultaneously rendered the exact closed checklist and an unconditional instruction to keep fixed_step minimal whenever scheduled callbacks implemented lifecycle behavior, while callback_coverage_mismatch repair lacked an explicit remove-when-undeclared rule. This contradictory mechanic-general guidance explains the repeated provider output rejection. KF-0002, KF-0003, KF-0004, KF-0005, KF-0006, KF-0008, KF-0009, KF-0011, KF-0012, and KF-0014 were consulted; they constrain projectile lifecycle, geometry, runtime evidence, and contract observation behavior but do not govern callback-set coverage. The durable fix qualifies fixed_step guidance by the exact contract-derived checklist and tells callback repair to remove undeclared kinds, add missing required kinds, and retain exactly one of each required kind without weakening validation.",
+          "observedAt": "2026-08-26T20:54:26Z"
+        }
+      ],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T02:17:03Z",
+          "reason": "All actual cycle-9 source candidates obeyed the closed callback checklist after the verified prompt repair.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Callback repairs must preserve the exact lifecycle checklist",
+            "guidance": "Treat the contract-derived required callback checklist as a closed set during initial generation and repair. Remove callback kinds absent from the checklist, add missing required kinds, and retain exactly one of each required kind. Apply fixed-step implementation guidance only when fixed_step is present in that exact checklist.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-9",
+              "stage": "source_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted contract set fixedStep false and its exact required callback checklist excluded fixed_step. The initial actual source candidate respected that callback set but used ungranted state_read; all three actual repair candidates then added and retained an undeclared no-op fixed_step callback. The generic source prompt simultaneously rendered the exact closed checklist and an unconditional instruction to keep fixed_step minimal whenever scheduled callbacks implemented lifecycle behavior, while callback_coverage_mismatch repair lacked an explicit remove-when-undeclared rule. This contradictory mechanic-general guidance explains the repeated provider output rejection. KF-0002, KF-0003, KF-0004, KF-0005, KF-0006, KF-0008, KF-0009, KF-0011, KF-0012, and KF-0014 were consulted; they constrain projectile lifecycle, geometry, runtime evidence, and contract observation behavior but do not govern callback-set coverage. The durable fix qualifies fixed_step guidance by the exact contract-derived checklist and tells callback repair to remove undeclared kinds, add missing required kinds, and retain exactly one of each required kind without weakening validation.",
+              "observedAt": "2026-08-26T20:54:26Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T20:52:09Z",
+      "updatedAt": "2026-08-27T02:17:03Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Post-action state observations must reflect accepted writes",
+      "guidance": "After an accepted action writes private state, final state observations must match that write or a later write caused by an explicit reachable callback. Advancing beyond a *_until deadline changes admission because the deadline is elapsed but does not reset the stored deadline to its initial sentinel; omit that final state assertion or assert the deterministic written value unless accepted behavior explicitly resets it.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0018",
+      "revision": 2,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Model-declared observation 1 \"state_equals\" failed. Assertion: {\"kind\":\"state_equals\",\"stateId\":\"cooldown_until\",\"value\":-1}. Actual: 250.",
+          "observedAt": "2026-08-26T21:00:00.100Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-10",
+          "stage": "contract_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The actual cycle-9 contract declared cooldown_until with initial sentinel -1, dispatched the accepted fire action, advanced time, and then required a final state_equals value of -1. Every actual source candidate preserved the exact accepted callback checklist and wrote a cooldown deadline after the accepted action; the observed value was 250, and no accepted reachable callback reset that state. The contract therefore contradicted its own accepted action semantics by requiring the pre-action sentinel after the action had deterministically updated the state. KF-0004 directly governs the negative sentinel and requires the first action to be admitted before writing the current timestamp, so it confirms that -1 is a pre-action state rather than a valid post-action assertion. KF-0017 is confirmed because cycle-9 source candidates preserved the closed callback checklist. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 were also applicable to the classified projectile attempt but govern owned-object lifecycle, target provenance, evidence placement, geometry, or bound-object authority rather than this private-state observation. The durable mechanic-general fix requires post-action state observations to reflect accepted writes or explicit reachable resets and states that advancing beyond a *_until deadline does not reset its stored value to the initial sentinel.",
+          "observedAt": "2026-08-27T02:18:42Z"
+        }
+      ],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T02:34:18Z",
+          "reason": "The verified cycle-10 prompt repair encodes post-action state consistency at contract authoring time.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Post-action state observations must reflect accepted writes",
+            "guidance": "After an accepted action writes private state, final state observations must match that write or a later write caused by an explicit reachable callback. Advancing beyond a *_until deadline changes admission because the deadline is elapsed but does not reset the stored deadline to its initial sentinel; omit that final state assertion or assert the deterministic written value unless accepted behavior explicitly resets it.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-10",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The actual cycle-9 contract declared cooldown_until with initial sentinel -1, dispatched the accepted fire action, advanced time, and then required a final state_equals value of -1. Every actual source candidate preserved the exact accepted callback checklist and wrote a cooldown deadline after the accepted action; the observed value was 250, and no accepted reachable callback reset that state. The contract therefore contradicted its own accepted action semantics by requiring the pre-action sentinel after the action had deterministically updated the state. KF-0004 directly governs the negative sentinel and requires the first action to be admitted before writing the current timestamp, so it confirms that -1 is a pre-action state rather than a valid post-action assertion. KF-0017 is confirmed because cycle-9 source candidates preserved the closed callback checklist. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 were also applicable to the classified projectile attempt but govern owned-object lifecycle, target provenance, evidence placement, geometry, or bound-object authority rather than this private-state observation. The durable mechanic-general fix requires post-action state observations to reflect accepted writes or explicit reachable resets and states that advancing beyond a *_until deadline does not reset its stored value to the initial sentinel.",
+              "observedAt": "2026-08-27T02:18:42Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T02:17:03Z",
+      "updatedAt": "2026-08-27T02:34:18Z"
     }
   ],
   "reconciliations": [
@@ -1288,6 +1950,984 @@
       "createdAt": "2026-08-24T23:17:44.000Z",
       "priorManifestDigest": "2d3f1846cdeff187fce97c593ff8b7dc0c568249c7a74285c17700c2d63d9834",
       "resultingManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t171703z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1"
+      },
+      "consultedManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b",
+      "contextDigest": "8b3e36d4cd31063aff4ddb1fc0ad3dbcf4c34d28d9a3f8d77ec21bdeb6f70a5f",
+      "consultedFindingIds": [
+        "KF-0007",
+        "KF-0008"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The actual submission showed that downstream handoff verification rejected an authentic passed evaluator receipt because it globally required target-interaction proof from an active-progress scenario instead of honoring the cleanup-capable scenario policy."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0008",
+          "expectedRevision": 1,
+          "reason": "Actual assembly evidence showed that cleanup-capable target-interaction policy must govern downstream handoff verification as well as evaluator-authored observations.",
+          "changes": {
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof on cleanup-capable time-advancing scenarios; use the first time-advancing scenario only when no cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c0-r1",
+              "attemptId": "a01-baseline",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "An accepted repaired source produced an authentic passed deterministic-evaluation receipt, but handoff rejected it because active-progress evidence omitted target interaction while cleanup scenarios carried that proof.",
+              "observedAt": "2026-08-26T16:59:01.103Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T17:17:03.000Z",
+      "priorManifestDigest": "275031df61edb558c60dbd5458bc9d2d41254efbe10e2116024fee2bc09e1d6b",
+      "resultingManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t174154z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1"
+      },
+      "consultedManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432",
+      "contextDigest": "bcead0969098693a3f0ce518ca6608c530a79e2c30d413da702226041fd42601",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-1",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The verified fix aligned handoff target-interaction verification with the cleanup-capable scenario policy already compiled in KF-0008."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0013"
+          ],
+          "rationale": "The actual submission received five successful provider responses across planning, contract, and source repair, then hit the single 300-second terminal wall-clock limit before the remaining repair path could finish or record structured generation evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-isolation-source-fixture-c1-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The fixture source referenced private state dash_active while the actual contract exposed cooldown_until, so its deterministic type rejection does not confirm or contradict the applicable source-behavior findings."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-isolation-contract-fixture-c1-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The fixture contract referenced shoot_action outside the trusted action catalog and stopped before any actual source call, so it does not provide reusable evidence about the actual source repair or terminal wait."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Measure campaign terminal timeout from provider progress",
+            "guidance": "Treat the campaign editor terminal timeout as a no-progress allowance: renew it when a provider request starts or its response completes, and classify infrastructure timeout only after the full allowance passes without provider or terminal progress.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0013",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c1-r1",
+                "attemptId": "a01-baseline",
+                "stage": "editor_mount",
+                "quality": "actual_submission",
+                "outcome": "infrastructure_failure",
+                "summary": "Five successful actual-provider responses were recorded before the campaign editor hit its single 300-second terminal wall-clock limit and lost the still-active repair path without structured generation evidence.",
+                "observedAt": "2026-08-26T17:32:36.194Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T17:41:54.000Z",
+            "updatedAt": "2026-08-26T17:41:54.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T17:41:54.000Z",
+      "priorManifestDigest": "328be52d79c38458e59693701f5ff4a21e7034eacad51f450b4f5783b2bae432",
+      "resultingManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t175334z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1"
+      },
+      "consultedManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9",
+      "contextDigest": "b4f495cf67de0a89356ea315cc8296c9dc3238ed7e99bd4641b5359a8d87367d",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0013"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-2",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0013"
+          ],
+          "rationale": "The verified campaign-runner fix implemented the KF-0013 no-progress timeout rule and preserved a structured outcome for the next multi-provider repair path."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0014"
+          ],
+          "rationale": "Actual source repairs satisfied the authenticated owned-object creation, travel, target-interaction, and cleanup path, but could not satisfy a model-declared requirement that a bound target become inactive because the admitted host can destroy only mechanic-owned objects."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Do not require generated source to deactivate bound objects",
+            "guidance": "Reject contract observations that require a bound object's active property to become false. Generated source may mutate admitted bound motion and produce authenticated target-interaction evidence, while object destruction applies only to mechanic-owned objects.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0014",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c2-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual source repairs passed creation, travel, target interaction, and cleanup but exhausted because the accepted contract required enemy_binding active to equal false, an unavailable mutation for a bound object.",
+                "observedAt": "2026-08-26T17:47:01.115Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T17:53:34.000Z",
+            "updatedAt": "2026-08-26T17:53:34.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T17:53:34.000Z",
+      "priorManifestDigest": "88d4d029916e19eade5b4afa80da9dccd39682314780dee1e772219c92e74dc9",
+      "resultingManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t180223z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-4",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1"
+      },
+      "consultedManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255",
+      "contextDigest": "9364d755e1da79df19eae4680a0eca1741fc21937c1048c21147710f0b474e45",
+      "consultedFindingIds": [
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0013",
+        "KF-0014"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-3",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0014"
+          ],
+          "rationale": "The verified contract-admission fix implemented the KF-0014 ownership boundary while preserving the KF-0008, KF-0009, and KF-0011 deterministic proof rules."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "The unchanged control checkout again emitted the old 300-second page.waitForFunction timeout even though the accepted loop revision contains the progress-aware runner, proving that active loop orchestration loads harness code from the control checkout rather than the linked worktree."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Active loop orchestration uses the control campaign harness",
+            "guidance": "Campaign application builds use the accepted linked-worktree revision, but the active loop CLI and browser runner are loaded from the control checkout. A worktree-only harness fix cannot govern that session until conclusion; use an explicit bounded runner option as temporary policy when needed.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0015",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c3-r1",
+                "attemptId": "a01-baseline",
+                "stage": "editor_mount",
+                "quality": "actual_submission",
+                "outcome": "infrastructure_failure",
+                "summary": "The active control-run harness emitted its old page.waitForFunction 300000 ms timeout even though the accepted linked-worktree revision contained the progress-aware terminal wait implementation.",
+                "observedAt": "2026-08-26T18:01:18.264Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T18:02:23.000Z",
+            "updatedAt": "2026-08-26T18:02:23.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T18:02:23.000Z",
+      "priorManifestDigest": "efa3e368e90f3a7502788e36195fc007bba278274f2e5bead0f9f69a7654e255",
+      "resultingManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t183013z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-5",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1"
+      },
+      "consultedManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480",
+      "contextDigest": "c044a1e4dac6a592e1dc2719f49a7dd74dea26917098f95a7529faa4d8f5d478",
+      "consultedFindingIds": [
+        "KF-0013",
+        "KF-0015"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-4",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "The verified temporary policy preserved the existing provider and proof ceilings while confirming that the active session still used the control checkout's total wall-clock terminal wait."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "All five actual planning, contract, and source responses were captured before the control runner emitted its 600-second total wall-clock timeout. Because individual provider requests are independently bounded and progress-aware waiting is already accepted in the loop revision, the safe session bridge is to run the accepted worktree CLI against the original persisted state root rather than continue increasing one aggregate timeout."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0015",
+          "expectedRevision": 1,
+          "reason": "The longer actual attempt proved that a fixed aggregate timeout is not a reliable substitute for the accepted progress-aware runner and established a safe persisted-state execution path.",
+          "changes": {
+            "guidance": "Campaign application builds and loop orchestration should both use the accepted linked-worktree revision. When the control checkout does not yet contain an accepted runner fix, invoke the accepted worktree CLI with --state-root pointing to the control checkout so application and harness code use the accepted revision while campaign evidence remains in the original persisted store. Do not substitute an increasingly large aggregate wall-clock timeout for provider-progress renewal."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c4-r1",
+              "attemptId": "a01-baseline",
+              "stage": "editor_mount",
+              "quality": "actual_submission",
+              "outcome": "infrastructure_failure",
+              "summary": "The control runner captured successful planning, contract, and all three source responses before its fixed 600-second total terminal wait expired, demonstrating that aggregate timeout growth does not provide the accepted provider-progress semantics.",
+              "observedAt": "2026-08-26T18:21:19.655Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T18:30:13.000Z",
+      "priorManifestDigest": "aa3bd17de35d5ee1bb07ea932514b059686ea1e7cde9021f2c3a8041ab6d0480",
+      "resultingManifestDigest": "5a79746c73c63cd0d404bb505d653d332fb191d09474657c96f45a79228f7e4e"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t190845z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-6",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1"
+      },
+      "consultedManifestDigest": "5a79746c73c63cd0d404bb505d653d332fb191d09474657c96f45a79228f7e4e",
+      "contextDigest": "6c9407ae081e7305b0330c75194f26d472bee06eaebeaa3adf519be1b4d7463a",
+      "consultedFindingIds": [
+        "KF-0013",
+        "KF-0015"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-5",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0013",
+            "KF-0015"
+          ],
+          "rationale": "The accepted worktree runner renewed its no-progress allowance through the planning, contract, and source responses, then emitted the precise five-minute no-progress classification after the last response."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0016"
+          ],
+          "rationale": "Captured-response browser replay showed the editor had generated, evaluated, accepted, persisted, and mounted the playable project while the campaign waiter continued waiting only because the current editor no longer renders the obsolete exact line Ready."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Recognize the accepted editor receipt as a campaign terminal",
+            "guidance": "Treat the exact editor receipt 'Generated, evaluated, and accepted a playable mechanic project.' as a ready terminal alongside the legacy exact line 'Ready'. Terminal recognition only stops waiting; campaign success must still require a succeeded persisted GenerationRun, a GamePack, healthy mounted runtime, manual-QA eligibility, and the external mechanic probe.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount"
+              ],
+              "classifications": [
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0016",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c5-r1",
+                "attemptId": "a01-baseline",
+                "stage": "editor_mount",
+                "quality": "actual_submission",
+                "outcome": "infrastructure_failure",
+                "summary": "All actual provider stages completed and a no-provider browser replay reached the accepted playable-project receipt with the sandbox runtime mounted, but the campaign waiter ignored that current success terminal and expired after five minutes without further progress.",
+                "observedAt": "2026-08-26T18:57:03.173Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T19:08:45.000Z",
+            "updatedAt": "2026-08-26T19:08:45.000Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T19:08:45.000Z",
+      "priorManifestDigest": "5a79746c73c63cd0d404bb505d653d332fb191d09474657c96f45a79228f7e4e",
+      "resultingManifestDigest": "8eff5f497aab9ab3c232f509c5e8437724befcf36aa605245b9bddd347d47b43"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t192912z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-7",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1"
+      },
+      "consultedManifestDigest": "8eff5f497aab9ab3c232f509c5e8437724befcf36aa605245b9bddd347d47b43",
+      "contextDigest": "8c1203504e45596f0aacb8648c773e1c1cb3d415e4d3cbebbf1ce3951381d8d1",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0016"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-6",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0016"
+          ],
+          "rationale": "The verified terminal-recognition fix reached a normal provider-output rejection rather than repeating the stale editor timeout, confirming that the accepted project receipt now terminates campaign waiting without bypassing pipeline gates."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The evaluator attached required target-interaction proof to a 100 ms active-travel scenario solely because that scenario lacked a positive owned-object-count observation, even though a separate scenario explicitly proved cleanup at zero. All four source attempts were therefore asked to satisfy early target interaction that contradicted the accepted cleanup-capable-only policy."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0008",
+          "expectedRevision": 2,
+          "reason": "Actual provider evidence showed that absence of positive owned-object count does not establish cleanup capability; cleanup proof must be explicit before target-interaction evidence is attached there.",
+          "changes": {
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. Use the first time-advancing scenario only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c6-r1",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The evaluator required target interaction on both the explicit zero-count cleanup scenario and a separate 100 ms travel scenario with no owned-object-count assertion. The travel scenario observed active creation and 36 units of motion but correctly had zero target interactions, exhausting all four source attempts against the misapplied proof.",
+              "observedAt": "2026-08-26T19:20:01.693Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T19:29:12Z",
+      "priorManifestDigest": "8eff5f497aab9ab3c232f509c5e8437724befcf36aa605245b9bddd347d47b43",
+      "resultingManifestDigest": "3d3392fad0e1982603333a4ce3b78ae3cecc20358ab796d26650ebdfb190e999"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t194952z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-8",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1"
+      },
+      "consultedManifestDigest": "3d3392fad0e1982603333a4ce3b78ae3cecc20358ab796d26650ebdfb190e999",
+      "contextDigest": "219d69657687d2677072dde79da61d187562050ba6663842bb7a482d63c177f0",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-7",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The verified explicit-cleanup selection fix allowed the next actual source candidate to pass deterministic evaluation and reach first-playable, confirming that the neutral travel scenario no longer carried cleanup-only target proof."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0011"
+          ],
+          "rationale": "Deterministic evaluation placed the target 32 pixels ahead of the actor and passed, while the returned Game Spec spawned the same actor and target 555 pixels apart against a declared 288-pixel lifetime travel budget. First-playable therefore observed creation, actor origin, motion, and cleanup but no possible target interaction."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0011",
+          "expectedRevision": 1,
+          "reason": "Actual first-playable evidence proved that deterministic target alignment is insufficient when the returned runtime spawn geometry exceeds the accepted finite travel budget.",
+          "changes": {
+            "title": "Align deterministic and runtime targets with the actor proof path",
+            "guidance": "For finite-lifetime moving owned objects that must interact with a target, align both deterministic proof placement and returned Game Spec spawn geometry with the actor proof path. The declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with bounded interaction headroom, or a compatible target spawn must move nearer. Do not rely on deterministic target relocation, unrelated target movement, or source behavior outside the declared travel budget.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "source_generation",
+                "deterministic_evaluation",
+                "first_playable"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The returned Game Spec spawned the player at center (105, 300) and enemy at center (660, 300), 555 pixels apart, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. Deterministic evaluation passed only because its fixture relocated the target to 32 pixels ahead of the actor; mounted first-playable cleanup then reported zero target interactions.",
+              "observedAt": "2026-08-26T19:36:57.120Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-26T19:49:52Z",
+      "priorManifestDigest": "3d3392fad0e1982603333a4ce3b78ae3cecc20358ab796d26650ebdfb190e999",
+      "resultingManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260826t205209z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-9",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1"
+      },
+      "consultedManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4",
+      "contextDigest": "d0821fa18b99454b4b71303edd5d231af02276ba879488484e5739a36845365c",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0012",
+        "KF-0014"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0011"
+          ],
+          "rationale": "The verified planning fix confirms that deterministic and returned-runtime actor-target geometry must both fit the accepted finite travel budget."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0017"
+          ],
+          "rationale": "The actual source repairs repeatedly retained an undeclared fixed_step callback despite a contract-derived checklist that excluded it, exposing contradictory generic repair guidance."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0011",
+          "expectedRevision": 2,
+          "confidence": "supported",
+          "reason": "A verified planning fix independently applies the existing reachability guidance to returned Game Spec spawn geometry.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-8",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c7-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-8",
+              "stage": "runtime_activation",
+              "quality": "verified_fix",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "KF-0006, KF-0008, KF-0009, KF-0010, KF-0011, and KF-0012 were the complete applicable finding set, with no related findings. The actual candidate passed source generation and deterministic evaluation, where the target fixture was placed 32 pixels ahead of the actor, but failed first-playable in the returned runtime layout. The player spawn center was (105, 300) and the enemy spawn center was (660, 300), a 555-pixel separation, while the accepted intent bounded projectile travel to 320 pixels per second for 900 milliseconds, or 288 pixels. The source therefore created at the actor, moved, and cleaned up correctly but could not possibly reach the live target. The durable planning fix requires the combined Game Spec and Mechanic Intent to make finite-lifetime target travel mutually reachable: declared speed multiplied by lifetime must exceed actor-to-target spawn-center distance with at least 64 pixels of interaction headroom, or the compatible target spawn must move nearer. The append-only reconciliation extends KF-0011 from deterministic placement through planning and first-playable runtime geometry.",
+              "observedAt": "2026-08-26T19:54:42Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Callback repairs must preserve the exact lifecycle checklist",
+            "guidance": "Treat the contract-derived required callback checklist as a closed set during initial generation and repair. Remove callback kinds absent from the checklist, add missing required kinds, and retain exactly one of each required kind. Apply fixed-step implementation guidance only when fixed_step is present in that exact checklist.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0017",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Source candidate callback kind \"fixed_step\" must occur exactly once and be declared by the accepted contract.",
+                "observedAt": "2026-08-26T20:00:12.549Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-26T20:52:09Z",
+            "updatedAt": "2026-08-26T20:52:09Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-26T20:52:09Z",
+      "priorManifestDigest": "a5a39418f0dae59c0f15c4721cf029cc7274d36b325691799dcf6b645bc9b9e4",
+      "resultingManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t021703z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-10",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1"
+      },
+      "consultedManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f",
+      "contextDigest": "27bfbcca71081a71f446c0ca2e864b553f3f95d6553cc4fb1a6b9e1baa55c0c7",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0017"
+          ],
+          "rationale": "The verified source prompt repair caused every actual cycle-9 candidate to preserve the exact contract-derived callback checklist, independently confirming the lifecycle-checklist guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0018"
+          ],
+          "rationale": "The contract required cooldown_until to return to its initial -1 sentinel after an accepted action had deterministically written a deadline, although no accepted callback reset that state."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0017",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "All actual cycle-9 source candidates obeyed the closed callback checklist after the verified prompt repair.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-9",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c8-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-9",
+              "stage": "source_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted contract set fixedStep false and its exact required callback checklist excluded fixed_step. The initial actual source candidate respected that callback set but used ungranted state_read; all three actual repair candidates then added and retained an undeclared no-op fixed_step callback. The generic source prompt simultaneously rendered the exact closed checklist and an unconditional instruction to keep fixed_step minimal whenever scheduled callbacks implemented lifecycle behavior, while callback_coverage_mismatch repair lacked an explicit remove-when-undeclared rule. This contradictory mechanic-general guidance explains the repeated provider output rejection. KF-0002, KF-0003, KF-0004, KF-0005, KF-0006, KF-0008, KF-0009, KF-0011, KF-0012, and KF-0014 were consulted; they constrain projectile lifecycle, geometry, runtime evidence, and contract observation behavior but do not govern callback-set coverage. The durable fix qualifies fixed_step guidance by the exact contract-derived checklist and tells callback repair to remove undeclared kinds, add missing required kinds, and retain exactly one of each required kind without weakening validation.",
+              "observedAt": "2026-08-26T20:54:26Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Post-action state observations must reflect accepted writes",
+            "guidance": "After an accepted action writes private state, final state observations must match that write or a later write caused by an explicit reachable callback. Advancing beyond a *_until deadline changes admission because the deadline is elapsed but does not reset the stored deadline to its initial sentinel; omit that final state assertion or assert the deterministic written value unless accepted behavior explicitly resets it.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0018",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Model-declared observation 1 \"state_equals\" failed. Assertion: {\"kind\":\"state_equals\",\"stateId\":\"cooldown_until\",\"value\":-1}. Actual: 250.",
+                "observedAt": "2026-08-26T21:00:00.100Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T02:17:03Z",
+            "updatedAt": "2026-08-27T02:17:03Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T02:17:03Z",
+      "priorManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f",
+      "resultingManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t023418z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-11",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1"
+      },
+      "consultedManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea",
+      "contextDigest": "a44edf551a34fdf63898b8b68e3ee78a052670c388a389210524ce9db267593e",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0018"
+          ],
+          "rationale": "The verified contract prompt fix enforces that post-action observations reflect accepted writes and that elapsed deadlines do not implicitly reset to their initial sentinels."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The terminal zero-interaction summary was downstream repair drift after earlier actual candidates had already produced a target interaction but failed the accepted contract's contradictory positive final count in a time-advancing scenario. The durable cause is already covered by KF-0008 and KF-0009, so the terminal symptom does not justify new source guidance."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0018",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "The verified cycle-10 prompt repair encodes post-action state consistency at contract authoring time.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-10",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The actual cycle-9 contract declared cooldown_until with initial sentinel -1, dispatched the accepted fire action, advanced time, and then required a final state_equals value of -1. Every actual source candidate preserved the exact accepted callback checklist and wrote a cooldown deadline after the accepted action; the observed value was 250, and no accepted reachable callback reset that state. The contract therefore contradicted its own accepted action semantics by requiring the pre-action sentinel after the action had deterministically updated the state. KF-0004 directly governs the negative sentinel and requires the first action to be admitted before writing the current timestamp, so it confirms that -1 is a pre-action state rather than a valid post-action assertion. KF-0017 is confirmed because cycle-9 source candidates preserved the closed callback checklist. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 were also applicable to the classified projectile attempt but govern owned-object lifecycle, target provenance, evidence placement, geometry, or bound-object authority rather than this private-state observation. The durable mechanic-general fix requires post-action state observations to reflect accepted writes or explicit reachable resets and states that advancing beyond a *_until deadline does not reset its stored value to the initial sentinel.",
+              "observedAt": "2026-08-27T02:18:42Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T02:34:18Z",
+      "priorManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea",
+      "resultingManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t025641z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-12",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c11-r1"
+      },
+      "consultedManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7",
+      "contextDigest": "f22539981b73aa3d32b55595ad288b83049d2b3ceee1265393b20208664532c3",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0008",
+            "KF-0009"
+          ],
+          "rationale": "The verified contract admission fix independently enforces cleanup-capable time-advancing evidence and dispatch-only positive transient creation proof."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c11-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The persisted attempt summary repeats the repaired initial contract contradiction even though contract repair, source generation, deterministic evaluation, and Final Game Spec assembly succeeded before a different first-playable callback watchdog failure. It does not faithfully summarize the terminal failure and cannot support a durable finding."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0008",
+          "expectedRevision": 3,
+          "confidence": "supported",
+          "reason": "Verified contract admission now rejects time-advancing positive-count evidence that cannot remain cleanup-capable.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
+        },
+        {
+          "type": "confirm",
+          "findingId": "KF-0009",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "Verified contract admission now reserves positive transient count evidence for dispatch-only scenarios.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-11",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-11",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
+              "observedAt": "2026-08-27T02:38:24Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T02:56:41Z",
+      "priorManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7",
+      "resultingManifestDigest": "00629c83986d9daa0a5a5b5a7a86ed26900e6d22d652ab240d02f2eb82d516f3"
     }
   ]
 }

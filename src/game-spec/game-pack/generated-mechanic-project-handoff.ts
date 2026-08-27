@@ -3627,7 +3627,7 @@ function externalObservationEvidenceActualMatchesAssertion({
       : "owned_object_lifecycle_unchanged_after_action";
   const expectedArchetypeIds = contract.ownedObjects.map(({ id }) => id);
   const requiresTargetInteraction =
-    (contract.intentLineage?.targets.length ?? 0) > 0;
+    scenarioRequiresTargetInteractionForHandoff(contract, scenario);
   const requiresActorOrigin =
     (contract.intentLineage?.actors.length ?? 0) > 0 &&
     (contract.intentLineage?.spatialRules.length ?? 0) > 0 &&
@@ -3704,6 +3704,29 @@ function scenarioRequiresImmediateOwnedObjectCreation(
       ownedArchetypeIds.has(observation.archetypeId) &&
       observation.operator !== "at_most" &&
       observation.value > 0
+  );
+}
+
+function scenarioRequiresTargetInteractionForHandoff(
+  contract: GeneratedMechanicContract,
+  scenario: GeneratedMechanicContract["scenarios"][number]
+): boolean {
+  if ((contract.intentLineage?.targets.length ?? 0) === 0) {
+    return false;
+  }
+  const timeAdvancingScenarios = contract.scenarios.filter((candidate) =>
+    candidate.steps.some((step) => step.kind === "advance_time")
+  );
+  const cleanupScenarios = timeAdvancingScenarios.filter(
+    (candidate) =>
+      !scenarioRequiresImmediateOwnedObjectCreation(candidate, contract)
+  );
+  const targetInteractionScenarios =
+    cleanupScenarios.length > 0
+      ? cleanupScenarios
+      : timeAdvancingScenarios.slice(0, 1);
+  return targetInteractionScenarios.some(
+    (candidate) => candidate.id === scenario.id
   );
 }
 

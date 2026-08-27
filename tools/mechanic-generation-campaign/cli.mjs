@@ -228,9 +228,9 @@ async function main(args) {
       importLegacyAttemptReports(repoRoot),
       parseTemporaryFixLedger(repoRoot),
     ]);
-    if (attempts.length !== 80 || fixes.length !== 32) {
+    if (attempts.length !== 80 || fixes.length !== 33) {
       throw new Error(
-        `Legacy import count changed: expected 80 attempts and 32 temporary fixes, received ${attempts.length} and ${fixes.length}.`
+        `Legacy import count changed: expected 80 attempts and 33 temporary fixes, received ${attempts.length} and ${fixes.length}.`
       );
     }
     if (shouldWrite) {

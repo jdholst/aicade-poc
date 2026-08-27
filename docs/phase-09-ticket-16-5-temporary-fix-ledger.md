@@ -361,6 +361,17 @@ This ledger records expedient fixes accepted to improve real-provider end-to-end
 - Removal criteria: transient cleanup horizons are structurally represented and contract validation can reject contradictory final counts without inspecting config-key suffixes.
 - Current coverage: red-to-green public contract-generation service regression for a 1200 ms accepted lifetime and a positive final count after 1200 ms; a public prompt-builder regression covers exact post-lifetime repair guidance; shorter active-progress scenarios remain covered by the evaluator's four-state lifecycle regressions.
 
+### TF-33 — Active-loop campaign timeout override (retired)
+
+- Status: retired in Ticket 17 proof-loop fix cycle 5; retained only as historical campaign evidence
+- Motivated by: `p09-t17-projectile-proof-loop-20260826t165320275z` discovery cycles 1 and 3. Both full-actual submissions received continuing provider-stage responses but the control checkout's 300-second wall-clock terminal wait expired before structured repair completion.
+- Current shortcut: none. The accepted loop worktree's CLI now resumes against the control checkout's persisted campaign state through `--state-root`, so both the application and campaign harness use the accepted progress-aware revision without changing evidence location.
+- Risk: a truly stalled editor can remain attached for up to ten minutes before the existing infrastructure-failure path records it. The larger wall-clock allowance is session policy rather than progress-aware behavior.
+- Current guardrails: the override is explicit on each resume, bounded at 600000 ms, and does not change provider limits, retry policy, proof thresholds, or human QA. The browser runner still records every submission, request count, response capture, terminal result, and timeout.
+- Robust replacement: implemented by the accepted-worktree `loop resume --state-root <control-checkout-path>` execution path and the committed provider-progress renewal logic, so the configured timeout measures inactivity rather than total repair duration.
+- Removal criteria: satisfied in proof-loop fix cycle 5 because the campaign CLI can execute the accepted loop revision's harness code while retaining the original persisted state root.
+- Current coverage: red-to-green state-root CLI contract, accepted-root behavior check, activity-renewal runner regression, 105 campaign-tool tests, lint, production build, and live evidence that aggregate 600-second waiting remained inferior to provider-progress renewal.
+
 ## Fixes deliberately not classified as band-aids
 
 The following changes address trusted infrastructure invariants and should remain even after the temporary entries above are replaced:
