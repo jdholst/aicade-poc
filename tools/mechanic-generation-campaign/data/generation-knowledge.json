@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 12,
-  "updatedAt": "2026-08-27T02:17:03Z",
+  "revision": 13,
+  "updatedAt": "2026-08-27T02:34:18Z",
   "entries": [
     {
       "status": "active",
@@ -1004,7 +1004,7 @@
         ]
       },
       "id": "KF-0018",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -1016,11 +1016,61 @@
           "outcome": "provider_output_rejected",
           "summary": "Model-declared observation 1 \"state_equals\" failed. Assertion: {\"kind\":\"state_equals\",\"stateId\":\"cooldown_until\",\"value\":-1}. Actual: 250.",
           "observedAt": "2026-08-26T21:00:00.100Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+          "fixId": "fix-cycle-10",
+          "stage": "contract_generation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "The actual cycle-9 contract declared cooldown_until with initial sentinel -1, dispatched the accepted fire action, advanced time, and then required a final state_equals value of -1. Every actual source candidate preserved the exact accepted callback checklist and wrote a cooldown deadline after the accepted action; the observed value was 250, and no accepted reachable callback reset that state. The contract therefore contradicted its own accepted action semantics by requiring the pre-action sentinel after the action had deterministically updated the state. KF-0004 directly governs the negative sentinel and requires the first action to be admitted before writing the current timestamp, so it confirms that -1 is a pre-action state rather than a valid post-action assertion. KF-0017 is confirmed because cycle-9 source candidates preserved the closed callback checklist. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 were also applicable to the classified projectile attempt but govern owned-object lifecycle, target provenance, evidence placement, geometry, or bound-object authority rather than this private-state observation. The durable mechanic-general fix requires post-action state observations to reflect accepted writes or explicit reachable resets and states that advancing beyond a *_until deadline does not reset its stored value to the initial sentinel.",
+          "observedAt": "2026-08-27T02:18:42Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T02:34:18Z",
+          "reason": "The verified cycle-10 prompt repair encodes post-action state consistency at contract authoring time.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Post-action state observations must reflect accepted writes",
+            "guidance": "After an accepted action writes private state, final state observations must match that write or a later write caused by an explicit reachable callback. Advancing beyond a *_until deadline changes admission because the deadline is elapsed but does not reset the stored deadline to its initial sentinel; omit that final state assertion or assert the deterministic written value unless accepted behavior explicitly resets it.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-10",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The actual cycle-9 contract declared cooldown_until with initial sentinel -1, dispatched the accepted fire action, advanced time, and then required a final state_equals value of -1. Every actual source candidate preserved the exact accepted callback checklist and wrote a cooldown deadline after the accepted action; the observed value was 250, and no accepted reachable callback reset that state. The contract therefore contradicted its own accepted action semantics by requiring the pre-action sentinel after the action had deterministically updated the state. KF-0004 directly governs the negative sentinel and requires the first action to be admitted before writing the current timestamp, so it confirms that -1 is a pre-action state rather than a valid post-action assertion. KF-0017 is confirmed because cycle-9 source candidates preserved the closed callback checklist. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 were also applicable to the classified projectile attempt but govern owned-object lifecycle, target provenance, evidence placement, geometry, or bound-object authority rather than this private-state observation. The durable mechanic-general fix requires post-action state observations to reflect accepted writes or explicit reachable resets and states that advancing beyond a *_until deadline does not reset its stored value to the initial sentinel.",
+              "observedAt": "2026-08-27T02:18:42Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-27T02:17:03Z",
-      "updatedAt": "2026-08-27T02:17:03Z"
+      "updatedAt": "2026-08-27T02:34:18Z"
     }
   ],
   "reconciliations": [
@@ -2626,6 +2676,72 @@
       "createdAt": "2026-08-27T02:17:03Z",
       "priorManifestDigest": "175b8b3f0b3dd67a93cf3247665ca5957daad2c23f796905655a42cf055b312f",
       "resultingManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t023418z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+        "fixId": "fix-cycle-11",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1"
+      },
+      "consultedManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea",
+      "contextDigest": "a44edf551a34fdf63898b8b68e3ee78a052670c388a389210524ce9db267593e",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0018"
+          ],
+          "rationale": "The verified contract prompt fix enforces that post-action observations reflect accepted writes and that elapsed deadlines do not implicitly reset to their initial sentinels."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c10-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The terminal zero-interaction summary was downstream repair drift after earlier actual candidates had already produced a target interaction but failed the accepted contract's contradictory positive final count in a time-advancing scenario. The durable cause is already covered by KF-0008 and KF-0009, so the terminal symptom does not justify new source guidance."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0018",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "The verified cycle-10 prompt repair encodes post-action state consistency at contract authoring time.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260826t165320275z/fix-cycle-10",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260826t165320275z-discovery-c9-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260826t165320275z",
+              "fixId": "fix-cycle-10",
+              "stage": "contract_generation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "The actual cycle-9 contract declared cooldown_until with initial sentinel -1, dispatched the accepted fire action, advanced time, and then required a final state_equals value of -1. Every actual source candidate preserved the exact accepted callback checklist and wrote a cooldown deadline after the accepted action; the observed value was 250, and no accepted reachable callback reset that state. The contract therefore contradicted its own accepted action semantics by requiring the pre-action sentinel after the action had deterministically updated the state. KF-0004 directly governs the negative sentinel and requires the first action to be admitted before writing the current timestamp, so it confirms that -1 is a pre-action state rather than a valid post-action assertion. KF-0017 is confirmed because cycle-9 source candidates preserved the closed callback checklist. KF-0002, KF-0003, KF-0005, KF-0008, KF-0009, KF-0011, and KF-0014 were also applicable to the classified projectile attempt but govern owned-object lifecycle, target provenance, evidence placement, geometry, or bound-object authority rather than this private-state observation. The durable mechanic-general fix requires post-action state observations to reflect accepted writes or explicit reachable resets and states that advancing beyond a *_until deadline does not reset its stored value to the initial sentinel.",
+              "observedAt": "2026-08-27T02:18:42Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T02:34:18Z",
+      "priorManifestDigest": "632300815a2fd27f624c774a4099ec125596c0e61f785739743b279932f823ea",
+      "resultingManifestDigest": "6f755700c9176e36121b2a0c9daa34876b7dc9bd5144ec34e7da2cc113da33b7"
     }
   ]
 }

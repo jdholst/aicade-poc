@@ -445,7 +445,18 @@ describe("generateMechanicContract", () => {
     });
   });
 
-  it("rejects a positive final owned-object count after the accepted transient lifetime", async () => {
+  it.each([
+    {
+      advancedMilliseconds: 100,
+      expectedMessage: "time-advancing scenario",
+    },
+    {
+      advancedMilliseconds: 1200,
+      expectedMessage: "accepted transient lifetime 1200ms",
+    },
+  ])(
+    "rejects a positive final owned-object count after advancing $advancedMilliseconds ms",
+    async ({ advancedMilliseconds, expectedMessage }) => {
     const transientIntent: MechanicIntent = {
       ...intent,
       ownedObjects: ["projectile"],
@@ -516,7 +527,7 @@ describe("generateMechanicContract", () => {
             ],
             steps: [
               { kind: "dispatch_action", actionId: "toggle" },
-              { kind: "advance_time", milliseconds: 1200 },
+              { kind: "advance_time", milliseconds: advancedMilliseconds },
             ],
             observations: [
               {
@@ -540,14 +551,13 @@ describe("generateMechanicContract", () => {
           expect.objectContaining({
             path: "scenarios.0.observations.0",
             code: "contradiction",
-            message: expect.stringContaining(
-              "accepted transient lifetime 1200ms"
-            ),
+            message: expect.stringContaining(expectedMessage),
           }),
         ],
       },
     });
-  });
+    }
+  );
 
   it("stamps exact trusted semantic lineage and ignores provider-authored substitutions", async () => {
     const semanticIntent: MechanicIntent = {
