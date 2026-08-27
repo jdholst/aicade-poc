@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 import { CAMPAIGN_LOOP_RUN_SCHEMA_VERSION } from "./loop-contracts.mjs";
 import { createCampaignLoopStore } from "./loop-store.mjs";
-import { inspectLoopWorktree } from "./loop-worktree.mjs";
+import { changedFilesBetween, inspectLoopWorktree } from "./loop-worktree.mjs";
 import { inspectRevision } from "./revision.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -238,20 +238,38 @@ async function validateFixChain(repoRoot, run, fixes) {
     ) {
       throw new Error(`Fix report ${id} does not form a verified revision chain.`);
     }
-    const { stdout: parents } = await git(repoRoot, [
+    const { stdout: commits } = await git(repoRoot, [
       "rev-list",
+      "--reverse",
       "--parents",
-      "-n",
-      "1",
-      fix.commit,
+      `${fix.beforeRevision.head}..${fix.afterRevision.head}`,
     ]);
-    const commitParents = parents.trim().split(" ").slice(1);
+    let checkpointHead = fix.beforeRevision.head;
+    for (const line of commits.trim().split("\n").filter(Boolean)) {
+      const [commit, ...commitParents] = line.split(" ");
+      if (commitParents.length !== 1 || commitParents[0] !== checkpointHead) {
+        throw new Error(
+          `Fix report ${id} contains unreported commits or a non-linear checkpoint.`
+        );
+      }
+      checkpointHead = commit;
+    }
+    if (checkpointHead !== fix.afterRevision.head) {
+      throw new Error(
+        `Fix report ${id} contains unreported commits or a non-linear checkpoint.`
+      );
+    }
+    const actualChangedFiles = await changedFilesBetween(
+      repoRoot,
+      fix.beforeRevision.head,
+      fix.afterRevision.head
+    );
     if (
-      commitParents.length !== 1 ||
-      commitParents[0] !== fix.beforeRevision.head
+      JSON.stringify(actualChangedFiles) !==
+      JSON.stringify([...fix.changedFiles].sort())
     ) {
       throw new Error(
-        `Fix report ${id} contains unreported commits or is not a single-parent checkpoint.`
+        `Fix report ${id} contains unreported commits or changed files.`
       );
     }
     head = fix.afterRevision.head;

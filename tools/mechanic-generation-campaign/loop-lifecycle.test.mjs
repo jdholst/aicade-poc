@@ -110,6 +110,40 @@ describe("campaign loop session lifecycle", () => {
     expect(parents.trim().split(" ")).toHaveLength(3);
   });
 
+  it("merges a verified linear multi-commit fix checkpoint", async () => {
+    const fixture = await createLoopFixture();
+    await mkdir(path.join(fixture.worktreePath, "src"), { recursive: true });
+    await writeFile(
+      path.join(fixture.worktreePath, "src", "pipeline.txt"),
+      "first verified change\n",
+      "utf8"
+    );
+    await git(fixture.worktreePath, ["add", "src/pipeline.txt"]);
+    await git(fixture.worktreePath, ["commit", "-m", "first checkpoint commit"]);
+    const { run, fixes } = await commitFix(fixture, {
+      file: "src/contract.txt",
+      contents: "second verified change\n",
+    });
+    fixes[0] = {
+      ...fixes[0],
+      changedFiles: ["src/contract.txt", "src/pipeline.txt"],
+    };
+
+    const concluded = await concludeLoopSession({
+      repoRoot: fixture.controlRoot,
+      run,
+      fixes,
+    });
+
+    expect(concluded.lifecycle.mergedFixes).toBe(true);
+    expect(
+      await readFile(path.join(fixture.controlRoot, "src/pipeline.txt"), "utf8")
+    ).toBe("first verified change\n");
+    expect(
+      await readFile(path.join(fixture.controlRoot, "src/contract.txt"), "utf8")
+    ).toBe("second verified change\n");
+  });
+
   it("aborts a conflicting conclusion without removing the loop session", async () => {
     const fixture = await createLoopFixture();
     await writeFile(
