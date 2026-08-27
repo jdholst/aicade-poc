@@ -15,7 +15,7 @@ const RUNTIME_HEARTBEAT_BROWSER_EVIDENCE = Symbol(
 const DEADLINE_EXCEEDED = Symbol("conformance_session_deadline_exceeded");
 
 export const MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION =
-  "mechanic_execution_realm_browser_session/v1";
+  "mechanic_execution_realm_browser_session/v3";
 
 export type MechanicExecutionRealmBrowserCandidateInitialization = {
   kind: "sparkline_mechanic_conformance_candidate_initialize";
@@ -31,14 +31,30 @@ export type MechanicExecutionRealmBrowserRuntimeInitialization = {
   runtimeId: StableId;
 };
 
-export type MechanicExecutionRealmBrowserCandidateRequest = {
+export type MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement = {
+  kind: "sparkline_mechanic_conformance_runtime_initialized";
+  protocolVersion: typeof MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION;
+  sessionId: StableId;
+  runtimeId: StableId;
+};
+
+type MechanicExecutionRealmBrowserCandidateRequestBase = {
   kind: "sparkline_mechanic_conformance_candidate_request";
   protocolVersion: typeof MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION;
   probeId: StableId;
   nonce: StableId;
-  action: "execute" | "terminate";
   probe: MechanicExecutionRealmConformanceProbe;
 };
+
+export type MechanicExecutionRealmBrowserCandidateRequest =
+  | (MechanicExecutionRealmBrowserCandidateRequestBase & {
+      action: "execute";
+      targetExecutionNonce?: never;
+    })
+  | (MechanicExecutionRealmBrowserCandidateRequestBase & {
+      action: "terminate";
+      targetExecutionNonce: StableId;
+    });
 
 export type MechanicExecutionRealmBrowserCandidateExecutionAcknowledgement = {
   kind: "sparkline_mechanic_conformance_candidate_execution_acknowledgement";
@@ -110,6 +126,7 @@ export type MechanicExecutionRealmConformanceSessionProbeEvidence = {
 
 export type MechanicExecutionRealmConformanceSessionState = {
   candidate: MechanicExecutionRealmCandidateAdapter;
+  waitForInitialization(deadlineMilliseconds: number): Promise<boolean>;
   consumeCandidateExecutionEvidence(
     probe: MechanicExecutionRealmConformanceProbe,
     result: MechanicExecutionRealmProbeResult
@@ -138,8 +155,15 @@ type RuntimeHeartbeatBrowserEvidence = {
 };
 
 type CancellableCandidateRequest = {
+  request?: MechanicExecutionRealmBrowserCandidateRequest;
   promise: Promise<MechanicExecutionRealmProbeResult>;
   cancel(): void;
+};
+
+type RetiredCandidateRequest = {
+  request: MechanicExecutionRealmBrowserCandidateRequest;
+  acknowledgementSeen: boolean;
+  responseSeen: boolean;
 };
 
 type PreparedIframeState = {
@@ -168,6 +192,7 @@ type BrowserCandidateRequestContext = {
   candidateEndpointId: StableId;
   issuedNonces: Set<StableId>;
   pendingCancellations: Set<() => void>;
+  retiredCandidateRequests: Map<StableId, RetiredCandidateRequest>;
   candidateAcknowledgements: Map<StableId, CandidateExecutionBrowserEvidence>;
   candidateEvidence: WeakMap<
     MechanicExecutionRealmProbeResult,
@@ -256,6 +281,9 @@ export function createMechanicExecutionRealmConformanceSession({
 
   sessionStates.set(session, Object.freeze({
     candidate,
+    async waitForInitialization() {
+      return !disposed;
+    },
     consumeCandidateExecutionEvidence() {
       return false;
     },
@@ -324,6 +352,7 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
     CandidateExecutionBrowserEvidence
   >();
   const pendingCancellations = new Set<() => void>();
+  const retiredCandidateRequests = new Map<StableId, RetiredCandidateRequest>();
   let disposed = false;
 
   const disposeBrowserState = () => {
@@ -336,6 +365,7 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
       cancel();
     }
     pendingCancellations.clear();
+    retiredCandidateRequests.clear();
     candidateAcknowledgements.clear();
     issuedNonces.clear();
     discardCapturedIframes();
@@ -349,6 +379,7 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
     candidateEndpointId,
     issuedNonces,
     pendingCancellations,
+    retiredCandidateRequests,
     candidateAcknowledgements,
     candidateEvidence,
     isDisposed: () => disposed,
@@ -369,12 +400,15 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
       return {
         result: executionRequest.promise,
         terminate() {
-          executionRequest.cancel();
-          terminationRequest = requestCandidate(
-            "terminate",
-            probe,
-            candidateRequestContext
-          );
+          if (!terminationRequest) {
+            executionRequest.cancel();
+            terminationRequest = requestCandidate(
+              "terminate",
+              probe,
+              candidateRequestContext,
+              executionRequest.request
+            );
+          }
           return terminationRequest.promise;
         },
         dispose() {
@@ -396,6 +430,17 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
     sessionId,
     runtimeId,
   };
+  const runtimeReadiness = requestRuntimeInitializationAcknowledgement({
+    runtimeIframe,
+    runtimeWindow,
+    runtimePreparation: capturedRuntime.preparation,
+    ownerWindow,
+    sessionId,
+    runtimeId,
+    pendingCancellations,
+    isDisposed: () => disposed,
+    disposeBrowserState,
+  });
   const session: MechanicExecutionRealmConformanceSession = Object.freeze({
     candidateId,
     [CONFORMANCE_SESSION]: true as const,
@@ -423,6 +468,17 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
 
   sessionStates.set(session, Object.freeze({
     candidate,
+    async waitForInitialization(deadlineMilliseconds) {
+      const readiness = await raceAgainstDeadline(
+        runtimeReadiness.promise,
+        deadlineMilliseconds
+      );
+      if (readiness === DEADLINE_EXCEEDED) {
+        runtimeReadiness.cancel();
+        return false;
+      }
+      return readiness;
+    },
     consumeCandidateExecutionEvidence(probe, result) {
       const evidence = candidateEvidence.get(result);
       candidateEvidence.delete(result);
@@ -435,6 +491,9 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
       );
     },
     checkHostResponsiveness(probeId, deadlineMilliseconds) {
+      if (!runtimeReadiness.isReady()) {
+        return Promise.resolve(noBrowserEvidence(false));
+      }
       return requestRuntimeHeartbeat({
         probeId,
         deadlineMilliseconds,
@@ -725,7 +784,8 @@ function createCryptographicNonce(
 function requestCandidate(
   action: MechanicExecutionRealmBrowserCandidateRequest["action"],
   probe: MechanicExecutionRealmConformanceProbe,
-  context: BrowserCandidateRequestContext
+  context: BrowserCandidateRequestContext,
+  pairedExecutionRequest?: MechanicExecutionRealmBrowserCandidateRequest
 ): CancellableCandidateRequest {
   if (context.isDisposed()) {
     return {
@@ -738,15 +798,36 @@ function requestCandidate(
     context.ownerWindow.crypto,
     context.issuedNonces
   );
-  const request: MechanicExecutionRealmBrowserCandidateRequest = {
-    kind: "sparkline_mechanic_conformance_candidate_request",
-    protocolVersion: MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
-    probeId: probe.id,
-    nonce,
-    action,
-    probe,
-  };
+  let request: MechanicExecutionRealmBrowserCandidateRequest;
+  if (action === "execute") {
+    request = {
+      kind: "sparkline_mechanic_conformance_candidate_request",
+      protocolVersion:
+        MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+      probeId: probe.id,
+      nonce,
+      action,
+      probe,
+    };
+  } else {
+    if (pairedExecutionRequest?.action !== "execute") {
+      throw new TypeError(
+        "Candidate termination requires the exact paired execute request."
+      );
+    }
+    request = {
+      kind: "sparkline_mechanic_conformance_candidate_request",
+      protocolVersion:
+        MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+      probeId: probe.id,
+      nonce,
+      action,
+      targetExecutionNonce: pairedExecutionRequest.nonce,
+      probe,
+    };
+  }
   let cancel: () => void = () => undefined;
+  let settled = false;
   const promise = new Promise<MechanicExecutionRealmProbeResult>(
     (resolve, reject) => {
       const eventTarget =
@@ -757,7 +838,21 @@ function requestCandidate(
         eventTarget.removeEventListener("message", onMessage as EventListener);
         context.pendingCancellations.delete(cancel);
       };
-      cancel = cleanup;
+      cancel = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (request.action === "execute") {
+          const evidence = context.candidateAcknowledgements.get(probe.id);
+          context.retiredCandidateRequests.set(request.nonce, {
+            request,
+            acknowledgementSeen: evidence?.nonce === request.nonce,
+            responseSeen: false,
+          });
+        }
+        cleanup();
+      };
       const onMessage = (event: MessageEvent<unknown>) => {
         if (
           event.isTrusted &&
@@ -792,6 +887,38 @@ function requestCandidate(
         }
 
         if (isCandidateExecutionAcknowledgement(event.data)) {
+          const retired = context.retiredCandidateRequests.get(
+            event.data.nonce
+          );
+          if (
+            retired &&
+            action === "terminate" &&
+            pairedExecutionRequest?.nonce === retired.request.nonce &&
+            isMatchingCandidateExecutionAcknowledgement(
+              event.data,
+              retired.request,
+              context.sessionId,
+              context.candidateEndpointId
+            )
+          ) {
+            if (retired.acknowledgementSeen) {
+              settled = true;
+              cleanup();
+              context.disposeBrowserState();
+              reject(
+                new Error("Candidate replayed a retired execution acknowledgement.")
+              );
+              return;
+            }
+            retired.acknowledgementSeen = true;
+            context.candidateAcknowledgements.set(probe.id, {
+              [CANDIDATE_EXECUTION_BROWSER_EVIDENCE]: true,
+              sessionIdentity: context.sessionIdentity,
+              probeId: retired.request.probeId,
+              nonce: retired.request.nonce,
+            });
+            return;
+          }
           if (
             action !== "execute" ||
             !isMatchingCandidateExecutionAcknowledgement(
@@ -801,6 +928,7 @@ function requestCandidate(
               context.candidateEndpointId
             )
           ) {
+            settled = true;
             cleanup();
             context.disposeBrowserState();
             reject(new Error("Candidate execution acknowledgement did not match the active probe."));
@@ -825,6 +953,35 @@ function requestCandidate(
               context.candidateEndpointId
             )
           ) {
+            const retired = context.retiredCandidateRequests.get(
+              event.data.nonce
+            );
+            if (
+              retired &&
+              action === "terminate" &&
+              pairedExecutionRequest?.nonce === retired.request.nonce &&
+              isMatchingCandidateResponse(
+                event.data,
+                retired.request,
+                context.sessionId,
+                context.candidateEndpointId
+              )
+            ) {
+              if (
+                !retired.acknowledgementSeen ||
+                retired.responseSeen ||
+                !isProbeResult(event.data.result, retired.request.probeId)
+              ) {
+                settled = true;
+                cleanup();
+                context.disposeBrowserState();
+                reject(new Error("Candidate replayed or malformed a retired response."));
+                return;
+              }
+              retired.responseSeen = true;
+              return;
+            }
+            settled = true;
             cleanup();
             context.disposeBrowserState();
             reject(new Error("Candidate response did not match the active probe."));
@@ -840,6 +997,12 @@ function requestCandidate(
         }
 
         cleanup();
+        settled = true;
+        if (action === "terminate" && pairedExecutionRequest) {
+          context.retiredCandidateRequests.delete(
+            pairedExecutionRequest.nonce
+          );
+        }
         const evidence = context.candidateAcknowledgements.get(probe.id);
         context.candidateAcknowledgements.delete(probe.id);
         if (
@@ -859,6 +1022,7 @@ function requestCandidate(
       try {
         postToCandidate(context.endpoint, request);
       } catch (error) {
+        settled = true;
         cleanup();
         context.disposeBrowserState();
         reject(error);
@@ -866,7 +1030,7 @@ function requestCandidate(
     }
   );
 
-  return { promise, cancel: () => cancel() };
+  return { request, promise, cancel: () => cancel() };
 }
 
 type RuntimeHeartbeatRequestInput = {
@@ -884,6 +1048,100 @@ type RuntimeHeartbeatRequestInput = {
   isDisposed(): boolean;
   disposeBrowserState(): void;
 };
+
+type RuntimeInitializationAcknowledgementRequestInput = Pick<
+  RuntimeHeartbeatRequestInput,
+  | "runtimeIframe"
+  | "runtimeWindow"
+  | "runtimePreparation"
+  | "ownerWindow"
+  | "sessionId"
+  | "runtimeId"
+  | "pendingCancellations"
+  | "isDisposed"
+  | "disposeBrowserState"
+>;
+
+type RuntimeInitializationReadiness = Readonly<{
+  promise: Promise<boolean>;
+  cancel(): void;
+  isReady(): boolean;
+}>;
+
+function requestRuntimeInitializationAcknowledgement({
+  runtimeIframe,
+  runtimeWindow,
+  runtimePreparation,
+  ownerWindow,
+  sessionId,
+  runtimeId,
+  pendingCancellations,
+  isDisposed,
+  disposeBrowserState,
+}: RuntimeInitializationAcknowledgementRequestInput): RuntimeInitializationReadiness {
+  let ready = false;
+  let settled = false;
+  let cancel: () => void = () => undefined;
+  const promise = new Promise<boolean>((resolve) => {
+    const cleanup = () => {
+      ownerWindow.removeEventListener("message", onMessage);
+      pendingCancellations.delete(cancel);
+    };
+    const finish = (value: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      ready = value;
+      cleanup();
+      resolve(value);
+    };
+    cancel = () => finish(false);
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (!event.isTrusted || event.source !== runtimeWindow) {
+        return;
+      }
+      if (
+        event.origin !== "null" ||
+        !isCurrentSandboxedIframe(
+          runtimeIframe,
+          runtimeWindow,
+          runtimePreparation
+        )
+      ) {
+        finish(false);
+        disposeBrowserState();
+        return;
+      }
+      if (!isRuntimeInitializationAcknowledgement(event.data)) {
+        return;
+      }
+      if (
+        event.data.protocolVersion !==
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION ||
+        event.data.sessionId !== sessionId ||
+        event.data.runtimeId !== runtimeId
+      ) {
+        finish(false);
+        disposeBrowserState();
+        return;
+      }
+      finish(true);
+    };
+
+    ownerWindow.addEventListener("message", onMessage);
+    pendingCancellations.add(cancel);
+    if (isDisposed()) {
+      finish(false);
+    }
+  });
+
+  return Object.freeze({
+    promise,
+    cancel: () => cancel(),
+    isReady: () => ready,
+  });
+}
 
 function requestRuntimeHeartbeat({
   probeId,
@@ -1096,7 +1354,7 @@ function isMatchingCandidateResponse(
   request: MechanicExecutionRealmBrowserCandidateRequest,
   sessionId: StableId,
   candidateEndpointId: StableId
-): value is MechanicExecutionRealmBrowserCandidateResponse {
+): boolean {
   return (
     isRecord(value) &&
     value.kind === "sparkline_mechanic_conformance_candidate_response" &&
@@ -1126,6 +1384,22 @@ function isMatchingRuntimeHeartbeatResponse(
     value.runtimeId === runtimeId &&
     value.probeId === challenge.probeId &&
     value.nonce === challenge.nonce
+  );
+}
+
+function isRuntimeInitializationAcknowledgement(
+  value: unknown
+): value is MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === 4 &&
+    ["kind", "protocolVersion", "runtimeId", "sessionId"].every((key) =>
+      Object.prototype.hasOwnProperty.call(value, key)
+    ) &&
+    value.kind === "sparkline_mechanic_conformance_runtime_initialized" &&
+    typeof value.protocolVersion === "string" &&
+    typeof value.sessionId === "string" &&
+    typeof value.runtimeId === "string"
   );
 }
 

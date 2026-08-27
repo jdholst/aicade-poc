@@ -64,7 +64,19 @@ describe("createBrowserRuntimeFoundation", () => {
       source: expectedParent,
     } as unknown as MessageEvent<unknown>);
 
-    expect(expectedParent.postMessage).toHaveBeenCalledWith(
+    expect(expectedParent.postMessage).toHaveBeenNthCalledWith(
+      1,
+      {
+        kind: "sparkline_mechanic_conformance_runtime_initialized",
+        protocolVersion:
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+        sessionId: "session_1",
+        runtimeId: "runtime_1",
+      },
+      "https://trusted.example"
+    );
+    expect(expectedParent.postMessage).toHaveBeenNthCalledWith(
+      2,
       {
         kind: "sparkline_mechanic_conformance_runtime_heartbeat_response",
         protocolVersion:

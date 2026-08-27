@@ -4,8 +4,11 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import { createServer as createViteServer } from "vite";
 
-const modes = [
+const allModes = [
   "pass",
+  "candidate_late_execute_before_terminate",
+  "candidate_late_execute_not_authoritative",
+  "candidate_retired_response_before_ack",
   "unattested_mix",
   "candidate_wrong_source",
   "candidate_wrong_endpoint",
@@ -24,6 +27,9 @@ const modes = [
   "candidate_popup_retagged",
   "runtime_wrong_id",
   "runtime_wrong_session",
+  "runtime_initialization_wrong_protocol",
+  "runtime_initialization_wrong_session",
+  "runtime_initialization_wrong_id",
   "runtime_disconnected",
   "runtime_missing_allow_scripts",
   "runtime_sandbox_mutated",
@@ -31,13 +37,19 @@ const modes = [
   "runtime_popup_retagged",
   "runtime_rejection_cleans_candidate_preparation",
 ];
+const modes = process.env.MECHANIC_REALM_CONFORMANCE_MODES
+  ? process.env.MECHANIC_REALM_CONFORMANCE_MODES.split(",").filter(Boolean)
+  : allModes;
+const legitimateEvidenceModes = new Set([
+  "pass",
+  "candidate_late_execute_before_terminate",
+]);
 const sandboxContractRejectionModes = new Set([
   "candidate_extra_sandbox_authority",
   "runtime_missing_allow_scripts",
 ]);
 const sandboxDriftModes = new Set([
   "candidate_sandbox_mutated",
-  "runtime_sandbox_mutated",
 ]);
 const retainedPreCaptureAuthorityModes = new Set([
   "candidate_same_origin_retagged",
@@ -48,6 +60,12 @@ const retainedPreCaptureAuthorityModes = new Set([
 const preparationCleanupModes = new Set([
   "runtime_rejection_cleans_candidate_preparation",
 ]);
+const runtimeInitializationRejectionModes = new Set([
+  "runtime_initialization_wrong_protocol",
+  "runtime_initialization_wrong_session",
+  "runtime_initialization_wrong_id",
+  "runtime_sandbox_mutated",
+]);
 
 const vite = await createViteServer({
   configFile: fileURLToPath(
@@ -55,7 +73,7 @@ const vite = await createViteServer({
   ),
   root: process.cwd(),
   appType: "spa",
-  server: { middlewareMode: true },
+  server: { middlewareMode: true, hmr: false },
 });
 const server = http.createServer(vite.middlewares);
 await new Promise((resolve, reject) => {
@@ -148,6 +166,25 @@ try {
       await page.close();
       continue;
     }
+    if (runtimeInitializationRejectionModes.has(mode)) {
+      if (
+        !fixture.error?.includes(
+          "did not acknowledge the exact browser session identity"
+        ) ||
+        fixture.report !== undefined ||
+        fixture.audits.some((audit) => audit.source === "candidate")
+      ) {
+        throw new Error(
+          `${mode}: invalid runtime initialization did not stop before probe dispatch`
+        );
+      }
+      if (fixture.activeMessageListeners !== 0) {
+        throw new Error(`${mode}: browser-conformance listeners leaked`);
+      }
+      console.log(`PASS ${mode}`);
+      await page.close();
+      continue;
+    }
     if (fixture.error) {
       throw new Error(`${mode}: ${fixture.error}`);
     }
@@ -160,7 +197,7 @@ try {
     const browserGate = fixture.report.gates.find(
       (gate) => gate.id === "browser_integration"
     );
-    if (mode === "pass") {
+    if (legitimateEvidenceModes.has(mode)) {
       if (fixture.report.verdict !== "passed" || browserGate?.status !== "passed") {
         throw new Error(
           `${mode}: legitimate browser evidence was rejected\n${JSON.stringify(
@@ -187,6 +224,24 @@ try {
         throw new Error(`${mode}: a probe lacked paired browser evidence`);
       }
       assertFreshPairedEvidence(fixture.audits);
+    } else if (mode === "candidate_late_execute_not_authoritative") {
+      const callbackProbe = fixture.report.probeResults.find(
+        (probe) => probe.probeId === "resource_callback_milliseconds"
+      );
+      const followingProbe = fixture.report.probeResults.find(
+        (probe) => probe.probeId === "resource_consecutive_failures"
+      );
+      if (
+        fixture.report.verdict !== "rejected" ||
+        browserGate?.status !== "passed" ||
+        callbackProbe?.result.outcome !== "terminated" ||
+        !followingProbe?.candidateExecutionBrowserEvidence ||
+        !followingProbe.runtimeHeartbeatBrowserEvidence
+      ) {
+        throw new Error(
+          `${mode}: a retired execute result became authoritative or disposed the session`
+        );
+      }
     } else if (browserGate?.status !== "failed") {
       throw new Error(`${mode}: adversarial evidence passed browser integration`);
     }
@@ -209,8 +264,9 @@ try {
   }
 } finally {
   await browser.close();
-  await vite.close();
+  server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
+  await vite.close();
 }
 
 function hasExactAllowScriptsSandbox(sandbox) {

@@ -13,7 +13,10 @@ import type {
   MechanicExecutionRealmDiagnostic,
   MechanicExecutionRealmExecutionResult,
 } from "@/runtime/mechanics/mechanic-execution-realm";
-import { mechanicCallbackWatchdogDelayMilliseconds } from "@/runtime/mechanics/mechanic-callback-watchdog-policy";
+import {
+  mechanicCallbackWatchdogDeadlineReached,
+  mechanicCallbackWatchdogDelayMilliseconds,
+} from "@/runtime/mechanics/mechanic-callback-watchdog-policy";
 import {
   SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
   type SesWorkerRealmBindingDescriptor,
@@ -35,6 +38,11 @@ type WorkerScope = {
 
 type ExecutorSlot = {
   worker: Worker;
+};
+
+type ExecutorReplacementFlight = {
+  promise: Promise<void>;
+  error?: unknown;
 };
 
 type CandidateIdentity = {
@@ -78,7 +86,10 @@ type RuntimeCapabilityRequestMessage = {
 
 type ConformanceActiveJob = SharedActiveJob & {
   mode: "conformance";
-  request: MechanicExecutionRealmBrowserCandidateRequest;
+  request: Extract<
+    MechanicExecutionRealmBrowserCandidateRequest,
+    { action: "execute" }
+  >;
 };
 
 type RuntimeActiveJob = SharedActiveJob & {
@@ -155,11 +166,42 @@ let candidateIdentity: CandidateIdentity | undefined;
 let runtimeState: RuntimeState | undefined;
 let idleSlots: ExecutorSlot[] = [];
 let activeJob: ActiveJob | undefined;
-let replacementsInFlight = 0;
+let executorReplacementFlight: ExecutorReplacementFlight | undefined;
 const pendingExecutorWorkers = new Set<Worker>();
 const pendingConformanceExecutions = new Map<string, string>();
+let lastConformanceSettlement:
+  | {
+      probeId: string;
+      executeNonce: string;
+      result: MechanicExecutionRealmProbeResult;
+    }
+  | undefined;
+const qaConformancePrewarmGateEnabled =
+  new URL(globalThis.location.href).searchParams.get(
+    "qaConformancePrewarmGate"
+  ) === "1";
+let releaseQaConformancePrewarmGate: (() => void) | undefined;
+const qaConformancePrewarmGate = qaConformancePrewarmGateEnabled
+  ? new Promise<void>((resolve) => {
+      releaseQaConformancePrewarmGate = resolve;
+    })
+  : Promise.resolve();
+const qaExecutorReplacementGateEnabled =
+  new URL(globalThis.location.href).searchParams.get(
+    "qaExecutorReplacementGate"
+  ) === "1";
+let releaseQaExecutorReplacementGate: (() => void) | undefined;
+const qaExecutorReplacementGate = qaExecutorReplacementGateEnabled
+  ? new Promise<void>((resolve) => {
+      releaseQaExecutorReplacementGate = resolve;
+    })
+  : Promise.resolve();
+let qaExecutorReplacementStartCount = 0;
 
-const initialPoolReady = createInitialExecutorPool().then((slots) => {
+const initialPoolReady = Promise.all([
+  createInitialExecutorPool(),
+  qaConformancePrewarmGate,
+]).then(([slots]) => {
   if (mode === "disposed") {
     for (const slot of slots) {
       slot.worker.terminate();
@@ -176,6 +218,20 @@ workerScope.addEventListener("message", (event) => {
     return;
   }
   const request = event.data;
+
+  if (isQaConformancePrewarmRelease(request)) {
+    const release = releaseQaConformancePrewarmGate;
+    releaseQaConformancePrewarmGate = undefined;
+    release?.();
+    return;
+  }
+
+  if (isQaExecutorReplacementRelease(request)) {
+    const release = releaseQaExecutorReplacementGate;
+    releaseQaExecutorReplacementGate = undefined;
+    release?.();
+    return;
+  }
 
   if (isRuntimeReadyProbe(request)) {
     void initialPoolReady.then(() => {
@@ -279,12 +335,17 @@ function initializeRuntime(initialization: SesWorkerRealmInitialize): void {
 }
 
 async function executeConformance(
-  request: MechanicExecutionRealmBrowserCandidateRequest
+  request: Extract<
+    MechanicExecutionRealmBrowserCandidateRequest,
+    { action: "execute" }
+  >
 ): Promise<void> {
   const identity = candidateIdentity;
   if (!identity || activeJob || pendingConformanceExecutions.size > 0) {
     return;
   }
+
+  lastConformanceSettlement = undefined;
 
   pendingConformanceExecutions.set(request.probeId, request.nonce);
   let slot: ExecutorSlot;
@@ -350,29 +411,67 @@ async function executeConformance(
   });
 }
 
-async function terminateConformance(
-  request: MechanicExecutionRealmBrowserCandidateRequest
-): Promise<void> {
-  pendingConformanceExecutions.delete(request.probeId);
+function terminateConformance(
+  request: Extract<
+    MechanicExecutionRealmBrowserCandidateRequest,
+    { action: "terminate" }
+  >
+): void {
+  const pendingNonce = pendingConformanceExecutions.get(request.probeId);
+  const matchesPending = pendingNonce === request.targetExecutionNonce;
   const job = activeJob;
-  if (
+  const matchingJob =
     job?.mode === "conformance" &&
-    job.request.probeId === request.probeId
-  ) {
-    finishActiveJob(job, true);
+    job.request.probeId === request.probeId &&
+    job.request.nonce === request.targetExecutionNonce
+      ? job
+      : undefined;
+  const matchingSettlement =
+    lastConformanceSettlement?.probeId === request.probeId &&
+    lastConformanceSettlement.executeNonce === request.targetExecutionNonce
+      ? lastConformanceSettlement
+      : undefined;
+  if (!matchesPending && !matchingJob && !matchingSettlement) {
+    return;
   }
-  await ensureWarmExecutor();
-  sendConformanceResponse(request, {
-    probeId: request.probeId,
-    outcome: "terminated",
-    durationMilliseconds: job ? performance.now() - job.startedAt : 0,
-    evidence: { resourcesAfterCleanup: noResources },
-    diagnostic: conformanceDiagnostic(
-      request.probe,
-      "realm_termination",
-      "execution_deadline_exceeded"
-    ),
-  });
+  if (matchesPending) {
+    pendingConformanceExecutions.delete(request.probeId);
+  }
+  const now = performance.now();
+  const measuredCallbackResult = matchingJob
+    ? callbackResourceLimitAtTermination(matchingJob, now)
+    : undefined;
+  if (matchingJob) {
+    finishActiveJob(matchingJob, true);
+  }
+  const settledCallbackResult =
+    matchingSettlement &&
+    isMeasuredCallbackResourceLimit(
+      matchingSettlement.result,
+      request.probe
+    )
+      ? matchingSettlement.result
+      : undefined;
+  if (matchingSettlement) {
+    lastConformanceSettlement = undefined;
+  }
+  sendConformanceResponse(
+    request,
+    measuredCallbackResult ??
+      settledCallbackResult ?? {
+        probeId: request.probeId,
+        outcome: "terminated",
+        durationMilliseconds: matchingJob
+          ? now - matchingJob.startedAt
+          : 0,
+        evidence: { resourcesAfterCleanup: noResources },
+        diagnostic: conformanceDiagnostic(
+          request.probe,
+          "realm_termination",
+          "execution_deadline_exceeded"
+        ),
+      }
+  );
 }
 
 async function executeRuntime(
@@ -613,31 +712,54 @@ function finishCallbackDeadline(
 
 function containSlowCallback(job: ActiveJob, limit: number): void {
   if (job.mode === "conformance") {
-    containSlowConformanceCallback(job, {
-      dimension: "callback_milliseconds",
-      limit,
-    });
+    containSlowConformanceCallback(job);
     return;
   }
   containSlowRuntimeCallback(job, limit);
 }
 
-function containSlowConformanceCallback(
-  job: ConformanceActiveJob,
-  target: { dimension: "callback_milliseconds"; limit: number }
-): void {
+function containSlowConformanceCallback(job: ConformanceActiveJob): void {
   if (activeJob !== job) {
     return;
   }
   finishActiveJob(job, true);
-  sendConformanceResponse(job.request, {
+  sendConformanceResponse(
+    job.request,
+    callbackResourceLimitResult(job, performance.now())
+  );
+}
+
+function callbackResourceLimitAtTermination(
+  job: ConformanceActiveJob,
+  now: number
+): MechanicExecutionRealmProbeResult | undefined {
+  const budget = job.callbackBudget;
+  if (
+    job.request.probe.resourceTarget?.dimension !== "callback_milliseconds" ||
+    !budget ||
+    !mechanicCallbackWatchdogDeadlineReached(budget, now)
+  ) {
+    return undefined;
+  }
+  return callbackResourceLimitResult(job, now);
+}
+
+function callbackResourceLimitResult(
+  job: ConformanceActiveJob,
+  now: number
+): MechanicExecutionRealmProbeResult {
+  const target = job.request.probe.resourceTarget;
+  if (target?.dimension !== "callback_milliseconds") {
+    throw new TypeError("Callback resource-limit evidence requires a callback target.");
+  }
+  return {
     probeId: job.request.probeId,
     outcome: "resource_limit",
-    durationMilliseconds: performance.now() - job.startedAt,
+    durationMilliseconds: now - job.startedAt,
     evidence: {
       resourcesAfterCleanup: noResources,
       resourceUsage: {
-        dimension: target.dimension,
+        dimension: "callback_milliseconds",
         limit: target.limit,
         observed: target.limit + 1,
       },
@@ -647,7 +769,23 @@ function containSlowConformanceCallback(
       "realm_execution",
       "resource_budget_exceeded"
     ),
-  });
+  };
+}
+
+function isMeasuredCallbackResourceLimit(
+  result: MechanicExecutionRealmProbeResult,
+  probe: MechanicExecutionRealmConformanceProbe
+): boolean {
+  const target = probe.resourceTarget;
+  const usage = result.evidence.resourceUsage;
+  return (
+    target?.dimension === "callback_milliseconds" &&
+    result.probeId === probe.id &&
+    result.outcome === "resource_limit" &&
+    usage?.dimension === "callback_milliseconds" &&
+    usage.limit === target.limit &&
+    usage.observed > target.limit
+  );
 }
 
 function containSlowRuntimeCallback(
@@ -902,7 +1040,7 @@ function finishActiveJob(job: ActiveJob, kill: boolean): void {
   }
   if (kill) {
     job.slot.worker.terminate();
-    replenishExecutorPool();
+    queueMicrotask(replenishExecutorPool);
   } else if (mode !== "disposed") {
     idleSlots.push(job.slot);
   } else {
@@ -911,42 +1049,58 @@ function finishActiveJob(job: ActiveJob, kill: boolean): void {
 }
 
 function replenishExecutorPool(): void {
-  while (
-    mode !== "disposed" &&
-    idleSlots.length + replacementsInFlight < TARGET_EXECUTOR_POOL_SIZE
+  const targetExecutorCount =
+    mode === "runtime" ? TARGET_EXECUTOR_POOL_SIZE : 1;
+  const currentExecutorCount = idleSlots.length + (activeJob ? 1 : 0);
+  if (
+    mode === "disposed" ||
+    currentExecutorCount >= targetExecutorCount ||
+    executorReplacementFlight
   ) {
-    replacementsInFlight += 1;
-    void createExecutorSlot().then(
-      (slot) => {
-        replacementsInFlight = Math.max(0, replacementsInFlight - 1);
-        if (mode === "disposed") {
-          slot.worker.terminate();
-        } else {
-          idleSlots.push(slot);
-        }
-      },
-      () => {
-        replacementsInFlight = Math.max(0, replacementsInFlight - 1);
-      }
-    );
+    return;
   }
+
+  const flight = {} as ExecutorReplacementFlight;
+  flight.promise = createReplacementExecutorSlot().then(
+    (slot) => {
+      if (mode === "disposed") {
+        slot.worker.terminate();
+      } else {
+        idleSlots.push(slot);
+      }
+    },
+    (error) => {
+      flight.error = error;
+    }
+  ).finally(() => {
+    if (executorReplacementFlight === flight) {
+      executorReplacementFlight = undefined;
+    }
+    if (!flight.error) {
+      replenishExecutorPool();
+    }
+  });
+  executorReplacementFlight = flight;
 }
 
 async function acquireExecutorSlot(): Promise<ExecutorSlot> {
   await initialPoolReady;
-  return idleSlots.shift() ?? createExecutorSlot();
-}
-
-async function ensureWarmExecutor(): Promise<void> {
-  if (mode === "disposed" || idleSlots.length > 0) {
-    return;
+  while (mode !== "disposed") {
+    const slot = idleSlots.shift();
+    if (slot) {
+      return slot;
+    }
+    replenishExecutorPool();
+    const flight = executorReplacementFlight;
+    if (!flight) {
+      throw new Error("The isolated executor pool could not start a replacement.");
+    }
+    await flight.promise;
+    if (flight.error) {
+      throw flight.error;
+    }
   }
-  const slot = await createExecutorSlot();
-  if (isControllerDisposed()) {
-    slot.worker.terminate();
-  } else {
-    idleSlots.push(slot);
-  }
+  throw new Error("The isolated executor controller is disposed.");
 }
 
 function releaseUnusedSlot(slot: ExecutorSlot): void {
@@ -991,7 +1145,7 @@ function disposeController(): void {
   }
   pendingExecutorWorkers.clear();
   pendingConformanceExecutions.clear();
-  replacementsInFlight = 0;
+  executorReplacementFlight = undefined;
   if (state) {
     state.capabilityPort.removeEventListener(
       "message",
@@ -1010,6 +1164,13 @@ function sendConformanceResponse(
   request: MechanicExecutionRealmBrowserCandidateRequest,
   result: MechanicExecutionRealmProbeResult
 ): void {
+  if (request.action === "execute") {
+    lastConformanceSettlement = {
+      probeId: request.probeId,
+      executeNonce: request.nonce,
+      result,
+    };
+  }
   const response: MechanicExecutionRealmBrowserCandidateResponse = {
     kind: "sparkline_mechanic_conformance_candidate_response",
     protocolVersion: MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
@@ -1164,6 +1325,25 @@ async function createExecutorSlot(): Promise<ExecutorSlot> {
   return { worker };
 }
 
+function createReplacementExecutorSlot(): Promise<ExecutorSlot> {
+  if (!qaExecutorReplacementGateEnabled) {
+    return createExecutorSlot();
+  }
+  qaExecutorReplacementStartCount += 1;
+  workerScope.postMessage({
+    kind: "ses_probe_audit",
+    audit: {
+      action: "executor_replacement_start",
+      ordinal: qaExecutorReplacementStartCount,
+      reason: "pool_replenishment",
+    },
+  });
+  return createExecutorSlot().then(async (slot) => {
+    await qaExecutorReplacementGate;
+    return slot;
+  });
+}
+
 async function createInitialExecutorPool(): Promise<ExecutorSlot[]> {
   const results = await Promise.allSettled(
     Array.from({ length: TARGET_EXECUTOR_POOL_SIZE }, () =>
@@ -1220,7 +1400,10 @@ function isCandidateRequest(
       MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION &&
     typeof value.probeId === "string" &&
     typeof value.nonce === "string" &&
-    (value.action === "execute" || value.action === "terminate") &&
+    ((value.action === "execute" &&
+      value.targetExecutionNonce === undefined) ||
+      (value.action === "terminate" &&
+        typeof value.targetExecutionNonce === "string")) &&
     isRecord(value.probe)
   );
 }
@@ -1231,6 +1414,26 @@ function isRuntimeReadyProbe(value: unknown): boolean {
     value.kind === "sparkline_mechanic_realm_controller_ready_probe" &&
     value.protocolVersion ===
       SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION
+  );
+}
+
+function isQaConformancePrewarmRelease(value: unknown): boolean {
+  return (
+    qaConformancePrewarmGateEnabled &&
+    isRecord(value) &&
+    value.kind === "ses_qa_release_conformance_prewarm" &&
+    value.protocolVersion ===
+      MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION
+  );
+}
+
+function isQaExecutorReplacementRelease(value: unknown): boolean {
+  return (
+    qaExecutorReplacementGateEnabled &&
+    isRecord(value) &&
+    value.kind === "ses_qa_release_executor_replacement" &&
+    value.protocolVersion ===
+      MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION
   );
 }
 
@@ -1402,10 +1605,6 @@ function isMessagePort(value: unknown): value is MessagePort {
     typeof value.start === "function" &&
     typeof value.close === "function"
   );
-}
-
-function isControllerDisposed(): boolean {
-  return mode === "disposed";
 }
 
 function isRecord(value: unknown): value is Record<PropertyKey, unknown> {

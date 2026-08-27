@@ -129,7 +129,9 @@ describe("provider request resolution", () => {
             })
         ),
         locator: vi.fn(() => ({
-          innerText: vi.fn(async () => (ready ? "Ready" : "Building")),
+          innerText: vi.fn(async () =>
+            ready ? "Runtime is running in the sandbox." : "Building"
+          ),
         })),
       };
       const activity = createCampaignActivityTracker();
@@ -141,13 +143,16 @@ describe("provider request resolution", () => {
       ready = true;
       await vi.advanceTimersByTimeAsync(30);
 
-      await expect(terminal).resolves.toEqual({ kind: "ready", text: "Ready" });
+      await expect(terminal).resolves.toEqual({
+        kind: "ready",
+        text: "Runtime is running in the sandbox.",
+      });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("recognizes the accepted playable-project receipt as a ready terminal", async () => {
+  it("prefers runtime readiness over the accepted playable-project receipt", async () => {
     let predicateSource = "";
     let predicateArgument;
     const acceptedReceipt =
@@ -170,10 +175,11 @@ describe("provider request resolution", () => {
 
     await expect(waitForTerminalEditorState(page, 50)).resolves.toEqual({
       kind: "ready",
-      text: acceptedReceipt,
+      text: "Runtime is running in the sandbox.",
     });
-    expect(predicateSource).toContain("acceptedReceipt");
-    expect(predicateArgument).toBe(acceptedReceipt);
+    expect(predicateSource).toContain("Runtime is running in the sandbox.");
+    expect(predicateSource).not.toContain("acceptedReceipt");
+    expect(predicateArgument).toBeUndefined();
   });
 
   it("uses the project's normal production build in linked campaign worktrees", () => {
@@ -198,6 +204,33 @@ describe("provider request resolution", () => {
     );
 
     expect(summary).toBe("Latest source issue");
+  });
+
+  it("does not report a repaired source issue when the successful run stalls in the editor", () => {
+    const summary = summarizeAttemptFailure(
+      {
+        status: "succeeded",
+        artifactScopedRepair: {
+          status: "succeeded",
+          attempts: [
+            {
+              status: "rejected",
+              issues: [
+                {
+                  message:
+                    "Identical mechanic evaluation inputs produced different observable evidence.",
+                },
+              ],
+            },
+            { status: "accepted" },
+          ],
+        },
+      },
+      "Booting runtime...",
+      { assertions: [] }
+    );
+
+    expect(summary).toBe("Booting runtime...");
   });
 
   it("continues actual browser requests without replacing their same-origin metadata", async () => {

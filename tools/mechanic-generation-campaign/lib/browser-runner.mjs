@@ -702,9 +702,6 @@ export function createCampaignActivityTracker(now = () => Date.now()) {
   };
 }
 
-const ACCEPTED_PROJECT_TERMINAL_RECEIPT =
-  "Generated, evaluated, and accepted a playable mechanic project.";
-
 export async function waitForTerminalEditorState(
   page,
   timeoutMs,
@@ -720,20 +717,21 @@ export async function waitForTerminalEditorState(
     }
     try {
       await page.waitForFunction(
-        (acceptedReceipt) => {
+        () => {
+          const iframe = document.querySelector("iframe");
           const lines = document.body.innerText
             .split("\n")
             .map((line) => line.trim());
           return (
-            lines.includes("Ready") ||
-            lines.includes(acceptedReceipt) ||
-            lines.includes("Runtime is running in the sandbox.") ||
+            (lines.includes("Runtime is running in the sandbox.") &&
+              iframe instanceof HTMLIFrameElement &&
+              Boolean(iframe.getAttribute("srcdoc")?.trim())) ||
             lines.includes("An error has occurred.") ||
             lines.includes("GENERATION STOPPED") ||
             document.body.innerText.includes("The runtime could not be prepared.")
           );
         },
-        ACCEPTED_PROJECT_TERMINAL_RECEIPT,
+        undefined,
         { timeout: Math.min(pollIntervalMs, remainingMs) }
       );
       break;
@@ -745,13 +743,9 @@ export async function waitForTerminalEditorState(
   }
   const text = await page.locator("body").innerText();
   const lines = text.split("\n").map((line) => line.trim());
-  const readyReceipt = lines.includes("Ready")
-    ? "Ready"
-    : lines.includes(ACCEPTED_PROJECT_TERMINAL_RECEIPT)
-      ? ACCEPTED_PROJECT_TERMINAL_RECEIPT
-      : undefined;
-  return readyReceipt
-    ? { kind: "ready", text: readyReceipt }
+  const runtimeReady = lines.includes("Runtime is running in the sandbox.");
+  return runtimeReady
+    ? { kind: "ready", text: "Runtime is running in the sandbox." }
     : { kind: "generation_failure", text: compactTerminalText(text) };
 }
 
@@ -826,10 +820,18 @@ export function summarizeAttemptFailure(generationRun, terminalText, probeResult
     generationRun?.artifactScopedRepair?.attempts?.flatMap((attempt) => attempt.issues ?? []) ?? [];
   const planningIssues =
     generationRun?.attempts?.flatMap((attempt) => attempt.validation?.issues ?? []) ?? [];
+  const probeFailure = probeResult.assertions?.find(({ passed }) => !passed)?.detail;
+  if (generationRun?.status === "succeeded") {
+    return (
+      probeFailure ??
+      terminalText ??
+      "Campaign attempt failed after mechanic generation succeeded."
+    );
+  }
   return (
     repairIssues.at(-1)?.message ??
     planningIssues.at(-1)?.message ??
-    probeResult.assertions?.find(({ passed }) => !passed)?.detail ??
+    probeFailure ??
     terminalText ??
     "Campaign attempt failed without structured evidence."
   );

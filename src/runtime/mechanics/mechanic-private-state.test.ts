@@ -49,12 +49,16 @@ describe("Mechanic private state host", () => {
     expect(
       await host.invoke({ capabilityId: "state_read", arguments: ["label"] })
     ).toEqual({ kind: "json", value: "ok" });
+    expect(state.readDeclaredState("counter")).toBe(12);
     expect(state.usedBytes).toBe(4);
     expect(delegate.invoke).not.toHaveBeenCalled();
 
     state.dispose();
 
     expect(state.usedBytes).toBe(0);
+    expect(() => state.readDeclaredState("counter")).toThrow(
+      "Mechanic private state host has been disposed."
+    );
     await expect(
       Promise.resolve().then(() =>
         host.invoke({ capabilityId: "state_read", arguments: ["counter"] })

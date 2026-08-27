@@ -43,6 +43,10 @@ import {
 } from "@/runtime/mechanics/mechanic-execution-realm";
 import { isMechanicExecutionRealmAdapterAuthentic } from "@/runtime/mechanics/mechanic-execution-realm-adapter-authenticity";
 import {
+  createGeneratedMechanicLifecycleProgram,
+  type GeneratedMechanicLifecycleSourceArtifact,
+} from "@/runtime/mechanics/generated-mechanic-lifecycle-program";
+import {
   createMechanicLifecycleServices,
   type MechanicLifecycleProgram,
 } from "@/runtime/mechanics/mechanic-lifecycle";
@@ -291,29 +295,37 @@ const FOUNDATION_CONNECTION_PLAN: FinalGameSpecMechanicConnectionPlan = {
   ],
 };
 
-const FOUNDATION_PROGRAM_SOURCE = "return null;";
 const FOUNDATION_INSTALL_SOURCE = `
-const foundationSubject = realm.binding("foundation_subject");
-const foundationObservation = await realm.callCapability("object_read", foundationSubject);
-await realm.callCapability("object_create", "foundation_owned", { active: true });
-await realm.callCapability("state_write", "foundation_count", 0);
-const foundationTime = await realm.callCapability("time_read");
-const foundationRandom = await realm.callCapability("random_next");
-await realm.callCapability("time_schedule", 8, "foundation_scheduled");
-return { observation: foundationObservation, time: foundationTime, random: foundationRandom };
-`;
-const FOUNDATION_ACTION_SOURCE = "return lifecycleInput;";
+const __sparklineGeneratedMechanicCallback = async () => {
+  const foundationSubject = bindings.foundation_subject;
+  const foundationObservation = await capabilities.objects.read(foundationSubject);
+  await capabilities.objects.create("foundation_owned", { active: true });
+  await capabilities.state.write("foundation_count", 0);
+  const foundationTime = await capabilities.time.now();
+  const foundationRandom = await capabilities.random.next();
+  await capabilities.time.schedule(8, "foundation_scheduled");
+  return { observation: foundationObservation, time: foundationTime, random: foundationRandom };
+};
+`.trim();
+const FOUNDATION_ACTION_SOURCE =
+  "const __sparklineGeneratedMechanicCallback = async () => input;";
 const FOUNDATION_CONTAINMENT_SOURCE = `
-await realm.callCapability("state_write", "foundation_buffer", "x".repeat(1024));
-return null;
-`;
+const __sparklineGeneratedMechanicCallback = async () => {
+  await capabilities.state.write("foundation_buffer", "x".repeat(1024));
+  return null;
+};
+`.trim();
 const FOUNDATION_SCHEDULED_SOURCE = `
-const foundationCount = await realm.callCapability("state_read", "foundation_count");
-const foundationNextCount = foundationCount + 1;
-await realm.callCapability("state_write", "foundation_count", foundationNextCount);
-await realm.callCapability("signal_emit", "foundation_output", foundationNextCount);
-return foundationNextCount;
-`;
+const __sparklineGeneratedMechanicCallback = async () => {
+  const foundationCount = await capabilities.state.read("foundation_count");
+  const foundationNextCount = foundationCount + 1;
+  await capabilities.state.write("foundation_count", foundationNextCount);
+  await capabilities.signals.emit("foundation_output", foundationNextCount);
+  return foundationNextCount;
+};
+`.trim();
+const FOUNDATION_DISPOSE_SOURCE =
+  "const __sparklineGeneratedMechanicCallback = async () => null;";
 
 export type RuntimeAndContractFoundationBoundary =
   | "intent_resolution"
@@ -655,6 +667,7 @@ export async function runRuntimeAndContractFoundationGate(
 
     const nominal = await runFoundationCycle({
       realmAdapter,
+      contract,
       grant,
       mechanicId: FOUNDATION_EXTENSION_ID,
       containmentProbe: false,
@@ -726,12 +739,14 @@ export async function runRuntimeAndContractFoundationGate(
 
     const containedFailureCycle = await runFoundationCycle({
       realmAdapter,
+      contract,
       grant,
       mechanicId: FOUNDATION_EXTENSION_ID,
       containmentProbe: true,
     });
     const replay = await runFoundationCycle({
       realmAdapter,
+      contract,
       grant,
       mechanicId: FOUNDATION_EXTENSION_ID,
       containmentProbe: false,
@@ -968,11 +983,13 @@ function createRealmConformanceFailureReport(
 
 async function runFoundationCycle({
   realmAdapter,
+  contract,
   grant,
   mechanicId,
   containmentProbe,
 }: {
   realmAdapter: MechanicExecutionRealmAdapter;
+  contract: GeneratedMechanicContract;
   grant: MechanicCapabilityGrant;
   mechanicId: StableId;
   containmentProbe: boolean;
@@ -1121,7 +1138,11 @@ async function runFoundationCycle({
         }),
       delegateCapabilityHost: privateStateCapabilityHost,
       capabilityGrant: grant,
-      program: createFoundationProgram(containmentProbe),
+      program: createFoundationProgram({
+        containmentProbe,
+        contract,
+        grant,
+      }),
       seed: FOUNDATION_SEED,
       resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
     });
@@ -1286,36 +1307,53 @@ async function runFoundationCycle({
   throw new Error("Foundation runtime cycle terminated without a result.");
 }
 
-function createFoundationProgram(
-  containmentProbe: boolean
-): MechanicLifecycleProgram {
-  return {
-    source: FOUNDATION_PROGRAM_SOURCE,
+function createFoundationProgram({
+  containmentProbe,
+  contract,
+  grant,
+}: {
+  containmentProbe: boolean;
+  contract: GeneratedMechanicContract;
+  grant: MechanicCapabilityGrant;
+}): MechanicLifecycleProgram {
+  const sourceArtifact = {
+    id: containmentProbe
+      ? "foundation_fixture_containment_source"
+      : "foundation_fixture_source",
+    contractId: contract.id,
+    intentId: contract.intentId,
+    capabilityVersion: contract.capabilityVersion,
+    grant,
     callbacks: [
       {
         id: "foundation_install",
         kind: "install",
-        source: FOUNDATION_INSTALL_SOURCE,
+        normalizedJavaScript: FOUNDATION_INSTALL_SOURCE,
       },
       {
         id: "foundation_action",
         kind: "logical_action",
-        source: containmentProbe
+        normalizedJavaScript: containmentProbe
           ? FOUNDATION_CONTAINMENT_SOURCE
           : FOUNDATION_ACTION_SOURCE,
       },
       {
         id: "foundation_scheduled",
         kind: "scheduled",
-        source: FOUNDATION_SCHEDULED_SOURCE,
+        normalizedJavaScript: FOUNDATION_SCHEDULED_SOURCE,
       },
       {
         id: "foundation_dispose",
         kind: "dispose",
-        source: "return null;",
+        normalizedJavaScript: FOUNDATION_DISPOSE_SOURCE,
       },
     ],
-  };
+  } satisfies GeneratedMechanicLifecycleSourceArtifact;
+  return createGeneratedMechanicLifecycleProgram({
+    contract,
+    sourceArtifact,
+    config: { enabled: true, maximum_records: 1 },
+  });
 }
 
 function createObjectCapabilityHost(

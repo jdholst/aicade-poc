@@ -2,6 +2,7 @@
 
 import {
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+  type MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement,
   type MechanicExecutionRealmBrowserRuntimeHeartbeatChallenge,
   type MechanicExecutionRealmBrowserRuntimeHeartbeatResponse,
   type MechanicExecutionRealmBrowserRuntimeInitialization,
@@ -44,6 +45,14 @@ export function createMechanicConformanceRuntimeHeartbeat({
         sessionId: event.data.sessionId,
         runtimeId: event.data.runtimeId,
       });
+      const acknowledgement: MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement = {
+        kind: "sparkline_mechanic_conformance_runtime_initialized",
+        protocolVersion:
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+        sessionId: identity.sessionId,
+        runtimeId: identity.runtimeId,
+      };
+      expectedParent.postMessage(acknowledgement, parentOrigin);
       return;
     }
 

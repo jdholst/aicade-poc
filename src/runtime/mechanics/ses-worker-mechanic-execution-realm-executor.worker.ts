@@ -20,7 +20,10 @@ import {
   evaluateMeteredMechanicRuntimeCallback,
   runMechanicRuntimeCallbacks,
 } from "@/runtime/mechanics/mechanic-runtime-callback-runner";
-import { scheduleMechanicCallbackYieldAcknowledgement } from "@/runtime/mechanics/mechanic-callback-yield-scheduler";
+import {
+  forwardMechanicCapabilityResultToCallback,
+  scheduleMechanicCallbackYieldAcknowledgement,
+} from "@/runtime/mechanics/mechanic-callback-yield-scheduler";
 import {
   SES_WORKER_MECHANIC_EXECUTION_REALM_PROTOCOL_VERSION,
   type SesWorkerRealmBindingDescriptor,
@@ -71,6 +74,9 @@ type RuntimeCallbackYieldTask = {
 type RuntimeCapabilityYieldGate = {
   suspend(): number | undefined;
   resume(): number | undefined;
+  prepareResumeAcknowledgement(
+    acknowledge: (activeMilliseconds: number) => void
+  ): void;
 };
 
 type ResourceCounters = Record<
@@ -549,6 +555,9 @@ async function runMechanicExecutionKernel(
         let callbackSuspension:
           | ReturnType<RuntimeCallbackActivityMeter["suspend"]>
           | undefined;
+        let resumeAcknowledgement:
+          | ((activeMilliseconds: number) => void)
+          | undefined;
         const yieldGate: RuntimeCapabilityYieldGate = {
           suspend() {
             if (input.mode !== "runtime" || callbackSuspension) {
@@ -561,7 +570,20 @@ async function runMechanicExecutionKernel(
             const activeMilliseconds = callbackSuspension?.activeMilliseconds;
             callbackSuspension?.resume();
             callbackSuspension = undefined;
+            const acknowledge = resumeAcknowledgement;
+            resumeAcknowledgement = undefined;
+            if (activeMilliseconds !== undefined) {
+              acknowledge?.(activeMilliseconds);
+            }
             return activeMilliseconds;
+          },
+          prepareResumeAcknowledgement(acknowledge) {
+            if (resumeAcknowledgement) {
+              throw new Error(
+                "Mechanic callback resume acknowledgement is already prepared."
+              );
+            }
+            resumeAcknowledgement = acknowledge;
           },
         };
         let capabilityResult: unknown | Promise<unknown>;
@@ -576,13 +598,13 @@ async function runMechanicExecutionKernel(
           yieldGate.resume();
           throw error;
         }
-        Promise.resolve(capabilityResult).then(
-          (value) => {
-            resolveTask(value);
+        forwardMechanicCapabilityResultToCallback(
+          capabilityResult,
+          () => {
+            yieldGate.resume();
           },
-          (error: unknown) => {
-            rejectTask(error);
-          }
+          resolveTask,
+          rejectTask
         );
       } catch (error) {
         rejectTask(error);
@@ -1062,8 +1084,7 @@ function settleRuntimeCapabilityResponse(
     return;
   }
   pendingCapabilityCalls.delete(key);
-  const activeMilliseconds = pending.yieldGate.resume();
-  if (activeMilliseconds !== undefined) {
+  pending.yieldGate.prepareResumeAcknowledgement((activeMilliseconds) => {
     workerScope.postMessage({
       kind: "ses_runtime_callback_resumed",
       jobId: message.jobId,
@@ -1071,7 +1092,7 @@ function settleRuntimeCapabilityResponse(
       callId: response.callId,
       activeMilliseconds,
     });
-  }
+  });
   if (response.success && response.value) {
     pending.resolve(response.value);
     return;

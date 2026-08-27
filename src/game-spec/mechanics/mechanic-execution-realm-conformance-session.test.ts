@@ -119,25 +119,18 @@ describe("Execution Realm browser-conformance session", () => {
       runtimeIframe,
     });
     const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
+    const rejection = expect(reportPromise).rejects.toThrow(
+      "did not acknowledge the exact browser session identity"
+    );
 
     await vi.runAllTimersAsync();
-    const report = await reportPromise;
+    await rejection;
 
-    expect(syntheticCandidateResponses).toBeGreaterThan(0);
-    expect(syntheticRuntimeResponses).toBeGreaterThan(0);
-    expect(report.gates).toContainEqual(
-      expect.objectContaining({ id: "browser_integration", status: "failed" })
-    );
-    expect(
-      report.probeResults.every(
-        (probe) =>
-          !probe.candidateExecutionBrowserEvidence &&
-          !probe.runtimeHeartbeatBrowserEvidence
-      )
-    ).toBe(true);
+    expect(syntheticCandidateResponses).toBe(0);
+    expect(syntheticRuntimeResponses).toBe(0);
   });
 
-  it("removes listeners and invalidates pending state after a candidate send failure", async () => {
+  it("removes listeners and invalidates pending state after initialization times out", async () => {
     vi.useFakeTimers();
     const candidateIframe = createSandboxedIframe();
     const runtimeIframe = createSandboxedIframe();
@@ -164,9 +157,12 @@ describe("Execution Realm browser-conformance session", () => {
       runtimeIframe,
     });
     const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
+    const rejection = expect(reportPromise).rejects.toThrow(
+      "did not acknowledge the exact browser session identity"
+    );
 
     await vi.runAllTimersAsync();
-    const report = await reportPromise;
+    await rejection;
     const addedMessageListeners = addListener.mock.calls.filter(
       ([type]) => type === "message"
     ).length;
@@ -174,9 +170,6 @@ describe("Execution Realm browser-conformance session", () => {
       ([type]) => type === "message"
     ).length;
 
-    expect(report.gates).toContainEqual(
-      expect.objectContaining({ id: "browser_integration", status: "failed" })
-    );
     expect(addedMessageListeners).toBeGreaterThan(0);
     expect(removedMessageListeners).toBeGreaterThanOrEqual(
       addedMessageListeners
@@ -443,13 +436,13 @@ describe("Execution Realm browser-conformance session", () => {
 
     candidateIframe.setAttribute("sandbox", "allow-scripts allow-popups");
     const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
+    const rejection = expect(reportPromise).rejects.toThrow(
+      "did not acknowledge the exact browser session identity"
+    );
     await vi.runAllTimersAsync();
-    const report = await reportPromise;
+    await rejection;
 
     expect(candidatePostMessage).toHaveBeenCalledTimes(1);
-    expect(report.gates).toContainEqual(
-      expect.objectContaining({ id: "browser_integration", status: "failed" })
-    );
   });
 
   it("invalidates the session if the runtime iframe sandbox changes after capture", async () => {
@@ -468,17 +461,16 @@ describe("Execution Realm browser-conformance session", () => {
 
     runtimeIframe.removeAttribute("sandbox");
     const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
+    const rejection = expect(reportPromise).rejects.toThrow(
+      "did not acknowledge the exact browser session identity"
+    );
     await vi.runAllTimersAsync();
-    const report = await reportPromise;
+    await rejection;
 
     expect(runtimePostMessage).toHaveBeenCalledTimes(1);
-    expect(report.gates).toContainEqual(
-      expect.objectContaining({ id: "browser_integration", status: "failed" })
-    );
   });
 
-  it("keeps the exact captured Worker when the caller mutates its endpoint object", async () => {
-    vi.useFakeTimers();
+  it("keeps the exact captured Worker when the caller mutates its endpoint object", () => {
     class FakeWorker extends EventTarget {
       postMessage = vi.fn();
     }
@@ -496,16 +488,14 @@ describe("Execution Realm browser-conformance session", () => {
     });
 
     candidateEndpoint.worker = replacementWorker as unknown as Worker;
-    const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
-    await vi.runAllTimersAsync();
-    await reportPromise;
 
     expect(originalWorker.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: "sparkline_mechanic_conformance_candidate_request",
+        kind: "sparkline_mechanic_conformance_candidate_initialize",
       })
     );
     expect(replacementWorker.postMessage).not.toHaveBeenCalled();
+    session.dispose();
   });
 });
 

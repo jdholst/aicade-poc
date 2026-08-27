@@ -26,12 +26,14 @@ export const MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY = {
   profileId: "phase_9_realm_conformance",
   maximumExecutionMilliseconds: 50,
   maximumTerminationMilliseconds: 50,
+  maximumInitializationMilliseconds: 1_000,
   maximumHostHeartbeatMilliseconds: 250,
   resourceBudget: PHASE_9_MECHANIC_RESOURCE_BUDGET,
 } as const satisfies {
   profileId: StableId;
   maximumExecutionMilliseconds: number;
   maximumTerminationMilliseconds: number;
+  maximumInitializationMilliseconds: number;
   maximumHostHeartbeatMilliseconds: number;
   resourceBudget: MechanicExecutionRealmResourceBudget;
 };
@@ -303,6 +305,15 @@ async function runMechanicExecutionRealmConformanceSession(
       runtimeHeartbeatBrowserAttested: boolean;
     }
   >();
+
+  const initialized = await sessionState.waitForInitialization(
+    MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumInitializationMilliseconds
+  );
+  if (!initialized) {
+    throw new Error(
+      "The browser conformance runtime did not acknowledge the exact browser session identity before the fixed initialization deadline."
+    );
+  }
 
   for (const probe of probes) {
     const result = await executeProbe(candidate, probe);
