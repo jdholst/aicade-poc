@@ -3,11 +3,15 @@ import {
   disposeMechanicExecutionRealmBrowserConformanceIframePreparation,
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
   prepareMechanicExecutionRealmBrowserConformanceIframe,
+  type MechanicExecutionRealmBrowserCandidateExecutionAcknowledgement,
+  type MechanicExecutionRealmBrowserCandidateRequest,
+  type MechanicExecutionRealmBrowserCandidateResponse,
   type MechanicExecutionRealmConformanceSession,
 } from "../../src/game-spec/mechanics/mechanic-execution-realm-conformance-session";
 import {
   runMechanicExecutionRealmConformanceSuite,
   MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY,
+  type MechanicExecutionRealmConformanceProbe,
   type MechanicExecutionRealmConformanceReport,
 } from "../../src/game-spec/mechanics/mechanic-execution-realm-conformance";
 import {
@@ -64,6 +68,20 @@ type CandidateEvaluation = {
   controllerAudit?: unknown[];
   integration?: ProductionIntegrationEvidence;
   exactPlayerDrift?: ExactPlayerDriftFixedStepEvidence;
+  terminationCorrelation?: TerminationCorrelationEvidence;
+};
+
+type TerminationCorrelationScenarioEvidence = {
+  executeAcknowledged: boolean;
+  executeSettled: boolean;
+  wrongTargetResponseCount: number;
+  exactTerminationOutcome: string;
+};
+
+type TerminationCorrelationEvidence = {
+  prewarmPending: TerminationCorrelationScenarioEvidence;
+  active: TerminationCorrelationScenarioEvidence;
+  settled: TerminationCorrelationScenarioEvidence;
 };
 
 declare global {
@@ -85,6 +103,12 @@ async function runMechanicExecutionRealmCandidateEvaluation(): Promise<void> {
     throw new TypeError(`Unknown Mechanic Execution Realm candidate "${candidate}".`);
   }
 
+  if (searchParams.get("terminationCorrelationOnly") === "1") {
+    const terminationCorrelation =
+      await runTerminationCorrelationIntegration();
+    window.__mechanicRealmCandidateEvaluation = { terminationCorrelation };
+    return;
+  }
   if (searchParams.get("exactPlayerDriftOnly") === "1") {
     const exactPlayerDrift = await runExactPlayerDriftFixedStepIntegration(
       Number(searchParams.get("requestedIterations") ?? 800),
@@ -164,6 +188,217 @@ async function runMechanicExecutionRealmCandidateEvaluation(): Promise<void> {
     controllerAudit,
     integration,
   };
+}
+
+async function runTerminationCorrelationIntegration(): Promise<TerminationCorrelationEvidence> {
+  return {
+    prewarmPending: await runTerminationCorrelationScenario({
+      scenarioId: "prewarm_pending",
+      waitForReadyBeforeExecute: false,
+      waitForSettlementBeforeTerminate: false,
+      source: "for (;;) {}",
+    }),
+    active: await runTerminationCorrelationScenario({
+      scenarioId: "active",
+      waitForReadyBeforeExecute: true,
+      waitForSettlementBeforeTerminate: false,
+      source: "for (;;) {}",
+    }),
+    settled: await runTerminationCorrelationScenario({
+      scenarioId: "settled",
+      waitForReadyBeforeExecute: true,
+      waitForSettlementBeforeTerminate: true,
+      source: "return true;",
+    }),
+  };
+}
+
+async function runTerminationCorrelationScenario(input: {
+  scenarioId: string;
+  waitForReadyBeforeExecute: boolean;
+  waitForSettlementBeforeTerminate: boolean;
+  source: string;
+}): Promise<TerminationCorrelationScenarioEvidence> {
+  const controllerUrl = new URL(
+    "../../src/runtime/mechanics/ses-worker-mechanic-execution-realm-controller.worker.ts",
+    import.meta.url
+  );
+  if (!input.waitForReadyBeforeExecute) {
+    controllerUrl.searchParams.set("qaConformancePrewarmGate", "1");
+  }
+  const controller = new Worker(
+    controllerUrl,
+    { type: "module" }
+  );
+  const messages: unknown[] = [];
+  const onMessage = (event: MessageEvent<unknown>) => {
+    if (event.isTrusted) {
+      messages.push(event.data);
+    }
+  };
+  controller.addEventListener("message", onMessage);
+
+  const sessionId = `termination_correlation_${input.scenarioId}_session`;
+  const candidateEndpointId =
+    `termination_correlation_${input.scenarioId}_candidate`;
+  const probeId = `termination_correlation_${input.scenarioId}_probe`;
+  const executeNonce = `termination_correlation_${input.scenarioId}_execute`;
+  const wrongTerminateNonce =
+    `termination_correlation_${input.scenarioId}_wrong_terminate`;
+  const exactTerminateNonce =
+    `termination_correlation_${input.scenarioId}_exact_terminate`;
+  const probe: MechanicExecutionRealmConformanceProbe = {
+    id: probeId,
+    kind: "runaway_work",
+    source: input.source,
+    capabilityGrant: {
+      capabilityVersion: mechanicCapabilityRegistry.version,
+      capabilities: [],
+    },
+    seed: 41,
+    resourceBudget: MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.resourceBudget,
+  };
+  const executeRequest: MechanicExecutionRealmBrowserCandidateRequest = {
+    kind: "sparkline_mechanic_conformance_candidate_request",
+    protocolVersion: MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+    probeId,
+    nonce: executeNonce,
+    action: "execute",
+    probe,
+  };
+
+  try {
+    if (input.waitForReadyBeforeExecute) {
+      await waitForWorkerReady(controller, []);
+    }
+    controller.postMessage({
+      kind: "sparkline_mechanic_conformance_candidate_initialize",
+      protocolVersion: MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+      sessionId,
+      candidateEndpointId,
+    });
+    controller.postMessage(executeRequest);
+
+    if (!input.waitForReadyBeforeExecute) {
+      controller.postMessage(
+        createTerminationCorrelationRequest({
+          executeRequest,
+          nonce: wrongTerminateNonce,
+          targetExecutionNonce: `${executeNonce}_wrong`,
+        })
+      );
+      controller.postMessage({
+        kind: "ses_qa_release_conformance_prewarm",
+        protocolVersion:
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+      });
+    }
+
+    const acknowledgement = await waitForControllerMessage(
+      messages,
+      (value): value is MechanicExecutionRealmBrowserCandidateExecutionAcknowledgement =>
+        isRecord(value) &&
+        value.kind ===
+          "sparkline_mechanic_conformance_candidate_execution_acknowledgement" &&
+        value.nonce === executeNonce,
+      `${input.scenarioId}: execute acknowledgement timeout.`
+    );
+
+    let settlement: MechanicExecutionRealmBrowserCandidateResponse | undefined;
+    if (input.waitForSettlementBeforeTerminate) {
+      settlement = await waitForControllerMessage(
+        messages,
+        (value): value is MechanicExecutionRealmBrowserCandidateResponse =>
+          isRecord(value) &&
+          value.kind ===
+            "sparkline_mechanic_conformance_candidate_response" &&
+          value.action === "execute" &&
+          value.nonce === executeNonce,
+        `${input.scenarioId}: execute settlement timeout.`
+      );
+    }
+
+    if (input.waitForReadyBeforeExecute) {
+      controller.postMessage(
+        createTerminationCorrelationRequest({
+          executeRequest,
+          nonce: wrongTerminateNonce,
+          targetExecutionNonce: `${executeNonce}_wrong`,
+        })
+      );
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+
+    controller.postMessage(
+      createTerminationCorrelationRequest({
+        executeRequest,
+        nonce: exactTerminateNonce,
+        targetExecutionNonce: executeNonce,
+      })
+    );
+    const exactTermination = await waitForControllerMessage(
+      messages,
+      (value): value is MechanicExecutionRealmBrowserCandidateResponse =>
+        isRecord(value) &&
+        value.kind === "sparkline_mechanic_conformance_candidate_response" &&
+        value.action === "terminate" &&
+        value.nonce === exactTerminateNonce,
+      `${input.scenarioId}: exact termination timeout.`
+    );
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+
+    return {
+      executeAcknowledged:
+        acknowledgement.action === "execute" &&
+        acknowledgement.probeId === probeId,
+      executeSettled:
+        !input.waitForSettlementBeforeTerminate ||
+        (settlement?.result.probeId === probeId &&
+          settlement.result.outcome === "completed"),
+      wrongTargetResponseCount: messages.filter(
+        (value) =>
+          isRecord(value) &&
+          value.kind === "sparkline_mechanic_conformance_candidate_response" &&
+          value.nonce === wrongTerminateNonce
+      ).length,
+      exactTerminationOutcome: exactTermination.result.outcome,
+    };
+  } finally {
+    controller.removeEventListener("message", onMessage);
+    controller.terminate();
+  }
+}
+
+function createTerminationCorrelationRequest(input: {
+  executeRequest: Extract<
+    MechanicExecutionRealmBrowserCandidateRequest,
+    { action: "execute" }
+  >;
+  nonce: string;
+  targetExecutionNonce: string;
+}): MechanicExecutionRealmBrowserCandidateRequest {
+  return {
+    ...input.executeRequest,
+    nonce: input.nonce,
+    action: "terminate",
+    targetExecutionNonce: input.targetExecutionNonce,
+  };
+}
+
+async function waitForControllerMessage<T>(
+  messages: readonly unknown[],
+  predicate: (value: unknown) => value is T,
+  timeoutMessage: string
+): Promise<T> {
+  const deadline = performance.now() + 60_000;
+  while (performance.now() < deadline) {
+    const message = messages.find(predicate);
+    if (message !== undefined) {
+      return message;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  }
+  throw new Error(timeoutMessage);
 }
 
 async function runProductionAdapterIntegration(): Promise<ProductionIntegrationEvidence> {

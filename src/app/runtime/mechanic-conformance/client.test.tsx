@@ -16,13 +16,13 @@ describe("createMechanicConformanceRuntimeHeartbeat", () => {
 
     dispatchParentMessage(expectedParent, {
       kind: "sparkline_mechanic_conformance_runtime_initialize",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       sessionId: "session_one",
       runtimeId: "runtime_one",
     });
     dispatchParentMessage(expectedParent, {
       kind: "sparkline_mechanic_conformance_runtime_heartbeat_challenge",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       probeId: "probe_one",
       nonce: "nonce_one",
     });
@@ -30,7 +30,7 @@ describe("createMechanicConformanceRuntimeHeartbeat", () => {
     expect(postMessage).toHaveBeenCalledWith(
       {
         kind: "sparkline_mechanic_conformance_runtime_heartbeat_response",
-        protocolVersion: "mechanic_execution_realm_browser_session/v1",
+        protocolVersion: "mechanic_execution_realm_browser_session/v2",
         sessionId: "session_one",
         runtimeId: "runtime_one",
         probeId: "probe_one",
@@ -52,7 +52,7 @@ describe("createMechanicConformanceRuntimeHeartbeat", () => {
     });
     const challenge = {
       kind: "sparkline_mechanic_conformance_runtime_heartbeat_challenge",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       probeId: "probe_one",
       nonce: "nonce_one",
     };
@@ -60,13 +60,13 @@ describe("createMechanicConformanceRuntimeHeartbeat", () => {
     dispatchParentMessage(expectedParent, challenge);
     dispatchParentMessage(foreignParent, {
       kind: "sparkline_mechanic_conformance_runtime_initialize",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       sessionId: "session_one",
       runtimeId: "runtime_one",
     });
     dispatchParentMessage(expectedParent, {
       kind: "sparkline_mechanic_conformance_runtime_initialize",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       sessionId: "session_one",
       runtimeId: "runtime_one",
       extra: true,

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 21,
-  "updatedAt": "2026-08-27T20:26:24Z",
+  "revision": 22,
+  "updatedAt": "2026-08-27T21:36:40Z",
   "entries": [
     {
       "status": "active",
@@ -1274,7 +1274,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Separate callback active-work and Worker-delivery budgets",
-      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted compilation or bridge work.",
+      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -1290,7 +1290,7 @@
         ]
       },
       "id": "KF-0019",
-      "revision": 4,
+      "revision": 5,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -1325,6 +1325,28 @@
           "outcome": "pipeline_failure",
           "summary": "Planning repair succeeded, but the pre-source trusted foundation fixture compiled its scheduled callback inside the exact active-work meter and reported callback_milliseconds 9 against the unchanged limit 8 before contract or source generation.",
           "observedAt": "2026-08-27T19:40:54.413Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_foundation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "The browser-attested callback resource probe remained active for 50.8 milliseconds, but termination returned a generic terminated result without resourceUsage instead of preserving the exact callback_milliseconds limit 8 measurement; the next resource probe passed.",
+          "observedAt": "2026-08-27T20:56:51.020Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-isolation-planning-fixture-c6-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-isolation-planning-fixture-c6-r1",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_foundation",
+          "quality": "fixture_diagnostic",
+          "outcome": "pipeline_failure",
+          "summary": "With fixture planning and zero provider calls, the exact late execute response reached the active terminate listener, produced Candidate response did not match the active probe, disposed the browser session, and cascaded through every later probe.",
+          "observedAt": "2026-08-27T21:03:31.301Z"
         },
         {
           "kind": "loop_fix",
@@ -1474,10 +1496,59 @@
               "observedAt": "2026-08-27T20:03:05Z"
             }
           ]
+        },
+        {
+          "revision": 4,
+          "changedAt": "2026-08-27T21:36:40Z",
+          "reason": "Actual and fixture-isolation evidence exposed both message orders at the conformance deadline: termination could discard an already measured callback resource limit, or a late exact execute response could invalidate the new terminate listener. The bounded fix must preserve the controller's own measurement while keeping termination authoritative and every unrelated message fail-closed.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted compilation or bridge work.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "pipeline_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The browser-attested callback resource probe remained active for 50.8 milliseconds, but termination returned a generic terminated result without resourceUsage instead of preserving the exact callback_milliseconds limit 8 measurement; the next resource probe passed.",
+              "observedAt": "2026-08-27T20:56:51.020Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-isolation-planning-fixture-c6-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-isolation-planning-fixture-c6-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "fixture_diagnostic",
+              "outcome": "pipeline_failure",
+              "summary": "With fixture planning and zero provider calls, the exact late execute response reached the active terminate listener, produced Candidate response did not match the active probe, disposed the browser session, and cascaded through every later probe.",
+              "observedAt": "2026-08-27T21:03:31.301Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T06:12:49Z",
-      "updatedAt": "2026-08-27T20:26:24Z"
+      "updatedAt": "2026-08-27T21:36:40Z"
     },
     {
       "status": "active",
@@ -1706,7 +1777,7 @@
         ]
       },
       "id": "KF-0023",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -1718,11 +1789,62 @@
           "outcome": "provider_output_rejected",
           "summary": "All four actual source attempts were rejected, and the terminal candidate persisted only a generic nondeterministic replay issue even though complete first-pass and replay scenario evidence existed inside the evaluation receipt. The continuation boundary omitted the replay scenarios from artifact-scoped repair evidence.",
           "observedAt": "2026-08-27T20:11:49.622Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-6",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-6",
+          "stage": "deterministic_evaluation",
+          "quality": "verified_fix",
+          "outcome": "provider_output_rejected",
+          "summary": "Cycle 6 preserved each differing replay scenario's runtime, setup, declared-observation, evaluator-observation, and generic mismatch evidence under bounded artifact-scoped repair paths while omitting identical replay scenarios.",
+          "observedAt": "2026-08-27T20:53:21Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T21:36:40Z",
+          "reason": "The accepted cycle-6 fix independently verified bounded replay-side repair evidence; the next campaign ended at the earlier foundation gate and supplied no conflicting replay evidence.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Replay-side failures must reach repair evidence",
+            "guidance": "When deterministic replay differs, retain the fail-closed mismatch and project failures from each differing replay scenario into artifact-scoped repair evidence under replay-specific paths. Include runtime, setup, declared-observation, and evaluator-observation failures without duplicating identical replay scenarios or widening resource budgets.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-6",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-6",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "Cycle 6 preserved each differing replay scenario's runtime, setup, declared-observation, evaluator-observation, and generic mismatch evidence under bounded artifact-scoped repair paths while omitting identical replay scenarios.",
+              "observedAt": "2026-08-27T20:53:21Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-27T20:26:24Z",
-      "updatedAt": "2026-08-27T20:26:24Z"
+      "updatedAt": "2026-08-27T21:36:40Z"
     }
   ],
   "reconciliations": [
@@ -4230,6 +4352,113 @@
       "createdAt": "2026-08-27T20:26:24Z",
       "priorManifestDigest": "c3b10d98498335f570e026053f9bd01bce30d64317ab727e98aaf62572a67138",
       "resultingManifestDigest": "f4cf375b070c1ff987e59c83645a0a7776258d9782ea8ee127b6e75383bdce0b"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t213640z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+        "fixId": "fix-cycle-7",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1"
+      },
+      "consultedManifestDigest": "f4cf375b070c1ff987e59c83645a0a7776258d9782ea8ee127b6e75383bdce0b",
+      "contextDigest": "12748eaa44ee45349e7f325cd2f49e90cf96c8f1a015659bb066fb5412ab4cc6",
+      "consultedFindingIds": [
+        "KF-0007",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-6",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0023"
+          ],
+          "rationale": "The verified cycle-6 continuation fix retained replay-side runtime, setup, declared-observation, and evaluator-observation failures under bounded repair paths without changing deterministic evaluation or resource policy. Campaign c6 stopped earlier at the runtime foundation boundary, so it did not contradict that verified repair-evidence behavior."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "Nested foundation evidence, selected instead of the coarse assembly summary as required by KF-0022, showed that the exact callback probe remained browser-attested and active for 50.8 milliseconds but termination replaced the controller's structured 8 millisecond resource-limit measurement with a generic terminated result. The following resource probe passed, so heartbeat policy, target proof, geometry, trusted state observation, and replay repair were not causal."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-isolation-planning-fixture-c6-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "The authorized planning-fixture isolation reproduced the foundation defect without planning-provider output and isolated a second delivery order: after the execute listener was canceled, its exact late response reached the terminate listener, was misclassified as an active-probe mismatch, disposed the browser session, and caused downstream heartbeat and candidate failures."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0023",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "The accepted cycle-6 fix independently verified bounded replay-side repair evidence; the next campaign ended at the earlier foundation gate and supplied no conflicting replay evidence.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-6",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c5-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-6",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "provider_output_rejected",
+              "summary": "Cycle 6 preserved each differing replay scenario's runtime, setup, declared-observation, evaluator-observation, and generic mismatch evidence under bounded artifact-scoped repair paths while omitting identical replay scenarios.",
+              "observedAt": "2026-08-27T20:53:21Z"
+            }
+          ]
+        },
+        {
+          "type": "amend",
+          "findingId": "KF-0019",
+          "expectedRevision": 4,
+          "reason": "Actual and fixture-isolation evidence exposed both message orders at the conformance deadline: termination could discard an already measured callback resource limit, or a late exact execute response could invalidate the new terminate listener. The bounded fix must preserve the controller's own measurement while keeping termination authoritative and every unrelated message fail-closed.",
+          "changes": {
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The browser-attested callback resource probe remained active for 50.8 milliseconds, but termination returned a generic terminated result without resourceUsage instead of preserving the exact callback_milliseconds limit 8 measurement; the next resource probe passed.",
+              "observedAt": "2026-08-27T20:56:51.020Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-isolation-planning-fixture-c6-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-isolation-planning-fixture-c6-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "fixture_diagnostic",
+              "outcome": "pipeline_failure",
+              "summary": "With fixture planning and zero provider calls, the exact late execute response reached the active terminate listener, produced Candidate response did not match the active probe, disposed the browser session, and cascaded through every later probe.",
+              "observedAt": "2026-08-27T21:03:31.301Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T21:36:40Z",
+      "priorManifestDigest": "f4cf375b070c1ff987e59c83645a0a7776258d9782ea8ee127b6e75383bdce0b",
+      "resultingManifestDigest": "dff18c0ad0688e1a8d69f5adf6db0ea7b829ca64aac947e65ff4c016f7a7a119"
     }
   ]
 }

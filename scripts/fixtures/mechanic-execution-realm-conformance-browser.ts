@@ -21,6 +21,9 @@ type FixtureMode =
   | "candidate_replaced"
   | "candidate_timeout"
   | "candidate_terminate_without_execute"
+  | "candidate_late_execute_before_terminate"
+  | "candidate_late_execute_not_authoritative"
+  | "candidate_retired_response_before_ack"
   | "candidate_send_failure"
   | "candidate_extra_sandbox_authority"
   | "candidate_sandbox_mutated"
@@ -526,6 +529,7 @@ function candidateResponder(responderMode: FixtureMode) {
   let acknowledgementReplayProbeId: string | undefined;
   let previousResponse: Record<string, unknown> | undefined;
   let replayProbeId: string | undefined;
+  let withheldCallbackExecution: Record<string, unknown> | undefined;
 
   window.addEventListener("message", (event) => {
     const request = event.data;
@@ -591,6 +595,9 @@ function candidateResponder(responderMode: FixtureMode) {
     }
 
     const corruptFirstProbe = request.probeId === "admitted_capability_calls";
+    const delaysCallbackAcknowledgement =
+      responderMode === "candidate_retired_response_before_ack" &&
+      request.probeId === "resource_callback_milliseconds";
     if (request.action === "execute") {
       let acknowledgement: Record<string, unknown> =
         createCandidateExecutionAcknowledgement(request);
@@ -619,7 +626,9 @@ function candidateResponder(responderMode: FixtureMode) {
         }
       }
 
-      if (responderMode === "candidate_wrong_source" && corruptFirstProbe) {
+      if (delaysCallbackAcknowledgement) {
+        // The adversarial response is intentionally delivered first at termination.
+      } else if (responderMode === "candidate_wrong_source" && corruptFirstProbe) {
         parent.postMessage(
           {
             kind: "fixture_forward_candidate_response",
@@ -630,6 +639,49 @@ function candidateResponder(responderMode: FixtureMode) {
       } else {
         parent.postMessage(acknowledgement, "*");
       }
+    }
+
+    const exercisesLateExecuteRouting = [
+      "candidate_late_execute_before_terminate",
+      "candidate_late_execute_not_authoritative",
+      "candidate_retired_response_before_ack",
+    ].includes(responderMode);
+    if (
+      exercisesLateExecuteRouting &&
+      request.probeId === "resource_callback_milliseconds"
+    ) {
+      if (request.action === "execute") {
+        withheldCallbackExecution = request;
+        return;
+      }
+      if (
+        !withheldCallbackExecution ||
+        request.probeId !== withheldCallbackExecution.probeId ||
+        request.targetExecutionNonce !== withheldCallbackExecution.nonce
+      ) {
+        return;
+      }
+      parent.postMessage(
+        createCandidateResponse(withheldCallbackExecution),
+        "*"
+      );
+      if (responderMode === "candidate_retired_response_before_ack") {
+        parent.postMessage(
+          createCandidateExecutionAcknowledgement(withheldCallbackExecution),
+          "*"
+        );
+      }
+      const terminationResponse = createCandidateResponse(request);
+      if (
+        responderMode === "candidate_late_execute_before_terminate" ||
+        responderMode === "candidate_retired_response_before_ack"
+      ) {
+        terminationResponse.result = createProbeResult(
+          request.probe as Record<string, unknown>
+        );
+      }
+      parent.postMessage(terminationResponse, "*");
+      return;
     }
 
     if (
@@ -682,7 +734,7 @@ function candidateResponder(responderMode: FixtureMode) {
     const probe = request.probe as Record<string, unknown>;
     return {
       kind: "sparkline_mechanic_conformance_candidate_response",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       sessionId: identity?.sessionId,
       candidateEndpointId: identity?.candidateEndpointId,
       probeId: request.probeId,
@@ -700,7 +752,7 @@ function candidateResponder(responderMode: FixtureMode) {
   ) {
     return {
       kind: "sparkline_mechanic_conformance_candidate_execution_acknowledgement",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       sessionId: identity?.sessionId,
       candidateEndpointId: identity?.candidateEndpointId,
       probeId: request.probeId,
@@ -872,7 +924,7 @@ function runtimeResponder(responderMode: FixtureMode) {
     );
     let response = {
       kind: "sparkline_mechanic_conformance_runtime_heartbeat_response",
-      protocolVersion: "mechanic_execution_realm_browser_session/v1",
+      protocolVersion: "mechanic_execution_realm_browser_session/v2",
       sessionId: identity.sessionId,
       runtimeId: identity.runtimeId,
       probeId: challenge.probeId,
@@ -905,7 +957,7 @@ function relayResponder() {
 
 if (
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION !==
-  "mechanic_execution_realm_browser_session/v1"
+  "mechanic_execution_realm_browser_session/v2"
 ) {
   throw new Error("Unexpected browser session protocol version.");
 }

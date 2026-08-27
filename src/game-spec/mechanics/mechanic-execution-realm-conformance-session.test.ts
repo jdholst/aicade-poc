@@ -505,6 +505,20 @@ describe("Execution Realm browser-conformance session", () => {
         kind: "sparkline_mechanic_conformance_candidate_request",
       })
     );
+    const requests = originalWorker.postMessage.mock.calls
+      .map(([message]) => message as MechanicExecutionRealmBrowserCandidateRequest)
+      .filter(
+        (message) =>
+          message.kind === "sparkline_mechanic_conformance_candidate_request"
+      );
+    const executeRequest = requests.find(
+      (request) => request.action === "execute"
+    );
+    const terminateRequest = requests.find(
+      (request) => request.action === "terminate"
+    );
+    expect(executeRequest?.nonce).toBeTruthy();
+    expect(terminateRequest?.targetExecutionNonce).toBe(executeRequest?.nonce);
     expect(replacementWorker.postMessage).not.toHaveBeenCalled();
   });
 });
