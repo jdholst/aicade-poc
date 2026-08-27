@@ -331,6 +331,45 @@ describe("Runtime and Contract Foundation Gate", () => {
     });
   });
 
+  it("runs the foundation fixture through authenticated generated callbacks", async () => {
+    trustSyntheticFoundationBoundary();
+    const callbackExecutions: Array<{
+      callbackId: string | undefined;
+      mode: "generated_admitted" | undefined;
+    }> = [];
+    const delegate = createFoundationRealmAdapter();
+    const result = await runRuntimeAndContractFoundationGate({
+      realmAdapter: {
+        ...delegate,
+        async create(input) {
+          const realm = await delegate.create(input);
+          return {
+            execute(execution) {
+              callbackExecutions.push({
+                callbackId: execution.lifecycle?.invocations[0]?.callbackId,
+                mode: execution.lifecycle?.callbackExecutionMode,
+              });
+              return realm.execute(execution);
+            },
+            dispose() {
+              realm.dispose();
+            },
+          };
+        },
+      },
+      realmConformanceReport: createPassingConformanceReport(),
+    });
+
+    expect(result.status).toBe("passed");
+    expect(callbackExecutions.length).toBeGreaterThan(0);
+    expect(callbackExecutions).toEqual(
+      callbackExecutions.map(({ callbackId }) => ({
+        callbackId,
+        mode: "generated_admitted",
+      }))
+    );
+  });
+
   it("disposes the integrated realm when the containment probe fails open", async () => {
     trustSyntheticFoundationBoundary();
     let disposedRealmCount = 0;

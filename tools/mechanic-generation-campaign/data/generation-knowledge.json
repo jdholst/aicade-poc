@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 19,
-  "updatedAt": "2026-08-27T19:33:12Z",
+  "revision": 20,
+  "updatedAt": "2026-08-27T20:00:02Z",
   "entries": [
     {
       "status": "active",
@@ -1274,21 +1274,23 @@
       "status": "active",
       "confidence": "supported",
       "title": "Separate callback active-work and Worker-delivery budgets",
-      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted bridge work.",
+      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted compilation or bridge work.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
+          "runtime_foundation",
           "runtime_activation",
           "first_playable"
         ],
         "classifications": [
+          "pipeline_failure",
           "runtime_pipeline_failure"
         ]
       },
       "id": "KF-0019",
-      "revision": 2,
+      "revision": 3,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -1312,6 +1314,29 @@
           "outcome": "runtime_pipeline_failure",
           "summary": "The accepted logical_action performed bounded straight-line scalar work with ten sequential awaited capabilities, contained no loop or spatial query, passed deterministic evaluation, then failed mounted first-playable before fire_action dispatch with callback_milliseconds exceeded 8.",
           "observedAt": "2026-08-27T19:06:39.635Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_foundation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "Planning repair succeeded, but the pre-source trusted foundation fixture compiled its scheduled callback inside the exact active-work meter and reported callback_milliseconds 9 against the unchanged limit 8 before contract or source generation.",
+          "observedAt": "2026-08-27T19:40:54.413Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-4",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-4",
+          "stage": "runtime_activation",
+          "quality": "verified_fix",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "Callback metering and the host watchdog now remain suspended through trusted response decoding and internal Promise forwarding and resume immediately before the generated continuation, with the exact 8 millisecond budget unchanged.",
+          "observedAt": "2026-08-27T19:36:54Z"
         }
       ],
       "amendments": [
@@ -1350,10 +1375,58 @@
               "observedAt": "2026-08-27T19:06:39.635Z"
             }
           ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-08-27T20:00:02Z",
+          "reason": "Actual foundation evidence showed that trusted callback compilation is another pre-invocation boundary that must remain outside the exact generated active-work measurement, and readiness fixtures must exercise the authenticated generated callback path they claim to prove.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted bridge work.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-4",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-4",
+              "stage": "runtime_activation",
+              "quality": "verified_fix",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "Callback metering and the host watchdog now remain suspended through trusted response decoding and internal Promise forwarding and resume immediately before the generated continuation, with the exact 8 millisecond budget unchanged.",
+              "observedAt": "2026-08-27T19:36:54Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Planning repair succeeded, but the pre-source trusted foundation fixture compiled its scheduled callback inside the exact active-work meter and reported callback_milliseconds 9 against the unchanged limit 8 before contract or source generation.",
+              "observedAt": "2026-08-27T19:40:54.413Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T06:12:49Z",
-      "updatedAt": "2026-08-27T19:33:12Z"
+      "updatedAt": "2026-08-27T20:00:02Z"
     },
     {
       "status": "active",
@@ -1528,6 +1601,40 @@
       ],
       "createdAt": "2026-08-27T18:59:57Z",
       "updatedAt": "2026-08-27T19:33:12Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Campaign summaries prefer terminal structured evidence",
+      "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage, so repaired planning or source issues cannot mask a later foundation, evaluation, assembly, or runtime failure.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [],
+        "classifications": [
+          "pipeline_failure",
+          "infrastructure_failure"
+        ]
+      },
+      "id": "KF-0022",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_foundation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "The campaign attempt reported a repaired planning issue and assembly stage even though the persisted GenerationRun showed planning repair succeeded and the terminal failure occurred in the pre-source runtime foundation gate.",
+          "observedAt": "2026-08-27T19:40:54.413Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-27T20:00:02Z",
+      "updatedAt": "2026-08-27T20:00:02Z"
     }
   ],
   "reconciliations": [
@@ -3795,6 +3902,135 @@
       "createdAt": "2026-08-27T19:33:12Z",
       "priorManifestDigest": "fc9fafc4c157e809c566aa3f59dbeda1fc11731facd24b6a2dc073c29ff9d877",
       "resultingManifestDigest": "b2ba1364019712b0aee5e45d86980a306ddc06e6daa5c9e1ac315940ea2e063d"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t200002z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+        "fixId": "fix-cycle-5",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1"
+      },
+      "consultedManifestDigest": "b2ba1364019712b0aee5e45d86980a306ddc06e6daa5c9e1ac315940ea2e063d",
+      "contextDigest": "6525009d1cee8027905a979f21f3a388231b4fc2bf51fa5aaad49322f1bd2780",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0007",
+        "KF-0008",
+        "KF-0012",
+        "KF-0019",
+        "KF-0021"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-4",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "The verified cycle-4 fix kept callback metering and the controller watchdog suspended through trusted response decoding and Promise forwarding, then resumed immediately before the generated continuation without changing the 8 millisecond budget."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0019",
+            "KF-0022"
+          ],
+          "rationale": "The persisted GenerationRun, rather than the stale campaign attempt summary, proves planning repair succeeded and contract and source generation were never called. The pre-source foundation fixture then failed its scheduled callback at 9 milliseconds against the exact 8 millisecond budget because the trusted fixture used the generic callback path that compiles inside the meter. The attempt summary incorrectly preferred an earlier repaired planning issue and classified the coarse artifact-build stage as assembly."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0019",
+          "expectedRevision": 2,
+          "reason": "Actual foundation evidence showed that trusted callback compilation is another pre-invocation boundary that must remain outside the exact generated active-work measurement, and readiness fixtures must exercise the authenticated generated callback path they claim to prove.",
+          "changes": {
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted compilation or bridge work.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "pipeline_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-4",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-4",
+              "stage": "runtime_activation",
+              "quality": "verified_fix",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "Callback metering and the host watchdog now remain suspended through trusted response decoding and internal Promise forwarding and resume immediately before the generated continuation, with the exact 8 millisecond budget unchanged.",
+              "observedAt": "2026-08-27T19:36:54Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Planning repair succeeded, but the pre-source trusted foundation fixture compiled its scheduled callback inside the exact active-work meter and reported callback_milliseconds 9 against the unchanged limit 8 before contract or source generation.",
+              "observedAt": "2026-08-27T19:40:54.413Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Campaign summaries prefer terminal structured evidence",
+            "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage, so repaired planning or source issues cannot mask a later foundation, evaluation, assembly, or runtime failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure"
+              ]
+            },
+            "id": "KF-0022",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c4-r1",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_foundation",
+                "quality": "actual_submission",
+                "outcome": "pipeline_failure",
+                "summary": "The campaign attempt reported a repaired planning issue and assembly stage even though the persisted GenerationRun showed planning repair succeeded and the terminal failure occurred in the pre-source runtime foundation gate.",
+                "observedAt": "2026-08-27T19:40:54.413Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T20:00:02Z",
+            "updatedAt": "2026-08-27T20:00:02Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T20:00:02Z",
+      "priorManifestDigest": "b2ba1364019712b0aee5e45d86980a306ddc06e6daa5c9e1ac315940ea2e063d",
+      "resultingManifestDigest": "c3b10d98498335f570e026053f9bd01bce30d64317ab727e98aaf62572a67138"
     }
   ]
 }
