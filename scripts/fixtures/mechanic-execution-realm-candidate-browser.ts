@@ -41,6 +41,10 @@ type ProductionIntegrationEvidence = {
   fireAndForgetOperationsBudgetEnforced: boolean;
   stateBudgetTotalsDistinctEntries: boolean;
   trustedHostWaitExcludedFromCallbackBudget: boolean;
+  trustedHostWaitOutcome: string;
+  trustedHostWaitCapabilityHostCalls: number;
+  trustedHostWaitCallbackBudgetMilliseconds: number;
+  trustedHostWaitResourceDimension?: string;
   postAwaitCallbackCpuBudgetEnforced: boolean;
   fireAndForgetCallbackCpuBudgetEnforced: boolean;
   fireAndForgetCallbackOutcome: string;
@@ -193,6 +197,7 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
   });
   const handle = objectHost.resolveOne("binding_actor");
   let capabilityHostCalls = 0;
+  let trustedHostWaitCapabilityHostCalls = 0;
   let actualHandleReachedHost = false;
   const transportAudit = {
     initializationObserved: false,
@@ -225,6 +230,13 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
             typeof capabilityArguments[1] !== "string"
           ) {
             throw new Error("State write arguments were malformed.");
+          }
+          if (
+            capabilityArguments[0].startsWith(
+              "delayed_callback_trusted_"
+            )
+          ) {
+            trustedHostWaitCapabilityHostCalls += 1;
           }
           if (capabilityArguments[0].startsWith("delayed_callback_")) {
             await new Promise((resolve) => window.setTimeout(resolve, 5));
@@ -360,8 +372,24 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
         callbacks: [
           {
             id: "browser_trusted_host_wait_callback",
-            source:
-              'await realm.callCapability("state_write", "delayed_callback_one", "one"); await realm.callCapability("state_write", "delayed_callback_two", "two"); await realm.callCapability("state_write", "delayed_callback_three", "three");',
+            source: [
+              'await realm.callCapability("state_write", "delayed_callback_trusted_one", "one");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_two", "two");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_three", "three");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_four", "four");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_five", "five");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_six", "six");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_seven", "seven");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_eight", "eight");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_nine", "nine");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_ten", "ten");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_eleven", "eleven");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_twelve", "twelve");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_thirteen", "thirteen");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_fourteen", "fourteen");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_fifteen", "fifteen");',
+              'await realm.callCapability("state_write", "delayed_callback_trusted_sixteen", "sixteen");',
+            ].join(" "),
           },
         ],
         invocations: [
@@ -438,6 +466,13 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
         stateBudget.outcome === "resource_limit",
       trustedHostWaitExcludedFromCallbackBudget:
         trustedHostWait.outcome === "completed",
+      trustedHostWaitOutcome: trustedHostWait.outcome,
+      trustedHostWaitCapabilityHostCalls,
+      trustedHostWaitCallbackBudgetMilliseconds:
+        MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.resourceBudget
+          .maximumCallbackMilliseconds,
+      trustedHostWaitResourceDimension:
+        trustedHostWait.resourceUsage?.dimension,
       postAwaitCallbackCpuBudgetEnforced:
         postAwaitCpu.outcome === "resource_limit" &&
         postAwaitCpu.resourceUsage?.dimension === "callback_milliseconds",

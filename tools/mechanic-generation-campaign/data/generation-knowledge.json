@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 18,
-  "updatedAt": "2026-08-27T18:59:57Z",
+  "revision": 19,
+  "updatedAt": "2026-08-27T19:33:12Z",
   "entries": [
     {
       "status": "active",
@@ -1274,7 +1274,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Separate callback active-work and Worker-delivery budgets",
-      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Give the host watchdog a separate bounded allowance for Worker delivery and suspension acknowledgement that remains below the outer conformance deadline. Do not charge capability transport or healthy suspension acknowledgement as generated active work.",
+      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted bridge work.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -1288,7 +1288,7 @@
         ]
       },
       "id": "KF-0019",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -1301,11 +1301,59 @@
           "outcome": "runtime_pipeline_failure",
           "summary": "Cycle 11 proved the cycle-11 contract fix worked: the initial time-advancing positive count was rejected, contract repair was accepted, the initial actual source passed deterministic evaluation, and Final Game Spec assembly succeeded. First-playable then failed before fire_action was reported as dispatched with callback_milliseconds exceeded 8. The accepted logical_action callback performs only bounded straight-line scalar work before its first awaited capabilities.time.now call, contains no loop or spatial query, and had already passed the executor-backed deterministic evaluation. The browser controller's outer callback watchdog allowed the exact 8ms active-work budget plus only 16ms for the executor Worker's suspension acknowledgement. Under this run's slow browser scheduling, that 24ms outer timer could expire before the trusted measured suspension signal arrived and synthesize an overrun even though capability transport is not generated active work. KF-0008 and KF-0009 were confirmed because contract repair enforced cleanup-capable time-advancing evidence and dispatch-only creation proof. KF-0010 was satisfied because the action callback made no discard-only query. KF-0006's causal runtime error precedence worked in the rendered first-playable evidence and was not the cause. KF-0011 and KF-0012 govern geometry and live participants but the action failed before those paths could be tested. The durable bounded fix increases only Worker-delivery grace from 16ms to 32ms, making the outer watchdog 40ms for an 8ms active budget while retaining exact executor enforcement at 8ms and staying below the 50ms conformance execution deadline.",
           "observedAt": "2026-08-27T02:58:15Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The accepted logical_action performed bounded straight-line scalar work with ten sequential awaited capabilities, contained no loop or spatial query, passed deterministic evaluation, then failed mounted first-playable before fire_action dispatch with callback_milliseconds exceeded 8.",
+          "observedAt": "2026-08-27T19:06:39.635Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T19:33:12Z",
+          "reason": "A second loop exposed that trusted response decoding and internal Promise forwarding also occur before generated continuation and must remain outside both active-work metering and the host watchdog interval.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Give the host watchdog a separate bounded allowance for Worker delivery and suspension acknowledgement that remains below the outer conformance deadline. Do not charge capability transport or healthy suspension acknowledgement as generated active work.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The accepted logical_action performed bounded straight-line scalar work with ten sequential awaited capabilities, contained no loop or spatial query, passed deterministic evaluation, then failed mounted first-playable before fire_action dispatch with callback_milliseconds exceeded 8.",
+              "observedAt": "2026-08-27T19:06:39.635Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-27T06:12:49Z",
-      "updatedAt": "2026-08-27T06:12:49Z"
+      "updatedAt": "2026-08-27T19:33:12Z"
     },
     {
       "status": "active",
@@ -1412,7 +1460,7 @@
         ]
       },
       "id": "KF-0021",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -1424,11 +1472,62 @@
           "outcome": "pipeline_failure",
           "summary": "Identical mechanic evaluation inputs produced different observable evidence.",
           "observedAt": "2026-08-27T18:42:30.086Z"
+        },
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-3",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-3",
+          "stage": "deterministic_evaluation",
+          "quality": "verified_fix",
+          "outcome": "pipeline_failure",
+          "summary": "The durable campaign wait now requires the exact runtime-ready receipt plus nonempty iframe source, preserves explicit failures and provider-activity renewal, and reports live probe or terminal evidence after successful repaired generation.",
+          "observedAt": "2026-08-27T19:02:39Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T19:33:12Z",
+          "reason": "Discovery cycle 3 reached and preserved an exact mounted-runtime failure after the cycle-3 readiness repair, confirming that generic progress no longer terminates campaign observation.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Campaign completion requires exact runtime readiness",
+            "guidance": "Treat generic Ready labels and accepted-project receipts as progress, not campaign completion. A browser campaign is runtime-ready only when the editor displays the exact runtime-ready receipt and the generated iframe has nonempty source. Keep waiting until that condition or an explicit failure, and when repaired generation succeeded, report the live probe or terminal failure instead of a stale rejected-attempt issue.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "editor_mount",
+                "runtime_health"
+              ],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-3",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-3",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "The durable campaign wait now requires the exact runtime-ready receipt plus nonempty iframe source, preserves explicit failures and provider-activity renewal, and reports live probe or terminal evidence after successful repaired generation.",
+              "observedAt": "2026-08-27T19:02:39Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-27T18:59:57Z",
-      "updatedAt": "2026-08-27T18:59:57Z"
+      "updatedAt": "2026-08-27T19:33:12Z"
     }
   ],
   "reconciliations": [
@@ -3609,6 +3708,93 @@
       "createdAt": "2026-08-27T18:59:57Z",
       "priorManifestDigest": "6fd00406c4ab0b960c267adaeddf53de6c99d2720e748601e74d33fe42dc058a",
       "resultingManifestDigest": "fc9fafc4c157e809c566aa3f59dbeda1fc11731facd24b6a2dc073c29ff9d877"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t193312z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+        "fixId": "fix-cycle-4",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1"
+      },
+      "consultedManifestDigest": "fc9fafc4c157e809c566aa3f59dbeda1fc11731facd24b6a2dc073c29ff9d877",
+      "contextDigest": "20c03f34b1a284f41baf152a1e887cde418695716e12306d0c789d01cbcdce6e",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0008",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012",
+        "KF-0019",
+        "KF-0021"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-3",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0021"
+          ],
+          "rationale": "The verified exact-readiness fix allowed discovery cycle 3 to remain active until the mounted runtime produced the causal callback-budget failure, instead of stopping on generic Ready or reporting stale repaired-source evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "The admitted straight-line action failed first-playable before dispatch with callback_milliseconds exceeded 8 despite containing no loop or spatial query. The executor resumed both local metering and the controller watchdog before trusted response decoding and internal Promise forwarding completed, charging that bridge work once per awaited capability."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0021",
+          "expectedRevision": 1,
+          "confidence": "supported",
+          "reason": "Discovery cycle 3 reached and preserved an exact mounted-runtime failure after the cycle-3 readiness repair, confirming that generic progress no longer terminates campaign observation.",
+          "evidence": [
+            {
+              "kind": "loop_fix",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-3",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c2-r1",
+              "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+              "fixId": "fix-cycle-3",
+              "stage": "deterministic_evaluation",
+              "quality": "verified_fix",
+              "outcome": "pipeline_failure",
+              "summary": "The durable campaign wait now requires the exact runtime-ready receipt plus nonempty iframe source, preserves explicit failures and provider-activity renewal, and reports live probe or terminal evidence after successful repaired generation.",
+              "observedAt": "2026-08-27T19:02:39Z"
+            }
+          ]
+        },
+        {
+          "type": "amend",
+          "findingId": "KF-0019",
+          "expectedRevision": 1,
+          "reason": "A second loop exposed that trusted response decoding and internal Promise forwarding also occur before generated continuation and must remain outside both active-work metering and the host watchdog interval.",
+          "changes": {
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Do not widen the generated resource budget to absorb trusted bridge work."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c3-r1",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The accepted logical_action performed bounded straight-line scalar work with ten sequential awaited capabilities, contained no loop or spatial query, passed deterministic evaluation, then failed mounted first-playable before fire_action dispatch with callback_milliseconds exceeded 8.",
+              "observedAt": "2026-08-27T19:06:39.635Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-27T19:33:12Z",
+      "priorManifestDigest": "fc9fafc4c157e809c566aa3f59dbeda1fc11731facd24b6a2dc073c29ff9d877",
+      "resultingManifestDigest": "b2ba1364019712b0aee5e45d86980a306ddc06e6daa5c9e1ac315940ea2e063d"
     }
   ]
 }
