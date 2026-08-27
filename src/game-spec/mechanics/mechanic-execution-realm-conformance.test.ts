@@ -1205,6 +1205,7 @@ describe("Execution Realm Conformance Suite", () => {
       profileId: "phase_9_realm_conformance",
       maximumExecutionMilliseconds: 50,
       maximumTerminationMilliseconds: 50,
+      maximumInitializationMilliseconds: 1_000,
       maximumHostHeartbeatMilliseconds: 250,
       resourceBudget: {
         profileId: "phase_9_fixed_budget",

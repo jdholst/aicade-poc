@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 22,
-  "updatedAt": "2026-08-27T21:36:40Z",
+  "revision": 23,
+  "updatedAt": "2026-08-27T23:16:34Z",
   "entries": [
     {
       "status": "active",
@@ -248,7 +248,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Separate heartbeat and candidate execution budgets",
-      "guidance": "Keep candidate execution and termination bounds exact, but size the host heartbeat allowance for healthy browser scheduling delays and require causal runtime evidence before classifying a missed heartbeat as candidate failure.",
+      "guidance": "Require the browser runtime to acknowledge the exact protocol version, session identity, and runtime identity from the captured opaque-origin window before dispatching any conformance probe, under a separate fixed initialization deadline. After readiness, retain the exact 50 millisecond execution, 50 millisecond termination, and 250 millisecond heartbeat budgets per probe. Require causal runtime evidence before classifying a missed heartbeat as candidate failure.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -262,7 +262,7 @@
         ]
       },
       "id": "KF-0007",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -275,11 +275,59 @@
           "outcome": "pipeline_failure",
           "summary": "The browser-attested realm candidate completed its first capability probe, but the runtime heartbeat missed a 50 millisecond scheduling allowance without any browser or runtime error. Earlier campaigns passed the same gate, so the fixed heartbeat policy was too narrow for a healthy but briefly delayed browser task. Increasing only the host-heartbeat allowance to 250 milliseconds preserves the 50 millisecond candidate execution and termination bounds.",
           "observedAt": "2026-08-24T17:14:29Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_foundation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "The callback probe returned exact structured resource-limit evidence at 51.3 milliseconds without runtime-heartbeat evidence, while every later probe did receive a heartbeat. The following resource probe timed out during termination and replacement, so readiness must be established before the fixed probe sequence begins.",
+          "observedAt": "2026-08-27T22:33:03.373Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-27T23:16:34Z",
+          "reason": "Actual foundation evidence showed that a probe could be dispatched before exact runtime readiness was established, making its missing heartbeat ambiguous even though later heartbeats passed. A separate bounded initialization acknowledgement preserves the exact per-probe budgets and makes every subsequent heartbeat classification causal.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate heartbeat and candidate execution budgets",
+            "guidance": "Keep candidate execution and termination bounds exact, but size the host heartbeat allowance for healthy browser scheduling delays and require causal runtime evidence before classifying a missed heartbeat as candidate failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "assembly"
+              ],
+              "classifications": [
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The callback probe returned exact structured resource-limit evidence at 51.3 milliseconds without runtime-heartbeat evidence, while every later probe did receive a heartbeat. The following resource probe timed out during termination and replacement, so readiness must be established before the fixed probe sequence begins.",
+              "observedAt": "2026-08-27T22:33:03.373Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-24T23:17:44.000Z"
+      "updatedAt": "2026-08-27T23:16:34Z"
     },
     {
       "status": "active",
@@ -1845,6 +1893,54 @@
       ],
       "createdAt": "2026-08-27T20:26:24Z",
       "updatedAt": "2026-08-27T21:36:40Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Separate termination response from executor replacement readiness",
+      "guidance": "Return the exact bounded termination response after synchronously terminating the matched executor without waiting for replacement construction. Track replacement as one shared readiness flight. Preserve one warm executor for conformance, count idle and active executors together for runtime capacity, and restore capacity one executor at a time. Requests that need capacity must join the current flight so replacement failures remain observable and no untracked executor starts.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_foundation",
+          "assembly"
+        ],
+        "classifications": [
+          "pipeline_failure"
+        ]
+      },
+      "id": "KF-0024",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "loop_fix",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-7",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1",
+          "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+          "fixId": "fix-cycle-7",
+          "stage": "deterministic_evaluation",
+          "quality": "verified_fix",
+          "outcome": "pipeline_failure",
+          "summary": "Cycle 7 made exact termination authoritative and retained structured callback-limit settlements, but its termination response still awaited warm executor replacement readiness.",
+          "observedAt": "2026-08-27T22:27:54Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_foundation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "After the callback probe settled correctly, resource_consecutive_failures timed out because executor replacement remained coupled to its bounded termination response. Later probes inherited the depleted or still-replacing pool state.",
+          "observedAt": "2026-08-27T22:33:03.373Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-27T23:16:34Z",
+      "updatedAt": "2026-08-27T23:16:34Z"
     }
   ],
   "reconciliations": [
@@ -4459,6 +4555,121 @@
       "createdAt": "2026-08-27T21:36:40Z",
       "priorManifestDigest": "f4cf375b070c1ff987e59c83645a0a7776258d9782ea8ee127b6e75383bdce0b",
       "resultingManifestDigest": "dff18c0ad0688e1a8d69f5adf6db0ea7b829ca64aac947e65ff4c016f7a7a119"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-fix-p09-t17-projectile-20260827t231634z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+        "fixId": "fix-cycle-8",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1"
+      },
+      "consultedManifestDigest": "dff18c0ad0688e1a8d69f5adf6db0ea7b829ca64aac947e65ff4c016f7a7a119",
+      "contextDigest": "8b3984d844015b58b576a403c644b7a2e9085194d311693d98dd299e881ae537",
+      "consultedFindingIds": [
+        "KF-0007",
+        "KF-0008",
+        "KF-0022",
+        "KF-0023"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-7",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0024"
+          ],
+          "rationale": "The verified cycle-7 correlation repair preserved exact terminate authority and structured callback-limit evidence, but it still placed warm executor replacement readiness on the termination response path. That coupling became causal in the next actual foundation run. KF-0008 target proof and KF-0023 replay evidence were not reached."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0007",
+            "KF-0024"
+          ],
+          "rationale": "KF-0022 required the nested runtime-foundation outcome to take precedence over the coarse assembly summary. The first callback probe completed with exact structured resource-limit evidence at 51.3 milliseconds, then resource_consecutive_failures timed out during the coupled terminate-and-replace path and later probes cascaded. Runtime heartbeat evidence was missing only for the first probe and present thereafter, so initialization readiness and replacement capacity need separate bounded evidence. KF-0008 target proof and KF-0023 replay evidence were not reached."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0007",
+          "expectedRevision": 1,
+          "reason": "Actual foundation evidence showed that a probe could be dispatched before exact runtime readiness was established, making its missing heartbeat ambiguous even though later heartbeats passed. A separate bounded initialization acknowledgement preserves the exact per-probe budgets and makes every subsequent heartbeat classification causal.",
+          "changes": {
+            "guidance": "Require the browser runtime to acknowledge the exact protocol version, session identity, and runtime identity from the captured opaque-origin window before dispatching any conformance probe, under a separate fixed initialization deadline. After readiness, retain the exact 50 millisecond execution, 50 millisecond termination, and 250 millisecond heartbeat budgets per probe. Require causal runtime evidence before classifying a missed heartbeat as candidate failure."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+              "attemptId": "a01-baseline",
+              "stage": "runtime_foundation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The callback probe returned exact structured resource-limit evidence at 51.3 milliseconds without runtime-heartbeat evidence, while every later probe did receive a heartbeat. The following resource probe timed out during termination and replacement, so readiness must be established before the fixed probe sequence begins.",
+              "observedAt": "2026-08-27T22:33:03.373Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate termination response from executor replacement readiness",
+            "guidance": "Return the exact bounded termination response after synchronously terminating the matched executor without waiting for replacement construction. Track replacement as one shared readiness flight. Preserve one warm executor for conformance, count idle and active executors together for runtime capacity, and restore capacity one executor at a time. Requests that need capacity must join the current flight so replacement failures remain observable and no untracked executor starts.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "assembly"
+              ],
+              "classifications": [
+                "pipeline_failure"
+              ]
+            },
+            "id": "KF-0024",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "loop_fix",
+                "id": "p09-t17-projectile-proof-loop-20260827t174214263z/fix-cycle-7",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c6-r1",
+                "loopId": "p09-t17-projectile-proof-loop-20260827t174214263z",
+                "fixId": "fix-cycle-7",
+                "stage": "deterministic_evaluation",
+                "quality": "verified_fix",
+                "outcome": "pipeline_failure",
+                "summary": "Cycle 7 made exact termination authoritative and retained structured callback-limit settlements, but its termination response still awaited warm executor replacement readiness.",
+                "observedAt": "2026-08-27T22:27:54Z"
+              },
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260827t174214263z-discovery-c7-r1",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_foundation",
+                "quality": "actual_submission",
+                "outcome": "pipeline_failure",
+                "summary": "After the callback probe settled correctly, resource_consecutive_failures timed out because executor replacement remained coupled to its bounded termination response. Later probes inherited the depleted or still-replacing pool state.",
+                "observedAt": "2026-08-27T22:33:03.373Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-27T23:16:34Z",
+            "updatedAt": "2026-08-27T23:16:34Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-27T23:16:34Z",
+      "priorManifestDigest": "dff18c0ad0688e1a8d69f5adf6db0ea7b829ca64aac947e65ff4c016f7a7a119",
+      "resultingManifestDigest": "ff1fca41e9488c7ba9839f465beb67a713ab6542b10acad3af1c5525ea00feef"
     }
   ]
 }

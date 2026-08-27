@@ -15,7 +15,7 @@ const RUNTIME_HEARTBEAT_BROWSER_EVIDENCE = Symbol(
 const DEADLINE_EXCEEDED = Symbol("conformance_session_deadline_exceeded");
 
 export const MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION =
-  "mechanic_execution_realm_browser_session/v2";
+  "mechanic_execution_realm_browser_session/v3";
 
 export type MechanicExecutionRealmBrowserCandidateInitialization = {
   kind: "sparkline_mechanic_conformance_candidate_initialize";
@@ -26,6 +26,13 @@ export type MechanicExecutionRealmBrowserCandidateInitialization = {
 
 export type MechanicExecutionRealmBrowserRuntimeInitialization = {
   kind: "sparkline_mechanic_conformance_runtime_initialize";
+  protocolVersion: typeof MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION;
+  sessionId: StableId;
+  runtimeId: StableId;
+};
+
+export type MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement = {
+  kind: "sparkline_mechanic_conformance_runtime_initialized";
   protocolVersion: typeof MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION;
   sessionId: StableId;
   runtimeId: StableId;
@@ -119,6 +126,7 @@ export type MechanicExecutionRealmConformanceSessionProbeEvidence = {
 
 export type MechanicExecutionRealmConformanceSessionState = {
   candidate: MechanicExecutionRealmCandidateAdapter;
+  waitForInitialization(deadlineMilliseconds: number): Promise<boolean>;
   consumeCandidateExecutionEvidence(
     probe: MechanicExecutionRealmConformanceProbe,
     result: MechanicExecutionRealmProbeResult
@@ -273,6 +281,9 @@ export function createMechanicExecutionRealmConformanceSession({
 
   sessionStates.set(session, Object.freeze({
     candidate,
+    async waitForInitialization() {
+      return !disposed;
+    },
     consumeCandidateExecutionEvidence() {
       return false;
     },
@@ -419,6 +430,17 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
     sessionId,
     runtimeId,
   };
+  const runtimeReadiness = requestRuntimeInitializationAcknowledgement({
+    runtimeIframe,
+    runtimeWindow,
+    runtimePreparation: capturedRuntime.preparation,
+    ownerWindow,
+    sessionId,
+    runtimeId,
+    pendingCancellations,
+    isDisposed: () => disposed,
+    disposeBrowserState,
+  });
   const session: MechanicExecutionRealmConformanceSession = Object.freeze({
     candidateId,
     [CONFORMANCE_SESSION]: true as const,
@@ -446,6 +468,17 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
 
   sessionStates.set(session, Object.freeze({
     candidate,
+    async waitForInitialization(deadlineMilliseconds) {
+      const readiness = await raceAgainstDeadline(
+        runtimeReadiness.promise,
+        deadlineMilliseconds
+      );
+      if (readiness === DEADLINE_EXCEEDED) {
+        runtimeReadiness.cancel();
+        return false;
+      }
+      return readiness;
+    },
     consumeCandidateExecutionEvidence(probe, result) {
       const evidence = candidateEvidence.get(result);
       candidateEvidence.delete(result);
@@ -458,6 +491,9 @@ export function createMechanicExecutionRealmBrowserConformanceSession({
       );
     },
     checkHostResponsiveness(probeId, deadlineMilliseconds) {
+      if (!runtimeReadiness.isReady()) {
+        return Promise.resolve(noBrowserEvidence(false));
+      }
       return requestRuntimeHeartbeat({
         probeId,
         deadlineMilliseconds,
@@ -1013,6 +1049,100 @@ type RuntimeHeartbeatRequestInput = {
   disposeBrowserState(): void;
 };
 
+type RuntimeInitializationAcknowledgementRequestInput = Pick<
+  RuntimeHeartbeatRequestInput,
+  | "runtimeIframe"
+  | "runtimeWindow"
+  | "runtimePreparation"
+  | "ownerWindow"
+  | "sessionId"
+  | "runtimeId"
+  | "pendingCancellations"
+  | "isDisposed"
+  | "disposeBrowserState"
+>;
+
+type RuntimeInitializationReadiness = Readonly<{
+  promise: Promise<boolean>;
+  cancel(): void;
+  isReady(): boolean;
+}>;
+
+function requestRuntimeInitializationAcknowledgement({
+  runtimeIframe,
+  runtimeWindow,
+  runtimePreparation,
+  ownerWindow,
+  sessionId,
+  runtimeId,
+  pendingCancellations,
+  isDisposed,
+  disposeBrowserState,
+}: RuntimeInitializationAcknowledgementRequestInput): RuntimeInitializationReadiness {
+  let ready = false;
+  let settled = false;
+  let cancel: () => void = () => undefined;
+  const promise = new Promise<boolean>((resolve) => {
+    const cleanup = () => {
+      ownerWindow.removeEventListener("message", onMessage);
+      pendingCancellations.delete(cancel);
+    };
+    const finish = (value: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      ready = value;
+      cleanup();
+      resolve(value);
+    };
+    cancel = () => finish(false);
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (!event.isTrusted || event.source !== runtimeWindow) {
+        return;
+      }
+      if (
+        event.origin !== "null" ||
+        !isCurrentSandboxedIframe(
+          runtimeIframe,
+          runtimeWindow,
+          runtimePreparation
+        )
+      ) {
+        finish(false);
+        disposeBrowserState();
+        return;
+      }
+      if (!isRuntimeInitializationAcknowledgement(event.data)) {
+        return;
+      }
+      if (
+        event.data.protocolVersion !==
+          MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION ||
+        event.data.sessionId !== sessionId ||
+        event.data.runtimeId !== runtimeId
+      ) {
+        finish(false);
+        disposeBrowserState();
+        return;
+      }
+      finish(true);
+    };
+
+    ownerWindow.addEventListener("message", onMessage);
+    pendingCancellations.add(cancel);
+    if (isDisposed()) {
+      finish(false);
+    }
+  });
+
+  return Object.freeze({
+    promise,
+    cancel: () => cancel(),
+    isReady: () => ready,
+  });
+}
+
 function requestRuntimeHeartbeat({
   probeId,
   deadlineMilliseconds,
@@ -1254,6 +1384,22 @@ function isMatchingRuntimeHeartbeatResponse(
     value.runtimeId === runtimeId &&
     value.probeId === challenge.probeId &&
     value.nonce === challenge.nonce
+  );
+}
+
+function isRuntimeInitializationAcknowledgement(
+  value: unknown
+): value is MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === 4 &&
+    ["kind", "protocolVersion", "runtimeId", "sessionId"].every((key) =>
+      Object.prototype.hasOwnProperty.call(value, key)
+    ) &&
+    value.kind === "sparkline_mechanic_conformance_runtime_initialized" &&
+    typeof value.protocolVersion === "string" &&
+    typeof value.sessionId === "string" &&
+    typeof value.runtimeId === "string"
   );
 }
 

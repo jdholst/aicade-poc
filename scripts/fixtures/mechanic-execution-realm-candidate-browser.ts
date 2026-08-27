@@ -69,6 +69,8 @@ type CandidateEvaluation = {
   integration?: ProductionIntegrationEvidence;
   exactPlayerDrift?: ExactPlayerDriftFixedStepEvidence;
   terminationCorrelation?: TerminationCorrelationEvidence;
+  executorReplacement?: ExecutorReplacementEvidence;
+  runtimeInitialization?: RuntimeInitializationEvidence;
 };
 
 type TerminationCorrelationScenarioEvidence = {
@@ -82,6 +84,25 @@ type TerminationCorrelationEvidence = {
   prewarmPending: TerminationCorrelationScenarioEvidence;
   active: TerminationCorrelationScenarioEvidence;
   settled: TerminationCorrelationScenarioEvidence;
+};
+
+type ExecutorReplacementEvidence = {
+  initialPoolReadyCount: number;
+  activeExecutionAcknowledgementCount: number;
+  exactTerminationOutcomes: string[];
+  thirdTerminationRespondedBeforeGateRelease: boolean;
+  thirdTerminationPrecededReplacementStart: boolean;
+  replacementStartsBeforeGateRelease: number;
+  replacementStartReasonsBeforeGateRelease: string[];
+  freshExecutionRespondedBeforeGateRelease: boolean;
+  freshExecutionOutcome: string;
+  replacementStartsAfterRecovery: number;
+};
+
+type RuntimeInitializationEvidence = {
+  probeDispatchedBeforeAcknowledgement: boolean;
+  firstProbeHeartbeatAttested: boolean;
+  verdict: string;
 };
 
 declare global {
@@ -98,11 +119,19 @@ void runMechanicExecutionRealmCandidateEvaluation().catch((error) => {
 
 async function runMechanicExecutionRealmCandidateEvaluation(): Promise<void> {
   const searchParams = new URLSearchParams(location.search);
+  const runtimeInitializationOnly =
+    searchParams.get("runtimeInitializationOnly") === "1";
   const candidate = searchParams.get("candidate");
   if (candidate !== "ses_worker") {
     throw new TypeError(`Unknown Mechanic Execution Realm candidate "${candidate}".`);
   }
 
+  if (searchParams.get("executorReplacementOnly") === "1") {
+    const executorReplacement =
+      await runExecutorReplacementReadinessIntegration();
+    window.__mechanicRealmCandidateEvaluation = { executorReplacement };
+    return;
+  }
   if (searchParams.get("terminationCorrelationOnly") === "1") {
     const terminationCorrelation =
       await runTerminationCorrelationIntegration();
@@ -140,7 +169,9 @@ async function runMechanicExecutionRealmCandidateEvaluation(): Promise<void> {
     await waitForWorkerReady(controller, controllerAudit);
 
     runtimeIframe = document.createElement("iframe");
-    runtimeIframe.srcdoc = createRuntimeResponderSource();
+    runtimeIframe.srcdoc = createRuntimeResponderSource(
+      runtimeInitializationOnly
+    );
     prepareMechanicExecutionRealmBrowserConformanceIframe(runtimeIframe);
     const runtimeReady = waitForRuntimeReady(runtimeIframe);
     document.body.append(runtimeIframe);
@@ -166,7 +197,33 @@ async function runMechanicExecutionRealmCandidateEvaluation(): Promise<void> {
       candidateEndpoint: { kind: "worker", worker: controller },
       runtimeIframe,
     });
-    report = await runMechanicExecutionRealmConformanceSuite({ session });
+    const reportPromise = runMechanicExecutionRealmConformanceSuite({ session });
+    if (runtimeInitializationOnly) {
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      const probeDispatchedBeforeAcknowledgement = controllerAudit.some(
+        (value) =>
+          isRecord(value) && value.action === "execute_dispatched"
+      );
+      runtimeIframe.contentWindow?.postMessage(
+        {
+          kind: "fixture_release_runtime_initialization",
+          protocolVersion:
+            MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+        },
+        "*"
+      );
+      report = await reportPromise;
+      window.__mechanicRealmCandidateEvaluation = {
+        runtimeInitialization: {
+          probeDispatchedBeforeAcknowledgement,
+          firstProbeHeartbeatAttested:
+            report.probeResults[0]?.runtimeHeartbeatBrowserEvidence === true,
+          verdict: report.verdict,
+        },
+      };
+      return;
+    }
+    report = await reportPromise;
   } finally {
     session?.dispose();
     controller.terminate();
@@ -211,6 +268,239 @@ async function runTerminationCorrelationIntegration(): Promise<TerminationCorrel
       source: "return true;",
     }),
   };
+}
+
+async function runExecutorReplacementReadinessIntegration(): Promise<ExecutorReplacementEvidence> {
+  const controllerUrl = new URL(
+    "../../src/runtime/mechanics/ses-worker-mechanic-execution-realm-controller.worker.ts",
+    import.meta.url
+  );
+  controllerUrl.searchParams.set("qaExecutorReplacementGate", "1");
+  const controller = new Worker(controllerUrl, { type: "module" });
+  const messages: unknown[] = [];
+  const onMessage = (event: MessageEvent<unknown>) => {
+    if (event.isTrusted) {
+      messages.push(event.data);
+    }
+  };
+  controller.addEventListener("message", onMessage);
+
+  const sessionId = "executor_replacement_session";
+  const candidateEndpointId = "executor_replacement_candidate";
+  const exactTerminationOutcomes: string[] = [];
+  let activeExecutionAcknowledgementCount = 0;
+
+  try {
+    await waitForWorkerReady(controller, []);
+    const initialPoolReadyCount = countControllerAudits(
+      messages,
+      "executor_ambient_audit"
+    );
+    controller.postMessage({
+      kind: "sparkline_mechanic_conformance_candidate_initialize",
+      protocolVersion: MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+      sessionId,
+      candidateEndpointId,
+    });
+
+    let thirdTermination:
+      | MechanicExecutionRealmBrowserCandidateResponse
+      | undefined;
+    for (let index = 1; index <= 3; index += 1) {
+      const probeId = `executor_replacement_probe_${index}`;
+      const executeNonce = `executor_replacement_execute_${index}`;
+      const terminateNonce = `executor_replacement_terminate_${index}`;
+      const executeRequest = createExecutorReplacementExecuteRequest({
+        probeId,
+        executeNonce,
+        source: "for (;;) {}",
+      });
+      controller.postMessage(executeRequest);
+      await waitForControllerMessage(
+        messages,
+        (value): value is MechanicExecutionRealmBrowserCandidateExecutionAcknowledgement =>
+          isRecord(value) &&
+          value.kind ===
+            "sparkline_mechanic_conformance_candidate_execution_acknowledgement" &&
+          value.probeId === probeId &&
+          value.nonce === executeNonce,
+        `${probeId}: active execution acknowledgement timeout.`
+      );
+      activeExecutionAcknowledgementCount += 1;
+
+      controller.postMessage(
+        createTerminationCorrelationRequest({
+          executeRequest,
+          nonce: terminateNonce,
+          targetExecutionNonce: executeNonce,
+        })
+      );
+      if (index < 3) {
+        const exactTermination = await waitForControllerMessage(
+          messages,
+          (value): value is MechanicExecutionRealmBrowserCandidateResponse =>
+            isExactTerminationResponse(value, probeId, terminateNonce),
+          `${probeId}: exact termination timeout.`
+        );
+        exactTerminationOutcomes.push(exactTermination.result.outcome);
+      } else {
+        thirdTermination = await findControllerMessageWithin(
+          messages,
+          (value): value is MechanicExecutionRealmBrowserCandidateResponse =>
+            isExactTerminationResponse(value, probeId, terminateNonce),
+          MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumTerminationMilliseconds
+        );
+      }
+    }
+
+    const thirdTerminationRespondedBeforeGateRelease =
+      thirdTermination !== undefined;
+    const firstReplacementStartMessage = await waitForControllerMessage(
+      messages,
+      (value): value is Record<string, unknown> =>
+        isRecord(value) &&
+        value.kind === "ses_probe_audit" &&
+        isRecord(value.audit) &&
+        value.audit.action === "executor_replacement_start" &&
+        value.audit.ordinal === 1,
+      "The first executor replacement did not start while readiness was gated."
+    );
+    const thirdTerminationPrecededReplacementStart =
+      thirdTermination !== undefined &&
+      messages.indexOf(thirdTermination) <
+        messages.indexOf(firstReplacementStartMessage);
+    const freshExecute = createExecutorReplacementExecuteRequest({
+      probeId: "executor_replacement_fresh_probe",
+      executeNonce: "executor_replacement_fresh_execute",
+      source: "return { recovered: true };",
+    });
+    controller.postMessage(freshExecute);
+    const freshResponseBeforeGateRelease = await findControllerMessageWithin(
+      messages,
+      (value): value is MechanicExecutionRealmBrowserCandidateResponse =>
+        isRecord(value) &&
+        value.kind === "sparkline_mechanic_conformance_candidate_response" &&
+        value.action === "execute" &&
+        value.probeId === freshExecute.probeId &&
+        value.nonce === freshExecute.nonce,
+      MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.maximumExecutionMilliseconds
+    );
+    const replacementStartAudits = readControllerAudits(
+      messages,
+      "executor_replacement_start"
+    );
+    controller.postMessage({
+      kind: "ses_qa_release_executor_replacement",
+      protocolVersion: MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+    });
+    thirdTermination ??= await waitForControllerMessage(
+      messages,
+      (value): value is MechanicExecutionRealmBrowserCandidateResponse =>
+        isExactTerminationResponse(
+          value,
+          "executor_replacement_probe_3",
+          "executor_replacement_terminate_3"
+        ),
+      "executor_replacement_probe_3: exact termination timeout after gate release."
+    );
+    exactTerminationOutcomes.push(thirdTermination.result.outcome);
+
+    const freshResponse = await waitForControllerMessage(
+      messages,
+      (value): value is MechanicExecutionRealmBrowserCandidateResponse =>
+        isRecord(value) &&
+        value.kind === "sparkline_mechanic_conformance_candidate_response" &&
+        value.action === "execute" &&
+        value.probeId === freshExecute.probeId &&
+        value.nonce === freshExecute.nonce,
+      "Fresh execution did not complete after replacement release."
+    );
+
+    return {
+      initialPoolReadyCount,
+      activeExecutionAcknowledgementCount,
+      exactTerminationOutcomes,
+      thirdTerminationRespondedBeforeGateRelease,
+      thirdTerminationPrecededReplacementStart,
+      replacementStartsBeforeGateRelease: replacementStartAudits.length,
+      replacementStartReasonsBeforeGateRelease: replacementStartAudits.flatMap(
+        (audit) => typeof audit.reason === "string" ? [audit.reason] : []
+      ),
+      freshExecutionRespondedBeforeGateRelease:
+        freshResponseBeforeGateRelease !== undefined,
+      freshExecutionOutcome: freshResponse.result.outcome,
+      replacementStartsAfterRecovery: readControllerAudits(
+        messages,
+        "executor_replacement_start"
+      ).length,
+    };
+  } finally {
+    controller.removeEventListener("message", onMessage);
+    controller.terminate();
+  }
+}
+
+function createExecutorReplacementExecuteRequest(input: {
+  probeId: string;
+  executeNonce: string;
+  source: string;
+}): Extract<
+  MechanicExecutionRealmBrowserCandidateRequest,
+  { action: "execute" }
+> {
+  return {
+    kind: "sparkline_mechanic_conformance_candidate_request",
+    protocolVersion: MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+    probeId: input.probeId,
+    nonce: input.executeNonce,
+    action: "execute",
+    probe: {
+      id: input.probeId,
+      kind: "runaway_work",
+      source: input.source,
+      capabilityGrant: {
+        capabilityVersion: mechanicCapabilityRegistry.version,
+        capabilities: [],
+      },
+      seed: 41,
+      resourceBudget: MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY.resourceBudget,
+    },
+  };
+}
+
+function isExactTerminationResponse(
+  value: unknown,
+  probeId: string,
+  terminateNonce: string
+): value is MechanicExecutionRealmBrowserCandidateResponse {
+  return (
+    isRecord(value) &&
+    value.kind === "sparkline_mechanic_conformance_candidate_response" &&
+    value.action === "terminate" &&
+    value.probeId === probeId &&
+    value.nonce === terminateNonce
+  );
+}
+
+function readControllerAudits(
+  messages: readonly unknown[],
+  action: string
+): Record<string, unknown>[] {
+  return messages.flatMap((value) =>
+    isRecord(value) &&
+    value.kind === "ses_probe_audit" &&
+    isRecord(value.audit) &&
+    value.audit.action === action
+      ? [value.audit]
+      : []
+  );
+}
+
+function countControllerAudits(
+  messages: readonly unknown[],
+  action: string
+): number {
+  return readControllerAudits(messages, action).length;
 }
 
 async function runTerminationCorrelationScenario(input: {
@@ -399,6 +689,22 @@ async function waitForControllerMessage<T>(
     await new Promise((resolve) => window.setTimeout(resolve, 0));
   }
   throw new Error(timeoutMessage);
+}
+
+async function findControllerMessageWithin<T>(
+  messages: readonly unknown[],
+  predicate: (value: unknown) => value is T,
+  timeoutMilliseconds: number
+): Promise<T | undefined> {
+  const deadline = performance.now() + timeoutMilliseconds;
+  while (performance.now() < deadline) {
+    const message = messages.find(predicate);
+    if (message !== undefined) {
+      return message;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  }
+  return messages.find(predicate);
 }
 
 async function runProductionAdapterIntegration(): Promise<ProductionIntegrationEvidence> {
@@ -1024,9 +1330,23 @@ function waitForRuntimeReady(iframe: HTMLIFrameElement): Promise<void> {
   });
 }
 
-function createRuntimeResponderSource(): string {
+function createRuntimeResponderSource(
+  gateInitialization = false
+): string {
   return `<!doctype html><meta charset="utf-8"><script>
     let identity;
+    let pendingIdentity;
+    let initializationReleased = ${JSON.stringify(!gateInitialization)};
+    const acknowledgeInitialization = () => {
+      if (!initializationReleased || !pendingIdentity || identity) return;
+      identity = pendingIdentity;
+      parent.postMessage({
+        kind: "sparkline_mechanic_conformance_runtime_initialized",
+        protocolVersion: "${MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION}",
+        sessionId: identity.sessionId,
+        runtimeId: identity.runtimeId,
+      }, "*");
+    };
     addEventListener("message", (event) => {
       const request = event.data;
       if (
@@ -1034,8 +1354,17 @@ function createRuntimeResponderSource(): string {
         event.source !== parent ||
         request?.protocolVersion !== "${MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION}"
       ) return;
+      if (request?.kind === "fixture_release_runtime_initialization") {
+        initializationReleased = true;
+        acknowledgeInitialization();
+        return;
+      }
       if (request?.kind === "sparkline_mechanic_conformance_runtime_initialize") {
-        identity ||= { sessionId: request.sessionId, runtimeId: request.runtimeId };
+        pendingIdentity ||= {
+          sessionId: request.sessionId,
+          runtimeId: request.runtimeId,
+        };
+        acknowledgeInitialization();
         return;
       }
       if (request?.kind !== "sparkline_mechanic_conformance_runtime_heartbeat_challenge" || !identity) return;

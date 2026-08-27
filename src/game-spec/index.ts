@@ -383,6 +383,7 @@ export {
   type MechanicExecutionRealmBrowserRuntimeHeartbeatChallenge,
   type MechanicExecutionRealmBrowserRuntimeHeartbeatResponse,
   type MechanicExecutionRealmBrowserRuntimeInitialization,
+  type MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement,
   type MechanicExecutionRealmConformanceHost,
   type MechanicExecutionRealmConformanceSession,
 } from "./mechanics/mechanic-execution-realm-conformance-session";

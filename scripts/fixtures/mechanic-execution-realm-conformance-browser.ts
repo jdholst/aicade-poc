@@ -31,6 +31,9 @@ type FixtureMode =
   | "candidate_popup_retagged"
   | "runtime_wrong_id"
   | "runtime_wrong_session"
+  | "runtime_initialization_wrong_protocol"
+  | "runtime_initialization_wrong_session"
+  | "runtime_initialization_wrong_id"
   | "runtime_disconnected"
   | "runtime_missing_allow_scripts"
   | "runtime_sandbox_mutated"
@@ -734,7 +737,7 @@ function candidateResponder(responderMode: FixtureMode) {
     const probe = request.probe as Record<string, unknown>;
     return {
       kind: "sparkline_mechanic_conformance_candidate_response",
-      protocolVersion: "mechanic_execution_realm_browser_session/v2",
+      protocolVersion: "mechanic_execution_realm_browser_session/v3",
       sessionId: identity?.sessionId,
       candidateEndpointId: identity?.candidateEndpointId,
       probeId: request.probeId,
@@ -752,7 +755,7 @@ function candidateResponder(responderMode: FixtureMode) {
   ) {
     return {
       kind: "sparkline_mechanic_conformance_candidate_execution_acknowledgement",
-      protocolVersion: "mechanic_execution_realm_browser_session/v2",
+      protocolVersion: "mechanic_execution_realm_browser_session/v3",
       sessionId: identity?.sessionId,
       candidateEndpointId: identity?.candidateEndpointId,
       probeId: request.probeId,
@@ -898,6 +901,21 @@ function runtimeResponder(responderMode: FixtureMode) {
         sessionId: challenge.sessionId,
         runtimeId: challenge.runtimeId,
       };
+      const acknowledgement = {
+        kind: "sparkline_mechanic_conformance_runtime_initialized",
+        protocolVersion: "mechanic_execution_realm_browser_session/v3",
+        sessionId: identity.sessionId,
+        runtimeId: identity.runtimeId,
+      };
+      if (responderMode === "runtime_initialization_wrong_protocol") {
+        acknowledgement.protocolVersion =
+          "mechanic_execution_realm_browser_session/invalid";
+      } else if (responderMode === "runtime_initialization_wrong_session") {
+        acknowledgement.sessionId = "wrong_session";
+      } else if (responderMode === "runtime_initialization_wrong_id") {
+        acknowledgement.runtimeId = "wrong_runtime";
+      }
+      parent.postMessage(acknowledgement, "*");
       return;
     }
     if (
@@ -924,7 +942,7 @@ function runtimeResponder(responderMode: FixtureMode) {
     );
     let response = {
       kind: "sparkline_mechanic_conformance_runtime_heartbeat_response",
-      protocolVersion: "mechanic_execution_realm_browser_session/v2",
+      protocolVersion: "mechanic_execution_realm_browser_session/v3",
       sessionId: identity.sessionId,
       runtimeId: identity.runtimeId,
       probeId: challenge.probeId,
@@ -957,7 +975,7 @@ function relayResponder() {
 
 if (
   MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION !==
-  "mechanic_execution_realm_browser_session/v2"
+  "mechanic_execution_realm_browser_session/v3"
 ) {
   throw new Error("Unexpected browser session protocol version.");
 }

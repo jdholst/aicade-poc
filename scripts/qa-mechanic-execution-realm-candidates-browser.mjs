@@ -11,6 +11,10 @@ const exactPlayerDriftOnly =
   process.env.MECHANIC_REALM_EXACT_PLAYER_DRIFT_ONLY === "1";
 const terminationCorrelationOnly =
   process.env.MECHANIC_REALM_TERMINATION_CORRELATION_ONLY === "1";
+const executorReplacementOnly =
+  process.env.MECHANIC_REALM_EXECUTOR_REPLACEMENT_ONLY === "1";
+const runtimeInitializationOnly =
+  process.env.MECHANIC_REALM_RUNTIME_INITIALIZATION_ONLY === "1";
 const mainThreadStressMilliseconds =
   process.env.MECHANIC_REALM_MAIN_THREAD_STRESS_MILLISECONDS ?? "";
 const requestedIterations =
@@ -50,7 +54,7 @@ try {
       }
     });
     await page.goto(
-      `http://127.0.0.1:${address.port}/scripts/fixtures/mechanic-execution-realm-candidate-browser.html?candidate=${candidate}${integrationOnly ? "&integrationOnly=1" : ""}${exactPlayerDriftOnly ? "&exactPlayerDriftOnly=1" : ""}${terminationCorrelationOnly ? "&terminationCorrelationOnly=1" : ""}${mainThreadStressMilliseconds ? `&mainThreadStressMilliseconds=${encodeURIComponent(mainThreadStressMilliseconds)}` : ""}${requestedIterations ? `&requestedIterations=${encodeURIComponent(requestedIterations)}` : ""}${elapsedMilliseconds ? `&elapsedMilliseconds=${encodeURIComponent(elapsedMilliseconds)}` : ""}`,
+      `http://127.0.0.1:${address.port}/scripts/fixtures/mechanic-execution-realm-candidate-browser.html?candidate=${candidate}${integrationOnly ? "&integrationOnly=1" : ""}${exactPlayerDriftOnly ? "&exactPlayerDriftOnly=1" : ""}${terminationCorrelationOnly ? "&terminationCorrelationOnly=1" : ""}${executorReplacementOnly ? "&executorReplacementOnly=1" : ""}${runtimeInitializationOnly ? "&runtimeInitializationOnly=1" : ""}${mainThreadStressMilliseconds ? `&mainThreadStressMilliseconds=${encodeURIComponent(mainThreadStressMilliseconds)}` : ""}${requestedIterations ? `&requestedIterations=${encodeURIComponent(requestedIterations)}` : ""}${elapsedMilliseconds ? `&elapsedMilliseconds=${encodeURIComponent(elapsedMilliseconds)}` : ""}`,
       { timeout: 60_000, waitUntil: "commit" }
     );
     try {
@@ -75,6 +79,51 @@ try {
     }
     if (evaluation.error) {
       throw new Error(`${candidate}: ${evaluation.error}`);
+    }
+    if (runtimeInitializationOnly) {
+      const evidence = evaluation.runtimeInitialization;
+      if (
+        !evidence ||
+        evidence.probeDispatchedBeforeAcknowledgement ||
+        !evidence.firstProbeHeartbeatAttested ||
+        evidence.verdict !== "passed"
+      ) {
+        throw new Error(
+          `${candidate}: runtime initialization readiness failed\n${JSON.stringify(evidence, null, 2)}`
+        );
+      }
+      console.log(
+        `PASS ${candidate} runtime initialization precedes the first conformance probe`
+      );
+      await page.close();
+      continue;
+    }
+    if (executorReplacementOnly) {
+      const evidence = evaluation.executorReplacement;
+      if (
+        !evidence ||
+        evidence.initialPoolReadyCount !== 3 ||
+        evidence.activeExecutionAcknowledgementCount !== 3 ||
+        evidence.exactTerminationOutcomes.length !== 3 ||
+        evidence.exactTerminationOutcomes.some(
+          (outcome) => outcome !== "terminated"
+        ) ||
+        !evidence.thirdTerminationRespondedBeforeGateRelease ||
+        !evidence.thirdTerminationPrecededReplacementStart ||
+        evidence.replacementStartsBeforeGateRelease !== 1 ||
+        evidence.freshExecutionRespondedBeforeGateRelease ||
+        evidence.freshExecutionOutcome !== "completed" ||
+        evidence.replacementStartsAfterRecovery !== 1
+      ) {
+        throw new Error(
+          `${candidate}: executor replacement readiness failed\n${JSON.stringify(evidence, null, 2)}`
+        );
+      }
+      console.log(
+        `PASS ${candidate} exact termination precedes one lazy replacement startup`
+      );
+      await page.close();
+      continue;
     }
     if (terminationCorrelationOnly) {
       const evidence = evaluation.terminationCorrelation;

@@ -27,6 +27,9 @@ const allModes = [
   "candidate_popup_retagged",
   "runtime_wrong_id",
   "runtime_wrong_session",
+  "runtime_initialization_wrong_protocol",
+  "runtime_initialization_wrong_session",
+  "runtime_initialization_wrong_id",
   "runtime_disconnected",
   "runtime_missing_allow_scripts",
   "runtime_sandbox_mutated",
@@ -47,7 +50,6 @@ const sandboxContractRejectionModes = new Set([
 ]);
 const sandboxDriftModes = new Set([
   "candidate_sandbox_mutated",
-  "runtime_sandbox_mutated",
 ]);
 const retainedPreCaptureAuthorityModes = new Set([
   "candidate_same_origin_retagged",
@@ -57,6 +59,12 @@ const retainedPreCaptureAuthorityModes = new Set([
 ]);
 const preparationCleanupModes = new Set([
   "runtime_rejection_cleans_candidate_preparation",
+]);
+const runtimeInitializationRejectionModes = new Set([
+  "runtime_initialization_wrong_protocol",
+  "runtime_initialization_wrong_session",
+  "runtime_initialization_wrong_id",
+  "runtime_sandbox_mutated",
 ]);
 
 const vite = await createViteServer({
@@ -149,6 +157,25 @@ try {
       ) {
         throw new Error(
           `${mode}: runtime-first rejection did not release candidate preparation`
+        );
+      }
+      if (fixture.activeMessageListeners !== 0) {
+        throw new Error(`${mode}: browser-conformance listeners leaked`);
+      }
+      console.log(`PASS ${mode}`);
+      await page.close();
+      continue;
+    }
+    if (runtimeInitializationRejectionModes.has(mode)) {
+      if (
+        !fixture.error?.includes(
+          "did not acknowledge the exact browser session identity"
+        ) ||
+        fixture.report !== undefined ||
+        fixture.audits.some((audit) => audit.source === "candidate")
+      ) {
+        throw new Error(
+          `${mode}: invalid runtime initialization did not stop before probe dispatch`
         );
       }
       if (fixture.activeMessageListeners !== 0) {

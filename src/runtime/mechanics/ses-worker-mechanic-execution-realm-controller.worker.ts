@@ -40,6 +40,11 @@ type ExecutorSlot = {
   worker: Worker;
 };
 
+type ExecutorReplacementFlight = {
+  promise: Promise<void>;
+  error?: unknown;
+};
+
 type CandidateIdentity = {
   sessionId: string;
   candidateEndpointId: string;
@@ -161,7 +166,7 @@ let candidateIdentity: CandidateIdentity | undefined;
 let runtimeState: RuntimeState | undefined;
 let idleSlots: ExecutorSlot[] = [];
 let activeJob: ActiveJob | undefined;
-let replacementsInFlight = 0;
+let executorReplacementFlight: ExecutorReplacementFlight | undefined;
 const pendingExecutorWorkers = new Set<Worker>();
 const pendingConformanceExecutions = new Map<string, string>();
 let lastConformanceSettlement:
@@ -181,6 +186,17 @@ const qaConformancePrewarmGate = qaConformancePrewarmGateEnabled
       releaseQaConformancePrewarmGate = resolve;
     })
   : Promise.resolve();
+const qaExecutorReplacementGateEnabled =
+  new URL(globalThis.location.href).searchParams.get(
+    "qaExecutorReplacementGate"
+  ) === "1";
+let releaseQaExecutorReplacementGate: (() => void) | undefined;
+const qaExecutorReplacementGate = qaExecutorReplacementGateEnabled
+  ? new Promise<void>((resolve) => {
+      releaseQaExecutorReplacementGate = resolve;
+    })
+  : Promise.resolve();
+let qaExecutorReplacementStartCount = 0;
 
 const initialPoolReady = Promise.all([
   createInitialExecutorPool(),
@@ -206,6 +222,13 @@ workerScope.addEventListener("message", (event) => {
   if (isQaConformancePrewarmRelease(request)) {
     const release = releaseQaConformancePrewarmGate;
     releaseQaConformancePrewarmGate = undefined;
+    release?.();
+    return;
+  }
+
+  if (isQaExecutorReplacementRelease(request)) {
+    const release = releaseQaExecutorReplacementGate;
+    releaseQaExecutorReplacementGate = undefined;
     release?.();
     return;
   }
@@ -388,12 +411,12 @@ async function executeConformance(
   });
 }
 
-async function terminateConformance(
+function terminateConformance(
   request: Extract<
     MechanicExecutionRealmBrowserCandidateRequest,
     { action: "terminate" }
   >
-): Promise<void> {
+): void {
   const pendingNonce = pendingConformanceExecutions.get(request.probeId);
   const matchesPending = pendingNonce === request.targetExecutionNonce;
   const job = activeJob;
@@ -421,7 +444,6 @@ async function terminateConformance(
   if (matchingJob) {
     finishActiveJob(matchingJob, true);
   }
-  await ensureWarmExecutor();
   const settledCallbackResult =
     matchingSettlement &&
     isMeasuredCallbackResourceLimit(
@@ -1018,7 +1040,7 @@ function finishActiveJob(job: ActiveJob, kill: boolean): void {
   }
   if (kill) {
     job.slot.worker.terminate();
-    replenishExecutorPool();
+    queueMicrotask(replenishExecutorPool);
   } else if (mode !== "disposed") {
     idleSlots.push(job.slot);
   } else {
@@ -1027,42 +1049,58 @@ function finishActiveJob(job: ActiveJob, kill: boolean): void {
 }
 
 function replenishExecutorPool(): void {
-  while (
-    mode !== "disposed" &&
-    idleSlots.length + replacementsInFlight < TARGET_EXECUTOR_POOL_SIZE
+  const targetExecutorCount =
+    mode === "runtime" ? TARGET_EXECUTOR_POOL_SIZE : 1;
+  const currentExecutorCount = idleSlots.length + (activeJob ? 1 : 0);
+  if (
+    mode === "disposed" ||
+    currentExecutorCount >= targetExecutorCount ||
+    executorReplacementFlight
   ) {
-    replacementsInFlight += 1;
-    void createExecutorSlot().then(
-      (slot) => {
-        replacementsInFlight = Math.max(0, replacementsInFlight - 1);
-        if (mode === "disposed") {
-          slot.worker.terminate();
-        } else {
-          idleSlots.push(slot);
-        }
-      },
-      () => {
-        replacementsInFlight = Math.max(0, replacementsInFlight - 1);
-      }
-    );
+    return;
   }
+
+  const flight = {} as ExecutorReplacementFlight;
+  flight.promise = createReplacementExecutorSlot().then(
+    (slot) => {
+      if (mode === "disposed") {
+        slot.worker.terminate();
+      } else {
+        idleSlots.push(slot);
+      }
+    },
+    (error) => {
+      flight.error = error;
+    }
+  ).finally(() => {
+    if (executorReplacementFlight === flight) {
+      executorReplacementFlight = undefined;
+    }
+    if (!flight.error) {
+      replenishExecutorPool();
+    }
+  });
+  executorReplacementFlight = flight;
 }
 
 async function acquireExecutorSlot(): Promise<ExecutorSlot> {
   await initialPoolReady;
-  return idleSlots.shift() ?? createExecutorSlot();
-}
-
-async function ensureWarmExecutor(): Promise<void> {
-  if (mode === "disposed" || idleSlots.length > 0) {
-    return;
+  while (mode !== "disposed") {
+    const slot = idleSlots.shift();
+    if (slot) {
+      return slot;
+    }
+    replenishExecutorPool();
+    const flight = executorReplacementFlight;
+    if (!flight) {
+      throw new Error("The isolated executor pool could not start a replacement.");
+    }
+    await flight.promise;
+    if (flight.error) {
+      throw flight.error;
+    }
   }
-  const slot = await createExecutorSlot();
-  if (isControllerDisposed()) {
-    slot.worker.terminate();
-  } else {
-    idleSlots.push(slot);
-  }
+  throw new Error("The isolated executor controller is disposed.");
 }
 
 function releaseUnusedSlot(slot: ExecutorSlot): void {
@@ -1107,7 +1145,7 @@ function disposeController(): void {
   }
   pendingExecutorWorkers.clear();
   pendingConformanceExecutions.clear();
-  replacementsInFlight = 0;
+  executorReplacementFlight = undefined;
   if (state) {
     state.capabilityPort.removeEventListener(
       "message",
@@ -1287,6 +1325,25 @@ async function createExecutorSlot(): Promise<ExecutorSlot> {
   return { worker };
 }
 
+function createReplacementExecutorSlot(): Promise<ExecutorSlot> {
+  if (!qaExecutorReplacementGateEnabled) {
+    return createExecutorSlot();
+  }
+  qaExecutorReplacementStartCount += 1;
+  workerScope.postMessage({
+    kind: "ses_probe_audit",
+    audit: {
+      action: "executor_replacement_start",
+      ordinal: qaExecutorReplacementStartCount,
+      reason: "pool_replenishment",
+    },
+  });
+  return createExecutorSlot().then(async (slot) => {
+    await qaExecutorReplacementGate;
+    return slot;
+  });
+}
+
 async function createInitialExecutorPool(): Promise<ExecutorSlot[]> {
   const results = await Promise.allSettled(
     Array.from({ length: TARGET_EXECUTOR_POOL_SIZE }, () =>
@@ -1365,6 +1422,16 @@ function isQaConformancePrewarmRelease(value: unknown): boolean {
     qaConformancePrewarmGateEnabled &&
     isRecord(value) &&
     value.kind === "ses_qa_release_conformance_prewarm" &&
+    value.protocolVersion ===
+      MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION
+  );
+}
+
+function isQaExecutorReplacementRelease(value: unknown): boolean {
+  return (
+    qaExecutorReplacementGateEnabled &&
+    isRecord(value) &&
+    value.kind === "ses_qa_release_executor_replacement" &&
     value.protocolVersion ===
       MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION
   );
@@ -1538,10 +1605,6 @@ function isMessagePort(value: unknown): value is MessagePort {
     typeof value.start === "function" &&
     typeof value.close === "function"
   );
-}
-
-function isControllerDisposed(): boolean {
-  return mode === "disposed";
 }
 
 function isRecord(value: unknown): value is Record<PropertyKey, unknown> {

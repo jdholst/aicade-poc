@@ -257,6 +257,15 @@ export function installMechanicConformanceRuntimeHeartbeat(
         runtimeId: event.data.runtimeId,
         sessionId: event.data.sessionId,
       });
+      expectedParent.postMessage(
+        {
+          kind: "sparkline_mechanic_conformance_runtime_initialized",
+          protocolVersion,
+          sessionId: identity.sessionId,
+          runtimeId: identity.runtimeId,
+        },
+        identity.parentOrigin
+      );
       return;
     }
 
