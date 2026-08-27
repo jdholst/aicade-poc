@@ -239,6 +239,115 @@ describe("validateGeneratedMechanicContract", () => {
     });
   });
 
+  it("rejects a deadline reset to its initial sentinel after the same action establishes a write", () => {
+    const invalidContract = {
+      ...validGeneratedMechanicContract,
+      privateState: [
+        {
+          id: "cooldown_until",
+          valueType: "integer",
+          initialValue: -1,
+        },
+      ],
+      scenarios: [
+        {
+          id: "action_sets_deadline",
+          seed: 42,
+          setup: [
+            { kind: "binding_present", bindingId: "actors" },
+            {
+              kind: "state_equals",
+              stateId: "cooldown_until",
+              value: -1,
+            },
+          ],
+          steps: [{ kind: "dispatch_action", actionId: "activate" }],
+          observations: [
+            {
+              kind: "state_equals",
+              stateId: "cooldown_until",
+              value: 250,
+            },
+            {
+              kind: "binding_property",
+              bindingId: "actors",
+              property: "active",
+              operator: "equals",
+              value: true,
+            },
+          ],
+        },
+        {
+          id: "elapsed_deadline_keeps_initial_sentinel",
+          seed: 43,
+          setup: [
+            { kind: "binding_present", bindingId: "actors" },
+            {
+              kind: "state_equals",
+              stateId: "cooldown_until",
+              value: -1,
+            },
+          ],
+          steps: [
+            { kind: "dispatch_action", actionId: "activate" },
+            { kind: "advance_time", milliseconds: 250 },
+          ],
+          observations: [
+            {
+              kind: "state_equals",
+              stateId: "cooldown_until",
+              value: -1,
+            },
+            {
+              kind: "binding_property",
+              bindingId: "actors",
+              property: "active",
+              operator: "equals",
+              value: true,
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      validateGeneratedMechanicContract({
+        ...validationContext,
+        input: invalidContract,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      })
+    ).toEqual({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          {
+            path: "scenarios.1.observations.0",
+            code: "contradiction",
+            message:
+              'Scenario "elapsed_deadline_keeps_initial_sentinel" requires deadline state "cooldown_until" to return to its initial sentinel after action "activate" and time advancement, but another dispatch-only scenario establishes that the same action writes a different deadline. Elapsing a *_until deadline does not reset its stored value; require the deterministic written deadline or omit the final state observation.',
+          },
+        ],
+      },
+    });
+
+    const unwitnessedContract = {
+      ...invalidContract,
+      scenarios: [invalidContract.scenarios[1]],
+    };
+    expect(
+      validateGeneratedMechanicContract({
+        ...validationContext,
+        input: unwitnessedContract,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      })
+    ).toEqual({
+      success: true,
+      data: unwitnessedContract,
+    });
+  });
+
   it("rejects Config DSL nesting beyond the active constraint set", () => {
     const invalidContract = {
       ...validGeneratedMechanicContract,

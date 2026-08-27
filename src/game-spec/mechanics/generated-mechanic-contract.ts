@@ -448,6 +448,7 @@ export function validateGeneratedMechanicContract({
       referenceCatalog
     );
     addBehaviorScenarioValueIssues(issues, parsed.data, referenceCatalog);
+    addBehaviorScenarioDeadlineIssues(issues, parsed.data);
     addBehaviorScenarioLifecycleIssues(issues, parsed.data);
 
     if (issues.length > 0) {
@@ -1177,6 +1178,87 @@ function addBehaviorScenarioValueIssues(
       }
     });
   });
+}
+
+function addBehaviorScenarioDeadlineIssues(
+  issues: GeneratedMechanicContractValidationIssue[],
+  contract: GeneratedMechanicContract
+) {
+  const deadlineStates = contract.privateState.filter(({ id }) =>
+    id.endsWith("_until")
+  );
+
+  for (const state of deadlineStates) {
+    const actionsThatEstablishDeadlineWrites = new Set<StableId>();
+
+    for (const scenario of contract.scenarios) {
+      const startsAtInitialSentinel = scenario.setup.some(
+        (setup) =>
+          setup.kind === "state_equals" &&
+          setup.stateId === state.id &&
+          Object.is(setup.value, state.initialValue)
+      );
+      const observesWrittenDeadline = scenario.observations.some(
+        (observation) =>
+          observation.kind === "state_equals" &&
+          observation.stateId === state.id &&
+          !Object.is(observation.value, state.initialValue)
+      );
+      const dispatchedActions = scenario.steps.filter(
+        (step) => step.kind === "dispatch_action"
+      );
+      if (
+        !startsAtInitialSentinel ||
+        !observesWrittenDeadline ||
+        dispatchedActions.length !== 1 ||
+        scenario.steps.some(({ kind }) => kind === "advance_time")
+      ) {
+        continue;
+      }
+      actionsThatEstablishDeadlineWrites.add(dispatchedActions[0].actionId);
+    }
+
+    if (actionsThatEstablishDeadlineWrites.size === 0) {
+      continue;
+    }
+
+    contract.scenarios.forEach((scenario, scenarioIndex) => {
+      const startsAtInitialSentinel = scenario.setup.some(
+        (setup) =>
+          setup.kind === "state_equals" &&
+          setup.stateId === state.id &&
+          Object.is(setup.value, state.initialValue)
+      );
+      if (!startsAtInitialSentinel) {
+        return;
+      }
+      const action = scenario.steps.find(
+        (step, stepIndex) =>
+          step.kind === "dispatch_action" &&
+          actionsThatEstablishDeadlineWrites.has(step.actionId) &&
+          scenario.steps
+            .slice(stepIndex + 1)
+            .some(({ kind }) => kind === "advance_time")
+      );
+      if (!action || action.kind !== "dispatch_action") {
+        return;
+      }
+      scenario.observations.forEach((observation, observationIndex) => {
+        if (
+          observation.kind !== "state_equals" ||
+          observation.stateId !== state.id ||
+          !Object.is(observation.value, state.initialValue)
+        ) {
+          return;
+        }
+        issues.push({
+          path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
+          code: "contradiction",
+          message: `Scenario "${scenario.id}" requires deadline state "${state.id}" to return to its initial sentinel after action "${action.actionId}" and time advancement, but another dispatch-only scenario establishes that the same action writes a different deadline. Elapsing a *_until deadline does not reset its stored value; require the deterministic written deadline or omit the final state observation.`,
+        });
+      });
+    });
+  }
 }
 
 export function configDslValueMatches(
