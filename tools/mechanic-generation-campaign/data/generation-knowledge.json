@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 25,
-  "updatedAt": "2026-08-29T05:25:30Z",
+  "revision": 26,
+  "updatedAt": "2026-08-29T05:39:09Z",
   "entries": [
     {
       "status": "active",
@@ -2226,6 +2226,45 @@
       ],
       "createdAt": "2026-08-27T23:16:34Z",
       "updatedAt": "2026-08-27T23:46:42Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Use scheduled checks when host motion is autonomous",
+      "guidance": "When generated source sets an owned object's velocity once and the trusted host advances its motion, use time_schedule with one bounded recurring scheduled callback for interaction and cleanup checks. Keep at most one next check scheduled per active owned object. Reserve fixed_step for behavior that must recalculate or rewrite motion on each simulation step.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation",
+          "runtime_health",
+          "external_mechanic_probe"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0025",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c1-r3/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c1-r3",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_health",
+          "quality": "actual_submission",
+          "outcome": "semantic_runtime_failure",
+          "summary": "The actual accepted artifact passed pipeline, mount, runtime health, capability, binding, and action-dispatch checks. Its contract selected fixedStep true for an owned object whose velocity was set once and host-advanced, so the external proof rejected lifecycle.callbacks [install, logical_action] because no recurring scheduled cleanup callback was declared.",
+          "observedAt": "2026-08-29T05:32:08.091Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-29T05:39:09Z",
+      "updatedAt": "2026-08-29T05:39:09Z"
     }
   ],
   "reconciliations": [
@@ -5252,6 +5291,98 @@
       "createdAt": "2026-08-29T05:25:30Z",
       "priorManifestDigest": "30ff57b45190fc22367e7ba6813b64f6a24de477a9cdc8f1e1d1ff59dfbb3f3f",
       "resultingManifestDigest": "84e7b0d85a9305b30412a86aaf6be17cee216c9a40dc37b0124411fb82c4d81e"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t17-20260829-fix-cycle-2",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260829t035944086z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c1-r3"
+      },
+      "consultedManifestDigest": "84e7b0d85a9305b30412a86aaf6be17cee216c9a40dc37b0124411fb82c4d81e",
+      "contextDigest": "392e9257d98726db8c0d46aa818eb28775c5247967dd462b3f5deb877400d290",
+      "consultedFindingIds": [
+        "KF-0008",
+        "KF-0009",
+        "KF-0014",
+        "KF-0018",
+        "KF-0022",
+        "KF-0023"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z/fix-cycle-1",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0008",
+            "KF-0022"
+          ],
+          "rationale": "The verified handoff selector repair implements KF-0008 and confirms the KF-0022 terminal-evidence diagnosis from the prior cycle; it does not govern the new callback-strategy failure."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c1-r3/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "The actual accepted artifact passed pipeline, mount, runtime-health, authority, binding, and dispatch checks but used fixed_step for autonomous owned-object motion, while the external proof required a recurring scheduled cleanup callback."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-isolation-contract-fixture-c1-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The authorized contract fixture hard-coded shoot_action while actual planning exposed fire_action, so all fixture attempts failed reference validation before source generation and cannot isolate callback strategy."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Use scheduled checks when host motion is autonomous",
+            "guidance": "When generated source sets an owned object's velocity once and the trusted host advances its motion, use time_schedule with one bounded recurring scheduled callback for interaction and cleanup checks. Keep at most one next check scheduled per active owned object. Reserve fixed_step for behavior that must recalculate or rewrite motion on each simulation step.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0025",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c1-r3/a01-baseline",
+                "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c1-r3",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_health",
+                "quality": "actual_submission",
+                "outcome": "semantic_runtime_failure",
+                "summary": "The actual accepted artifact passed pipeline, mount, runtime health, capability, binding, and action-dispatch checks. Its contract selected fixedStep true for an owned object whose velocity was set once and host-advanced, so the external proof rejected lifecycle.callbacks [install, logical_action] because no recurring scheduled cleanup callback was declared.",
+                "observedAt": "2026-08-29T05:32:08.091Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-29T05:39:09Z",
+            "updatedAt": "2026-08-29T05:39:09Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-29T05:39:09Z",
+      "priorManifestDigest": "84e7b0d85a9305b30412a86aaf6be17cee216c9a40dc37b0124411fb82c4d81e",
+      "resultingManifestDigest": "4f5e37e5855e8af5211bebc49cc3c143e6ab7bfbf301da58c425754be4aaec38"
     }
   ]
 }

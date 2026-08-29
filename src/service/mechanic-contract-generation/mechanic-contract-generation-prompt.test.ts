@@ -169,6 +169,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "Do not use fixed_step to poll for dash expiry, cooldown expiry, or another one-shot deadline"
     );
     expect(prompt).toContain(
+      "When an owned object's velocity is set once and the host advances its motion, use time_schedule with a scheduled callback for bounded recurring interaction and cleanup checks"
+    );
+    expect(prompt).toContain(
+      "reserve fixed_step for behavior that must recalculate or rewrite motion on each simulation step"
+    );
+    expect(prompt).toContain(
       '"routedActionConnection": "exactly one accepted intent input connection whose port is an exact active logical action"'
     );
     expect(prompt).toContain(
