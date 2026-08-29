@@ -230,7 +230,21 @@ function renderFailures(attempts) {
 function renderCampaigns(campaigns) {
   document.querySelector("#campaigns").innerHTML = campaigns.map((campaign) => {
     const calls = campaign.attempts.reduce((total, attempt) => total + Object.values(attempt.providerCalls ?? {}).reduce((sum, value) => sum + value, 0), 0);
-    return `<tr><td><strong>${escapeHtml(campaign.manifestId)}</strong><br><small>${escapeHtml(campaign.id)}</small></td><td>${escapeHtml(campaign.cohort)}</td><td>${modeText(campaign.providerModes)}</td><td><span class="badge ${campaign.status}">${escapeHtml(campaign.status)}</span></td><td>${campaign.result?.successes ?? 0}/${campaign.result?.submissions ?? campaign.attempts.length}</td><td>${calls}</td><td><code>${shortHash(campaign.revision.revisionKey)}</code></td></tr>`;
+    const result = campaign.result ?? {};
+    const failureProgress = result.failureLimit === undefined
+      ? ""
+      : `<br><small>${result.failures ?? 0}/${result.failureLimit} failures · ${result.remainingFailureTolerance ?? result.failureLimit} remaining</small>`;
+    const replacementProgress = result.replacementSubmissions === undefined
+      ? ""
+      : `<br><small>${result.replacementSubmissions}/1 replacement used</small>`;
+    const terminalReason = result.terminalReason === "failure_limit_reached"
+      ? `<br><small>stopped: failure limit reached</small>`
+      : result.terminalReason
+        ? `<br><small>${escapeHtml(humanize(result.terminalReason))}</small>`
+        : result.failureLimit === undefined
+          ? ""
+          : `<br><small>cohort continuing</small>`;
+    return `<tr><td><strong>${escapeHtml(campaign.manifestId)}</strong><br><small>${escapeHtml(campaign.id)}</small></td><td>${escapeHtml(campaign.cohort)}</td><td>${modeText(campaign.providerModes)}</td><td><span class="badge ${campaign.status}">${escapeHtml(campaign.status)}</span>${terminalReason}</td><td>${result.successes ?? 0}/${result.submissions ?? campaign.attempts.length}${failureProgress}${replacementProgress}</td><td>${calls}</td><td><code>${shortHash(campaign.revision.revisionKey)}</code></td></tr>`;
   }).join("") || `<tr><td colspan="7">${empty("No campaign runs yet.")}</td></tr>`;
 }
 
@@ -238,7 +252,10 @@ function renderAttempts(attempts) {
   document.querySelector("#attempts").innerHTML = attempts.map((attempt) => {
     const links = (attempt.artifacts ?? []).map((file) => `<a href="/artifacts/${encodeURIComponent(attempt.campaignRunId)}/${encodeURIComponent(attempt.id)}/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a>`).join(" · ");
     const manualStatus = attempt.manualQaEvidence?.status ?? attempt.manualQa?.status;
-    return `<tr><td><strong>${escapeHtml(attempt.id)}</strong><br><small>${escapeHtml(attempt.campaignRunId)}</small></td><td>${escapeHtml(attempt.promptId)}</td><td><span class="badge ${attempt.status}">${escapeHtml(attempt.status)}</span>${manualStatus ? `<br><small>manual QA: ${escapeHtml(manualStatus)}</small>` : ""}</td><td>${escapeHtml(humanize(attempt.furthestStage))}</td><td>${escapeHtml(humanize(attempt.classification))}${attempt.failure ? `<br><small>${escapeHtml(attempt.failure)}</small>` : ""}</td><td>${formatDuration(attempt.durationMs)}</td><td>${links || "—"}</td></tr>`;
+    const submissionKind = attempt.submissionKind === "replacement"
+      ? `<br><small>replacement for ${escapeHtml(attempt.replacementForPromptId)}</small>`
+      : "";
+    return `<tr><td><strong>${escapeHtml(attempt.id)}</strong><br><small>${escapeHtml(attempt.campaignRunId)}</small></td><td>${escapeHtml(attempt.promptId)}${submissionKind}</td><td><span class="badge ${attempt.status}">${escapeHtml(attempt.status)}</span>${manualStatus ? `<br><small>manual QA: ${escapeHtml(manualStatus)}</small>` : ""}</td><td>${escapeHtml(humanize(attempt.furthestStage))}</td><td>${escapeHtml(humanize(attempt.classification))}${attempt.failure ? `<br><small>${escapeHtml(attempt.failure)}</small>` : ""}</td><td>${formatDuration(attempt.durationMs)}</td><td>${links || "—"}</td></tr>`;
   }).join("") || `<tr><td colspan="7">${empty("No attempts in this selection.")}</td></tr>`;
 }
 

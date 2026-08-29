@@ -43,7 +43,7 @@
   "cohorts": {
     "discovery": { "maxAttempts": 1, "minimumSuccesses": 1 },
     "isolation": { "maxAttempts": 1, "minimumSuccesses": 1 },
-    "repeatability": { "maxAttempts": 10, "minimumSuccesses": 8 },
-    "variation": { "runsPerPrompt": 2, "minimumSuccesses": 8, "requireEveryPromptSuccess": true }
+    "repeatability": { "maxAttempts": 10, "minimumSuccesses": 8, "failureLimit": 3 },
+    "variation": { "runsPerPrompt": 2, "minimumSuccesses": 8, "requireEveryPromptSuccess": true, "failureLimit": 3, "maxReplacementAttempts": 1 }
   }
 }

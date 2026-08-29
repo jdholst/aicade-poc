@@ -6,6 +6,7 @@ import {
   CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
   loopBudgetAdditionsSchema,
 } from "./loop-contracts.mjs";
+import { isCountedCohortFailure } from "./contracts.mjs";
 
 const ACTUAL_PROVIDER_STAGES = ["planning", "contract", "source"];
 const PROOF_COHORTS = ["discovery", "repeatability", "variation"];
@@ -219,7 +220,11 @@ export function finishSequenceCampaign(run, definition, {
   const failedClassifications = attempts
     .filter((attempt) => attempt.status !== "success")
     .map((attempt) => attempt.classification);
+  const failureLimitReached =
+    ["repeatability", "variation"].includes(stepDefinition.cohort) &&
+    attempts.filter(isCountedCohortFailure).length >= 3;
   const canRetry =
+    !failureLimitReached &&
     failedClassifications.length > 0 &&
     failedClassifications.every((classification) =>
       stepDefinition.retryableClassifications.includes(classification)

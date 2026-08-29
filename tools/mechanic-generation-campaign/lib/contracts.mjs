@@ -257,6 +257,7 @@ export const campaignManifestSchema = z
           .object({
             maxAttempts: z.literal(10),
             minimumSuccesses: z.literal(8),
+            failureLimit: z.literal(3),
           })
           .strict(),
         variation: z
@@ -264,6 +265,8 @@ export const campaignManifestSchema = z
             runsPerPrompt: z.literal(2),
             minimumSuccesses: z.literal(8),
             requireEveryPromptSuccess: z.literal(true),
+            failureLimit: z.literal(3),
+            maxReplacementAttempts: z.literal(1),
           })
           .strict(),
       })
@@ -339,6 +342,8 @@ export const campaignAttemptSchema = z
     cohort: z.enum(CAMPAIGN_COHORTS),
     promptId: z.string().min(1),
     prompt: z.string(),
+    submissionKind: z.enum(["scheduled", "replacement"]).optional(),
+    replacementForPromptId: z.string().min(1).optional(),
     status: z.enum([
       "success",
       "awaiting_manual_qa",
@@ -439,6 +444,26 @@ export const campaignAttemptSchema = z
         message: "A manual QA rejection requires denied evidence.",
       });
     }
+    if (
+      attempt.submissionKind === "replacement" &&
+      attempt.replacementForPromptId !== attempt.promptId
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["replacementForPromptId"],
+        message: "A replacement submission must identify its prompt variant.",
+      });
+    }
+    if (
+      attempt.submissionKind !== "replacement" &&
+      attempt.replacementForPromptId
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["replacementForPromptId"],
+        message: "Only replacement submissions may identify a replacement prompt.",
+      });
+    }
   });
 
 const campaignRunBaseSchema = z
@@ -490,6 +515,13 @@ const campaignRunBaseSchema = z
         submissions: z.number().int().nonnegative(),
         qualifiesForMechanicProof: z.boolean(),
         missingSuccessfulPromptIds: z.array(z.string()),
+        failures: z.number().int().nonnegative().optional(),
+        failureLimit: z.number().int().positive().optional(),
+        remainingFailureTolerance: z.number().int().nonnegative().optional(),
+        baseSubmissions: z.number().int().nonnegative().optional(),
+        replacementSubmissions: z.number().int().nonnegative().optional(),
+        terminalReason: z.string().min(1).optional(),
+        replacementPromptId: z.string().min(1).optional(),
       })
       .strict()
       .optional(),
@@ -583,6 +615,19 @@ export function requiresManualQa({
   );
 }
 
+const COUNTED_FAILURE_CLASSIFICATIONS = new Set([
+  "provider_failure",
+  "provider_output_rejected",
+  "pipeline_failure",
+  "runtime_pipeline_failure",
+  "semantic_runtime_failure",
+  "manual_qa_rejected",
+]);
+
+export function isCountedCohortFailure(attempt) {
+  return COUNTED_FAILURE_CLASSIFICATIONS.has(attempt.classification);
+}
+
 export function scoreCampaign(cohort, manifestInput, attemptInputs) {
   const manifest = parseCampaignManifest(manifestInput);
   const attempts = attemptInputs.map((attempt) =>
@@ -594,6 +639,15 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
     (attempt) => attempt.status === "awaiting_manual_qa"
   ).length;
   const submissions = attempts.length;
+  const failures = attempts.filter(isCountedCohortFailure).length;
+  const baseSubmissions = attempts.filter(
+    (attempt) => attempt.submissionKind !== "replacement"
+  ).length;
+  const replacementSubmissions = attempts.filter(
+    (attempt) => attempt.submissionKind === "replacement"
+  ).length;
+  const cohortPolicy = manifest.cohorts[cohort];
+  const failureLimit = cohortPolicy.failureLimit;
   const result = {
     cohort,
     status: "running",
@@ -601,9 +655,24 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
     diagnosticSuccesses,
     automatedCandidates,
     submissions,
+    failures,
+    failureLimit,
+    remainingFailureTolerance: failureLimit === undefined
+      ? undefined
+      : Math.max(0, failureLimit - failures),
+    baseSubmissions,
+    replacementSubmissions,
+    terminalReason: undefined,
+    replacementPromptId: undefined,
     qualifiesForMechanicProof: false,
     missingSuccessfulPromptIds: [],
   };
+
+  if (failureLimit !== undefined && failures >= failureLimit) {
+    result.status = "completed_not_achieved";
+    result.terminalReason = "failure_limit_reached";
+    return result;
+  }
 
   if (automatedCandidates > 0) {
     result.status = "waiting_for_manual_qa";
@@ -634,11 +703,16 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
     result.qualifiesForMechanicProof =
       successes >= manifest.cohorts.repeatability.minimumSuccesses;
     result.status =
-      submissions < manifest.cohorts.repeatability.maxAttempts
+      baseSubmissions < manifest.cohorts.repeatability.maxAttempts
         ? "running"
         : result.qualifiesForMechanicProof
           ? "achieved"
           : "completed_not_achieved";
+    result.terminalReason = result.status === "achieved"
+      ? "criteria_achieved"
+      : result.status === "completed_not_achieved"
+        ? "submission_ceiling_reached"
+        : undefined;
     return result;
   }
 
@@ -652,14 +726,25 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
     result.qualifiesForMechanicProof =
       successes >= manifest.cohorts.variation.minimumSuccesses &&
       result.missingSuccessfulPromptIds.length === 0;
-    const expectedSubmissions =
+    const expectedBaseSubmissions =
       manifest.prompts.length * manifest.cohorts.variation.runsPerPrompt;
-    result.status =
-      submissions < expectedSubmissions
-        ? "running"
-        : result.qualifiesForMechanicProof
-          ? "achieved"
-          : "completed_not_achieved";
+    if (baseSubmissions < expectedBaseSubmissions) {
+      return result;
+    }
+    if (result.qualifiesForMechanicProof) {
+      result.status = "achieved";
+      result.terminalReason = "criteria_achieved";
+      return result;
+    }
+    if (
+      result.missingSuccessfulPromptIds.length === 1 &&
+      replacementSubmissions < manifest.cohorts.variation.maxReplacementAttempts
+    ) {
+      result.replacementPromptId = result.missingSuccessfulPromptIds[0];
+      return result;
+    }
+    result.status = "completed_not_achieved";
+    result.terminalReason = "replacement_limit_reached";
     return result;
   }
 

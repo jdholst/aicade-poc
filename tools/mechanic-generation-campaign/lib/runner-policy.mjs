@@ -49,6 +49,43 @@ export function createAttemptSchedule(cohort, prompts) {
   }));
 }
 
+export function maximumCampaignSubmissions(cohort, prompts, cohortPolicy) {
+  return (
+    createAttemptSchedule(cohort, prompts).length +
+    (cohort === "variation" ? cohortPolicy.maxReplacementAttempts ?? 0 : 0)
+  );
+}
+
+export function createNextAttemptSchedule({ cohort, prompts, attempts, score }) {
+  if (score.status !== "running") return null;
+
+  const scheduledAttempts = attempts.filter(
+    (attempt) => attempt.submissionKind !== "replacement"
+  );
+  const baseSchedule = createAttemptSchedule(cohort, prompts);
+  if (scheduledAttempts.length < baseSchedule.length) {
+    return baseSchedule[scheduledAttempts.length];
+  }
+
+  if (cohort !== "variation" || !score.replacementPromptId) return null;
+  if (attempts.some((attempt) => attempt.submissionKind === "replacement")) {
+    return null;
+  }
+  const prompt = prompts.find(({ id }) => id === score.replacementPromptId);
+  if (!prompt) {
+    throw new Error(
+      `Variation replacement prompt "${score.replacementPromptId}" is not frozen in the manifest.`
+    );
+  }
+  return {
+    sequence: attempts.length + 1,
+    promptId: prompt.id,
+    prompt: prompt.text,
+    submissionKind: "replacement",
+    replacementForPromptId: prompt.id,
+  };
+}
+
 export function resolveProviderModes(cohort, modes, fixtures) {
   const resolved = {
     planning: modes.planning,

@@ -20,13 +20,13 @@ import {
   denyCampaignAttempt,
 } from "./lib/manual-qa.mjs";
 
-function pendingAttempt() {
+function pendingAttempt({ sequence = 1, cohort = "discovery" } = {}) {
   return {
     schemaVersion: "campaign-attempt/v1",
-    id: "a01-baseline",
+    id: `a${String(sequence).padStart(2, "0")}-baseline`,
     campaignRunId: "campaign-1",
-    sequence: 1,
-    cohort: "discovery",
+    sequence,
+    cohort,
     promptId: "baseline",
     prompt: "Create a projectile mechanic.",
     status: "awaiting_manual_qa",
@@ -53,21 +53,21 @@ function pendingAttempt() {
   };
 }
 
-function pendingRun() {
+function pendingRun({ cohort = "discovery", attemptIds = [] } = {}) {
   return {
     schemaVersion: "campaign-run/v1",
     id: "campaign-1",
     manifestId: "p09-t17-projectile",
     manifestPath: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
     manifestHash: "a".repeat(64),
-    cohort: "discovery",
+    cohort,
     status: "running",
     createdAt: "2026-08-23T15:00:00.000Z",
     startedAt: "2026-08-23T15:00:00.000Z",
     model: "gpt-5.6-luna",
     providerModes: { planning: "actual", contract: "actual", source: "actual" },
-    attemptCeiling: 1,
-    attemptIds: [],
+    attemptCeiling: cohort === "variation" ? 11 : cohort === "repeatability" ? 10 : 1,
+    attemptIds,
     revision: {
       head: "b".repeat(40),
       revisionKey: "c".repeat(64),
@@ -82,14 +82,40 @@ function pendingRun() {
   };
 }
 
-async function createPendingStore() {
+function recordedFailure(sequence, cohort = "repeatability") {
+  const attempt = pendingAttempt({ sequence, cohort });
+  return {
+    ...attempt,
+    status: "pipeline_failure",
+    terminalOutcome: "pipeline failure",
+    classification: "pipeline_failure",
+    failure: "pipeline failure",
+    pipelinePassed: false,
+    externalProbePassed: false,
+    automatedOutcome: {
+      status: "failed",
+      terminalOutcome: "pipeline failure",
+      recordedAt: attempt.completedAt,
+    },
+    recordedOutcome: "pipeline_failure",
+  };
+}
+
+async function createPendingStore({ cohort = "discovery", priorFailures = 0 } = {}) {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), "campaign-manual-qa-"));
   const store = createCampaignStore(repoRoot);
   await store.initialize();
+  const failures = Array.from({ length: priorFailures }, (_, index) =>
+    recordedFailure(index + 1, cohort)
+  );
+  for (const failure of failures) {
+    await store.writeAttempt(failure);
+  }
+  const sequence = priorFailures + 1;
   const candidate = await createManualQaCandidate({
     store,
-    run: pendingRun(),
-    attempt: pendingAttempt(),
+    run: pendingRun({ cohort, attemptIds: failures.map(({ id }) => id) }),
+    attempt: pendingAttempt({ sequence, cohort }),
     generationRunRecord: {
       id: "generation-run-1",
       recordVersion: 1,
@@ -186,6 +212,105 @@ describe("manual gameplay QA", () => {
         attemptId: "a01-baseline",
       })
     ).rejects.toThrow(/conflicting/i);
+  });
+
+  it("keeps the first two repeatability denials in the active campaign and stops on the third", async () => {
+    for (const priorFailures of [0, 1]) {
+      const fixture = await createPendingStore({
+        cohort: "repeatability",
+        priorFailures,
+      });
+      const attemptId = `a${String(priorFailures + 1).padStart(2, "0")}-baseline`;
+      const denied = await denyCampaignAttempt({
+        store: fixture.store,
+        campaignRunId: "campaign-1",
+        attemptId,
+        reason: `Manual gameplay failure ${priorFailures + 1}.`,
+        decidedAt: "2026-08-23T15:05:00.000Z",
+      });
+
+      expect(denied.run).toMatchObject({
+        status: "running",
+        result: {
+          failures: priorFailures + 1,
+          failureLimit: 3,
+          remainingFailureTolerance: 2 - priorFailures,
+        },
+      });
+      expect(denied.run.result).not.toHaveProperty("terminalReason");
+      if (priorFailures === 0) {
+        const repeated = await denyCampaignAttempt({
+          store: fixture.store,
+          campaignRunId: "campaign-1",
+          attemptId,
+          reason: "A later conflicting description must not replace evidence.",
+          decidedAt: "2026-08-23T15:06:00.000Z",
+        });
+        expect(repeated.manualQa.denialReason).toBe("Manual gameplay failure 1.");
+        expect(repeated.manualQa.decidedAt).toBe("2026-08-23T15:05:00.000Z");
+      }
+    }
+
+    const thirdFixture = await createPendingStore({
+      cohort: "repeatability",
+      priorFailures: 2,
+    });
+    const third = await denyCampaignAttempt({
+      store: thirdFixture.store,
+      campaignRunId: "campaign-1",
+      attemptId: "a03-baseline",
+      reason: "Manual gameplay failure 3.",
+      decidedAt: "2026-08-23T15:05:00.000Z",
+    });
+
+    expect(third.run).toMatchObject({
+      status: "completed_not_achieved",
+      result: {
+        failures: 3,
+        failureLimit: 3,
+        remainingFailureTolerance: 0,
+        terminalReason: "failure_limit_reached",
+      },
+    });
+  });
+
+  it("keeps a linked repeatability campaign active until its third denial", async () => {
+    const continuingFixture = await createPendingStore({ cohort: "repeatability" });
+    const continuingLoopStore = await attachLoop(
+      continuingFixture.store,
+      continuingFixture.run
+    );
+    const continuingBefore = await continuingLoopStore.readRun("loop-1");
+    const continuing = await denyCampaignAttempt({
+      store: continuingFixture.store,
+      loopStore: continuingLoopStore,
+      campaignRunId: "campaign-1",
+      attemptId: "a01-baseline",
+      reason: "Projectile impact is wrong.",
+      decidedAt: "2026-08-23T15:05:00.000Z",
+    });
+
+    expect(continuing.loopRun.status).toBe("running");
+    expect(continuing.loopRun.activeCampaign?.campaignRunId).toBe("campaign-1");
+    expect(continuing.loopRun.campaignLinks[0].status).toBe("running");
+    expect(continuing.loopRun.usage).toEqual(continuingBefore.usage);
+
+    const terminalFixture = await createPendingStore({
+      cohort: "repeatability",
+      priorFailures: 2,
+    });
+    const terminalLoopStore = await attachLoop(terminalFixture.store, terminalFixture.run);
+    const terminal = await denyCampaignAttempt({
+      store: terminalFixture.store,
+      loopStore: terminalLoopStore,
+      campaignRunId: "campaign-1",
+      attemptId: "a03-baseline",
+      reason: "Projectile impact is wrong for the third time.",
+      decidedAt: "2026-08-23T15:05:00.000Z",
+    });
+
+    expect(terminal.loopRun.status).toBe("waiting_for_fix");
+    expect(terminal.loopRun.activeCampaign).toBeUndefined();
   });
 
   it("rejects a verdict after candidate revision drift", async () => {
@@ -376,8 +501,8 @@ async function attachLoop(store, campaignRun) {
     model: "gpt-5.6-luna",
     sequence: [
       {
-        id: "discover",
-        cohort: "discovery",
+        id: campaignRun.cohort,
+        cohort: campaignRun.cohort,
         providerModes: campaignRun.providerModes,
         maxCampaignRunsPerRevision: 1,
         retryableClassifications: [],
@@ -415,7 +540,7 @@ async function attachLoop(store, campaignRun) {
   loop = startLoopCampaign(loop, {
     campaignRunId: campaignRun.id,
     role: "sequence",
-    stepId: "discover",
+    stepId: campaignRun.cohort,
   });
   loop = finishSequenceCampaign(loop, definition, {
     campaignRunId: campaignRun.id,
@@ -428,7 +553,7 @@ async function attachLoop(store, campaignRun) {
   const linkedCampaign = {
     ...campaignRun,
     loopId: loop.id,
-    loopStepId: "discover",
+    loopStepId: campaignRun.cohort,
     loopCycle: 0,
   };
   await store.writeRun(linkedCampaign);

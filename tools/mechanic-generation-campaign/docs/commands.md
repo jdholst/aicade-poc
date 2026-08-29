@@ -75,8 +75,8 @@ Schedules:
 
 - Discovery: one baseline submission.
 - Isolation: one baseline submission.
-- Repeatability: ten baseline submissions.
-- Variation: two submissions for each of five frozen prompts.
+- Repeatability: ten baseline submissions, stopping immediately at the third qualifying failure.
+- Variation: two base submissions for each of five frozen prompts, plus at most one targeted replacement. It also stops immediately at the third qualifying failure.
 
 Side effects:
 
@@ -115,7 +115,7 @@ Purpose: explicitly approve the exact pending candidate. The optional note is st
 npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reason <text>
 ```
 
-Purpose: record the candidate as `mechanic_incorrect` with classification `manual_qa_rejected`. A non-empty reason is required. A standalone campaign stops. A linked loop moves directly to `waiting_for_fix`. The command consumes no budget and makes zero provider calls.
+Purpose: record the candidate as `mechanic_incorrect` with classification `manual_qa_rejected`. A non-empty reason is required. Discovery denial is terminal. A repeatability or variation campaign resumes after denial one or two; denial three ends the campaign and moves a linked loop to `waiting_for_fix`. The command consumes no budget and makes zero provider calls.
 
 ## Manual-QA evidence contracts
 
@@ -274,7 +274,7 @@ npm run campaign -- loop recover --id <loop-id> --state-root <control-checkout-p
 
 Recovery fails unless the persisted loop is invalid for a frozen-definition lookup failure, the exact definition hashes still match, and the last sequence evidence derives `waiting_for_fix`. It makes no provider calls and does not accept a fix report; the normal resume command still validates the clean fix commit and knowledge reconciliation.
 
-If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`; denial returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
+If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`. A first or second repeatability or variation denial also returns it to `running`; discovery denial or the third qualifying failure returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
 
 If a loop is `waiting_for_campaign_repair`, repair and verify `tools/mechanic-generation-campaign/` in the control checkout, then run `loop resume`. The command restores the preserved `running` or `waiting_for_manual_qa` checkpoint without a fix report, fix-cycle charge, revision change, or proof reset.
 

@@ -37,8 +37,14 @@ const manifest = {
   cohorts: {
     discovery: { maxAttempts: 1, minimumSuccesses: 1 },
     isolation: { maxAttempts: 1, minimumSuccesses: 1 },
-    repeatability: { maxAttempts: 10, minimumSuccesses: 8 },
-    variation: { runsPerPrompt: 2, minimumSuccesses: 8, requireEveryPromptSuccess: true },
+    repeatability: { maxAttempts: 10, minimumSuccesses: 8, failureLimit: 3 },
+    variation: {
+      runsPerPrompt: 2,
+      minimumSuccesses: 8,
+      requireEveryPromptSuccess: true,
+      failureLimit: 3,
+      maxReplacementAttempts: 1,
+    },
   },
 };
 
@@ -78,6 +84,32 @@ function successAttempt(index, promptId = "baseline") {
     artifacts: [],
     temporaryFixIds: [],
   });
+}
+
+function failureAttempt(index, promptId = "baseline", classification = "pipeline_failure") {
+  return {
+    ...successAttempt(index, promptId),
+    status: "pipeline_failure",
+    terminalOutcome: classification,
+    classification,
+    failure: classification,
+    pipelinePassed: false,
+    externalProbePassed: false,
+    automatedOutcome: {
+      status: "failed",
+      terminalOutcome: classification,
+      recordedAt: "2026-08-22T12:01:00.000Z",
+    },
+    recordedOutcome: classification,
+    adjudicatedOutcome: undefined,
+    manualQa: classification === "manual_qa_rejected"
+      ? {
+          id: `manual-qa-attempt-${index}`,
+          path: `attempt-${index}/manual-qa.json`,
+          status: "denied",
+        }
+      : undefined,
+  };
 }
 
 describe("campaign contracts", () => {
@@ -124,14 +156,79 @@ describe("campaign contracts", () => {
     const attempts = Array.from({ length: 10 }, (_, index) =>
       index < 8
         ? successAttempt(index + 1)
-        : { ...successAttempt(index + 1), status: "pipeline_failure", pipelinePassed: false }
+        : failureAttempt(index + 1)
     );
 
     expect(scoreCampaign("repeatability", manifest, attempts)).toMatchObject({
       status: "achieved",
       successes: 8,
+      failures: 2,
+      failureLimit: 3,
+      remainingFailureTolerance: 1,
+      baseSubmissions: 10,
+      replacementSubmissions: 0,
       submissions: 10,
       qualifiesForMechanicProof: true,
+    });
+  });
+
+  it.each([0, 1, 2])(
+    "achieves repeatability after ten submissions with %i qualifying failures",
+    (failureCount) => {
+      const attempts = Array.from({ length: 10 }, (_, index) =>
+        index < failureCount
+          ? failureAttempt(index + 1)
+          : successAttempt(index + 1)
+      );
+
+      expect(scoreCampaign("repeatability", manifest, attempts)).toMatchObject({
+        status: "achieved",
+        successes: 10 - failureCount,
+        failures: failureCount,
+        submissions: 10,
+        terminalReason: "criteria_achieved",
+      });
+    }
+  );
+
+  it("keeps the first two repeatability failures in the active campaign and stops on the third", () => {
+    expect(
+      scoreCampaign("repeatability", manifest, [
+        failureAttempt(1, "baseline", "provider_failure"),
+        failureAttempt(2, "baseline", "manual_qa_rejected"),
+      ])
+    ).toMatchObject({
+      status: "running",
+      failures: 2,
+      remainingFailureTolerance: 1,
+      terminalReason: undefined,
+    });
+
+    expect(
+      scoreCampaign("repeatability", manifest, [
+        failureAttempt(1, "baseline", "provider_failure"),
+        failureAttempt(2, "baseline", "manual_qa_rejected"),
+        failureAttempt(3, "baseline", "semantic_runtime_failure"),
+      ])
+    ).toMatchObject({
+      status: "completed_not_achieved",
+      failures: 3,
+      remainingFailureTolerance: 0,
+      terminalReason: "failure_limit_reached",
+    });
+  });
+
+  it("does not count infrastructure and bounded-control outcomes toward the cohort failure limit", () => {
+    const attempts = [
+      failureAttempt(1, "baseline", "infrastructure_failure"),
+      failureAttempt(2, "baseline", "provider_call_budget_exhausted"),
+      { ...failureAttempt(3), status: "cancelled", classification: "cancelled" },
+    ];
+
+    expect(scoreCampaign("repeatability", manifest, attempts)).toMatchObject({
+      status: "running",
+      failures: 0,
+      remainingFailureTolerance: 3,
     });
   });
 
@@ -140,16 +237,83 @@ describe("campaign contracts", () => {
     const attempts = promptIds.flatMap((promptId, promptIndex) =>
       Array.from({ length: 2 }, (_, runIndex) =>
         promptId === "compact"
-          ? { ...successAttempt(promptIndex * 2 + runIndex + 1, promptId), status: "pipeline_failure", pipelinePassed: false }
+          ? failureAttempt(promptIndex * 2 + runIndex + 1, promptId)
           : successAttempt(promptIndex * 2 + runIndex + 1, promptId)
       )
     );
 
     expect(scoreCampaign("variation", manifest, attempts)).toMatchObject({
-      status: "completed_not_achieved",
+      status: "running",
       successes: 8,
+      failures: 2,
       submissions: 10,
       missingSuccessfulPromptIds: ["compact"],
+      replacementPromptId: "compact",
+      replacementSubmissions: 0,
+    });
+  });
+
+  it("achieves variation when two failures affect different prompt variants", () => {
+    const attempts = manifest.prompts.flatMap((prompt, promptIndex) =>
+      [1, 2].map((runIndex) => {
+        const sequence = promptIndex * 2 + runIndex;
+        return runIndex === 1 && promptIndex < 2
+          ? failureAttempt(sequence, prompt.id)
+          : successAttempt(sequence, prompt.id);
+      })
+    );
+
+    expect(scoreCampaign("variation", manifest, attempts)).toMatchObject({
+      status: "achieved",
+      successes: 8,
+      failures: 2,
+      missingSuccessfulPromptIds: [],
+      replacementSubmissions: 0,
+      terminalReason: "criteria_achieved",
+    });
+  });
+
+  it("passes variation after one targeted replacement and fails when that replacement is the third failure", () => {
+    const promptIds = manifest.prompts.map((prompt) => prompt.id);
+    const baseAttempts = promptIds.flatMap((promptId, promptIndex) =>
+      Array.from({ length: 2 }, (_, runIndex) =>
+        promptId === "compact"
+          ? failureAttempt(promptIndex * 2 + runIndex + 1, promptId)
+          : successAttempt(promptIndex * 2 + runIndex + 1, promptId)
+      )
+    );
+    const replacementSuccess = {
+      ...successAttempt(11, "compact"),
+      cohort: "variation",
+      submissionKind: "replacement",
+      replacementForPromptId: "compact",
+    };
+    const replacementFailure = {
+      ...failureAttempt(11, "compact", "manual_qa_rejected"),
+      cohort: "variation",
+      submissionKind: "replacement",
+      replacementForPromptId: "compact",
+    };
+
+    expect(
+      scoreCampaign("variation", manifest, [...baseAttempts, replacementSuccess])
+    ).toMatchObject({
+      status: "achieved",
+      successes: 9,
+      failures: 2,
+      submissions: 11,
+      replacementSubmissions: 1,
+      missingSuccessfulPromptIds: [],
+      qualifiesForMechanicProof: true,
+    });
+    expect(
+      scoreCampaign("variation", manifest, [...baseAttempts, replacementFailure])
+    ).toMatchObject({
+      status: "completed_not_achieved",
+      failures: 3,
+      submissions: 11,
+      replacementSubmissions: 1,
+      terminalReason: "failure_limit_reached",
     });
   });
 

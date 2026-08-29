@@ -35,7 +35,10 @@ import {
 } from "./loop-worktree.mjs";
 import { validateManifestEnvironment } from "./manifest-loader.mjs";
 import { inspectRevision } from "./revision.mjs";
-import { createAttemptSchedule } from "./runner-policy.mjs";
+import {
+  createAttemptSchedule,
+  maximumCampaignSubmissions,
+} from "./runner-policy.mjs";
 
 const ACTUAL_PROVIDER_STAGES = ["planning", "contract", "source"];
 
@@ -759,9 +762,10 @@ async function executeSequence({
   while (["pending", "running"].includes(state.run.status)) {
     const step = loaded.definition.sequence[state.run.currentStepIndex];
     if (!step) break;
-    const schedule = createAttemptSchedule(
+    const campaignSubmissionCeiling = maximumCampaignSubmissions(
       step.cohort,
-      loaded.campaign.manifest.prompts
+      loaded.campaign.manifest.prompts,
+      loaded.campaign.manifest.cohorts[step.cohort]
     );
     const active = state.run.activeCampaign;
     const isResume = active?.role === "sequence" && active.stepId === step.id;
@@ -773,7 +777,7 @@ async function executeSequence({
       const existingAttempts = await campaignStore.readAttempts(campaignRunId);
       const capacityFailure = continuationCapacityFailure(
         state.run,
-        Math.max(0, schedule.length - existingAttempts.length),
+        Math.max(0, campaignSubmissionCeiling - existingAttempts.length),
         step.providerModes
       );
       if (capacityFailure) {
@@ -784,7 +788,7 @@ async function executeSequence({
     } else {
       const capacityFailure = campaignCapacityFailure(
         state.run,
-        schedule.length,
+        campaignSubmissionCeiling,
         step.providerModes
       );
       if (capacityFailure) {

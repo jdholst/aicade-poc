@@ -8,8 +8,8 @@ Use one cohort per campaign:
 
 - `discovery`: one baseline submission. An automated pass becomes a candidate; explicit gameplay approval makes it a success.
 - `isolation`: one diagnostic baseline submission with one or more fixture stages. It passes when the declared isolation question is answered and never contributes to mechanic proof.
-- `repeatability`: ten baseline submissions on one clean revision. It passes with at least eight manually approved full-actual successes.
-- `variation`: five frozen prompts with two submissions each on one clean revision. Planning must be actual. It passes with at least eight manually approved full-actual successes and at least one approved success for every prompt.
+- `repeatability`: ten baseline submissions on one clean revision. It passes with at least eight manually approved full-actual successes and stops immediately at the third qualifying failure.
+- `variation`: five frozen prompts with two base submissions each on one clean revision. Planning must be actual. It passes with at least eight manually approved full-actual successes and at least one approved success for every prompt. One targeted replacement is allowed when both base submissions for exactly one prompt failed and the failure limit has not been reached.
 
 ## Freeze the campaign identity
 
@@ -66,7 +66,7 @@ npm run campaign -- approve --campaign <campaign-id> --attempt <attempt-id> [--n
 npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reason <text>
 ```
 
-Approval changes the attempt to `success`; resume the same campaign or loop to continue. Denial records `manual_qa_rejected`. It is never retried on the same revision and sends a linked loop directly to `waiting_for_fix`.
+Approval changes the attempt to `success`; resume the same campaign or loop to continue. Denial records `manual_qa_rejected`. Discovery denial is terminal. A first or second repeatability or variation denial resumes the same campaign. The third qualifying failure ends the campaign and sends a linked loop to `waiting_for_fix`.
 
 ## Interpret evidence
 
@@ -111,7 +111,9 @@ Inspect attempt artifacts before publishing. Fixture-backed evidence answers onl
 
 ## Prove a mechanic
 
-Run discovery, repeatability, and variation as separate full-actual campaigns with the same revision, model, manifest, and provider modes. The complete proof sequence contains 21 submissions and, when every submission passes automatically, 21 manual playtests: one discovery, ten repeatability, and ten variation.
+Run discovery, repeatability, and variation as separate full-actual campaigns with the same revision, model, manifest, and provider modes. Authorize capacity for up to 22 submissions: one discovery, ten repeatability, ten variation base submissions, and at most one targeted variation replacement. When no replacement is needed, the sequence uses 21 submissions.
+
+Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count toward the three-failure limit. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion retain their existing states and do not count.
 
 A mechanic is proven only when all three cohorts pass and every counted success reaches the external mechanic probe. If source or manifest changes are needed, end the current revision cohort, implement the separately authorized fix, and begin a new proof sequence.
 

@@ -4,8 +4,8 @@
 
 - `discovery`: one baseline submission. An automated full-actual pipeline and external-probe pass pauses for gameplay review. The cohort is achieved only after explicit approval.
 - `isolation`: one bounded diagnostic submission with one or more fixture stages. Achieved when the declared diagnostic question is answered. It never contributes to mechanic proof.
-- `repeatability`: ten baseline submissions on one clean revision. Every automated pass pauses for review. Achieved at eight manually approved full-actual successes.
-- `variation`: five frozen prompts with two submissions each on one clean revision. Planning remains actual. Every automated pass pauses for review. Achieved at eight manually approved full-actual successes with at least one approved success for every prompt.
+- `repeatability`: ten baseline submissions on one clean revision. Every automated pass pauses for review. Achieved after all ten base submissions with at least eight manually approved full-actual successes. The third qualifying failure stops the campaign immediately.
+- `variation`: five frozen prompts with two base submissions each on one clean revision. Planning remains actual. Every automated pass pauses for review. Achieved with at least eight manually approved full-actual successes and at least one approved success for every prompt. If both base submissions for exactly one prompt failed and fewer than three failures occurred, one targeted replacement may run. The third qualifying failure stops the campaign immediately.
 
 A mechanic is proven only when discovery, repeatability, and variation are achieved with the same revision, model, and provider modes.
 
@@ -36,7 +36,7 @@ If sources disagree, use the shallower stage and report the disagreement.
 - `semantic_runtime_failure`: the pipeline accepted and mounted, but the external mechanic probe failed.
 - `infrastructure_failure`: external server, browser, or navigation infrastructure prevented a valid result. Preserve the diagnostic attempt, stop the campaign immediately, and handle a linked loop through the budget-neutral campaign-repair lifecycle instead of advancing to another submission.
 - `awaiting_manual_qa`: the full-actual pipeline and external probe passed, exact replay artifacts were frozen, and a human verdict is pending.
-- `manual_qa_rejected`: the user denied the candidate and supplied the gameplay defect. It is a mechanic failure and is not retryable on the same revision.
+- `manual_qa_rejected`: the user denied the candidate and supplied the gameplay defect. It counts toward the active proof cohort's failure limit.
 - `success`: the full-actual pipeline and external probe passed and the user explicitly approved the exact replayed candidate.
 
 Treat automated classifications as provisional when evidence is incomplete. Preserve the recorded outcome and add a later adjudication instead of rewriting history.
@@ -48,6 +48,8 @@ A loop contains one mechanic manifest and an ordered campaign sequence. Every nu
 An achieved custom sequence is not automatically mechanic proof. Proof still requires achieved discovery, repeatability, and variation steps on the same final revision, model, and all-actual provider configuration.
 
 Fixture-backed isolation may diagnose a failure while a loop is waiting for a fix. It consumes the loop's campaign, submission, isolation, and applicable provider-call budgets but does not advance a proof step.
+
+Repeatability and variation continue after their first and second qualifying failures. Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion do not. The third qualifying failure ends the campaign and moves a linked loop to `waiting_for_fix`; an accepted fix begins a new revision cycle at discovery. The maximum full proof envelope is 22 submissions: one discovery, ten repeatability, and up to eleven variation.
 
 Campaign-tool defects are repaired outside the loop's Sparkline budget. A thrown campaign-runner defect or persisted infrastructure failure moves the loop to `waiting_for_campaign_repair`, preserves the candidate revision, and credits the invalidated campaign, submission, isolation, and Sparkline-attributed provider usage. Gross actual-provider calls remain append-only and enforce the authorization ceiling. Repair `tools/mechanic-generation-campaign/` in the control checkout, then resume without a fix report or proof reset. Runtime readiness requires the exact editor message `Runtime is running in the sandbox.` plus a generated iframe with source; timeout evidence includes the observed editor state.
 

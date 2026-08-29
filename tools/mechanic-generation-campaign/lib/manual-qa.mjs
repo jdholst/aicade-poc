@@ -7,6 +7,9 @@ import {
   parseCampaignAttempt,
   parseCampaignManualQa,
   parseCampaignRun,
+  isCountedCohortFailure,
+  isDiagnosticSuccess,
+  isFullActualSuccess,
 } from "./contracts.mjs";
 import { redactSensitive } from "./redaction.mjs";
 import {
@@ -215,26 +218,52 @@ async function decideCampaignAttempt({
           manualQa: { ...attempt.manualQa, status: "denied" },
         }
   );
+  const attempts = (await store.readAttempts(campaignRunId)).map((entry) =>
+    entry.id === decidedAttempt.id ? decidedAttempt : entry
+  );
+  const failures = attempts.filter(isCountedCohortFailure).length;
+  const thresholdCohort = ["repeatability", "variation"].includes(run.cohort);
+  const failureLimit = thresholdCohort ? 3 : undefined;
+  const campaignContinues =
+    verdict === "approved" || (thresholdCohort && failures < failureLimit);
+  const result = {
+    successes: attempts.filter(isFullActualSuccess).length,
+    diagnosticSuccesses: attempts.filter(isDiagnosticSuccess).length,
+    submissions: attempts.length,
+    qualifiesForMechanicProof: false,
+    missingSuccessfulPromptIds: [],
+    ...(thresholdCohort
+      ? {
+          failures,
+          failureLimit,
+          remainingFailureTolerance: Math.max(0, failureLimit - failures),
+          baseSubmissions: attempts.filter(
+            ({ submissionKind }) => submissionKind !== "replacement"
+          ).length,
+          replacementSubmissions: attempts.filter(
+            ({ submissionKind }) => submissionKind === "replacement"
+          ).length,
+          ...(!campaignContinues
+            ? { terminalReason: "failure_limit_reached" }
+            : {}),
+        }
+      : {}),
+  };
   const decidedRun = parseCampaignRun(
-    verdict === "approved"
+    campaignContinues
       ? {
           ...run,
           status: "running",
           completedAt: undefined,
           pendingManualQa: undefined,
+          result,
         }
       : {
           ...run,
           status: "completed_not_achieved",
           completedAt: decidedAt,
           pendingManualQa: undefined,
-          result: {
-            successes: 0,
-            diagnosticSuccesses: 0,
-            submissions: run.attemptIds.length,
-            qualifiesForMechanicProof: false,
-            missingSuccessfulPromptIds: [],
-          },
+          result,
         }
   );
 
@@ -244,6 +273,7 @@ async function decideCampaignAttempt({
   const loopRun = await updateLinkedLoop({
     campaignRun: run,
     verdict,
+    campaignContinues,
     decidedAt,
     loopStore,
   });
@@ -314,6 +344,7 @@ function assertPendingCandidate(run, attempt, manualQa, linkedLoop) {
 async function updateLinkedLoop({
   campaignRun,
   verdict,
+  campaignContinues,
   decidedAt,
   loopStore,
 }) {
@@ -322,7 +353,7 @@ async function updateLinkedLoop({
     throw new Error("A loop-linked manual QA verdict requires the campaign loop store.");
   }
   const loopRun = await loopStore.readRun(campaignRun.loopId);
-  const updated = verdict === "approved"
+  const updated = verdict === "approved" || campaignContinues
     ? resumeLoopAfterManualQaApproval(loopRun, {
         campaignRunId: campaignRun.id,
         completedAt: decidedAt,
