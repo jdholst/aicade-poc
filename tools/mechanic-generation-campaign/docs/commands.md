@@ -272,7 +272,7 @@ If an earlier accepted-worktree invocation marked the loop invalid only because 
 npm run campaign -- loop recover --id <loop-id> --state-root <control-checkout-path>
 ```
 
-Recovery fails unless the persisted loop is invalid for a frozen-definition lookup failure, the exact definition hashes still match, and the last sequence evidence derives `waiting_for_fix`. It makes no provider calls and does not accept a fix report; the normal resume command still validates the clean fix commit and knowledge reconciliation.
+Recovery fails unless the persisted loop is invalid for a frozen-definition lookup failure, the exact definition hashes still match, and the last sequence evidence derives either `waiting_for_fix` or an active `running` sequence campaign. A running checkpoint reconstructs only that exact campaign and current step; it preserves prior achieved steps, revision identity, usage, and submission history. It never restarts the sequence. Recovery makes no provider calls and does not accept a fix report; normal resume performs the remaining work and still validates any required clean fix commit and knowledge reconciliation.
 
 If a loop is `waiting_for_manual_qa`, use the top-level `review` and verdict commands first. Approval returns the loop to `running`; denial returns it to `waiting_for_fix`. Calling `loop resume` before a verdict fails closed.
 

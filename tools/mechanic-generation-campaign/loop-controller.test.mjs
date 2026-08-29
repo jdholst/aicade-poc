@@ -117,6 +117,111 @@ describe("campaign loop controller", () => {
     ).rejects.toThrow(/requires --fix-report/i);
   });
 
+  it("recovers an exact frozen-definition lookup failure at a running sequence checkpoint", async () => {
+    const fixture = await createRepositoryFixture();
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    let campaignCall = 0;
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        campaignCall += 1;
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        if (campaignCall < 3) {
+          return {
+            run: { id: input.runId, status: "achieved" },
+            attempts: [
+              {
+                id: "a1",
+                status: "success",
+                classification: "success",
+                manualQa: { status: "approved" },
+              },
+            ],
+          };
+        }
+        return {
+          run: {
+            id: input.runId,
+            status: "waiting_for_manual_qa",
+            pendingManualQa: {
+              manualQaId: "manual-qa-a1",
+              campaignRunId: input.runId,
+              attemptId: "a1",
+              promptId: "baseline",
+              cohort: "variation",
+              revisionKey: validation.revision.revisionKey,
+              requestedAt: "2026-08-23T15:01:00.000Z",
+              evidencePath: "a1/manual-qa.json",
+            },
+          },
+          attempts: [
+            {
+              id: "a1",
+              status: "awaiting_manual_qa",
+              classification: "awaiting_manual_qa",
+            },
+          ],
+        };
+      },
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+        path: worktreePath,
+        branch,
+        head: fixture.head,
+        revisionKey: validation.revision.revisionKey,
+        dirty: false,
+        statusEntries: [],
+      }),
+      now: () => new Date("2026-08-23T15:00:00.000Z"),
+    });
+    const campaignRunId = started.run.pendingManualQa.campaignRunId;
+    const approved = resumeLoopAfterManualQaApproval(started.run, {
+      campaignRunId,
+    });
+    await loopStore.writeRun(
+      invalidateLoop(
+        approved,
+        "Frozen loop definition or criteria can no longer be loaded: temporary manifest drift"
+      )
+    );
+
+    const recovered = await recoverCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      loopStore,
+      environment: process.env,
+    });
+
+    expect(recovered.run).toMatchObject({
+      status: "running",
+      currentStepIndex: 2,
+      activeCampaign: {
+        campaignRunId,
+        role: "sequence",
+        stepId: "variation",
+      },
+    });
+    expect(recovered.run.steps.map(({ status }) => status)).toEqual([
+      "achieved",
+      "achieved",
+      "running",
+    ]);
+    expect(recovered.run.completedAt).toBeUndefined();
+    expect(recovered.run.invalidReason).toBeUndefined();
+  });
+
   it("previews an additive extension without mutation, then applies its exact hash once", async () => {
     const fixture = await createRepositoryFixture({ singleStepFix: true });
     const loopStore = createCampaignLoopStore(fixture.repoRoot);

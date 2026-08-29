@@ -323,22 +323,40 @@ export async function recoverCampaignLoop({
   const lastSequenceCampaign = [...run.campaignLinks]
     .reverse()
     .find(({ role }) => role === "sequence");
-  if (
+  const checkpointDoesNotMatchCurrentStep =
     currentStep?.status !== "running" ||
     lastSequenceCampaign?.stepId !== currentStep.id ||
-    lastSequenceCampaign.status !== "completed_not_achieved" ||
     lastSequenceCampaign.revisionKey !== run.currentRevision.revisionKey ||
-    run.pendingManualQa
-  ) {
+    run.pendingManualQa;
+  if (checkpointDoesNotMatchCurrentStep) {
     throw new Error(
-      "Invalid loop evidence does not derive an exact waiting_for_fix checkpoint."
+      "Invalid loop evidence does not derive an exact recoverable checkpoint."
+    );
+  }
+  const recoverableStatus =
+    lastSequenceCampaign.status === "completed_not_achieved"
+      ? "waiting_for_fix"
+      : lastSequenceCampaign.status === "running"
+        ? "running"
+        : undefined;
+  if (!recoverableStatus) {
+    throw new Error(
+      "Invalid loop evidence does not derive an exact recoverable checkpoint."
     );
   }
   const recovered = {
     ...run,
-    status: "waiting_for_fix",
+    status: recoverableStatus,
     completedAt: undefined,
-    activeCampaign: undefined,
+    invalidReason: undefined,
+    activeCampaign:
+      recoverableStatus === "running"
+        ? {
+            campaignRunId: lastSequenceCampaign.campaignRunId,
+            role: "sequence",
+            stepId: lastSequenceCampaign.stepId,
+          }
+        : undefined,
   };
   await loopStore.writeRun(recovered);
   return { run: recovered };
