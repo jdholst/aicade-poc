@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 27,
-  "updatedAt": "2026-08-29T06:30:02Z",
+  "revision": 28,
+  "updatedAt": "2026-08-29T21:36:59.864Z",
   "entries": [
     {
       "status": "active",
@@ -89,22 +89,25 @@
     },
     {
       "status": "active",
-      "confidence": "supported",
-      "title": "Active owned objects must survive post-action observation",
-      "guidance": "Keep active owned objects observable through the post-action lifecycle check and defer expiry cleanup until after bounded motion and target interaction can be observed.",
+      "confidence": "confirmed",
+      "title": "Post-action owned-object liveness is scenario-local",
+      "guidance": "Require an owned object to remain active through a post-action observation only when that exact scenario explicitly declares a positive final owned_object_count. When a time-advancing scenario has no positive count requirement, accept complete lifecycle evidence that proves actor-origin creation and bounded motion even if valid target interaction or cleanup destroys the transient before final observation.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
-          "source_generation"
+          "source_generation",
+          "deterministic_evaluation",
+          "assembly"
         ],
         "classifications": [
-          "provider_output_rejected"
+          "provider_output_rejected",
+          "pipeline_failure"
         ]
       },
       "id": "KF-0003",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -117,11 +120,124 @@
           "outcome": "provider_output_rejected",
           "summary": "Actual source generation created and moved an owned projectile, interacted with the target, and then destroyed it before the post-action observation. The durable mechanic-general source-generation repair guidance now requires active owned objects to remain observable through the post-action lifecycle check, with bounded motion, target interaction, and deferred expiry cleanup.",
           "observedAt": "2026-08-24T02:43:38.000Z"
+        },
+        {
+          "kind": "manual_qa",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a02-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+          "attemptId": "a02-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "manual_qa_approved",
+          "outcome": "success",
+          "summary": "Projectile despawned shortly after firing, before reaching a target; observed as non-failing behavior for this candidate.",
+          "observedAt": "2026-08-29T19:55:12.905Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a05-constraints_first",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+          "attemptId": "a05-constraints_first",
+          "stage": "assembly",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":36,\"targetInteractionsDelta\":1}]}.",
+          "observedAt": "2026-08-29T20:21:34.126Z"
+        },
+        {
+          "kind": "manual_qa",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a01-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "manual_qa_approved",
+          "outcome": "success",
+          "summary": "IMPORTANT NON-FAILING OBSERVATION: The projectile lasted less than a few hundred milliseconds and despawned almost immediately. The user explicitly approved this exact candidate with this behavior noted.",
+          "observedAt": "2026-08-29T20:45:44.048Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a04-plain_paraphrase",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+          "attemptId": "a04-plain_paraphrase",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":150,\"targetInteractionsDelta\":1}]}.",
+          "observedAt": "2026-08-29T20:55:04.233Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-08-29T21:36:59.864Z",
+          "reason": "Two manually approved actual candidates and two actual evaluator failures show that post-action liveness is valid only when the same scenario explicitly requires a positive final owned-object count.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Active owned objects must survive post-action observation",
+            "guidance": "Keep active owned objects observable through the post-action lifecycle check and defer expiry cleanup until after bounded motion and target interaction can be observed.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a02-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+              "attemptId": "a02-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "manual_qa_approved",
+              "outcome": "success",
+              "summary": "Projectile despawned shortly after firing, before reaching a target; observed as non-failing behavior for this candidate.",
+              "observedAt": "2026-08-29T19:55:12.905Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a05-constraints_first",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+              "attemptId": "a05-constraints_first",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":36,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:21:34.126Z"
+            },
+            {
+              "kind": "manual_qa",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "manual_qa_approved",
+              "outcome": "success",
+              "summary": "IMPORTANT NON-FAILING OBSERVATION: The projectile lasted less than a few hundred milliseconds and despawned almost immediately. The user explicitly approved this exact candidate with this behavior noted.",
+              "observedAt": "2026-08-29T20:45:44.048Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a04-plain_paraphrase",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+              "attemptId": "a04-plain_paraphrase",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":150,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:55:04.233Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-24T02:43:38.000Z",
-      "updatedAt": "2026-08-24T02:43:38.000Z"
+      "updatedAt": "2026-08-29T21:36:59.864Z"
     },
     {
       "status": "active",
@@ -382,7 +498,7 @@
       "status": "active",
       "confidence": "confirmed",
       "title": "Attach target proof to cleanup-capable scenarios",
-      "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. When the same contract has an explicit cleanup scenario, author lifecycle-progress evidence for a time-advancing travel window that lacks a cleanup assertion; do not require cleanup there. Use the first time-advancing scenario as cleanup fallback only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+      "guidance": "For transient owned-object behavior, attach required target-interaction proof only to time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. Choose lifecycle-progress evidence only when that exact scenario explicitly requires a positive final owned_object_count. A separate cleanup scenario must not impose liveness on another travel window with no positive count assertion; author complete lifecycle evidence there so valid interaction and cleanup may destroy the transient before final observation. Use the first time-advancing scenario as the target-interaction fallback only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -398,7 +514,7 @@
         ]
       },
       "id": "KF-0008",
-      "revision": 6,
+      "revision": 7,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -489,6 +605,28 @@
           "outcome": "provider_output_rejected",
           "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":1,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":0,\"simulatedDistanceTraveledDelta\":168,\"targetInteractionsDelta\":0}]}.",
           "observedAt": "2026-08-29T05:47:36.477Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a05-constraints_first",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+          "attemptId": "a05-constraints_first",
+          "stage": "assembly",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":36,\"targetInteractionsDelta\":1}]}.",
+          "observedAt": "2026-08-29T20:21:34.126Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a04-plain_paraphrase",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+          "attemptId": "a04-plain_paraphrase",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":150,\"targetInteractionsDelta\":1}]}.",
+          "observedAt": "2026-08-29T20:55:04.233Z"
         }
       ],
       "amendments": [
@@ -691,10 +829,59 @@
               "observedAt": "2026-08-29T05:47:36.477Z"
             }
           ]
+        },
+        {
+          "revision": 6,
+          "changedAt": "2026-08-29T21:36:59.864Z",
+          "reason": "Actual variation evidence contradicted the prior rule that a separate cleanup scenario should force progress evidence on every unasserted travel window.",
+          "previous": {
+            "status": "active",
+            "confidence": "confirmed",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. When the same contract has an explicit cleanup scenario, author lifecycle-progress evidence for a time-advancing travel window that lacks a cleanup assertion; do not require cleanup there. Use the first time-advancing scenario as cleanup fallback only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a05-constraints_first",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+              "attemptId": "a05-constraints_first",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":36,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:21:34.126Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a04-plain_paraphrase",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+              "attemptId": "a04-plain_paraphrase",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":150,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:55:04.233Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-29T06:30:02Z"
+      "updatedAt": "2026-08-29T21:36:59.864Z"
     },
     {
       "status": "active",
@@ -6066,6 +6253,400 @@
       "createdAt": "2026-08-29T06:30:02Z",
       "priorManifestDigest": "4f5e37e5855e8af5211bebc49cc3c143e6ab7bfbf301da58c425754be4aaec38",
       "resultingManifestDigest": "fc49fb3a03093fab3647d6c2885182a510e969254cd09b218194c4b068c6e0fc"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t17-20260829-conclusion",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t17-projectile-proof-loop-20260829t035944086z"
+      },
+      "consultedManifestDigest": "fc49fb3a03093fab3647d6c2885182a510e969254cd09b218194c4b068c6e0fc",
+      "contextDigest": "1783f30e2b44379080c0a9ce58552c7cab28af76e98b46d68a3f6af3abbe20cd",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0007",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0024",
+        "KF-0025",
+        "KF-0026"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z/fix-cycle-3",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008"
+          ],
+          "rationale": "The prior verified fix introduced cross-scenario progress evidence for unasserted travel windows; the current actual failures contradict that policy while preserving its other contract and source repairs."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c3-r5/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "The cycle-three discovery candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a03-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a04-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a05-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a06-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a08-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a09-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a10-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA under the recurring scheduled lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a02-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "A widened string was rejected where the accepted owned-object literal was required; this provider repair variance is independent of the evaluator defect and did not recur across the successful cohort."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c3-r3/a07-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0026"
+          ],
+          "rationale": "The candidate created, moved, and destroyed its owned object but made no observable nonzero target mutation, confirming the existing target-interaction guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The provider declared an unrelated player position assertion that contradicted the fixture setup; it does not inform scenario-local lifecycle evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a02-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "The user explicitly approved a candidate whose transient object was already destroyed at observation time, confirming that liveness must not be imposed without a scenario-local positive count requirement."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a03-plain_paraphrase",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a04-plain_paraphrase",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a05-constraints_first",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "The evaluator required an active transient even though the candidate created, moved, interacted with the target, and destroyed it during a scenario with no positive final-count assertion."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a06-constraints_first",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "The candidate passed explicit manual gameplay QA; its non-failing delayed cleanup and startup observations do not change the scenario-local evaluator rule."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a07-outcomes_first",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0026"
+          ],
+          "rationale": "The transient remained active and moved, but targetInteractionsDelta stayed zero, confirming the existing nonzero target-mutation requirement."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a08-outcomes_first",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a09-compact",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This was an editor-hydration campaign-tool failure already repaired outside Sparkline fix budgets; it does not inform the evaluator fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "The user explicitly approved a candidate whose projectile despawned in under a few hundred milliseconds, confirming that an unasserted travel window cannot require final liveness."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a02-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a03-plain_paraphrase",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a04-plain_paraphrase",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "The candidate created, moved, hit the bound target, and destroyed its transient object, but was rejected only because a separate cleanup scenario incorrectly imposed progress liveness."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a05-constraints_first",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008",
+            "KF-0022"
+          ],
+          "rationale": "Terminal structured evidence, rather than the stale repaired summary, showed deterministic-evaluation exact-coverage mismatch from the same cross-scenario lifecycle-kind inconsistency."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a06-constraints_first",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008",
+            "KF-0022"
+          ],
+          "rationale": "Artifact inspection showed source attempt two satisfied creation, travel, target interaction, and cleanup but failed the false progress assertion before later literal-type repair variance exhausted the stage."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a07-outcomes_first",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a08-outcomes_first",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a09-compact",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a10-compact",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider variation candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-isolation-source-fixture-c3-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The fixed source assumed state capability while the actual contract omitted it, so the capability-incompatible fixture cannot isolate source-provider quality or contribute to mechanic proof."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0003",
+          "expectedRevision": 1,
+          "reason": "Two manually approved actual candidates and two actual evaluator failures show that post-action liveness is valid only when the same scenario explicitly requires a positive final owned-object count.",
+          "changes": {
+            "confidence": "confirmed",
+            "title": "Post-action owned-object liveness is scenario-local",
+            "guidance": "Require an owned object to remain active through a post-action observation only when that exact scenario explicitly declares a positive final owned_object_count. When a time-advancing scenario has no positive count requirement, accept complete lifecycle evidence that proves actor-origin creation and bounded motion even if valid target interaction or cleanup destroys the transient before final observation.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a02-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+              "attemptId": "a02-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "manual_qa_approved",
+              "outcome": "success",
+              "summary": "Projectile despawned shortly after firing, before reaching a target; observed as non-failing behavior for this candidate.",
+              "observedAt": "2026-08-29T19:55:12.905Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a05-constraints_first",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+              "attemptId": "a05-constraints_first",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":36,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:21:34.126Z"
+            },
+            {
+              "kind": "manual_qa",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a01-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "manual_qa_approved",
+              "outcome": "success",
+              "summary": "IMPORTANT NON-FAILING OBSERVATION: The projectile lasted less than a few hundred milliseconds and despawned almost immediately. The user explicitly approved this exact candidate with this behavior noted.",
+              "observedAt": "2026-08-29T20:45:44.048Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a04-plain_paraphrase",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+              "attemptId": "a04-plain_paraphrase",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":150,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:55:04.233Z"
+            }
+          ]
+        },
+        {
+          "type": "amend",
+          "findingId": "KF-0008",
+          "expectedRevision": 6,
+          "reason": "Actual variation evidence contradicted the prior rule that a separate cleanup scenario should force progress evidence on every unasserted travel window.",
+          "changes": {
+            "guidance": "For transient owned-object behavior, attach required target-interaction proof only to time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. Choose lifecycle-progress evidence only when that exact scenario explicitly requires a positive final owned_object_count. A separate cleanup scenario must not impose liveness on another travel window with no positive count assertion; author complete lifecycle evidence there so valid interaction and cleanup may destroy the transient before final observation. Use the first time-advancing scenario as the target-interaction fallback only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1/a05-constraints_first",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r1",
+              "attemptId": "a05-constraints_first",
+              "stage": "assembly",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":36,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:21:34.126Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2/a04-plain_paraphrase",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-variation-c3-r2",
+              "attemptId": "a04-plain_paraphrase",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":150,\"targetInteractionsDelta\":1}]}.",
+              "observedAt": "2026-08-29T20:55:04.233Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-29T21:36:59.864Z",
+      "priorManifestDigest": "fc49fb3a03093fab3647d6c2885182a510e969254cd09b218194c4b068c6e0fc",
+      "resultingManifestDigest": "465077dbf18a6918da817c62a6c744e73fee1e26825e420c64f08655251d5eb0"
     }
   ]
 }
