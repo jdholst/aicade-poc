@@ -321,11 +321,7 @@ async function runBrowserAttempt({
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    await enterControlledText(
-      page.getByPlaceholder("Describe the starter game you want to build."),
-      scheduled.prompt
-    );
-    await page.getByRole("button", { name: "Send prompt" }).click();
+    await submitCampaignPrompt(page, scheduled.prompt);
     await configureProviderInput(page, manifest, run.providerModes);
     await onSubmission?.({
       campaignRunId: run.id,
@@ -626,6 +622,15 @@ async function configureProviderInput(page, manifest, providerModes) {
   if (await modelSelect.count()) {
     await modelSelect.selectOption(manifest.model);
   }
+}
+
+export async function submitCampaignPrompt(page, prompt) {
+  await page.waitForLoadState("networkidle", { timeout: 30_000 });
+  await enterControlledText(
+    page.getByPlaceholder("Describe the starter game you want to build."),
+    prompt
+  );
+  await page.getByRole("button", { name: "Send prompt" }).click();
 }
 
 async function enterControlledText(locator, value) {

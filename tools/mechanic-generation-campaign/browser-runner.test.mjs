@@ -4,10 +4,26 @@ import {
   CampaignInfrastructureFailureError,
   createCampaignActivityTracker,
   requireCampaignAttemptContinuation,
+  submitCampaignPrompt,
   waitForCampaignEditorTerminalState,
 } from "./lib/browser-runner.mjs";
 
 describe("campaign browser runner", () => {
+  it("waits for editor hydration before entering and submitting a prompt", async () => {
+    const events = [];
+    const page = createPromptPageDouble(events);
+
+    await submitCampaignPrompt(page, "Build a compact arena.");
+
+    expect(events).toEqual([
+      "wait:networkidle:30000",
+      "prompt:click",
+      `prompt:press:${process.platform === "darwin" ? "Meta+A" : "Control+A"}`,
+      "prompt:type:Build a compact arena.",
+      "submit:click",
+    ]);
+  });
+
   it("recognizes the current routed generated-mechanic runtime iframe", async () => {
     installEditorDocument({
       bodyText: "Generated runtime\nRuntime is running in the sandbox.",
@@ -105,6 +121,36 @@ describe("campaign browser runner", () => {
     );
   });
 });
+
+function createPromptPageDouble(events) {
+  const prompt = {
+    async click() {
+      events.push("prompt:click");
+    },
+    async press(value) {
+      events.push(`prompt:press:${value}`);
+    },
+    async pressSequentially(value) {
+      events.push(`prompt:type:${value}`);
+    },
+  };
+  const submit = {
+    async click() {
+      events.push("submit:click");
+    },
+  };
+  return {
+    async waitForLoadState(state, options) {
+      events.push(`wait:${state}:${options.timeout}`);
+    },
+    getByPlaceholder() {
+      return prompt;
+    },
+    getByRole() {
+      return submit;
+    },
+  };
+}
 
 function createPageDouble({ waitError, afterUnmetWait } = {}) {
   let waitCalls = 0;
