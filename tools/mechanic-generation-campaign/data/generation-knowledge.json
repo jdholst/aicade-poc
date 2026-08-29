@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 24,
-  "updatedAt": "2026-08-27T23:46:42Z",
+  "revision": 25,
+  "updatedAt": "2026-08-29T05:25:30Z",
   "entries": [
     {
       "status": "active",
@@ -380,7 +380,7 @@
     },
     {
       "status": "active",
-      "confidence": "supported",
+      "confidence": "confirmed",
       "title": "Attach target proof to cleanup-capable scenarios",
       "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. Use the first time-advancing scenario only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
       "scope": {
@@ -398,7 +398,7 @@
         ]
       },
       "id": "KF-0008",
-      "revision": 4,
+      "revision": 5,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -456,6 +456,28 @@
           "outcome": "provider_output_rejected",
           "summary": "The accepted cycle-10 contract correctly used a dispatch-only scenario for positive creation, but also declared projectile_travels_before_cleanup with dispatch_action, 100ms of advance_time, and a positive final owned_object_count. The initial and first repair source candidates both created at actor origin, traveled 70 units, recorded one target interaction, and destroyed the projectile during that advance, producing the valid final count 0 while the contract required at least 1. Later source repairs drifted to zero interactions, so the terminal attempt summary was downstream repair noise rather than the durable cause. KF-0008 and KF-0009 directly govern this contradiction: target proof belongs on cleanup-capable time-advancing scenarios, while positive transient creation proof must remain dispatch-only. The provider had ignored those existing prompt rules, and contract admission only rejected positive counts at or beyond the accepted lifetime. KF-0002, KF-0003, and KF-0005 govern the recurring target-check implementation but were satisfied by the earlier candidates' observed travel and interaction. KF-0011's deterministic geometry was reachable. KF-0004 and KF-0018's cooldown state guidance produced no state failure. KF-0014 did not govern this owned-object count, and KF-0017's callback checklist remained intact. The durable mechanic-general fix makes contract validation reject every positive transient owned-object count after any time advance while retaining the more specific post-lifetime diagnostic.",
           "observedAt": "2026-08-27T02:38:24Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a04-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+          "attemptId": "a04-baseline",
+          "stage": "deterministic_evaluation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "Contract and source repair completed, deterministic evaluation passed, and handoff rejected the receipt because it required target interaction on a time-advancing scenario without an explicit owned_object_count cleanup assertion.",
+          "observedAt": "2026-08-29T04:54:05.670Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a09-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+          "attemptId": "a09-baseline",
+          "stage": "deterministic_evaluation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "Source repair succeeded and deterministic evaluation passed, then handoff reproduced the same evidence mismatch by treating a time-advancing scenario without an owned-object-count assertion as cleanup-capable.",
+          "observedAt": "2026-08-29T05:11:05.568Z"
         }
       ],
       "amendments": [
@@ -571,10 +593,59 @@
               "observedAt": "2026-08-27T02:38:24Z"
             }
           ]
+        },
+        {
+          "revision": 4,
+          "changedAt": "2026-08-29T05:25:30Z",
+          "reason": "Two repeatability attempts reached accepted repaired artifacts and then reproduced the existing KF-0008 mismatch because handoff treated a time-advancing scenario without owned_object_count as cleanup-capable. The verified regression fix aligns handoff with the evaluator's explicit zero-count cleanup rule.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Attach target proof to cleanup-capable scenarios",
+            "guidance": "For transient owned-object behavior, attach and verify required target-interaction proof only on time-advancing scenarios that explicitly declare cleanup with owned_object_count equals 0 or at_most 0. A scenario with no owned-object-count assertion is not cleanup-capable. Use the first time-advancing scenario only when no explicit cleanup scenario exists, and keep evaluator authoring and downstream verification aligned to that policy.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a04-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a04-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Contract and source repair completed, deterministic evaluation passed, and handoff rejected the receipt because it required target interaction on a time-advancing scenario without an explicit owned_object_count cleanup assertion.",
+              "observedAt": "2026-08-29T04:54:05.670Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a09-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a09-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Source repair succeeded and deterministic evaluation passed, then handoff reproduced the same evidence mismatch by treating a time-advancing scenario without an owned-object-count assertion as cleanup-capable.",
+              "observedAt": "2026-08-29T05:11:05.568Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-24T23:17:44.000Z",
-      "updatedAt": "2026-08-27T02:56:41Z"
+      "updatedAt": "2026-08-29T05:25:30Z"
     },
     {
       "status": "active",
@@ -1823,7 +1894,7 @@
     },
     {
       "status": "active",
-      "confidence": "supported",
+      "confidence": "confirmed",
       "title": "Campaign summaries prefer terminal structured evidence",
       "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage. When a repaired provider-stage issue and a later first-playable runtime failure coexist, preserve the repaired issue as history but report the terminal runtime receipt as the campaign failure.",
       "scope": {
@@ -1838,7 +1909,7 @@
         ]
       },
       "id": "KF-0022",
-      "revision": 2,
+      "revision": 3,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -1861,6 +1932,28 @@
           "outcome": "runtime_pipeline_failure",
           "summary": "The initial source failed its cleanup scenario with zero target interactions, source repair 2 and the final Game Spec were accepted, and first-playable then failed because the iframe controller terminated the parent SES Worker. The attempt classification and furthest stage were terminally correct, but its failure text retained the earlier repaired source issue.",
           "observedAt": "2026-08-27T23:25:15.708Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a04-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+          "attemptId": "a04-baseline",
+          "stage": "deterministic_evaluation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "The attempt summary retained an earlier target-interaction failure, but terminal structured outcome evaluation_scenario_evidence_mismatch showed the repaired artifact reached deterministic handoff validation.",
+          "observedAt": "2026-08-29T04:54:05.670Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a09-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+          "attemptId": "a09-baseline",
+          "stage": "deterministic_evaluation",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "The attempt summary retained a repaired literal-type error, but terminal structured outcome evaluation_scenario_evidence_mismatch identified the later deterministic handoff failure.",
+          "observedAt": "2026-08-29T05:11:05.568Z"
         }
       ],
       "amendments": [
@@ -1897,10 +1990,56 @@
               "observedAt": "2026-08-27T23:25:15.708Z"
             }
           ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-08-29T05:25:30Z",
+          "reason": "Attempts 4 and 9 both retained repaired provider errors in their summaries, while terminal structured outcomes identified the later deterministic handoff evidence mismatch. This confirms that terminal structured evidence must govern diagnosis.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Campaign summaries prefer terminal structured evidence",
+            "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage. When a repaired provider-stage issue and a later first-playable runtime failure coexist, preserve the repaired issue as history but report the terminal runtime receipt as the campaign failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a04-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a04-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The attempt summary retained an earlier target-interaction failure, but terminal structured outcome evaluation_scenario_evidence_mismatch showed the repaired artifact reached deterministic handoff validation.",
+              "observedAt": "2026-08-29T04:54:05.670Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a09-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a09-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The attempt summary retained a repaired literal-type error, but terminal structured outcome evaluation_scenario_evidence_mismatch identified the later deterministic handoff failure.",
+              "observedAt": "2026-08-29T05:11:05.568Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T20:00:02Z",
-      "updatedAt": "2026-08-27T23:46:42Z"
+      "updatedAt": "2026-08-29T05:25:30Z"
     },
     {
       "status": "active",
@@ -4937,6 +5076,182 @@
       "createdAt": "2026-08-27T23:46:42Z",
       "priorManifestDigest": "ff1fca41e9488c7ba9839f465beb67a713ab6542b10acad3af1c5525ea00feef",
       "resultingManifestDigest": "30ff57b45190fc22367e7ba6813b64f6a24de477a9cdc8f1e1d1ff59dfbb3f3f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t17-20260829-fix-cycle-1",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260829t035944086z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1"
+      },
+      "consultedManifestDigest": "30ff57b45190fc22367e7ba6813b64f6a24de477a9cdc8f1e1d1ff59dfbb3f3f",
+      "contextDigest": "64987708b616eff75fd37e4eedecb3a44d644597148bbb351d11607478d0eac3",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0007",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0024"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The iframe route detector invalidated this otherwise terminal campaign and was repaired in the control checkout as campaign-tool infrastructure, so it adds no Sparkline implementation guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-discovery-c0-r2/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approved discovery candidate establishes campaign progress but does not isolate the handoff evidence-selector defect or change compiled guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This approved candidate confirms end-to-end behavior generally but does not distinguish cleanup-scenario selection from other pipeline behavior."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a02-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This attempt exhausted provider repair on invalid reference kinds and literal typing, a separate provider-output failure not addressed by the handoff fix and not sufficient to change existing source guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a03-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This approved candidate confirms end-to-end behavior generally but does not isolate the cleanup-scenario selector boundary."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a04-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008",
+            "KF-0022"
+          ],
+          "rationale": "Terminal structured evidence shows an accepted repaired artifact was rejected when handoff required target interaction on a time-advancing scenario without an explicit zero-count cleanup assertion; the stale attempt summary alone obscured that terminal mismatch."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a05-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This approved candidate confirms end-to-end behavior generally but does not isolate the cleanup-scenario selector boundary."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a06-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This approved candidate confirms end-to-end behavior generally but does not isolate the cleanup-scenario selector boundary."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a07-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This approved candidate confirms end-to-end behavior generally but does not isolate the cleanup-scenario selector boundary."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a08-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This approved candidate confirms end-to-end behavior generally but does not isolate the cleanup-scenario selector boundary."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a09-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0008",
+            "KF-0022"
+          ],
+          "rationale": "Terminal structured evidence independently reproduces the same handoff/evaluator scenario-selector mismatch after source repair succeeded, while the attempt summary retained the repaired literal-type error."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a10-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This approved candidate confirms end-to-end behavior generally but does not isolate the cleanup-scenario selector boundary."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0008",
+          "expectedRevision": 4,
+          "confidence": "confirmed",
+          "reason": "Two repeatability attempts reached accepted repaired artifacts and then reproduced the existing KF-0008 mismatch because handoff treated a time-advancing scenario without owned_object_count as cleanup-capable. The verified regression fix aligns handoff with the evaluator's explicit zero-count cleanup rule.",
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a04-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a04-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Contract and source repair completed, deterministic evaluation passed, and handoff rejected the receipt because it required target interaction on a time-advancing scenario without an explicit owned_object_count cleanup assertion.",
+              "observedAt": "2026-08-29T04:54:05.670Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a09-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a09-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "Source repair succeeded and deterministic evaluation passed, then handoff reproduced the same evidence mismatch by treating a time-advancing scenario without an owned-object-count assertion as cleanup-capable.",
+              "observedAt": "2026-08-29T05:11:05.568Z"
+            }
+          ]
+        },
+        {
+          "type": "confirm",
+          "findingId": "KF-0022",
+          "expectedRevision": 2,
+          "confidence": "confirmed",
+          "reason": "Attempts 4 and 9 both retained repaired provider errors in their summaries, while terminal structured outcomes identified the later deterministic handoff evidence mismatch. This confirms that terminal structured evidence must govern diagnosis.",
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a04-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a04-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The attempt summary retained an earlier target-interaction failure, but terminal structured outcome evaluation_scenario_evidence_mismatch showed the repaired artifact reached deterministic handoff validation.",
+              "observedAt": "2026-08-29T04:54:05.670Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1/a09-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260829t035944086z-repeatability-c0-r1",
+              "attemptId": "a09-baseline",
+              "stage": "deterministic_evaluation",
+              "quality": "actual_submission",
+              "outcome": "pipeline_failure",
+              "summary": "The attempt summary retained a repaired literal-type error, but terminal structured outcome evaluation_scenario_evidence_mismatch identified the later deterministic handoff failure.",
+              "observedAt": "2026-08-29T05:11:05.568Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-29T05:25:30Z",
+      "priorManifestDigest": "30ff57b45190fc22367e7ba6813b64f6a24de477a9cdc8f1e1d1ff59dfbb3f3f",
+      "resultingManifestDigest": "84e7b0d85a9305b30412a86aaf6be17cee216c9a40dc37b0124411fb82c4d81e"
     }
   ]
 }

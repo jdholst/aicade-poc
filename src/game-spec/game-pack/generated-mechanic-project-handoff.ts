@@ -3717,9 +3717,19 @@ function scenarioRequiresTargetInteractionForHandoff(
   const timeAdvancingScenarios = contract.scenarios.filter((candidate) =>
     candidate.steps.some((step) => step.kind === "advance_time")
   );
+  const ownedArchetypeIds = new Set(
+    contract.ownedObjects.map(({ id }) => id)
+  );
   const cleanupScenarios = timeAdvancingScenarios.filter(
     (candidate) =>
-      !scenarioRequiresImmediateOwnedObjectCreation(candidate, contract)
+      candidate.observations.some(
+        (observation) =>
+          observation.kind === "owned_object_count" &&
+          ownedArchetypeIds.has(observation.archetypeId) &&
+          (observation.operator === "equals" ||
+            observation.operator === "at_most") &&
+          observation.value === 0
+      )
   );
   const targetInteractionScenarios =
     cleanupScenarios.length > 0
