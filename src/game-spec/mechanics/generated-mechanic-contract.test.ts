@@ -343,8 +343,38 @@ describe("validateGeneratedMechanicContract", () => {
         constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
       })
     ).toEqual({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          {
+            path: "scenarios.0.observations.0",
+            code: "contradiction",
+            message:
+              'Scenario "elapsed_deadline_keeps_initial_sentinel" requires deadline state "cooldown_until" to return to its initial sentinel after action "activate" and time advancement. Elapsing a *_until deadline does not reset its stored value; require the deterministic written deadline or omit the final state observation.',
+          },
+        ],
+      },
+    });
+
+    const explicitResetContract = {
+      ...unwitnessedContract,
+      behavior: {
+        ...unwitnessedContract.behavior,
+        summary:
+          "Reset cooldown_until to its initial sentinel after the delayed behavior completes.",
+      },
+    };
+    expect(
+      validateGeneratedMechanicContract({
+        ...validationContext,
+        input: explicitResetContract,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      })
+    ).toEqual({
       success: true,
-      data: unwitnessedContract,
+      data: explicitResetContract,
     });
   });
 

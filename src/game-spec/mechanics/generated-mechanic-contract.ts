@@ -1218,10 +1218,6 @@ function addBehaviorScenarioDeadlineIssues(
       actionsThatEstablishDeadlineWrites.add(dispatchedActions[0].actionId);
     }
 
-    if (actionsThatEstablishDeadlineWrites.size === 0) {
-      continue;
-    }
-
     contract.scenarios.forEach((scenario, scenarioIndex) => {
       const startsAtInitialSentinel = scenario.setup.some(
         (setup) =>
@@ -1235,12 +1231,17 @@ function addBehaviorScenarioDeadlineIssues(
       const action = scenario.steps.find(
         (step, stepIndex) =>
           step.kind === "dispatch_action" &&
-          actionsThatEstablishDeadlineWrites.has(step.actionId) &&
+          (actionsThatEstablishDeadlineWrites.size === 0 ||
+            actionsThatEstablishDeadlineWrites.has(step.actionId)) &&
           scenario.steps
             .slice(stepIndex + 1)
             .some(({ kind }) => kind === "advance_time")
       );
-      if (!action || action.kind !== "dispatch_action") {
+      if (
+        !action ||
+        action.kind !== "dispatch_action" ||
+        behaviorExplicitlyResetsDeadline(contract, state.id)
+      ) {
         return;
       }
       scenario.observations.forEach((observation, observationIndex) => {
@@ -1254,11 +1255,30 @@ function addBehaviorScenarioDeadlineIssues(
         issues.push({
           path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
           code: "contradiction",
-          message: `Scenario "${scenario.id}" requires deadline state "${state.id}" to return to its initial sentinel after action "${action.actionId}" and time advancement, but another dispatch-only scenario establishes that the same action writes a different deadline. Elapsing a *_until deadline does not reset its stored value; require the deterministic written deadline or omit the final state observation.`,
+          message:
+            actionsThatEstablishDeadlineWrites.size > 0
+              ? `Scenario "${scenario.id}" requires deadline state "${state.id}" to return to its initial sentinel after action "${action.actionId}" and time advancement, but another dispatch-only scenario establishes that the same action writes a different deadline. Elapsing a *_until deadline does not reset its stored value; require the deterministic written deadline or omit the final state observation.`
+              : `Scenario "${scenario.id}" requires deadline state "${state.id}" to return to its initial sentinel after action "${action.actionId}" and time advancement. Elapsing a *_until deadline does not reset its stored value; require the deterministic written deadline or omit the final state observation.`,
         });
       });
     });
   }
+}
+
+function behaviorExplicitlyResetsDeadline(
+  contract: GeneratedMechanicContract,
+  stateId: StableId
+) {
+  const behaviorText = [contract.behavior.summary, ...contract.behavior.outcomes]
+    .join(" ")
+    .toLowerCase();
+  const normalizedStateId = stateId.toLowerCase();
+  const spacedStateId = normalizedStateId.replaceAll("_", " ");
+  return (
+    (behaviorText.includes(normalizedStateId) ||
+      behaviorText.includes(spacedStateId)) &&
+    /\b(clear|release|reset|restore)\b/.test(behaviorText)
+  );
 }
 
 export function configDslValueMatches(
