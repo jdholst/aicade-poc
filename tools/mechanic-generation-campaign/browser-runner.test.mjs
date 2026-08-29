@@ -8,6 +8,21 @@ import {
 } from "./lib/browser-runner.mjs";
 
 describe("campaign browser runner", () => {
+  it("recognizes the current routed generated-mechanic runtime iframe", async () => {
+    installEditorDocument({
+      bodyText: "Generated runtime\nRuntime is running in the sandbox.",
+      iframeRoute: "/runtime/phaser-generated",
+    });
+    const page = createPageDouble();
+
+    const terminal = await waitForCampaignEditorTerminalState(page, 1_000);
+
+    expect(terminal).toEqual({
+      kind: "ready",
+      text: "Runtime is running in the sandbox.",
+    });
+  });
+
   it("recognizes the current runtime-ready message only when the runtime iframe is mounted", async () => {
     installEditorDocument({
       bodyText: "Generated runtime\nRuntime is running in the sandbox.",
@@ -97,16 +112,16 @@ function createPageDouble({ waitError, afterUnmetWait } = {}) {
     get waitCalls() {
       return waitCalls;
     },
-    async waitForFunction(predicate) {
+    async waitForFunction(predicate, argument) {
       waitCalls += 1;
       if (waitError) throw waitError;
-      if (!predicate()) {
+      if (!predicate(argument)) {
         afterUnmetWait?.();
         throw new Error("page.waitForFunction: Timeout 1000ms exceeded.");
       }
     },
-    async evaluate(operation) {
-      return operation();
+    async evaluate(operation, argument) {
+      return operation(argument);
     },
     locator() {
       return {
@@ -118,7 +133,7 @@ function createPageDouble({ waitError, afterUnmetWait } = {}) {
   };
 }
 
-function installEditorDocument({ bodyText, iframeSource }) {
+function installEditorDocument({ bodyText, iframeSource, iframeRoute }) {
   document.body.replaceChildren();
   Object.defineProperty(document.body, "innerText", {
     configurable: true,
@@ -127,6 +142,11 @@ function installEditorDocument({ bodyText, iframeSource }) {
   if (iframeSource) {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("srcdoc", iframeSource);
+    document.body.append(iframe);
+  }
+  if (iframeRoute) {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", iframeRoute);
     document.body.append(iframe);
   }
 }

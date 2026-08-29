@@ -34,6 +34,8 @@ import {
   resolveProviderModes,
 } from "./runner-policy.mjs";
 
+const GENERATED_MECHANIC_RUNTIME_PATH = "/runtime/phaser-generated";
+
 export async function runCampaign({
   repoRoot,
   manifestPath,
@@ -642,21 +644,24 @@ export async function waitForCampaignEditorTerminalState(
       await waitForTerminalEditorState(page, timeoutMs, activity);
     } else {
       await page.waitForFunction(
-        () => {
+        (runtimePath) => {
           const iframe = document.querySelector("iframe");
           const lines = document.body.innerText
             .split("\n")
             .map((line) => line.trim());
+          const iframeHasSource =
+            iframe instanceof HTMLIFrameElement &&
+            (Boolean(iframe.getAttribute("srcdoc")?.trim()) ||
+              iframe.getAttribute("src") === runtimePath);
           return (
             (lines.includes("Runtime is running in the sandbox.") &&
-              iframe instanceof HTMLIFrameElement &&
-              Boolean(iframe.getAttribute("srcdoc")?.trim())) ||
+              iframeHasSource) ||
             lines.includes("An error has occurred.") ||
             lines.includes("GENERATION STOPPED") ||
             document.body.innerText.includes("The runtime could not be prepared.")
           );
         },
-        undefined,
+        GENERATED_MECHANIC_RUNTIME_PATH,
         { timeout: timeoutMs }
       );
     }
@@ -676,7 +681,7 @@ export async function waitForCampaignEditorTerminalState(
 }
 
 async function inspectCampaignEditorState(page) {
-  return page.evaluate(() => {
+  return page.evaluate((runtimePath) => {
     const iframe = document.querySelector("iframe");
     const lines = document.body.innerText
       .split("\n")
@@ -685,9 +690,12 @@ async function inspectCampaignEditorState(page) {
       body: document.body.innerText.slice(0, 4_000),
       runtimeReady: lines.includes("Runtime is running in the sandbox."),
       iframeCount: document.querySelectorAll("iframe").length,
-      iframeHasSource: Boolean(iframe?.getAttribute("srcdoc")?.trim()),
+      iframeHasSource:
+        iframe instanceof HTMLIFrameElement &&
+        (Boolean(iframe.getAttribute("srcdoc")?.trim()) ||
+          iframe.getAttribute("src") === runtimePath),
     };
-  });
+  }, GENERATED_MECHANIC_RUNTIME_PATH);
 }
 
 export function createCampaignActivityTracker(now = () => Date.now()) {
@@ -717,21 +725,24 @@ export async function waitForTerminalEditorState(
     }
     try {
       await page.waitForFunction(
-        () => {
+        (runtimePath) => {
           const iframe = document.querySelector("iframe");
           const lines = document.body.innerText
             .split("\n")
             .map((line) => line.trim());
+          const iframeHasSource =
+            iframe instanceof HTMLIFrameElement &&
+            (Boolean(iframe.getAttribute("srcdoc")?.trim()) ||
+              iframe.getAttribute("src") === runtimePath);
           return (
             (lines.includes("Runtime is running in the sandbox.") &&
-              iframe instanceof HTMLIFrameElement &&
-              Boolean(iframe.getAttribute("srcdoc")?.trim())) ||
+              iframeHasSource) ||
             lines.includes("An error has occurred.") ||
             lines.includes("GENERATION STOPPED") ||
             document.body.innerText.includes("The runtime could not be prepared.")
           );
         },
-        undefined,
+        GENERATED_MECHANIC_RUNTIME_PATH,
         { timeout: Math.min(pollIntervalMs, remainingMs) }
       );
       break;

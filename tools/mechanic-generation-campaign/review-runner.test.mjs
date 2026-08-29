@@ -29,6 +29,31 @@ afterEach(async () => {
 });
 
 describe("manual QA candidate replay", () => {
+  it("recognizes the current routed generated-mechanic runtime during replay", async () => {
+    document.body.replaceChildren();
+    Object.defineProperty(document.body, "innerText", {
+      configurable: true,
+      value: "Runtime is running in the sandbox.",
+    });
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", "/runtime/phaser-generated");
+    document.body.append(iframe);
+    const page = {
+      async waitForFunction(predicate, argument) {
+        if (!predicate(argument)) {
+          throw new Error("page.waitForFunction: Timeout 50ms exceeded.");
+        }
+      },
+      async evaluate(operation) {
+        return operation();
+      },
+    };
+
+    await expect(
+      waitForRestoredCandidateRuntime(page, { timeout: 50 })
+    ).resolves.toBeUndefined();
+  });
+
   it("pauses a linked loop for campaign repair without changing the frozen verdict candidate", async () => {
     const definition = {
       sequence: [{ id: "discovery", cohort: "discovery" }],

@@ -179,7 +179,7 @@ describe("provider request resolution", () => {
     });
     expect(predicateSource).toContain("Runtime is running in the sandbox.");
     expect(predicateSource).not.toContain("acceptedReceipt");
-    expect(predicateArgument).toBeUndefined();
+    expect(predicateArgument).toBe("/runtime/phaser-generated");
   });
 
   it("uses the project's normal production build in linked campaign worktrees", () => {

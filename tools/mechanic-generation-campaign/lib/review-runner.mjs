@@ -7,6 +7,8 @@ import { verifyManualQaCandidate } from "./manual-qa.mjs";
 import { pauseLoopForCampaignRepair } from "./loop-state.mjs";
 import { inspectRevision } from "./revision.mjs";
 
+const GENERATED_MECHANIC_RUNTIME_PATH = "/runtime/phaser-generated";
+
 export async function installReviewProviderBlocking(page, counter = { count: 0 }) {
   const block = async (route) => {
     counter.count += 1;
@@ -80,29 +82,35 @@ export async function waitForRestoredCandidateRuntime(
 ) {
   try {
     await page.waitForFunction(
-      () => {
+      (runtimePath) => {
         const iframe = document.querySelector("iframe");
         const runtimeReady = document.body.innerText
           .split("\n")
           .some((line) => line.trim() === "Runtime is running in the sandbox.");
+        const iframeHasSource =
+          iframe instanceof HTMLIFrameElement &&
+          (Boolean(iframe.getAttribute("srcdoc")?.trim()) ||
+            iframe.getAttribute("src") === runtimePath);
         return (
           runtimeReady &&
-          iframe instanceof HTMLIFrameElement &&
-          Boolean(iframe.getAttribute("srcdoc")?.trim())
+          iframeHasSource
         );
       },
-      undefined,
+      GENERATED_MECHANIC_RUNTIME_PATH,
       { timeout }
     );
   } catch (error) {
-    const state = await page.evaluate(() => {
+    const state = await page.evaluate((runtimePath) => {
       const iframe = document.querySelector("iframe");
       return {
         body: document.body.innerText.slice(0, 4_000),
         iframeCount: document.querySelectorAll("iframe").length,
-        iframeHasSource: Boolean(iframe?.getAttribute("srcdoc")?.trim()),
+        iframeHasSource:
+          iframe instanceof HTMLIFrameElement &&
+          (Boolean(iframe.getAttribute("srcdoc")?.trim()) ||
+            iframe.getAttribute("src") === runtimePath),
       };
-    });
+    }, GENERATED_MECHANIC_RUNTIME_PATH);
     throw new CandidateRuntimeError(
       `Restored game did not mount and report runtime readiness: ${JSON.stringify(state)}. ${
         error instanceof Error ? error.message : String(error)
