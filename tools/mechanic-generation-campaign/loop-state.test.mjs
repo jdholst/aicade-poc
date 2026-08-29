@@ -10,6 +10,7 @@ import {
   pauseLoopForCampaignRepair,
   rejectLoopManualQa,
   recordActualProviderCall,
+  recordLoopSubmission,
   resumeLoopAfterCampaignRepair,
   resumeLoopAfterManualQaApproval,
   startLoopCampaign,
@@ -286,6 +287,45 @@ describe("campaign loop state", () => {
     expect(resumed.currentRevision).toEqual(revisionBefore);
     expect(resumed.usage).toEqual(usageBefore);
     expect(resumed.campaignLinks[0].status).toBe("waiting_for_manual_qa");
+    expect(resumed.campaignRepairs[0]).toMatchObject({
+      id: "campaign-repair-1",
+      status: "completed",
+      completedAt: "2026-08-23T15:03:00.000Z",
+    });
+  });
+
+  it("replaces a running campaign after campaign repair without charging the discarded run", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    run = recordLoopSubmission(run).run;
+    run = recordActualProviderCall(run, "planning").run;
+    run = pauseLoopForCampaignRepair(run, {
+      id: "campaign-repair-1",
+      reason: "The campaign browser detector failed.",
+      detectedAt: "2026-08-23T15:02:00.000Z",
+    });
+
+    const resumed = resumeLoopAfterCampaignRepair(run, {
+      completedAt: "2026-08-23T15:03:00.000Z",
+    });
+
+    expect(resumed.status).toBe("running");
+    expect(resumed.activeCampaign).toBeUndefined();
+    expect(resumed.usage).toMatchObject({
+      campaignRuns: 0,
+      submissions: 0,
+      actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+      grossActualProviderCalls: { planning: 1, contract: 0, source: 0 },
+    });
+    expect(resumed.steps[0]).toMatchObject({
+      status: "running",
+      campaignRunIds: ["discovery-1"],
+      sameRevisionRuns: 0,
+    });
+    expect(resumed.campaignLinks[0].status).toBe("campaign_repair_replaced");
     expect(resumed.campaignRepairs[0]).toMatchObject({
       id: "campaign-repair-1",
       status: "completed",

@@ -338,22 +338,39 @@ export function resumeLoopAfterCampaignRepair(
   if (run.activeCampaign?.campaignRunId !== repair.campaignRunId) {
     throw new Error("The pending campaign repair does not match the active campaign.");
   }
+  const replacesRunningCampaign = repair.resumeStatus === "running";
+  const replacedSequenceStepId =
+    replacesRunningCampaign && run.activeCampaign.role === "sequence"
+      ? run.activeCampaign.stepId
+      : undefined;
   return {
     ...run,
-    status: repair.resumeStatus,
+    status:
+      replacesRunningCampaign && run.activeCampaign.role === "isolation"
+        ? "waiting_for_fix"
+        : repair.resumeStatus,
     completedAt: undefined,
-    usage: repair.resumeStatus === "running"
-      ? {
-          ...run.usage,
-          campaignRuns: run.usage.campaignRuns + 1,
-          auxiliaryIsolationCampaigns:
-            run.usage.auxiliaryIsolationCampaigns +
-            (run.activeCampaign.role === "isolation" ? 1 : 0),
-        }
-      : run.usage,
+    activeCampaign: replacesRunningCampaign ? undefined : run.activeCampaign,
+    pendingManualQa: replacesRunningCampaign ? undefined : run.pendingManualQa,
+    usage: run.usage,
+    steps: replacedSequenceStepId
+      ? run.steps.map((step) =>
+          step.id === replacedSequenceStepId
+            ? {
+                ...step,
+                sameRevisionRuns: Math.max(0, step.sameRevisionRuns - 1),
+              }
+            : step
+        )
+      : run.steps,
     campaignLinks: run.campaignLinks.map((link) =>
       link.campaignRunId === repair.campaignRunId
-        ? { ...link, status: repair.resumeStatus }
+        ? {
+            ...link,
+            status: replacesRunningCampaign
+              ? "campaign_repair_replaced"
+              : repair.resumeStatus,
+          }
         : link
     ),
     campaignRepairs: run.campaignRepairs.map((entry) =>

@@ -567,6 +567,144 @@ describe("campaign loop controller", () => {
         actualProviderCalls: { planning: 1, contract: 0, source: 0 },
       },
     });
+
+    const originalCampaignRunId = paused.activeCampaign.campaignRunId;
+    let replacementInput;
+    const resumed = await resumeCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: paused.id,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        replacementInput = input;
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        return {
+          run: { id: input.runId, status: "completed_not_achieved" },
+          attempts: [
+            { status: "pipeline_failure", classification: "pipeline_failure" },
+          ],
+        };
+      },
+      inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+        path: worktreePath,
+        branch,
+        head: fixture.head,
+        revisionKey: validation.revision.revisionKey,
+        dirty: false,
+        statusEntries: [],
+      }),
+    });
+
+    expect(replacementInput.runId).not.toBe(originalCampaignRunId);
+    expect(replacementInput.resume).toBeUndefined();
+    expect(resumed.run.status).toBe("waiting_for_fix");
+    expect(resumed.run.usage.campaignRuns).toBe(1);
+    expect(resumed.run.campaignLinks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          campaignRunId: originalCampaignRunId,
+          status: "campaign_repair_replaced",
+        }),
+      ])
+    );
+  });
+
+  it("recovers a legacy repaired infrastructure campaign misclassified as waiting_for_fix", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const inspectWorktreeFn = async ({ path: worktreePath, branch }) => ({
+      path: worktreePath,
+      branch,
+      head: fixture.head,
+      revisionKey: validation.revision.revisionKey,
+      dirty: false,
+      statusEntries: [],
+    });
+
+    await expect(
+      startCampaignLoop({
+        repoRoot: fixture.repoRoot,
+        definitionPath: fixture.definitionPath,
+        authorization: validation.definitionHash,
+        loopStore,
+        campaignStore,
+        runCampaignFn: async (input) => {
+          await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+          throw new Error("campaign browser adapter crashed");
+        },
+        prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+          path: controlRoot,
+          branch: `codex/campaign-loop-${loopId}`,
+        }),
+        inspectWorktreeFn,
+        now: () => new Date("2026-08-23T15:00:00.000Z"),
+      })
+    ).rejects.toThrow(/browser adapter crashed/i);
+
+    const [paused] = await loopStore.listRuns();
+    const originalCampaignRunId = paused.activeCampaign.campaignRunId;
+    await loopStore.writeRun({
+      ...paused,
+      status: "waiting_for_fix",
+      activeCampaign: undefined,
+      usage: {
+        ...paused.usage,
+        campaignRuns: paused.usage.campaignRuns + 1,
+      },
+      campaignLinks: paused.campaignLinks.map((link) => ({
+        ...link,
+        status: "completed_not_achieved",
+      })),
+      campaignRepairs: paused.campaignRepairs.map((repair) => ({
+        ...repair,
+        status: "completed",
+        completedAt: "2026-08-23T15:03:00.000Z",
+      })),
+    });
+
+    let replacementInput;
+    const resumed = await resumeCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: paused.id,
+      loopStore,
+      campaignStore: {
+        ...campaignStore,
+        async readAttempts(campaignRunId) {
+          return campaignRunId === originalCampaignRunId
+            ? [{ status: "failure", classification: "infrastructure_failure" }]
+            : campaignStore.readAttempts(campaignRunId);
+        },
+      },
+      runCampaignFn: async (input) => {
+        replacementInput = input;
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        return {
+          run: { id: input.runId, status: "completed_not_achieved" },
+          attempts: [
+            { status: "pipeline_failure", classification: "pipeline_failure" },
+          ],
+        };
+      },
+      inspectWorktreeFn,
+    });
+
+    expect(replacementInput.runId).not.toBe(originalCampaignRunId);
+    expect(replacementInput.resume).toBeUndefined();
+    expect(resumed.run.status).toBe("waiting_for_fix");
+    expect(resumed.run.usage.campaignRuns).toBe(1);
+    expect(resumed.run.campaignLinks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          campaignRunId: originalCampaignRunId,
+          status: "campaign_repair_replaced",
+        }),
+      ])
+    );
   });
 
   it("recovers a terminal loop around the exact still-pending candidate without extending budgets", async () => {

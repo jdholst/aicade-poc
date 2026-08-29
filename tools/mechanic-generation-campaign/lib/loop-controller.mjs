@@ -170,6 +170,7 @@ export async function resumeCampaignLoop({
     branch: run.worktree.branch,
   });
   if (run.status === "waiting_for_campaign_repair") {
+    const repairedCampaignRole = run.activeCampaign?.role;
     if (fixReportPath) {
       throw new Error("Campaign-tool repair resumes without a Sparkline fix report.");
     }
@@ -184,8 +185,21 @@ export async function resumeCampaignLoop({
     }
     run = resumeLoopAfterCampaignRepair(run);
     await loopStore.writeRun(run);
-    if (run.status === "waiting_for_manual_qa") {
+    if (
+      run.status === "waiting_for_manual_qa" ||
+      (repairedCampaignRole === "isolation" && run.status === "waiting_for_fix")
+    ) {
       return { run };
+    }
+  }
+  if (run.status === "waiting_for_fix" && !fixReportPath) {
+    const recovered = await recoverMisclassifiedCompletedRepair({
+      run,
+      campaignStore,
+    });
+    if (recovered !== run) {
+      run = recovered;
+      await loopStore.writeRun(run);
     }
   }
   let loaded;
@@ -482,7 +496,10 @@ export async function runCampaignLoopIsolation({
     throw new Error(`Unknown authorized isolation profile ${profileId}.`);
   }
   const profileRuns = initialRun.campaignLinks.filter(
-    (link) => link.role === "isolation" && link.profileId === profileId
+    (link) =>
+      link.role === "isolation" &&
+      link.profileId === profileId &&
+      link.status !== "campaign_repair_replaced"
   ).length;
   if (
     initialRun.usage.auxiliaryIsolationCampaigns >=
@@ -881,6 +898,63 @@ function createSubmissionRecorder(state, loopStore) {
   };
 }
 
+async function recoverMisclassifiedCompletedRepair({ run, campaignStore }) {
+  if (run.activeCampaign || run.pendingManualQa || run.usage.campaignRuns < 1) {
+    return run;
+  }
+  const repair = [...(run.campaignRepairs ?? [])]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.status === "completed" && entry.resumeStatus === "running"
+    );
+  if (!repair) return run;
+  const link = run.campaignLinks.find(
+    ({ campaignRunId }) => campaignRunId === repair.campaignRunId
+  );
+  const currentStep = run.steps[run.currentStepIndex];
+  if (
+    link?.role !== "sequence" ||
+    link.status !== "completed_not_achieved" ||
+    link.stepId !== currentStep?.id ||
+    link.revisionKey !== run.currentRevision.revisionKey ||
+    currentStep.status !== "running"
+  ) {
+    return run;
+  }
+  const attempts = await campaignStore.readAttempts(repair.campaignRunId);
+  if (
+    attempts.length === 0 ||
+    !attempts.every(
+      ({ classification }) => classification === "infrastructure_failure"
+    )
+  ) {
+    return run;
+  }
+  return {
+    ...run,
+    status: "running",
+    completedAt: undefined,
+    usage: {
+      ...run.usage,
+      campaignRuns: run.usage.campaignRuns - 1,
+    },
+    steps: run.steps.map((step) =>
+      step.id === link.stepId
+        ? {
+            ...step,
+            sameRevisionRuns: Math.max(0, step.sameRevisionRuns - 1),
+          }
+        : step
+    ),
+    campaignLinks: run.campaignLinks.map((entry) =>
+      entry.campaignRunId === repair.campaignRunId
+        ? { ...entry, status: "campaign_repair_replaced" }
+        : entry
+    ),
+  };
+}
+
 function campaignCapacityFailure(run, submissionCount, providerModes) {
   if (run.usage.campaignRuns >= run.limits.maxCampaignRuns) {
     return "Global campaign-run ceiling reached.";
@@ -932,7 +1006,7 @@ function createLoopRunId(definitionId, createdAt) {
 
 function createLinkedCampaignRunId(run, stepId) {
   return `${run.id}-${stepId}-c${run.currentRevision.cycle}-r${
-    run.steps[run.currentStepIndex].sameRevisionRuns + 1
+    run.steps[run.currentStepIndex].campaignRunIds.length + 1
   }`;
 }
 
