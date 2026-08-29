@@ -332,6 +332,24 @@ describe("generated mechanic project handoff", () => {
           ],
         },
         {
+          id: "projectile_unasserted_cleanup",
+          seed: 11,
+          setup: [{ kind: "binding_present", bindingId: "actor" }],
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+          observations: [
+            {
+              kind: "binding_property",
+              bindingId: "actor",
+              property: "position",
+              operator: "equals",
+              value: { x: 0, y: 0 },
+            },
+          ],
+        },
+        {
           id: "projectile_created",
           seed: 9,
           setup: [{ kind: "binding_present", bindingId: "actor" }],
@@ -401,6 +419,16 @@ describe("generated mechanic project handoff", () => {
           },
         },
         {
+          id: "external_projectile_unasserted_cleanup",
+          scenarioId: "projectile_unasserted_cleanup",
+          observation: {
+            kind: "owned_object_lifecycle_after_action",
+            archetypeIds: ["projectile"],
+            actionId: "move",
+            requireActorOrigin: true,
+          },
+        },
+        {
           id: "external_projectile_created",
           scenarioId: "projectile_created",
           observation: {
@@ -443,6 +471,7 @@ describe("generated mechanic project handoff", () => {
             if (
               scenarioId === "projectile_lifecycle" ||
               scenarioId === "projectile_progress" ||
+              scenarioId === "projectile_unasserted_cleanup" ||
               scenarioId === "projectile_created"
             ) {
               activity.active = 1;
@@ -457,6 +486,10 @@ describe("generated mechanic project handoff", () => {
               activity.simulatedDistanceTraveled = 12;
               activity.targetInteractions = 1;
             } else if (scenarioId === "projectile_progress") {
+              activity.simulatedDistanceTraveled = 12;
+            } else if (scenarioId === "projectile_unasserted_cleanup") {
+              activity.active = 0;
+              activity.destroyed = 1;
               activity.simulatedDistanceTraveled = 12;
             }
           },

@@ -175,6 +175,43 @@ describe("generateMechanicContract", () => {
     ]);
   });
 
+  it("rejects an observable private-state transition when planning and contract both omit state_write", async () => {
+    const intentWithoutStateWrite = {
+      ...intent,
+      requiredCapabilities: [],
+    };
+    const result = await generateMechanicContract({
+      intent: intentWithoutStateWrite,
+      admittedRequest: {
+        resolution,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        capabilities: ["object_read"],
+      }),
+    });
+
+    expect(result).toEqual({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          {
+            path: "scenarios.0.observations.0",
+            code: "contradiction",
+            message:
+              'Scenario "action_toggles_state" requires private state "enabled" to differ from its setup value, but the contract does not grant state_write.',
+          },
+        ],
+      },
+    });
+  });
+
   it("returns exact contract-validation evidence for invalid provider output", async () => {
     const invalidCandidate = {
       ...candidate,

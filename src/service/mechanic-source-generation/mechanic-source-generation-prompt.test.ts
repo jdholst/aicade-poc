@@ -1070,6 +1070,15 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "after acceptance write now + duration into the deadline state"
     );
+    expect(prompt).toContain(
+      "For any declared_observation_failed state_equals mismatch, treat the accepted observation as a required reachable final write"
+    );
+    expect(prompt).toContain(
+      "when a cleanup scenario requires the initial *_until sentinel, write that exact sentinel from the reachable cleanup callback"
+    );
+    expect(prompt).toContain(
+      "A zero vector such as { x: 0, y: 0 } is not a target interaction"
+    );
   });
 
   it("turns a mismatched scheduled callback literal into exact callback-ID repair guidance", () => {

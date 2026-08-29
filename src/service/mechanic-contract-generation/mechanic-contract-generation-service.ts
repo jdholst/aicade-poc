@@ -362,8 +362,55 @@ function generatedContractIntentLineageIssues(
   }
   appendTransientLifetimeFinalCountIssues(intent, contract, issues);
   appendUnsupportedBoundDeactivationIssues(contract, issues);
+  appendUnsupportedPrivateStateTransitionIssues(intent, contract, issues);
 
   return issues;
+}
+
+function appendUnsupportedPrivateStateTransitionIssues(
+  intent: MechanicIntent,
+  contract: GeneratedMechanicContract,
+  issues: ContractValidationEvidence["issues"]
+): void {
+  if (
+    contract.capabilities.includes("state_write") ||
+    intent.requiredCapabilities.includes("state_write")
+  ) {
+    return;
+  }
+  const statesById = new Map(
+    contract.privateState.map((state) => [state.id, state])
+  );
+  contract.scenarios.forEach((scenario, scenarioIndex) => {
+    scenario.observations.forEach((observation, observationIndex) => {
+      if (observation.kind !== "state_equals") {
+        return;
+      }
+      const state = statesById.get(observation.stateId);
+      if (!state) {
+        return;
+      }
+      const setupValues = scenario.setup.flatMap((candidate) =>
+        candidate.kind === "state_equals" &&
+        candidate.stateId === observation.stateId
+          ? [candidate.value]
+          : []
+      );
+      if (
+        Object.is(
+          observation.value,
+          setupValues.length > 0 ? setupValues[0] : state.initialValue
+        )
+      ) {
+        return;
+      }
+      issues.push({
+        path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
+        code: "contradiction",
+        message: `Scenario "${scenario.id}" requires private state "${observation.stateId}" to differ from its setup value, but the contract does not grant state_write.`,
+      });
+    });
+  });
 }
 
 function appendUnsupportedBoundDeactivationIssues(
