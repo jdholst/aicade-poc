@@ -6,7 +6,10 @@ import {
   parseCampaignLoopManifest,
   parseCampaignLoopRun,
 } from "./lib/loop-contracts.mjs";
-import { loadCampaignLoopDefinition } from "./lib/loop-definition-loader.mjs";
+import {
+  calculateLoopMinimums,
+  loadCampaignLoopDefinition,
+} from "./lib/loop-definition-loader.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -16,7 +19,7 @@ function validDefinition() {
     id: "p09-t17-proof-loop",
     manifest: {
       path: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
-      sha256: "a6265e16881d158a1620b49ef806e94b592a939194c090569c8b6392ccce93c2",
+      sha256: "9c7eeaa6e656167531c2e322c28535a8a71f4c5d11df594cdd207068a0f57d99",
       probeSha256: "4dc1c0b63661c708a9c326a377f1f1d5be62a03ff1f5d0a1519dd579936002df",
     },
     model: "gpt-5.6-luna",
@@ -103,6 +106,39 @@ describe("campaign loop definitions", () => {
     expect(() => parseCampaignLoopManifest(definition)).toThrow(
       /maxFixCycles/
     );
+  });
+
+  it("reserves the optional variation replacement in the proof-sequence authorization", () => {
+    const prompts = [
+      "baseline",
+      "plain_paraphrase",
+      "constraints_first",
+      "outcomes_first",
+      "compact",
+    ].map((id) => ({ id, text: id }));
+    const definition = {
+      sequence: ["discovery", "repeatability", "variation"].map((cohort) => ({
+        cohort,
+        providerModes: { planning: "actual", contract: "actual", source: "actual" },
+      })),
+    };
+    const cohorts = {
+      discovery: { maxAttempts: 1, minimumSuccesses: 1 },
+      repeatability: { maxAttempts: 10, minimumSuccesses: 8, failureLimit: 3 },
+      variation: {
+        runsPerPrompt: 2,
+        minimumSuccesses: 8,
+        requireEveryPromptSuccess: true,
+        failureLimit: 3,
+        maxReplacementAttempts: 1,
+      },
+    };
+
+    expect(calculateLoopMinimums(definition, prompts, cohorts)).toEqual({
+      campaignRuns: 3,
+      submissions: 22,
+      actualProviderCalls: { planning: 22, contract: 22, source: 22 },
+    });
   });
 });
 

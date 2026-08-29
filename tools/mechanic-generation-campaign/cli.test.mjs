@@ -15,11 +15,18 @@ const cliPath = path.join(import.meta.dirname, "cli.mjs");
 
 describe("campaign manual-QA CLI", () => {
   it("documents the review and explicit verdict commands in live help", async () => {
-    const { stdout } = await execFileAsync(process.execPath, [cliPath, "--help"]);
+    const [{ stdout }, cliSource] = await Promise.all([
+      execFileAsync(process.execPath, [cliPath, "--help"]),
+      readFile(cliPath, "utf8"),
+    ]);
 
     expect(stdout).toContain("review --campaign <run-id>");
     expect(stdout).toContain("approve --campaign <run-id> --attempt <attempt-id>");
     expect(stdout).toContain("deny --campaign <run-id> --attempt <attempt-id> --reason <text>");
+    expect(cliSource).toContain("Failures:");
+    expect(cliSource).toContain("Remaining failure tolerance:");
+    expect(cliSource).toContain("Replacement submissions:");
+    expect(cliSource).toContain("failure_limit_reached");
   });
 
   it("rejects denial without a non-empty reason before reading campaign evidence", async () => {

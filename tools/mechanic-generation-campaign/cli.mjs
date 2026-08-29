@@ -16,7 +16,10 @@ import {
   loadCampaignManifest,
   validateManifestEnvironment,
 } from "./lib/manifest-loader.mjs";
-import { createAttemptSchedule, resolveProviderModes } from "./lib/runner-policy.mjs";
+import {
+  maximumCampaignSubmissions,
+  resolveProviderModes,
+} from "./lib/runner-policy.mjs";
 import { handleLoopCommand } from "./lib/loop-cli.mjs";
 import {
   assertCampaignKnowledgeReconciled,
@@ -74,7 +77,11 @@ async function main(args) {
       parseProviderModes(takeOption(args, "--provider-modes")) ?? loaded.manifest.providerModes,
       loaded.manifest.fixtures
     );
-    const schedule = createAttemptSchedule(cohort, loaded.manifest.prompts);
+    const submissionCeiling = maximumCampaignSubmissions(
+      cohort,
+      loaded.manifest.prompts,
+      loaded.manifest.cohorts[cohort]
+    );
     const actualStages = Object.entries(providerModes)
       .filter(([, mode]) => mode === "actual")
       .map(([stage]) => stage);
@@ -89,12 +96,12 @@ async function main(args) {
     }
     if (actualStages.length > 0 && !authorized) {
       throw new Error(
-        `Campaign can submit ${schedule.length} prompt(s) with actual stages ${actualStages.join(", ")}. Re-run with --authorize-actual after campaign-level authorization.`
+        `Campaign can submit ${submissionCeiling} prompt(s) with actual stages ${actualStages.join(", ")}. Re-run with --authorize-actual after campaign-level authorization.`
       );
     }
     console.log(`Campaign: ${loaded.manifest.id}`);
     console.log(`Cohort: ${cohort}`);
-    console.log(`Submission ceiling: ${schedule.length}`);
+    console.log(`Submission ceiling: ${submissionCeiling}`);
     console.log(`Provider modes: ${formatProviderModes(providerModes)}`);
     const result = await runCampaign({
       repoRoot,
@@ -172,6 +179,13 @@ async function main(args) {
     console.log(`Reason: ${result.manualQa.denialReason}`);
     if (result.loopRun) {
       console.log(`Loop status: ${result.loopRun.status}`);
+    }
+    if (result.run.status === "running") {
+      console.log(
+        result.run.loopId
+          ? `Resume loop: npm run campaign -- loop resume --id ${result.run.loopId}`
+          : `Resume campaign: npm run campaign -- run --manifest ${result.run.manifestPath} --cohort ${result.run.cohort} --provider-modes ${formatProviderModes(result.run.providerModes)} --resume ${result.run.id}`
+      );
     }
     return;
   }
@@ -321,9 +335,24 @@ function printRunSummary(run, attempts) {
   console.log(`Status: ${run.status}`);
   console.log(`Revision: ${run.revision.revisionKey}`);
   console.log(`Submissions: ${attempts.length}/${run.attemptCeiling}`);
-  for (const attempt of attempts) {
+  if (run.result?.failureLimit !== undefined) {
+    console.log(`Failures: ${run.result.failures ?? 0}/${run.result.failureLimit}`);
     console.log(
-      `${attempt.id}: ${attempt.status} at ${attempt.furthestStage} (${formatProviderModes(attempt.providerModes)})`
+      `Remaining failure tolerance: ${run.result.remainingFailureTolerance ?? run.result.failureLimit}`
+    );
+    console.log(
+      `Replacement submissions: ${run.result.replacementSubmissions ?? 0}/1`
+    );
+    console.log(
+      `Cohort result: ${run.result.terminalReason === "failure_limit_reached" ? "stopped at failure limit" : run.result.terminalReason ?? "continuing"}`
+    );
+  }
+  for (const attempt of attempts) {
+    const replacement = attempt.submissionKind === "replacement"
+      ? ` replacement for ${attempt.replacementForPromptId}`
+      : "";
+    console.log(
+      `${attempt.id}:${replacement} ${attempt.status} at ${attempt.furthestStage} (${formatProviderModes(attempt.providerModes)})`
     );
   }
   if (run.pendingManualQa) {

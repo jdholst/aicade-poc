@@ -4,7 +4,9 @@ import { createRevisionKey } from "./lib/revision.mjs";
 import {
   classifyFurthestStage,
   createAttemptSchedule,
+  createNextAttemptSchedule,
   createLoopbackBaseUrl,
+  maximumCampaignSubmissions,
   resolveProviderCredentialInput,
   resolveProviderModes,
 } from "./lib/runner-policy.mjs";
@@ -37,6 +39,49 @@ describe("campaign runner policy", () => {
         prompt: prompt.text,
       })))
     );
+  });
+
+  it("reserves and schedules at most one targeted variation replacement", () => {
+    const variationPolicy = { maxReplacementAttempts: 1 };
+    const baseAttempts = createAttemptSchedule("variation", prompts).map(
+      ({ sequence, promptId }) => ({ sequence, promptId })
+    );
+
+    expect(
+      maximumCampaignSubmissions("variation", prompts, variationPolicy)
+    ).toBe(11);
+    expect(
+      maximumCampaignSubmissions("repeatability", prompts, {})
+    ).toBe(10);
+    expect(
+      createNextAttemptSchedule({
+        cohort: "variation",
+        prompts,
+        attempts: baseAttempts,
+        score: { status: "running", replacementPromptId: "compact" },
+      })
+    ).toEqual({
+      sequence: 11,
+      promptId: "compact",
+      prompt: "Compact",
+      submissionKind: "replacement",
+      replacementForPromptId: "compact",
+    });
+    expect(
+      createNextAttemptSchedule({
+        cohort: "variation",
+        prompts,
+        attempts: [
+          ...baseAttempts,
+          {
+            sequence: 11,
+            promptId: "compact",
+            submissionKind: "replacement",
+          },
+        ],
+        score: { status: "running", replacementPromptId: "compact" },
+      })
+    ).toBeNull();
   });
 
   it("requires actual planning for variation", () => {

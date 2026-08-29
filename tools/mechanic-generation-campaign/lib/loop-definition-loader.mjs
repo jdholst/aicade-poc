@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { parseCampaignLoopManifest } from "./loop-contracts.mjs";
 import { loadCampaignManifest } from "./manifest-loader.mjs";
-import { createAttemptSchedule, resolveProviderModes } from "./runner-policy.mjs";
+import { maximumCampaignSubmissions, resolveProviderModes } from "./runner-policy.mjs";
 
 export async function loadCampaignLoopDefinition({
   definition,
@@ -65,7 +65,8 @@ export async function loadCampaignLoopDefinition({
 
   const minimums = calculateLoopMinimums(
     parsedDefinition,
-    campaign.manifest.prompts
+    campaign.manifest.prompts,
+    campaign.manifest.cohorts
   );
   validateMinimumCapacity(parsedDefinition, minimums);
 
@@ -82,11 +83,15 @@ export async function loadCampaignLoopDefinition({
   };
 }
 
-export function calculateLoopMinimums(definition, prompts) {
+export function calculateLoopMinimums(definition, prompts, cohorts = {}) {
   const actualProviderCalls = { planning: 0, contract: 0, source: 0 };
   let submissions = 0;
   for (const step of definition.sequence) {
-    const count = createAttemptSchedule(step.cohort, prompts).length;
+    const count = maximumCampaignSubmissions(
+      step.cohort,
+      prompts,
+      cohorts[step.cohort] ?? {}
+    );
     submissions += count;
     for (const stage of ["planning", "contract", "source"]) {
       if (step.providerModes[stage] === "actual") {

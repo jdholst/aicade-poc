@@ -394,6 +394,46 @@ describe("campaign loop state", () => {
     expect(run.steps[0].status).toBe("running");
   });
 
+  it("bypasses same-revision retries when repeatability reaches three qualifying failures", () => {
+    const thresholdDefinition = structuredClone(definition);
+    thresholdDefinition.sequence[1].maxCampaignRunsPerRevision = 2;
+    thresholdDefinition.sequence[1].retryableClassifications = [
+      "provider_failure",
+      "pipeline_failure",
+      "semantic_runtime_failure",
+    ];
+    let run = initialRun();
+    run = {
+      ...run,
+      currentStepIndex: 1,
+      steps: run.steps.map((step, index) =>
+        index === 0
+          ? { ...step, status: "achieved", revisionKey: revisionA.revisionKey }
+          : step
+      ),
+    };
+    run = startLoopCampaign(run, {
+      campaignRunId: "repeatability-1",
+      role: "sequence",
+      stepId: "repeat",
+    });
+
+    run = finishSequenceCampaign(run, thresholdDefinition, {
+      campaignRunId: "repeatability-1",
+      status: "completed_not_achieved",
+      attempts: [
+        { status: "pipeline_failure", classification: "provider_failure" },
+        { status: "pipeline_failure", classification: "pipeline_failure" },
+        { status: "mechanic_incorrect", classification: "semantic_runtime_failure" },
+      ],
+    });
+
+    expect(run.status).toBe("waiting_for_fix");
+    expect(run.activeCampaign).toBeUndefined();
+    expect(run.currentStepIndex).toBe(1);
+    expect(run.steps[1].sameRevisionRuns).toBe(1);
+  });
+
   it("resets proof progress on a committed fix while preserving prior evidence", () => {
     let run = startLoopCampaign(initialRun(), {
       campaignRunId: "discovery-1",

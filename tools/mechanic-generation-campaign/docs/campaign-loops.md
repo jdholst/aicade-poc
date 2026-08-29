@@ -76,7 +76,9 @@ Dependencies and build output are never copied from the control checkout. Enviro
 
 ## Failure and fix flow
 
-When a full-actual proof submission passes the automated pipeline and external probe, the loop preserves that active campaign and pauses at `waiting_for_manual_qa`. Run the review command, let the user inspect the live exact output, and record an explicit approval or denial. Approval resumes the same campaign without consuming another campaign, submission, provider-call, or fix-cycle unit. Denial records `manual_qa_rejected` and moves directly to `waiting_for_fix` without a same-revision retry.
+When a full-actual proof submission passes the automated pipeline and external probe, the loop preserves that active campaign and pauses at `waiting_for_manual_qa`. Run the review command, let the user inspect the live exact output, and record an explicit approval or denial. Approval resumes the same campaign without consuming another campaign, submission, provider-call, or fix-cycle unit. Discovery denial moves directly to `waiting_for_fix`. In repeatability and variation, denial one or two resumes the same campaign; denial three ends the campaign and moves to `waiting_for_fix`.
+
+Repeatability and variation each stop immediately at three qualifying failures. Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion do not. Variation can use one targeted replacement after its ten base submissions when both submissions for exactly one prompt failed and no third failure occurred. A complete proof definition must therefore authorize up to 22 submissions and matching per-stage actual-provider calls.
 
 When a campaign fails, the loop checks only that campaign's failed attempts. It starts another campaign on the same revision only when every failure classification is listed by the current step and its same-revision run limit remains.
 

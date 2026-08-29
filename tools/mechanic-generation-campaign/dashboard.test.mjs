@@ -86,6 +86,10 @@ describe("campaign dashboard data", () => {
     expect(dashboardApp).toContain("loop.lifecycle");
     expect(dashboardApp).toContain("grossActualProviderCalls");
     expect(dashboardApp).toContain("campaign repair");
+    expect(dashboardApp).toContain("failure_limit_reached");
+    expect(dashboardApp).toContain("remainingFailureTolerance");
+    expect(dashboardApp).toContain("replacementSubmissions");
+    expect(dashboardApp).toContain("submissionKind");
     expect(dashboardStyles).toContain(".concluded");
     expect(dashboardStyles).toContain(".discarded");
   });

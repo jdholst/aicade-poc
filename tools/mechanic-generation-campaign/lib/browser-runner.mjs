@@ -28,8 +28,9 @@ import { inspectRevision } from "./revision.mjs";
 import { createManualQaCandidate } from "./manual-qa.mjs";
 import {
   classifyFurthestStage,
-  createAttemptSchedule,
+  createNextAttemptSchedule,
   createLoopbackBaseUrl,
+  maximumCampaignSubmissions,
   resolveProviderCredentialInput,
   resolveProviderModes,
 } from "./runner-policy.mjs";
@@ -86,7 +87,11 @@ export async function runCampaign({
   const campaignRunId =
     resume ?? runId ?? createCampaignRunId(loaded.manifest.id, cohort, createdAt);
   const baseUrl = attachedBaseUrl ?? createLoopbackBaseUrl(port);
-  const schedule = createAttemptSchedule(cohort, loaded.manifest.prompts);
+  const attemptCeiling = maximumCampaignSubmissions(
+    cohort,
+    loaded.manifest.prompts,
+    loaded.manifest.cohorts[cohort]
+  );
   const baselineManifestDigest = resume
     ? undefined
     : knowledgeEntriesDigest(await knowledgeStore.read());
@@ -103,7 +108,7 @@ export async function runCampaign({
         createdAt,
         model: loaded.manifest.model,
         providerModes,
-        attemptCeiling: schedule.length,
+        attemptCeiling,
         attemptIds: [],
         knowledgePolicy: {
           required: true,
@@ -166,8 +171,16 @@ export async function runCampaign({
     };
     await store.writeRun(run);
 
-    const existingAttempts = await store.readAttempts(campaignRunId);
-    for (const scheduled of schedule.slice(existingAttempts.length)) {
+    while (true) {
+      const existingAttempts = await store.readAttempts(campaignRunId);
+      const currentScore = scoreCampaign(cohort, loaded.manifest, existingAttempts);
+      const scheduled = createNextAttemptSchedule({
+        cohort,
+        prompts: loaded.manifest.prompts,
+        attempts: existingAttempts,
+        score: currentScore,
+      });
+      if (!scheduled) break;
       const beforeAttemptRevision = await inspectRevision(repoRoot);
       if (beforeAttemptRevision.revisionKey !== run.revision.revisionKey) {
         run = {
@@ -241,6 +254,15 @@ export async function runCampaign({
         submissions: score.submissions,
         qualifiesForMechanicProof: score.qualifiesForMechanicProof,
         missingSuccessfulPromptIds: score.missingSuccessfulPromptIds,
+        failures: score.failures,
+        failureLimit: score.failureLimit,
+        remainingFailureTolerance: score.remainingFailureTolerance,
+        baseSubmissions: score.baseSubmissions,
+        replacementSubmissions: score.replacementSubmissions,
+        ...(score.terminalReason ? { terminalReason: score.terminalReason } : {}),
+        ...(score.replacementPromptId
+          ? { replacementPromptId: score.replacementPromptId }
+          : {}),
       },
     };
     await store.writeRun(run);
@@ -391,6 +413,10 @@ async function runBrowserAttempt({
     cohort: run.cohort,
     promptId: scheduled.promptId,
     prompt: scheduled.prompt,
+    submissionKind: scheduled.submissionKind ?? "scheduled",
+    ...(scheduled.replacementForPromptId
+      ? { replacementForPromptId: scheduled.replacementForPromptId }
+      : {}),
     status,
     terminalOutcome:
       status === "awaiting_manual_qa"

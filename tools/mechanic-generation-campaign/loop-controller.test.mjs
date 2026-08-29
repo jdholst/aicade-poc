@@ -1424,8 +1424,14 @@ async function createRepositoryFixture({
     cohorts: {
       discovery: { maxAttempts: 1, minimumSuccesses: 1 },
       isolation: { maxAttempts: 1, minimumSuccesses: 1 },
-      repeatability: { maxAttempts: 10, minimumSuccesses: 8 },
-      variation: { runsPerPrompt: 2, minimumSuccesses: 8, requireEveryPromptSuccess: true },
+      repeatability: { maxAttempts: 10, minimumSuccesses: 8, failureLimit: 3 },
+      variation: {
+        runsPerPrompt: 2,
+        minimumSuccesses: 8,
+        requireEveryPromptSuccess: true,
+        failureLimit: 3,
+        maxReplacementAttempts: 1,
+      },
     },
   };
   const manifestPath = path.join(manifestDirectory, "test-projectile.json");
@@ -1472,7 +1478,7 @@ async function createRepositoryFixture({
     limits: {
       maxFixCycles: singleStepFix ? 1 : 0,
       maxCampaignRuns: singleStepFix ? 2 : 3,
-      maxSubmissions: singleStepFix ? 2 : 21,
+      maxSubmissions: singleStepFix ? 2 : 22,
       maxAuxiliaryIsolationCampaigns: withIsolation ? 1 : 0,
       actualProviderCalls: singleStepFix
         ? {
@@ -1480,7 +1486,7 @@ async function createRepositoryFixture({
             contract: 2,
             source: 2,
           }
-        : { planning: 21, contract: 21, source: 21 },
+        : { planning: 22, contract: 22, source: 22 },
     },
   };
   await writeFile(definitionPath, `${JSON.stringify(definition, null, 2)}\n`, "utf8");
