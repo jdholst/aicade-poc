@@ -174,7 +174,7 @@ export async function runCampaign({
     ? await store.acquireRunExecutionLock(campaignRunId)
     : async () => {};
   let server = null;
-  let browser = null;
+  let browserPool = null;
   try {
     if (resume) {
       run = await reconcileResumableRun(store, run);
@@ -206,7 +206,11 @@ export async function runCampaign({
     }
 
     const { chromium } = await import("@playwright/test");
-    browser = await launchBrowser(chromium, headed);
+    browserPool = await createCampaignBrowserPool({
+      chromium,
+      headed,
+      executionPolicy: run.executionPolicy,
+    });
     run = await updateCampaignRun(store, run, (current) => ({
       ...current,
       status: "running",
@@ -216,7 +220,7 @@ export async function runCampaign({
 
     return await executeCampaignAttempts({
       repoRoot,
-      browser,
+      browserPool,
       store,
       run,
       manifest: loaded.manifest,
@@ -236,7 +240,7 @@ export async function runCampaign({
     }));
     throw error;
   } finally {
-    await browser?.close();
+    await browserPool?.close();
     await stopProcess(server);
     await releaseExecutionLock();
   }
@@ -292,7 +296,7 @@ export async function reconcileResumableRun(store, run) {
 
 async function executeCampaignAttempts({
   repoRoot,
-  browser,
+  browserPool,
   store,
   run: initialRun,
   manifest,
@@ -394,6 +398,7 @@ async function executeCampaignAttempts({
       }));
       for (const slot of batch) {
         const scheduled = schedule.find(({ sequence }) => sequence === slot.sequence);
+        const browser = browserPool.claim();
         const task = runBrowserAttempt({
           browser,
           store,
@@ -408,8 +413,8 @@ async function executeCampaignAttempts({
           pricing,
           stageConcurrency,
         }).then(
-          (result) => ({ slot, result }),
-          (error) => ({ slot, error })
+          (result) => ({ slot, browser, result }),
+          (error) => ({ slot, browser, error })
         );
         active.set(slot.attemptId, task);
       }
@@ -423,6 +428,7 @@ async function executeCampaignAttempts({
 
     const settled = await Promise.race(active.values());
     active.delete(settled.slot.attemptId);
+    browserPool.release(settled.browser);
     if (settled.error) {
       const failedAt = new Date().toISOString();
       run = await updateCampaignRun(store, run, (current) => ({
@@ -1334,6 +1340,56 @@ async function launchBrowser(chromium, headed) {
   } catch {
     return chromium.launch({ headless: !headed });
   }
+}
+
+export async function createCampaignBrowserPool({
+  chromium,
+  headed,
+  executionPolicy,
+  launchBrowserFn = launchBrowser,
+}) {
+  const processCount = executionPolicy.mode === "parallel"
+    ? executionPolicy.maxConcurrentAttempts
+    : 1;
+  const launchResults = await Promise.allSettled(
+    Array.from({ length: processCount }, () =>
+      launchBrowserFn(chromium, headed)
+    )
+  );
+  const browsers = launchResults
+    .filter(({ status }) => status === "fulfilled")
+    .map(({ value }) => value);
+  const failedLaunch = launchResults.find(({ status }) => status === "rejected");
+  if (failedLaunch) {
+    await Promise.allSettled(browsers.map((browser) => browser.close()));
+    throw failedLaunch.reason;
+  }
+  const available = [...browsers];
+  const leased = new Set();
+  let closed = false;
+  return {
+    claim() {
+      if (closed || available.length === 0) {
+        throw new Error("No isolated campaign browser process is available.");
+      }
+      const browser = available.shift();
+      leased.add(browser);
+      return browser;
+    },
+    release(browser) {
+      if (closed || !leased.delete(browser)) {
+        throw new Error("Campaign browser process was not leased by this pool.");
+      }
+      available.push(browser);
+    },
+    async close() {
+      if (closed) return;
+      closed = true;
+      await Promise.allSettled(browsers.map((browser) => browser.close()));
+      available.length = 0;
+      leased.clear();
+    },
+  };
 }
 
 async function waitForUrl(baseUrl, processHandle) {

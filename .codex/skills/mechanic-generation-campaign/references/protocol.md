@@ -15,7 +15,7 @@ New repeatability and variation campaigns may explicitly freeze bounded parallel
 active attempts + pending manual reviews <= failure limit - counted failures
 ```
 
-Parallel variation uses round-robin base prompt order unless the frozen policy explicitly selects legacy prompt-major order. Each attempt receives a durable slot, isolated browser context, artifact directory, and provider-call identity before launch.
+Parallel variation uses round-robin base prompt order unless the frozen policy explicitly selects legacy prompt-major order. Each active attempt receives a durable slot, isolated browser process and context, artifact directory, and provider-call identity before launch. All attempts share one production server but do not share renderer scheduling for fixed browser-attestation budgets.
 
 ## Cost evidence
 

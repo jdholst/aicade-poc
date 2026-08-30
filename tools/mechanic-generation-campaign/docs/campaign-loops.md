@@ -80,7 +80,7 @@ Every `campaign-loop-manifest/v1` contains one exact campaign manifest, its exte
 
 The values above illustrate the shape only. Choose and authorize limits for each loop explicitly. Validation rejects a definition that cannot contain one complete pass through its sequence.
 
-An omitted execution policy is frozen as sequential behavior when the linked campaign starts. Parallel policy is valid only for repeatability and variation, with limits from one through three. The definition hash binds every execution-policy field, and validation prints the normalized policy hash for each sequence step. Existing frozen definitions never opt into parallel execution silently.
+An omitted execution policy is frozen as sequential behavior when the linked campaign starts. Parallel policy is valid only for repeatability and variation, with limits from one through three. Parallel attempts share one production server but each active attempt uses a separate browser process and isolated context so fixed browser-attestation budgets do not share renderer scheduling. The definition hash binds every execution-policy field, and validation prints the normalized policy hash for each sequence step. Existing frozen definitions never opt into parallel execution silently.
 
 The cost ceiling is optional. When present, the referenced campaign manifest must freeze a pricing snapshot. A frozen snapshot without a cost ceiling records cost without enforcing a limit. A cost ceiling without a snapshot is invalid.
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   authorizeProviderDispatchBatch,
   CampaignInfrastructureFailureError,
+  createCampaignBrowserPool,
   createCampaignActivityTracker,
   reconcileResumableRun,
   requireCampaignAttemptContinuation,
@@ -11,6 +12,40 @@ import {
 } from "./lib/browser-runner.mjs";
 
 describe("campaign browser runner", () => {
+  it("assigns a separate browser process to each parallel attempt slot", async () => {
+    const closed = [];
+    let launched = 0;
+    const pool = await createCampaignBrowserPool({
+      chromium: {},
+      headed: false,
+      executionPolicy: {
+        mode: "parallel",
+        maxConcurrentAttempts: 3,
+      },
+      launchBrowserFn: async () => {
+        const id = ++launched;
+        return {
+          id,
+          async close() {
+            closed.push(id);
+          },
+        };
+      },
+    });
+
+    const first = pool.claim();
+    const second = pool.claim();
+    const third = pool.claim();
+    expect(new Set([first.id, second.id, third.id]).size).toBe(3);
+    expect(() => pool.claim()).toThrow(/browser process/i);
+    pool.release(second);
+    expect(pool.claim()).toBe(second);
+
+    await pool.close();
+    expect(launched).toBe(3);
+    expect(closed.sort()).toEqual([1, 2, 3]);
+  });
+
   it("authorizes the bounded attempt batch before dispatch", async () => {
     const observed = [];
     const allowed = await authorizeProviderDispatchBatch(

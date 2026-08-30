@@ -839,6 +839,113 @@ describe("campaign loop controller", () => {
     );
   });
 
+  it("recovers a completed failed campaign for an out-of-band campaign repair", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        await input.onSubmission({ campaignRunId: input.runId, attemptId: "a1" });
+        for (const stage of ["planning", "contract", "source"]) {
+          expect(await input.providerCallBudget.consume(stage)).toBe(true);
+        }
+        return {
+          run: { id: input.runId, status: "completed_not_achieved" },
+          attempts: [
+            {
+              id: "a1",
+              promptId: "baseline",
+              status: "pipeline_failure",
+              classification: "pipeline_failure",
+              providerCalls: { planning: 1, contract: 1, source: 1 },
+            },
+          ],
+        };
+      },
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn: async ({ path: worktreePath, branch }) => ({
+        path: worktreePath,
+        branch,
+        head: fixture.head,
+        revisionKey: validation.revision.revisionKey,
+        dirty: false,
+        statusEntries: [],
+      }),
+    });
+    expect(started.run.status).toBe("waiting_for_fix");
+    const campaignRunId = started.run.campaignLinks[0].campaignRunId;
+
+    const { run: paused } = await pauseCampaignLoopForRepair({
+      repoRoot: fixture.repoRoot,
+      loopId: started.run.id,
+      campaignRunId,
+      reason: "Parallel browser scheduling invalidated the campaign.",
+      loopStore,
+      campaignStore: {
+        async initialize() {},
+        async readRun() {
+          return {
+            id: campaignRunId,
+            loopId: started.run.id,
+            cohort: "discovery",
+            status: "completed_not_achieved",
+            revision: {
+              head: fixture.head,
+              revisionKey: validation.revision.revisionKey,
+            },
+          };
+        },
+        async readAttempts() {
+          return [
+            {
+              id: "a1",
+              promptId: "baseline",
+              revisionKey: validation.revision.revisionKey,
+              providerCalls: { planning: 1, contract: 1, source: 1 },
+            },
+          ];
+        },
+      },
+      now: () => new Date("2026-08-23T15:04:00.000Z"),
+    });
+
+    expect(paused.status).toBe("waiting_for_campaign_repair");
+    expect(paused.activeCampaign).toMatchObject({
+      campaignRunId,
+      role: "sequence",
+      stepId: "discovery",
+    });
+    expect(paused.usage).toMatchObject({
+      campaignRuns: 0,
+      submissions: 0,
+      actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+      grossActualProviderCalls: { planning: 1, contract: 1, source: 1 },
+    });
+    expect(paused.campaignRepairs[0]).toMatchObject({
+      campaignRunId,
+      resumeStatus: "running",
+      status: "pending",
+      creditedUsage: {
+        campaignRuns: 1,
+        submissions: 1,
+        auxiliaryIsolationCampaigns: 0,
+        actualProviderCalls: { planning: 1, contract: 1, source: 1 },
+      },
+    });
+  });
+
   it("recovers a legacy repaired infrastructure campaign misclassified as waiting_for_fix", async () => {
     const fixture = await createRepositoryFixture({ singleStepFix: true });
     const loopStore = createCampaignLoopStore(fixture.repoRoot);

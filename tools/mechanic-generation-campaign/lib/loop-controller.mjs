@@ -666,24 +666,32 @@ export async function pauseCampaignLoopForRepair({
   let priorTerminal;
   if (!run.activeCampaign && campaignRunId) {
     await campaignStore.initialize?.();
-    priorTerminal = {
-      status: run.status,
-      reason:
-        run.exhaustionReason ??
-        run.invalidReason ??
-        run.blockedReason ??
-        "Campaign-tool failure was previously recorded as terminal.",
-      ...(run.blockedReason ? { blockedReason: run.blockedReason } : {}),
-      ...(run.exhaustionReason
-        ? { exhaustionReason: run.exhaustionReason }
-        : {}),
-      ...(run.invalidReason ? { invalidReason: run.invalidReason } : {}),
-    };
-    run = await restoreTerminalPendingCandidate({
-      run,
-      campaignRunId,
-      campaignStore,
-    });
+    if (["blocked", "exhausted", "invalid"].includes(run.status)) {
+      priorTerminal = {
+        status: run.status,
+        reason:
+          run.exhaustionReason ??
+          run.invalidReason ??
+          run.blockedReason ??
+          "Campaign-tool failure was previously recorded as terminal.",
+        ...(run.blockedReason ? { blockedReason: run.blockedReason } : {}),
+        ...(run.exhaustionReason
+          ? { exhaustionReason: run.exhaustionReason }
+          : {}),
+        ...(run.invalidReason ? { invalidReason: run.invalidReason } : {}),
+      };
+    }
+    run = run.status === "waiting_for_fix"
+      ? await restoreCompletedCampaignRepairCandidate({
+          run,
+          campaignRunId,
+          campaignStore,
+        })
+      : await restoreTerminalPendingCandidate({
+          run,
+          campaignRunId,
+          campaignStore,
+        });
   }
   if (!run.activeCampaign) {
     throw new Error(
@@ -795,6 +803,114 @@ async function restoreTerminalPendingCandidate({
     campaignLinks: run.campaignLinks.map((entry) =>
       entry.campaignRunId === campaignRunId
         ? { ...entry, status: "waiting_for_manual_qa" }
+        : entry
+    ),
+  };
+}
+
+async function restoreCompletedCampaignRepairCandidate({
+  run,
+  campaignRunId,
+  campaignStore,
+}) {
+  if (run.status !== "waiting_for_fix") {
+    throw new Error(
+      `Campaign loop ${run.id} cannot recover a completed campaign from status ${run.status}.`
+    );
+  }
+  const [campaignRun, attempts] = await Promise.all([
+    campaignStore.readRun(campaignRunId),
+    campaignStore.readAttempts(campaignRunId),
+  ]);
+  if (
+    campaignRun.loopId !== run.id ||
+    campaignRun.status !== "completed_not_achieved"
+  ) {
+    throw new Error(
+      `Campaign ${campaignRunId} is not a completed failed campaign linked to loop ${run.id}.`
+    );
+  }
+  const link = run.campaignLinks.find(
+    ({ campaignRunId: linkedId }) => linkedId === campaignRunId
+  );
+  if (
+    !link ||
+    link.status !== "completed_not_achieved" ||
+    link.revisionKey !== run.currentRevision.revisionKey
+  ) {
+    throw new Error(
+      `Campaign ${campaignRunId} does not match the loop's completed current-revision campaign.`
+    );
+  }
+  const campaignActualProviderCalls = Object.fromEntries(
+    ACTUAL_PROVIDER_STAGES.map((stage) => [
+      stage,
+      attempts.reduce(
+        (total, attempt) => total + (attempt.providerCalls?.[stage] ?? 0),
+        0
+      ),
+    ])
+  );
+  const campaignUsage = {
+    campaignRuns: 1,
+    submissions: attempts.length,
+    auxiliaryIsolationCampaigns: link.role === "isolation" ? 1 : 0,
+    actualProviderCalls: campaignActualProviderCalls,
+    attributedExactNanoUsd: campaignRun.cost?.exactNanoUsd ?? 0,
+    attributedEstimatedNanoUsd: campaignRun.cost?.estimatedNanoUsd ?? 0,
+  };
+  const budgetCheckpoint = {
+    campaignRuns: run.usage.campaignRuns - campaignUsage.campaignRuns,
+    submissions: run.usage.submissions - campaignUsage.submissions,
+    auxiliaryIsolationCampaigns:
+      run.usage.auxiliaryIsolationCampaigns -
+      campaignUsage.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        run.usage.actualProviderCalls[stage] -
+          campaignUsage.actualProviderCalls[stage],
+      ])
+    ),
+    ...(run.providerCost
+      ? {
+          attributedExactNanoUsd:
+            run.providerCost.attributedExactNanoUsd -
+            campaignUsage.attributedExactNanoUsd,
+          attributedEstimatedNanoUsd:
+            run.providerCost.attributedEstimatedNanoUsd -
+            campaignUsage.attributedEstimatedNanoUsd,
+        }
+      : {}),
+  };
+  if (
+    [
+      budgetCheckpoint.campaignRuns,
+      budgetCheckpoint.submissions,
+      budgetCheckpoint.auxiliaryIsolationCampaigns,
+      ...Object.values(budgetCheckpoint.actualProviderCalls),
+      budgetCheckpoint.attributedExactNanoUsd ?? 0,
+      budgetCheckpoint.attributedEstimatedNanoUsd ?? 0,
+    ].some((value) => !Number.isSafeInteger(value) || value < 0)
+  ) {
+    throw new Error(
+      `Campaign ${campaignRunId} usage cannot be credited from the current loop evidence.`
+    );
+  }
+  return {
+    ...run,
+    status: "running",
+    completedAt: undefined,
+    activeCampaign: {
+      campaignRunId,
+      role: link.role,
+      ...(link.stepId ? { stepId: link.stepId } : {}),
+      ...(link.profileId ? { profileId: link.profileId } : {}),
+      budgetCheckpoint,
+    },
+    campaignLinks: run.campaignLinks.map((entry) =>
+      entry.campaignRunId === campaignRunId
+        ? { ...entry, status: "running" }
         : entry
     ),
   };
