@@ -1035,10 +1035,10 @@ describe("generated mechanic browser evaluation fixture", () => {
         },
       },
       {
-        id: "external_scenario_dash_travel_window_owned_object_lifecycle_progress_after_action",
+        id: "external_scenario_dash_travel_window_owned_object_lifecycle_after_action",
         scenarioId: "scenario_dash_travel_window",
         observation: {
-          kind: "owned_object_lifecycle_progress_after_action",
+          kind: "owned_object_lifecycle_after_action",
           archetypeIds: ["transient_effect"],
           actionId: "move",
         },
