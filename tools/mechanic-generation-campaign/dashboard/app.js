@@ -1,8 +1,10 @@
 import { createKnownCostSummary, formatNanoUsd } from "./cost.js";
+import { installCostCardNavigationGuard } from "./cost-card-navigation.js";
 import { paginateItems } from "./pagination.js";
 
 let snapshot = null;
 let costTimeframe = "all";
+let deferredRefreshRender = false;
 const paginationPages = new Map();
 
 const campaignFilter = document.querySelector("#campaign-filter");
@@ -22,10 +24,17 @@ loopFilter.addEventListener("change", () => resetPagination(["loops"]));
 fixFilter.addEventListener("change", () => resetPagination(["fixes"]));
 legacyFilter.addEventListener("change", () => resetPagination(["legacy"]));
 knowledgeFilters.forEach((filter) => filter.addEventListener("change", () => resetPagination(["knowledge"])));
-document.querySelector("#summary").addEventListener("change", (event) => {
-  if (event.target?.id !== "cost-timeframe") return;
-  costTimeframe = event.target.value;
-  render();
+const costCardNavigationGuard = installCostCardNavigationGuard(document.querySelector("#summary"), {
+  onInteractionEnd() {
+    if (!deferredRefreshRender) return;
+    deferredRefreshRender = false;
+    render();
+  },
+  onTimeframeChange(value) {
+    costTimeframe = value;
+    deferredRefreshRender = false;
+    render();
+  },
 });
 
 function resetPagination(sectionIds) {
@@ -103,7 +112,8 @@ async function refresh() {
     syncCampaignOptions();
     syncLoopOptions();
     syncKnowledgeOptions();
-    render();
+    if (costCardNavigationGuard.isActive()) deferredRefreshRender = true;
+    else render();
   } catch (error) {
     document.querySelector("#updated").textContent = error.message;
   }
@@ -381,9 +391,7 @@ function syncKnowledgeFilter(filter, label, values) {
 function costStat(cost) {
   const hasPricedEvidence = cost.pricedCalls > 0;
   const value = hasPricedEvidence ? formatNanoUsd(cost.totalNanoUsd) : "—";
-  const exact = hasPricedEvidence ? formatNanoUsd(cost.exactNanoUsd) : "—";
-  const estimate = hasPricedEvidence ? formatNanoUsd(cost.estimatedNanoUsd) : "—";
-  return `<article class="stat cost-stat stat-link"><a class="cost-stat-link" href="#dashboard-attempts" aria-label="Go to submissions"></a><div class="stat-heading"><p class="eyebrow">Known cost</p><select id="cost-timeframe" aria-label="Known cost timeframe"><option value="day"${costTimeframe === "day" ? " selected" : ""}>Past 24 hours</option><option value="week"${costTimeframe === "week" ? " selected" : ""}>Past 7 days</option><option value="month"${costTimeframe === "month" ? " selected" : ""}>Past 30 days</option><option value="all"${costTimeframe === "all" ? " selected" : ""}>All time</option></select></div><strong>${value}</strong><small>Exact ${exact} · estimate ${estimate} · ${cost.unknownCalls} unknown call(s) excluded</small></article>`;
+  return `<article class="stat cost-stat stat-link"><a class="cost-stat-link" href="#dashboard-attempts" aria-label="Go to submissions"></a><div class="stat-heading"><p class="eyebrow">Known cost</p><select id="cost-timeframe" aria-label="Known cost timeframe"><option value="day"${costTimeframe === "day" ? " selected" : ""}>Past 24 hours</option><option value="week"${costTimeframe === "week" ? " selected" : ""}>Past 7 days</option><option value="month"${costTimeframe === "month" ? " selected" : ""}>Past 30 days</option><option value="all"${costTimeframe === "all" ? " selected" : ""}>All time</option></select></div><strong>${value}</strong></article>`;
 }
 function renderCampaignCost(campaign) {
   const cost = campaign.cost;

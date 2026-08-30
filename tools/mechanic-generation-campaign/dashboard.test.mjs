@@ -100,6 +100,22 @@ describe("campaign dashboard data", () => {
     expect(dashboardApp).toContain('"#dashboard-fixes"');
     expect(dashboardStyles).toContain("scroll-behavior: smooth");
     expect(dashboardStyles).toContain(".stat-link");
+    expect(dashboardStyles).not.toContain(".cost-stat { position: relative; grid-column: span 2; }");
+    expect(dashboardStyles).not.toContain(".cost-stat { grid-column: span 1; }");
+    expect(dashboardStyles).toContain(
+      ".cost-stat .stat-heading { position: relative; z-index: 2; flex-wrap: wrap; }"
+    );
+    expect(dashboardStyles).toContain(
+      ".cost-stat:focus-within .cost-stat-link, .cost-stat.is-cost-timeframe-active .cost-stat-link { pointer-events: none; }"
+    );
+    expect(dashboardStyles).toContain(
+      ".cost-stat:focus-within, .cost-stat:focus-within:hover, .cost-stat.is-cost-timeframe-active, .cost-stat.is-cost-timeframe-active:hover { border-color: var(--line); box-shadow: 0 18px 50px rgba(0,0,0,.16); transform: none; }"
+    );
+    expect(dashboardApp).toContain("installCostCardNavigationGuard");
+    expect(dashboardApp).toContain("costCardNavigationGuard.isActive()");
+    expect(dashboardApp).toContain("deferredRefreshRender = true");
+    expect(dashboardApp).not.toContain("unknown call(s) excluded");
+    expect(dashboardApp).not.toContain("<small>Exact ${exact} · estimate ${estimate}");
     expect(dashboardApp).toContain("initializeCollapsiblePanels");
     expect(dashboardApp).toContain("panel.append(toggle)");
     expect(dashboardApp).toContain("section-toggle");
