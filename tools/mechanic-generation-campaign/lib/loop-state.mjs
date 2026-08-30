@@ -546,6 +546,18 @@ export function beginActualProviderCall(
   ) {
     return { allowed: true, run };
   }
+  if (hasUnresolvedProviderCost(run.providerCost)) {
+    return {
+      allowed: false,
+      run:
+        run.status === "exhausted"
+          ? run
+          : exhaustLoop(
+              run,
+              "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
+            ),
+    };
+  }
   const limit = run.limits.maxActualProviderCostNanoUsd;
   const chargedAndPending = providerCostChargedAndPending(run.providerCost);
   if (limit !== undefined && chargedAndPending >= limit) {
@@ -590,15 +602,26 @@ export function settleActualProviderCallCost(
   const pending = run.providerCost.pendingReservations.find(
     (reservation) => reservation.callId === callId
   );
-  const settledQuality = quality === "exact" ? "exact" : "conservative_estimate";
-  const settledNanoUsd = Number.isSafeInteger(totalNanoUsd)
-    ? totalNanoUsd
-    : pending?.totalNanoUsd;
+  const settledQuality = [
+    "exact",
+    "call_derived_estimate",
+    "unknown",
+  ].includes(quality)
+    ? quality
+    : "conservative_estimate";
+  const settledNanoUsd = settledQuality === "unknown"
+    ? 0
+    : Number.isSafeInteger(totalNanoUsd)
+      ? totalNanoUsd
+      : pending?.totalNanoUsd;
   if (!Number.isSafeInteger(settledNanoUsd) || settledNanoUsd < 0) {
     throw new Error(`Provider call ${callId} has invalid settled cost.`);
   }
   const exactDelta = settledQuality === "exact" ? settledNanoUsd : 0;
-  const estimatedDelta = settledQuality === "conservative_estimate"
+  const estimatedDelta = [
+    "call_derived_estimate",
+    "conservative_estimate",
+  ].includes(settledQuality)
     ? settledNanoUsd
     : 0;
   const next = {
@@ -623,15 +646,99 @@ export function settleActualProviderCallCost(
           completedAt,
           quality: settledQuality,
           totalNanoUsd: settledNanoUsd,
+          ...(settledQuality === "unknown" && pending
+            ? { reservationNanoUsd: pending.totalNanoUsd }
+            : {}),
           attributed: true,
         },
       ],
     },
   };
+  if (settledQuality === "unknown") {
+    return exhaustLoop(
+      next,
+      "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
+    );
+  }
   const limit = next.limits.maxActualProviderCostNanoUsd;
   return limit !== undefined && providerCostChargedAndPending(next.providerCost) >= limit
     ? exhaustLoop(next, "Actual-provider cost budget reached.")
     : next;
+}
+
+export function reconcileLegacyProviderCostEstimates(
+  run,
+  { id, reason, reconciledAt = new Date().toISOString() }
+) {
+  if (!run.providerCost) {
+    throw new Error("Provider cost reconciliation requires frozen pricing.");
+  }
+  if (!id?.trim() || !reason?.trim()) {
+    throw new Error("Provider cost reconciliation requires an ID and reason.");
+  }
+  if (
+    (run.providerCostReconciliations ?? []).some(
+      (reconciliation) => reconciliation.id === id
+    )
+  ) {
+    return run;
+  }
+  const legacyCalls = run.providerCost.settledCalls.filter(
+    (call) => call.quality === "conservative_estimate"
+  );
+  const removedGrossEstimatedNanoUsd = legacyCalls.reduce(
+    (sum, call) => sum + call.totalNanoUsd,
+    0
+  );
+  const removedAttributedEstimatedNanoUsd = legacyCalls.reduce(
+    (sum, call) => sum + (call.attributed ? call.totalNanoUsd : 0),
+    0
+  );
+  const reconciled = {
+    ...run,
+    providerCost: {
+      ...run.providerCost,
+      grossEstimatedNanoUsd: Math.max(
+        0,
+        run.providerCost.grossEstimatedNanoUsd - removedGrossEstimatedNanoUsd
+      ),
+      attributedEstimatedNanoUsd: Math.max(
+        0,
+        run.providerCost.attributedEstimatedNanoUsd -
+          removedAttributedEstimatedNanoUsd
+      ),
+      settledCalls: run.providerCost.settledCalls.map((call) =>
+        call.quality === "conservative_estimate"
+          ? {
+              ...call,
+              quality: "unknown",
+              reservationNanoUsd: call.totalNanoUsd,
+              totalNanoUsd: 0,
+            }
+          : call
+      ),
+    },
+    providerCostReconciliations: [
+      ...(run.providerCostReconciliations ?? []),
+      {
+        id: id.trim(),
+        reason: reason.trim(),
+        reconciledAt,
+        convertedCalls: legacyCalls.length,
+        removedGrossEstimatedNanoUsd,
+        removedAttributedEstimatedNanoUsd,
+      },
+    ],
+  };
+  return run.status === "exhausted" && /provider cost budget/i.test(
+    run.exhaustionReason ?? ""
+  )
+    ? {
+        ...reconciled,
+        exhaustionReason:
+          "Actual-provider cost budget is unresolved because one or more API calls have no token usage or call-derived estimate.",
+      }
+    : reconciled;
 }
 
 export function blockLoop(run, reason, completedAt = new Date().toISOString()) {
@@ -937,6 +1044,12 @@ function providerCostChargedAndPending(providerCost) {
       (sum, reservation) => sum + reservation.totalNanoUsd,
       0
     )
+  );
+}
+
+function hasUnresolvedProviderCost(providerCost) {
+  return Boolean(
+    providerCost?.settledCalls.some((call) => call.quality === "unknown")
   );
 }
 

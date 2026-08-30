@@ -68,6 +68,48 @@ describe("OpenAI creator-generation planning provider", () => {
     );
   });
 
+  it("reports a call-derived estimate when OpenAI omits token usage", async () => {
+    const onProviderUsage = vi.fn();
+    const envelope = {
+      gameSpec: getFirstValidTopDownGameSpecFixture(),
+      mechanicIntent: createTransportIntent(),
+    };
+    const provider = createOpenAiCreatorGenerationPlanProvider({
+      fetchImpl: vi.fn().mockResolvedValue(
+        Response.json({
+          id: "resp_planning_without_usage",
+          model: "gpt-5.6-luna",
+          service_tier: "default",
+          output: [
+            {
+              type: "function_call",
+              name: "return_top_down_creator_generation_plan",
+              arguments: JSON.stringify(envelope),
+            },
+          ],
+        })
+      ),
+    });
+
+    await provider({
+      prompt: "Make a compact arena.",
+      model: "gpt-5.6-luna",
+      providerCredential: "sk-secret",
+      taskRoute: "spec_generation.primary",
+      availableCapabilities: ["object_read"],
+      onProviderUsage,
+    });
+
+    expect(onProviderUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schemaVersion: "openai_provider_usage_estimate/v1",
+        estimation: expect.objectContaining({
+          source: "actual_api_request_and_response",
+        }),
+      })
+    );
+  });
+
   it("requests one combined spec-and-intent tool call without exposing the credential in its payload", async () => {
     const envelope = {
       gameSpec: getFirstValidTopDownGameSpecFixture(),

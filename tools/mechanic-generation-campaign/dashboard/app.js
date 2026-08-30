@@ -406,10 +406,11 @@ function renderLoopCostBudget(loop) {
   const gross = loop.providerCost.grossExactNanoUsd + loop.providerCost.grossEstimatedNanoUsd;
   const attributed = loop.providerCost.attributedExactNanoUsd + loop.providerCost.attributedEstimatedNanoUsd;
   const pending = loop.providerCost.pendingReservations.reduce((sum, reservation) => sum + reservation.totalNanoUsd, 0);
+  const unresolved = loop.providerCost.settledCalls.reduce((sum, call) => sum + (call.quality === "unknown" ? call.reservationNanoUsd ?? 0 : 0), 0);
   const limit = loop.limits.maxActualProviderCostNanoUsd;
   const remaining = loop.remaining.actualProviderCostNanoUsd;
   const overage = limit === undefined ? 0 : Math.max(0, gross + pending - limit);
-  return `<small>cost gross ${formatNanoUsd(gross)} / ${formatNanoUsd(limit)}<br>attributed ${formatNanoUsd(attributed)} · remaining ${formatNanoUsd(remaining)}<br>exact ${formatNanoUsd(loop.providerCost.grossExactNanoUsd)} · estimate ${formatNanoUsd(loop.providerCost.grossEstimatedNanoUsd)} · pending ${formatNanoUsd(pending)} · over ${formatNanoUsd(overage)}</small>`;
+  return `<small>cost gross ${formatNanoUsd(gross)} / ${formatNanoUsd(limit)}<br>attributed ${formatNanoUsd(attributed)} · remaining ${formatNanoUsd(remaining)}<br>exact ${formatNanoUsd(loop.providerCost.grossExactNanoUsd)} · call-derived estimate ${formatNanoUsd(loop.providerCost.grossEstimatedNanoUsd)}<br>unresolved exposure ${formatNanoUsd(unresolved)} · pending ${formatNanoUsd(pending)} · over ${formatNanoUsd(overage)}</small>`;
 }
 function summaryStatLink(label, value, note, target) { return `<a class="stat stat-link" href="${target}"><p class="eyebrow">${label}</p><strong>${value}</strong><small>${note}</small></a>`; }
 function proof(label, status) { return `<span class="${status}">${label}<br><strong>${escapeHtml(humanize(status))}</strong></span>`; }

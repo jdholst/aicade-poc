@@ -6,6 +6,7 @@ import {
   blockCampaignLoop,
   extendCampaignLoop,
   pauseCampaignLoopForRepair,
+  reconcileCampaignLoopProviderCosts,
   recoverCampaignLoop,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
@@ -165,6 +166,20 @@ export async function handleLoopCommand({ args, repoRoot }) {
       campaignStore,
     });
     printLoopSummary(result.run);
+    return;
+  }
+
+  if (command === "reconcile-cost") {
+    const loopId = requiredOption(args, "--id");
+    const reason = requiredOption(args, "--reason");
+    assertNoArguments(args);
+    const run = await reconcileCampaignLoopProviderCosts({
+      repoRoot,
+      loopId,
+      reason,
+      loopStore,
+    });
+    printLoopSummary(run);
     return;
   }
 
@@ -336,12 +351,21 @@ export function printLoopSummary(run) {
       (sum, reservation) => sum + reservation.totalNanoUsd,
       0
     );
+    const unresolved = run.providerCost.settledCalls.reduce(
+      (sum, call) =>
+        sum +
+        (call.quality === "unknown" ? call.reservationNanoUsd ?? 0 : 0),
+      0
+    );
     const overage = Math.max(
       0,
       gross + pending - (run.limits.maxActualProviderCostNanoUsd ?? Infinity)
     );
     console.log(
-      `Provider cost: gross ${formatNanoUsd(gross)}, attributed ${formatNanoUsd(attributed)}, exact ${formatNanoUsd(run.providerCost.grossExactNanoUsd)}, estimated ${formatNanoUsd(run.providerCost.grossEstimatedNanoUsd)}, pending ${formatNanoUsd(pending)}`
+      `Provider cost: gross ${formatNanoUsd(gross)}, attributed ${formatNanoUsd(attributed)}, exact ${formatNanoUsd(run.providerCost.grossExactNanoUsd)}, call-derived estimated ${formatNanoUsd(run.providerCost.grossEstimatedNanoUsd)}`
+    );
+    console.log(
+      `Provider cost exposure: unresolved ${formatNanoUsd(unresolved)}, pending ${formatNanoUsd(pending)}`
     );
     console.log(
       `Provider cost budget: ${formatNanoUsd(run.limits.maxActualProviderCostNanoUsd)}; remaining ${formatNanoUsd(remaining.actualProviderCostNanoUsd)}; overage ${formatNanoUsd(overage)}`
@@ -513,6 +537,7 @@ export function printLoopHelp() {
   npm run campaign -- loop extend --id <loop-id> [additive budget options] [--fix-report <path>] [--authorize <extension-hash>] [options]
   npm run campaign -- loop isolate --id <loop-id> --profile <profile-id> [options]
   npm run campaign -- loop repair-campaign --id <loop-id> --reason <text> [--campaign <run-id>]
+  npm run campaign -- loop reconcile-cost --id <loop-id> --reason <text>
   npm run campaign -- loop block --id <loop-id> --reason <text>
   npm run campaign -- loop conclude --id <loop-id>
   npm run campaign -- loop discard --id <loop-id> [--force]

@@ -414,7 +414,7 @@ Usage:
   npm run campaign -- knowledge reconcile (--loop <loop-id> | --campaign <run-id>) --proposal <path>
   npm run campaign -- pricing refresh --check
   npm run campaign -- pricing refresh --write --effective-at <YYYY-MM-DD>
-  npm run campaign -- loop <validate|run|resume|extend|isolate|repair-campaign|block|conclude|discard|report|publish> [options]
+  npm run campaign -- loop <validate|run|resume|extend|isolate|repair-campaign|reconcile-cost|block|conclude|discard|report|publish> [options]
 
 Run options:
   --provider-modes planning=<actual|fixture>,contract=<actual|fixture>,source=<actual|fixture>

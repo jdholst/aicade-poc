@@ -56,6 +56,9 @@ describe("campaign manual-QA CLI", () => {
     expect(stdout).toContain(
       "loop repair-campaign --id <loop-id> --reason <text>"
     );
+    expect(stdout).toContain(
+      "loop reconcile-cost --id <loop-id> --reason <text>"
+    );
     expect(stdout).toContain("--add-fix-cycles <number>");
     expect(stdout).toContain("--add-planning-calls <number>");
     expect(stdout).toContain("--authorize <extension-hash>");
@@ -206,6 +209,75 @@ describe("campaign manual-QA CLI", () => {
       "Gross actual-provider usage: planning=1, contract=0, source=0"
     );
     expect(output.join("\n")).toContain("Campaign repairs: 1 (1 pending)");
+    vi.restoreAllMocks();
+  });
+
+  it("reports unknown reservations as exposure instead of provider spend", () => {
+    const output = [];
+    vi.spyOn(console, "log").mockImplementation((line) => output.push(line));
+
+    printLoopSummary({
+      id: "loop-1",
+      status: "exhausted",
+      currentRevision: { cycle: 0, revisionKey: "a".repeat(64) },
+      worktree: { branch: "codex/campaign-loop-loop-1", path: "/repo/worktree" },
+      usage: {
+        fixCycles: 0,
+        campaignRuns: 1,
+        submissions: 1,
+        auxiliaryIsolationCampaigns: 0,
+        actualProviderCalls: { planning: 1, contract: 1, source: 1 },
+        grossActualProviderCalls: { planning: 1, contract: 1, source: 1 },
+      },
+      limits: {
+        maxFixCycles: 1,
+        maxCampaignRuns: 2,
+        maxSubmissions: 2,
+        maxAuxiliaryIsolationCampaigns: 1,
+        actualProviderCalls: { planning: 2, contract: 2, source: 2 },
+        maxActualProviderCostNanoUsd: 500_000_000,
+      },
+      providerCost: {
+        grossExactNanoUsd: 21_415_800,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 15_192_550,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [],
+        settledCalls: [
+          {
+            callId: "attempt-1:source:1",
+            stage: "source",
+            completedAt: "2026-08-30T17:25:48.006Z",
+            quality: "unknown",
+            totalNanoUsd: 0,
+            reservationNanoUsd: 755_400_000,
+            attributed: true,
+          },
+        ],
+      },
+      steps: [
+        {
+          id: "discovery",
+          cohort: "discovery",
+          status: "running",
+          campaignRunIds: ["campaign-1"],
+        },
+      ],
+      currentStepIndex: 0,
+      campaignRepairs: [],
+      budgetExtensions: [],
+      exhaustionReason: "Actual-provider cost budget is unresolved.",
+    });
+
+    expect(output.join("\n")).toContain(
+      "Provider cost: gross $0.021416"
+    );
+    expect(output.join("\n")).toContain(
+      "Provider cost exposure: unresolved $0.755400"
+    );
+    expect(output.join("\n")).toContain(
+      "remaining $0.478584; overage $0.000000"
+    );
     vi.restoreAllMocks();
   });
 });

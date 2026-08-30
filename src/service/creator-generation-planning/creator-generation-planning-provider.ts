@@ -81,6 +81,40 @@ export function createOpenAiCreatorGenerationPlanProvider({
     }, timeoutMs);
     let response: Response;
     let payload: OpenAiResponsePayload;
+    const requestPayload = {
+      model: input.model,
+      service_tier: "default",
+      reasoning: {
+        effort: "medium",
+      },
+      parallel_tool_calls: false,
+      tool_choice: {
+        type: "function",
+        name: CREATOR_GENERATION_PLAN_TOOL,
+      },
+      tools: [
+        {
+          type: "function",
+          name: CREATOR_GENERATION_PLAN_TOOL,
+          description:
+            "Return one complete top-down Game Spec and its material Mechanic Intent. Do not return source code or choose a mechanic route.",
+          parameters: creatorGenerationPlanJsonSchema,
+          strict: true,
+        },
+      ],
+      instructions: createCreatorGenerationPlanningSystemPrompt(input),
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: input.prompt,
+            },
+          ],
+        },
+      ],
+    };
 
     try {
       response = await fetchImpl(OPENAI_RESPONSES_URL, {
@@ -90,44 +124,11 @@ export function createOpenAiCreatorGenerationPlanProvider({
           "Content-Type": "application/json",
         },
         signal: controller.signal,
-        body: JSON.stringify({
-          model: input.model,
-          service_tier: "default",
-          reasoning: {
-            effort: "medium",
-          },
-          parallel_tool_calls: false,
-          tool_choice: {
-            type: "function",
-            name: CREATOR_GENERATION_PLAN_TOOL,
-          },
-          tools: [
-            {
-              type: "function",
-              name: CREATOR_GENERATION_PLAN_TOOL,
-              description:
-                "Return one complete top-down Game Spec and its material Mechanic Intent. Do not return source code or choose a mechanic route.",
-              parameters: creatorGenerationPlanJsonSchema,
-              strict: true,
-            },
-          ],
-          instructions: createCreatorGenerationPlanningSystemPrompt(input),
-          input: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "input_text",
-                  text: input.prompt,
-                },
-              ],
-            },
-          ],
-        }),
+        body: JSON.stringify(requestPayload),
         cache: "no-store",
       });
       payload = await readOpenAiResponsePayload(response);
-      reportOpenAiProviderUsage(input.onProviderUsage, payload);
+      reportOpenAiProviderUsage(input.onProviderUsage, payload, requestPayload);
       if (cancelled || timedOut) {
         throw new DOMException("Aborted", "AbortError");
       }

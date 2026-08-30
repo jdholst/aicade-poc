@@ -123,7 +123,10 @@ export function calculateProviderCallCost({ receipt, snapshot: snapshotInput }) 
     ),
   };
   return {
-    quality: "exact",
+    quality:
+      receipt.schemaVersion === "openai_provider_usage_estimate/v1"
+        ? "call_derived_estimate"
+        : "exact",
     totalNanoUsd: Object.values(components).reduce((sum, value) => sum + value, 0),
     components,
     modelId: model.id,
@@ -184,7 +187,7 @@ export function aggregateProviderCallCosts(calls) {
         aggregate.exactNanoUsd += call.cost.totalNanoUsd;
         aggregate.totalNanoUsd += call.cost.totalNanoUsd;
         aggregate.pricedCalls += 1;
-      } else if (call.cost?.quality === "conservative_estimate") {
+      } else if (call.cost?.quality === "call_derived_estimate") {
         aggregate.estimatedNanoUsd += call.cost.totalNanoUsd;
         aggregate.totalNanoUsd += call.cost.totalNanoUsd;
         aggregate.pricedCalls += 1;
@@ -206,8 +209,6 @@ export function aggregateProviderCallCosts(calls) {
 export function createProviderCallReceipts({
   networkCaptures,
   snapshot,
-  requestedModel,
-  serviceTier = "default",
 }) {
   return networkCaptures
     .filter((capture) => capture.source === "actual")
@@ -218,19 +219,7 @@ export function createProviderCallReceipts({
         if (receipt) {
           try {
             cost = calculateProviderCallCost({ receipt, snapshot });
-          } catch {
-            cost = calculateConservativeReservation({
-              model: requestedModel,
-              serviceTier,
-              snapshot,
-            });
-          }
-        } else {
-          cost = calculateConservativeReservation({
-            model: requestedModel,
-            serviceTier,
-            snapshot,
-          });
+          } catch {}
         }
       }
       return {

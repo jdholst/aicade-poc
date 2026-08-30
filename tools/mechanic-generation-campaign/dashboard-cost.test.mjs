@@ -8,10 +8,11 @@ import {
 const now = new Date("2026-08-30T12:00:00.000Z");
 const attempts = [
   {
-    providerCalls: { planning: 2, contract: 1, source: 1 },
+    providerCalls: { planning: 3, contract: 1, source: 1 },
     providerCallReceipts: [
       call("day-boundary", "2026-08-29T12:00:00.000Z", "exact", 100),
-      call("week-only", "2026-08-27T12:00:00.000Z", "conservative_estimate", 200),
+      call("week-only", "2026-08-27T12:00:00.000Z", "call_derived_estimate", 200),
+      call("legacy-maximum", "2026-08-28T12:00:00.000Z", "conservative_estimate", 900),
       call("month-only", "2026-08-10T12:00:00.000Z", "exact", 300),
     ],
   },
@@ -33,7 +34,7 @@ describe("dashboard known cost", () => {
   });
 
   it("keeps unknown historical calls unpriced and renders missing evidence as a dash", () => {
-    expect(createKnownCostSummary(attempts, { timeframe: "all", now }).unknownCalls).toBe(1);
+    expect(createKnownCostSummary(attempts, { timeframe: "all", now }).unknownCalls).toBe(2);
     expect(formatNanoUsd(undefined)).toBe("—");
   });
 });

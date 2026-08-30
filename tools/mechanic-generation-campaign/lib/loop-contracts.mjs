@@ -315,12 +315,29 @@ const providerCostSchema = z
           callId: z.string().min(1),
           stage: z.enum(["planning", "contract", "source"]),
           completedAt: z.string().datetime(),
-          quality: z.enum(["exact", "conservative_estimate"]),
+          quality: z.enum([
+            "exact",
+            "call_derived_estimate",
+            "conservative_estimate",
+            "unknown",
+          ]),
           totalNanoUsd: z.number().int().nonnegative(),
+          reservationNanoUsd: z.number().int().nonnegative().optional(),
           attributed: z.boolean(),
         })
         .strict()
     ),
+  })
+  .strict();
+
+const providerCostReconciliationSchema = z
+  .object({
+    id: z.string().min(1),
+    reason: z.string().min(1),
+    reconciledAt: z.string().datetime(),
+    convertedCalls: z.number().int().nonnegative(),
+    removedGrossEstimatedNanoUsd: z.number().int().nonnegative(),
+    removedAttributedEstimatedNanoUsd: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -412,6 +429,9 @@ const campaignLoopRunBaseSchema = z
     limits: loopLimitsSchema,
     pricing: pricingIdentitySchema.optional(),
     providerCost: providerCostSchema.optional(),
+    providerCostReconciliations: z
+      .array(providerCostReconciliationSchema)
+      .optional(),
     worktree: z
       .object({
         controlRoot: z.string().min(1),

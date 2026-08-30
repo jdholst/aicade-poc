@@ -38,7 +38,7 @@ export function createKnownCostSummary(
         result.exactNanoUsd += call.cost.totalNanoUsd;
         result.totalNanoUsd += call.cost.totalNanoUsd;
         result.pricedCalls += 1;
-      } else if (call.cost?.quality === "conservative_estimate") {
+      } else if (call.cost?.quality === "call_derived_estimate") {
         result.estimatedNanoUsd += call.cost.totalNanoUsd;
         result.totalNanoUsd += call.cost.totalNanoUsd;
         result.pricedCalls += 1;

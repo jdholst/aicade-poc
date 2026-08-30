@@ -68,9 +68,9 @@ The authorization remains valid on ordinary resume because usage only decreases 
 
 ## Provider cost accounting
 
-Before each actual provider request, the loop records a stable call ID and a conservative maximum reservation from the frozen snapshot. Valid returned usage replaces that reservation with exact calculated cost. Missing or malformed usage keeps the reservation as a conservative estimate. Resume settles unresolved reservations once, so interrupted evidence is not charged twice.
+Before each actual provider request, the loop records a stable call ID and a maximum reservation from the frozen snapshot for budget enforcement only. Valid OpenAI token usage replaces that reservation with exact calculated cost. When usage is absent, the Sparkline provider estimates tokens from that call's actual OpenAI request and response payloads. When neither is available, the call remains unknown and its reservation is retained only as unresolved budget exposure. A model-maximum reservation is never reported as provider spend. Resume settles unresolved reservations once, so interrupted evidence is not charged twice.
 
-The cost limit is a soft stop. The current request may cross it, but settled spend plus pending reservations prevents the next provider request. Reports and the dashboard separate exact, estimated, pending, remaining, and overage amounts. Gross spend never decreases. A campaign-tool repair can credit Sparkline-attributed cost while preserving gross spend.
+The cost limit is a soft stop. The current request may cross it, but settled spend plus pending and unresolved exposure prevents the next provider request. Reports and the dashboard separate exact, call-derived estimated, unknown, pending, remaining, and overage amounts. Gross provider-call history never decreases. A campaign-tool repair can credit Sparkline-attributed cost while preserving gross call evidence.
 
 ## Worktree preparation
 

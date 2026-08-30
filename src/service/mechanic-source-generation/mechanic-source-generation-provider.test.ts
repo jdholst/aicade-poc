@@ -56,6 +56,34 @@ describe("OpenAI mechanic source provider", () => {
     );
   });
 
+  it("reports a call-derived estimate when OpenAI omits token usage", async () => {
+    const onProviderUsage = vi.fn();
+    const provider = createOpenAiMechanicSourceProvider({
+      fetchImpl: async () =>
+        Response.json({
+          id: "resp_source_without_usage",
+          model: "gpt-5.6-luna",
+          service_tier: "default",
+          output: [],
+        }),
+    });
+
+    await expect(
+      provider({ ...createProviderInput(), onProviderUsage })
+    ).rejects.toMatchObject({
+      evidence: { code: "invalid_provider_output" },
+    });
+
+    expect(onProviderUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schemaVersion: "openai_provider_usage_estimate/v1",
+        estimation: expect.objectContaining({
+          source: "actual_api_request_and_response",
+        }),
+      })
+    );
+  });
+
   it("requests and returns one strict Generated Mechanic Source candidate", async () => {
     const candidate = {
       schemaVersion: "generated_mechanic_source_candidate/v1",

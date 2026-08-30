@@ -13,9 +13,9 @@ A mechanic is proven only when discovery, repeatability, and variation are achie
 
 The campaign manifest may freeze one `openai-pricing-snapshot/v1` by path and SHA-256 hash. Every actual planning, contract, source, and repair request writes one sanitized receipt with its completion time, resolved model, service tier, token usage, and integer nano-USD cost. Fixture calls cost zero and produce no actual-provider receipt.
 
-Valid usage produces exact calculated cost. Missing, malformed, or unsupported usage settles the call's preflight reservation as a conservative estimate. Historical calls without a pricing snapshot remain unknown; they are excluded from totals rather than assigned `$0.000`.
+Valid OpenAI usage produces exact calculated cost. When usage is absent or malformed, estimate token counts only from that call's actual OpenAI request and response payloads. If those payloads are unavailable, keep the cost unknown and retain the preflight reservation only as unresolved budget exposure. Never report a model-maximum reservation as spend. Historical calls without a pricing snapshot remain unknown; they are excluded from totals rather than assigned `$0.000`.
 
-A loop cost ceiling is a soft stop. A call may settle above the ceiling because usage is known only after completion. Settled cost plus pending reservations blocks the next actual request and exhausts the loop. Gross spend is append-only. Campaign-tool repair can credit Sparkline-attributed cost without reducing gross spend.
+A loop cost ceiling is a soft stop. A call may settle above the ceiling because usage is known only after completion. Settled cost plus pending and unresolved exposure blocks the next actual request and exhausts the loop. Gross provider-call evidence is append-only. Campaign-tool repair can credit Sparkline-attributed cost without removing gross call evidence.
 
 ## Stage evidence
 

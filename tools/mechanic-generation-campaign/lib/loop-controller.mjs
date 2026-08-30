@@ -26,6 +26,7 @@ import {
   beginActualProviderCall,
   recordActualProviderCall,
   recordLoopSubmission,
+  reconcileLegacyProviderCostEstimates,
   resumeLoopAfterCampaignRepair,
   settleActualProviderCallCost,
   startLoopCampaign,
@@ -712,6 +713,26 @@ export async function pauseCampaignLoopForRepair({
   return { run: repaired };
 }
 
+export async function reconcileCampaignLoopProviderCosts({
+  repoRoot,
+  loopId,
+  reason,
+  loopStore = createCampaignLoopStore(repoRoot),
+  now = () => new Date(),
+}) {
+  await loopStore.initialize();
+  const run = await loopStore.readRun(loopId);
+  const reconciled = reconcileLegacyProviderCostEstimates(run, {
+    id: `provider-cost-reconciliation-${
+      (run.providerCostReconciliations ?? []).length + 1
+    }`,
+    reason,
+    reconciledAt: now().toISOString(),
+  });
+  await loopStore.writeRun(reconciled);
+  return reconciled;
+}
+
 async function restoreTerminalPendingCandidate({
   run,
   campaignRunId,
@@ -924,8 +945,7 @@ function createProviderCallBudget(state, loopStore, pricing) {
           callId: pending.callId,
           stage: pending.stage,
           completedAt: new Date().toISOString(),
-          quality: "conservative_estimate",
-          totalNanoUsd: pending.totalNanoUsd,
+          quality: "unknown",
         });
       }
       const reservationNanoUsd = pricing
@@ -948,7 +968,10 @@ function createProviderCallBudget(state, loopStore, pricing) {
     async settle(call) {
       if (!pricing || !state.run.pricing) return;
       let cost = call.cost;
-      if (!cost || !["exact", "conservative_estimate"].includes(cost.quality)) {
+      if (
+        !cost ||
+        !["exact", "call_derived_estimate", "unknown"].includes(cost.quality)
+      ) {
         if (call.receipt) {
           try {
             cost = calculateProviderCallCost({
@@ -959,11 +982,7 @@ function createProviderCallBudget(state, loopStore, pricing) {
             cost = undefined;
           }
         }
-        cost ??= calculateConservativeReservation({
-          model: state.run.model,
-          serviceTier: call.receipt?.serviceTier ?? "default",
-          snapshot: pricing.snapshot,
-        });
+        cost ??= { quality: "unknown" };
       }
       state.run = settleActualProviderCallCost(state.run, {
         callId: call.callId,

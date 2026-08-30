@@ -107,6 +107,34 @@ describe("OpenAI mechanic contract provider", () => {
     );
   });
 
+  it("reports a call-derived estimate when OpenAI omits token usage", async () => {
+    const onProviderUsage = vi.fn();
+    const provider = createOpenAiMechanicContractProvider({
+      fetchImpl: async () =>
+        Response.json({
+          id: "resp_contract_without_usage",
+          model: "gpt-5.6-luna",
+          service_tier: "default",
+          output: [],
+        }),
+    });
+
+    await expect(
+      provider({ ...providerInput, onProviderUsage })
+    ).rejects.toMatchObject({
+      evidence: { code: "invalid_provider_output" },
+    });
+
+    expect(onProviderUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schemaVersion: "openai_provider_usage_estimate/v1",
+        estimation: expect.objectContaining({
+          source: "actual_api_request_and_response",
+        }),
+      })
+    );
+  });
+
   it("requests only a structured Generated Mechanic Contract", async () => {
     const candidate = {
       schemaVersion: "generated-mechanic-contract/v1",

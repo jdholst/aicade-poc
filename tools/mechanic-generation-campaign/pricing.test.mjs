@@ -114,19 +114,20 @@ describe("campaign OpenAI pricing", () => {
     expect(
       aggregateProviderCallCosts([
         { callId: "one", completedAt: "2026-08-29T12:00:00.000Z", cost: { quality: "exact", totalNanoUsd: 10 } },
-        { callId: "two", completedAt: "2026-08-29T12:01:00.000Z", cost: { quality: "conservative_estimate", totalNanoUsd: 20 } },
-        { callId: "three", completedAt: "2026-08-29T12:02:00.000Z", cost: { quality: "unknown" } },
+        { callId: "two", completedAt: "2026-08-29T12:01:00.000Z", cost: { quality: "call_derived_estimate", totalNanoUsd: 20 } },
+        { callId: "three", completedAt: "2026-08-29T12:02:00.000Z", cost: { quality: "conservative_estimate", totalNanoUsd: 30 } },
+        { callId: "four", completedAt: "2026-08-29T12:03:00.000Z", cost: { quality: "unknown" } },
       ])
     ).toEqual({
       exactNanoUsd: 10,
       estimatedNanoUsd: 20,
       totalNanoUsd: 30,
       pricedCalls: 2,
-      unknownCalls: 1,
+      unknownCalls: 2,
     });
   });
 
-  it("prices captured actual calls and conservatively estimates missing usage", () => {
+  it("prices captured actual calls and leaves missing call-derived usage unknown", () => {
     const calls = createProviderCallReceipts({
       networkCaptures: [
         {
@@ -153,7 +154,38 @@ describe("campaign OpenAI pricing", () => {
 
     expect(calls).toHaveLength(2);
     expect(calls[0].cost.quality).toBe("exact");
-    expect(calls[1].cost.quality).toBe("conservative_estimate");
+    expect(calls[1].cost.quality).toBe("unknown");
     expect(calls[1].receipt).toBeUndefined();
+  });
+
+  it("prices a call-derived token estimate without replacing provider-returned usage", () => {
+    const cost = calculateProviderCallCost({
+      receipt: {
+        schemaVersion: "openai_provider_usage_estimate/v1",
+        responseId: "resp_estimated",
+        model: "gpt-5.6-luna",
+        serviceTier: "default",
+        completedAt: "2026-08-29T12:05:00.000Z",
+        usage: {
+          inputTokens: 1_000,
+          cachedInputTokens: 0,
+          cacheWriteInputTokens: 0,
+          outputTokens: 300,
+          totalTokens: 1_300,
+        },
+        estimation: {
+          method: "utf8_bytes_divided_by_4",
+          source: "actual_api_request_and_response",
+          inputUtf8Bytes: 4_000,
+          outputUtf8Bytes: 1_200,
+        },
+      },
+      snapshot,
+    });
+
+    expect(cost).toMatchObject({
+      quality: "call_derived_estimate",
+      totalNanoUsd: 560_000,
+    });
   });
 });

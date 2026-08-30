@@ -315,6 +315,16 @@ npm run campaign -- loop repair-campaign \
   --reason "<campaign-tool defect>"
 ```
 
+Reconcile legacy model-maximum cost estimates into unresolved exposure without making provider calls:
+
+```bash
+npm run campaign -- loop reconcile-cost \
+  --id <loop-id> \
+  --reason "<why the legacy estimate is not call-derived usage>"
+```
+
+This preserves the provider-call record, removes maximum-context reservations from reported exact or estimated spend, and retains them only as unresolved budget exposure.
+
 The terminal recovery verifies the linked current revision and pending manual-QA identity before restoring it. Neither form makes provider calls or extends a budget. Invalidated campaign, submission, isolation, and Sparkline-attributed provider usage is credited back. Actual calls remain in the gross ledger and still count against the authorized provider ceiling. Runtime readiness is the exact editor message `Runtime is running in the sandbox.` plus a generated iframe with source; the campaign runner records the observed editor state when that contract times out.
 
 ### Extend an exhausted loop

@@ -72,6 +72,40 @@ export function createOpenAiMechanicContractProvider({
     }, timeoutMs);
     let response: Response;
     let payload: OpenAIResponsePayload;
+    const requestPayload = {
+      model: input.model,
+      service_tier: "default",
+      reasoning: {
+        effort: "medium",
+      },
+      parallel_tool_calls: false,
+      tool_choice: {
+        type: "function",
+        name: GENERATED_MECHANIC_CONTRACT_TOOL,
+      },
+      tools: [
+        {
+          type: "function",
+          name: GENERATED_MECHANIC_CONTRACT_TOOL,
+          description:
+            "Return one validated pre-implementation Generated Mechanic Contract. Do not return implementation code or a game specification.",
+          parameters: generatedMechanicContractJsonSchema,
+          strict: true,
+        },
+      ],
+      instructions: createMechanicContractGenerationSystemPrompt(input),
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "Generate the admitted mechanic's contract.",
+            },
+          ],
+        },
+      ],
+    };
 
     try {
       response = await fetchImpl(OPENAI_RESPONSES_URL, {
@@ -81,44 +115,11 @@ export function createOpenAiMechanicContractProvider({
           "Content-Type": "application/json",
         },
         signal: controller.signal,
-        body: JSON.stringify({
-          model: input.model,
-          service_tier: "default",
-          reasoning: {
-            effort: "medium",
-          },
-          parallel_tool_calls: false,
-          tool_choice: {
-            type: "function",
-            name: GENERATED_MECHANIC_CONTRACT_TOOL,
-          },
-          tools: [
-            {
-              type: "function",
-              name: GENERATED_MECHANIC_CONTRACT_TOOL,
-              description:
-                "Return one validated pre-implementation Generated Mechanic Contract. Do not return implementation code or a game specification.",
-              parameters: generatedMechanicContractJsonSchema,
-              strict: true,
-            },
-          ],
-          instructions: createMechanicContractGenerationSystemPrompt(input),
-          input: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "input_text",
-                  text: "Generate the admitted mechanic's contract.",
-                },
-              ],
-            },
-          ],
-        }),
+        body: JSON.stringify(requestPayload),
         cache: "no-store",
       });
       payload = await readOpenAIResponsePayload(response, controller.signal);
-      reportOpenAiProviderUsage(input.onProviderUsage, payload);
+      reportOpenAiProviderUsage(input.onProviderUsage, payload, requestPayload);
     } catch (error) {
       if (cancelled) {
         throw createMechanicContractProviderError(

@@ -12,7 +12,9 @@ import {
   rejectLoopManualQa,
   recordActualProviderCall,
   recordLoopSubmission,
+  remainingLoopBudgets,
   settleActualProviderCallCost,
+  reconcileLegacyProviderCostEstimates,
   resumeLoopAfterCampaignRepair,
   resumeLoopAfterManualQaApproval,
   startLoopCampaign,
@@ -144,6 +146,110 @@ describe("campaign loop state", () => {
     expect(blocked.allowed).toBe(false);
     expect(blocked.run.status).toBe("exhausted");
     expect(blocked.run.exhaustionReason).toMatch(/cost/i);
+  });
+
+  it("keeps a missing-usage reservation as unresolved exposure instead of reported spend", () => {
+    let run = {
+      ...initialRun(),
+      pricing: {
+        path: "tools/mechanic-generation-campaign/pricing/openai-2026-08-29.json",
+        sha256: "7".repeat(64),
+        snapshotId: "openai-2026-08-29",
+      },
+      limits: { ...initialRun().limits, maxActualProviderCostNanoUsd: 1_000_000 },
+      providerCost: {
+        grossExactNanoUsd: 0,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 0,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [],
+        settledCalls: [],
+      },
+    };
+    run = beginActualProviderCall(run, {
+      callId: "attempt-1:source:1",
+      stage: "source",
+      requestedAt: "2026-08-29T12:00:00.000Z",
+      reservationNanoUsd: 1_200_000,
+    }).run;
+    run = settleActualProviderCallCost(run, {
+      callId: "attempt-1:source:1",
+      stage: "source",
+      completedAt: "2026-08-29T12:00:01.000Z",
+      quality: "unknown",
+    });
+
+    expect(run.providerCost).toMatchObject({
+      grossExactNanoUsd: 0,
+      grossEstimatedNanoUsd: 0,
+      settledCalls: [
+        {
+          quality: "unknown",
+          totalNanoUsd: 0,
+          reservationNanoUsd: 1_200_000,
+        },
+      ],
+    });
+    expect(run.status).toBe("exhausted");
+    expect(run.exhaustionReason).toMatch(/unresolved/i);
+    expect(remainingLoopBudgets(run).actualProviderCostNanoUsd).toBe(
+      1_000_000
+    );
+  });
+
+  it("reclassifies legacy maximum-context estimates as unresolved exposure", () => {
+    const run = {
+      ...initialRun(),
+      pricing: {
+        path: "tools/mechanic-generation-campaign/pricing/openai-2026-08-29.json",
+        sha256: "7".repeat(64),
+        snapshotId: "openai-2026-08-29",
+      },
+      providerCost: {
+        grossExactNanoUsd: 21_415_800,
+        grossEstimatedNanoUsd: 755_400_000,
+        attributedExactNanoUsd: 15_192_550,
+        attributedEstimatedNanoUsd: 755_400_000,
+        pendingReservations: [],
+        settledCalls: [
+          {
+            callId: "attempt-1:source:1",
+            stage: "source",
+            completedAt: "2026-08-30T17:25:48.006Z",
+            quality: "conservative_estimate",
+            totalNanoUsd: 755_400_000,
+            attributed: true,
+          },
+        ],
+      },
+    };
+
+    const reconciled = reconcileLegacyProviderCostEstimates(run, {
+      id: "provider-cost-reconciliation-1",
+      reason: "Maximum-context reservations are not provider-call usage.",
+      reconciledAt: "2026-08-30T18:00:00.000Z",
+    });
+
+    expect(reconciled.providerCost).toMatchObject({
+      grossExactNanoUsd: 21_415_800,
+      grossEstimatedNanoUsd: 0,
+      attributedExactNanoUsd: 15_192_550,
+      attributedEstimatedNanoUsd: 0,
+      settledCalls: [
+        {
+          quality: "unknown",
+          totalNanoUsd: 0,
+          reservationNanoUsd: 755_400_000,
+        },
+      ],
+    });
+    expect(reconciled.providerCostReconciliations).toEqual([
+      expect.objectContaining({
+        id: "provider-cost-reconciliation-1",
+        convertedCalls: 1,
+        removedGrossEstimatedNanoUsd: 755_400_000,
+      }),
+    ]);
   });
 
   it("refuses to advance a proof step from automated-only success evidence", () => {
