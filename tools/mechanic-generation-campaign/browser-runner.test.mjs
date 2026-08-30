@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  authorizeProviderDispatchBatch,
   CampaignInfrastructureFailureError,
   createCampaignActivityTracker,
   reconcileResumableRun,
@@ -10,6 +11,24 @@ import {
 } from "./lib/browser-runner.mjs";
 
 describe("campaign browser runner", () => {
+  it("authorizes the bounded attempt batch before dispatch", async () => {
+    const observed = [];
+    const allowed = await authorizeProviderDispatchBatch(
+      {
+        async authorizeBatch(input) {
+          observed.push(input);
+          return true;
+        },
+      },
+      [{ attemptId: "a01-baseline" }, { attemptId: "a02-baseline" }]
+    );
+
+    expect(allowed).toBe(true);
+    expect(observed).toEqual([
+      { attemptIds: ["a01-baseline", "a02-baseline"] },
+    ]);
+  });
+
   it("recovers durable slots and exact pending candidates after interruption", async () => {
     const pendingAttempt = {
       id: "a01-baseline",

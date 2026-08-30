@@ -21,9 +21,9 @@ Parallel variation uses round-robin base prompt order unless the frozen policy e
 
 The campaign manifest may freeze one `openai-pricing-snapshot/v1` by path and SHA-256 hash. Every actual planning, contract, source, and repair request writes one sanitized receipt with its completion time, resolved model, service tier, token usage, and integer nano-USD cost. Fixture calls cost zero and produce no actual-provider receipt.
 
-Valid OpenAI usage produces exact calculated cost. When usage is absent or malformed, estimate token counts only from that call's actual OpenAI request and response payloads. If those payloads are unavailable, keep the cost unknown and retain the preflight reservation only as unresolved budget exposure. Never report a model-maximum reservation as spend. Historical calls without a pricing snapshot remain unknown; they are excluded from totals rather than assigned `$0.000`.
+Valid OpenAI usage produces exact calculated cost. Before dispatch, enforce authorization, stage call-count ceilings, and previously settled spend only. Do not calculate a theoretical model-maximum reservation. When usage is absent or malformed, estimate token counts only from that call's actual OpenAI request and response payloads. If those payloads are unavailable, keep the cost unknown as unresolved exposure. Historical calls without a pricing snapshot remain unknown; they are excluded from totals rather than assigned `$0.000`.
 
-A loop cost ceiling is a soft stop. A call may settle above the ceiling because usage is known only after completion. Settled cost plus pending and unresolved exposure blocks the next actual request and exhausts the loop. Gross provider-call evidence is append-only. Campaign-tool repair can credit Sparkline-attributed cost without removing gross call evidence.
+A loop cost ceiling is a soft stop. The already-bounded parallel batch may settle above the ceiling because usage is known only after completion. Settled cost or unresolved exposure blocks dispatch of the next batch and exhausts the loop. Gross provider-call evidence is append-only. Campaign-tool repair can credit Sparkline-attributed cost without removing gross call evidence.
 
 ## Stage evidence
 

@@ -137,49 +137,6 @@ export function calculateProviderCallCost({ receipt, snapshot: snapshotInput }) 
   };
 }
 
-export function calculateConservativeReservation({
-  model: modelIdentity,
-  serviceTier,
-  snapshot: snapshotInput,
-}) {
-  const snapshot = parseOpenAiPricingSnapshot(snapshotInput);
-  const model = resolvePricingModel(snapshot, modelIdentity);
-  const rates = model.serviceTiers[serviceTier];
-  if (!rates) {
-    throw new Error(
-      `Pricing snapshot ${snapshot.id} does not define service tier ${serviceTier} for ${model.id}.`
-    );
-  }
-  const inputMultiplier = model.longContext?.inputMultiplier ?? {
-    numerator: 1,
-    denominator: 1,
-  };
-  const outputMultiplier = model.longContext?.outputMultiplier ?? {
-    numerator: 1,
-    denominator: 1,
-  };
-  const inputRate = Math.max(
-    rates.inputNanoUsdPerMillionTokens,
-    rates.cachedInputNanoUsdPerMillionTokens,
-    rates.cacheWriteInputNanoUsdPerMillionTokens
-  );
-  const totalNanoUsd =
-    tokenCost(model.contextWindowTokens, inputRate, inputMultiplier) +
-    tokenCost(
-      model.maxOutputTokens,
-      rates.outputNanoUsdPerMillionTokens,
-      outputMultiplier
-    );
-  return {
-    quality: "conservative_estimate",
-    totalNanoUsd,
-    modelId: model.id,
-    serviceTier,
-    snapshotId: snapshot.id,
-    assumptions: ["maximum_context_and_output", "highest_input_rate"],
-  };
-}
-
 export function aggregateProviderCallCosts(calls) {
   return calls.reduce(
     (aggregate, call) => {

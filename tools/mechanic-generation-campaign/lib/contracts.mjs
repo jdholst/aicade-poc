@@ -748,8 +748,20 @@ export function parseCampaignRun(input) {
 }
 
 function normalizeCampaignRun(input) {
+  const inputPendingQueue = input?.pendingManualQaQueue ??
+    (input?.pendingManualQa ? [input.pendingManualQa] : []);
+  const hasPendingReview = inputPendingQueue.length > 0;
   const prepared =
-    input?.pendingManualQa === undefined &&
+    hasPendingReview &&
+    !["running", "waiting_for_manual_qa", "interrupted"].includes(input?.status)
+      ? {
+          ...input,
+          status: "waiting_for_manual_qa",
+          completedAt: undefined,
+          pendingManualQa: inputPendingQueue[0],
+          pendingManualQaQueue: inputPendingQueue,
+        }
+      : input?.pendingManualQa === undefined &&
     !["running", "waiting_for_manual_qa", "interrupted"].includes(input?.status)
       ? { ...input, pendingManualQaQueue: [] }
       : input;

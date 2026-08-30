@@ -18,6 +18,7 @@ import {
 } from "./lib/knowledge.mjs";
 import { validateFixKnowledgeCheckpoint } from "./lib/knowledge-checkpoint.mjs";
 import {
+  createProviderCallBudget,
   extendCampaignLoop,
   pauseCampaignLoopForRepair,
   recoverCampaignLoop,
@@ -30,6 +31,7 @@ import { createCampaignLoopStore } from "./lib/loop-store.mjs";
 import { inspectRevision } from "./lib/revision.mjs";
 import { createAttemptSchedule } from "./lib/runner-policy.mjs";
 import {
+  createInitialLoopRun,
   exhaustLoop,
   invalidateLoop,
   resumeLoopAfterManualQaApproval,
@@ -47,6 +49,129 @@ afterEach(async () => {
 });
 
 describe("campaign loop controller", () => {
+  it("authorizes parallel provider calls from settled spend only", async () => {
+    const pricingPath = path.join(
+      import.meta.dirname,
+      "pricing/openai-2026-08-29.json"
+    );
+    const snapshot = JSON.parse(await readFile(pricingPath, "utf8"));
+    const definition = {
+      id: "provider-budget-wait",
+      model: "gpt-5.6-luna",
+      sequence: [
+        {
+          id: "repeat",
+          cohort: "repeatability",
+          providerModes: {
+            planning: "actual",
+            contract: "actual",
+            source: "actual",
+          },
+          maxCampaignRunsPerRevision: 1,
+          retryableClassifications: ["infrastructure_failure"],
+        },
+      ],
+      limits: {
+        maxFixCycles: 1,
+        maxCampaignRuns: 1,
+        maxSubmissions: 3,
+        maxAuxiliaryIsolationCampaigns: 0,
+        actualProviderCalls: { planning: 3, contract: 3, source: 3 },
+        maxActualProviderCostNanoUsd: 500_000_000,
+      },
+    };
+    const run = {
+      ...createInitialLoopRun({
+        definition,
+        definitionPath: "/repo/loop.json",
+        definitionHash: "1".repeat(64),
+        authorizationHash: "2".repeat(64),
+        campaign: {
+          manifest: { id: "provider-budget-wait" },
+          manifestPath: "/repo/manifest.json",
+          manifestHash: "3".repeat(64),
+          pricing: {
+            pricingPath,
+            pricingHash: "4".repeat(64),
+            snapshot,
+          },
+        },
+        runId: "provider-budget-wait-20260830t200000000z",
+        createdAt: "2026-08-30T20:00:00.000Z",
+        revision: { head: "5".repeat(40), revisionKey: "6".repeat(64) },
+        controlRoot: "/repo",
+        worktreePath: "/repo/worktree",
+        branch: "codex/campaign-loop-provider-budget-wait",
+        knowledgeManifestDigest: "7".repeat(64),
+      }),
+      status: "running",
+    };
+    const state = { run };
+    const loopStore = {
+      async updateRun(_loopId, update) {
+        return update(state.run);
+      },
+    };
+    const budget = createProviderCallBudget(state, loopStore, { snapshot });
+
+    await expect(
+      budget.authorizeBatch({ attemptIds: ["attempt-1", "attempt-2"] })
+    ).resolves.toBe(true);
+
+    await expect(
+      budget.begin({
+        attemptId: "attempt-1",
+        callId: "attempt-1:planning:1",
+        stage: "planning",
+        model: definition.model,
+        serviceTier: "default",
+        requestedAt: "2026-08-30T20:00:01.000Z",
+      })
+    ).resolves.toBe(true);
+
+    const sibling = budget.begin({
+        attemptId: "attempt-2",
+        callId: "attempt-2:planning:1",
+        stage: "planning",
+        model: definition.model,
+        serviceTier: "default",
+        requestedAt: "2026-08-30T20:00:02.000Z",
+      });
+    await expect(
+      Promise.race([
+        sibling,
+        new Promise((resolve) => setTimeout(() => resolve("blocked"), 10)),
+      ])
+    ).resolves.toBe(true);
+    expect(state.run.status).toBe("running");
+    expect(state.run.exhaustionReason).toBeUndefined();
+    expect(
+      state.run.providerCost.pendingReservations.map(
+        ({ totalNanoUsd }) => totalNanoUsd
+      )
+    ).toEqual([0, 0]);
+
+    await budget.settle({
+      callId: "attempt-1:planning:1",
+      stage: "planning",
+      completedAt: "2026-08-30T20:00:03.000Z",
+      cost: { quality: "exact", totalNanoUsd: 510_000_000 },
+    });
+    expect(state.run.status).toBe("running");
+    await expect(
+      budget.begin({
+        attemptId: "attempt-2",
+        callId: "attempt-2:contract:1",
+        stage: "contract",
+        requestedAt: "2026-08-30T20:00:04.000Z",
+      })
+    ).resolves.toBe(true);
+    await expect(
+      budget.authorizeBatch({ attemptIds: ["attempt-3"] })
+    ).resolves.toBe(false);
+    expect(state.run.status).toBe("exhausted");
+  });
+
   it("recovers an exact frozen-definition lookup failure at a derivable fix checkpoint", async () => {
     const fixture = await createRepositoryFixture({ singleStepFix: true });
     const loopStore = createCampaignLoopStore(fixture.repoRoot);

@@ -565,7 +565,7 @@ export function recordActualProviderCall(run, stage) {
 
 export function beginActualProviderCall(
   run,
-  { callId, stage, requestedAt, reservationNanoUsd = 0 }
+  { callId, stage, requestedAt, costAuthorized = false }
 ) {
   if (!run.pricing) {
     return recordActualProviderCall(run, stage);
@@ -579,27 +579,11 @@ export function beginActualProviderCall(
     return { allowed: true, run };
   }
   if (hasUnresolvedProviderCost(run.providerCost)) {
-    return {
-      allowed: false,
-      run:
-        run.status === "exhausted"
-          ? run
-          : exhaustLoop(
-              run,
-              "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
-            ),
-    };
+    return unresolvedProviderCostResult(run);
   }
-  const limit = run.limits.maxActualProviderCostNanoUsd;
-  const chargedAndPending = providerCostChargedAndPending(run.providerCost);
-  if (limit !== undefined && chargedAndPending >= limit) {
-    return {
-      allowed: false,
-      run:
-        run.status === "exhausted"
-          ? run
-          : exhaustLoop(run, "Actual-provider cost budget reached."),
-    };
+  if (!costAuthorized) {
+    const batchAuthorization = authorizeActualProviderBatch(run);
+    if (!batchAuthorization.allowed) return batchAuthorization;
   }
   const callResult = recordActualProviderCall(run, stage);
   if (!callResult.allowed) return callResult;
@@ -615,12 +599,30 @@ export function beginActualProviderCall(
             callId,
             stage,
             requestedAt,
-            totalNanoUsd: reservationNanoUsd,
+            totalNanoUsd: 0,
           },
         ],
       },
     },
   };
+}
+
+export function authorizeActualProviderBatch(run) {
+  if (!run.pricing) return { allowed: true, run };
+  if (hasUnresolvedProviderCost(run.providerCost)) {
+    return unresolvedProviderCostResult(run);
+  }
+  const limit = run.limits.maxActualProviderCostNanoUsd;
+  if (limit !== undefined && providerCostSettled(run.providerCost) >= limit) {
+    return {
+      allowed: false,
+      run:
+        run.status === "exhausted"
+          ? run
+          : exhaustLoop(run, "Actual-provider cost budget reached."),
+    };
+  }
+  return { allowed: true, run };
 }
 
 export function settleActualProviderCallCost(
@@ -692,10 +694,7 @@ export function settleActualProviderCallCost(
       "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
     );
   }
-  const limit = next.limits.maxActualProviderCostNanoUsd;
-  return limit !== undefined && providerCostChargedAndPending(next.providerCost) >= limit
-    ? exhaustLoop(next, "Actual-provider cost budget reached.")
-    : next;
+  return next;
 }
 
 export function reconcileLegacyProviderCostEstimates(
@@ -910,7 +909,7 @@ export function remainingLoopBudgets(run) {
         : Math.max(
             0,
             run.limits.maxActualProviderCostNanoUsd -
-              providerCostChargedAndPending(run.providerCost)
+              providerCostSettled(run.providerCost)
           ),
   };
 }
@@ -1067,22 +1066,28 @@ function emptyProviderCost() {
   };
 }
 
-function providerCostChargedAndPending(providerCost) {
+function providerCostSettled(providerCost) {
   if (!providerCost) return 0;
-  return (
-    providerCost.grossExactNanoUsd +
-    providerCost.grossEstimatedNanoUsd +
-    providerCost.pendingReservations.reduce(
-      (sum, reservation) => sum + reservation.totalNanoUsd,
-      0
-    )
-  );
+  return providerCost.grossExactNanoUsd + providerCost.grossEstimatedNanoUsd;
 }
 
 function hasUnresolvedProviderCost(providerCost) {
   return Boolean(
     providerCost?.settledCalls.some((call) => call.quality === "unknown")
   );
+}
+
+function unresolvedProviderCostResult(run) {
+  return {
+    allowed: false,
+    run:
+      run.status === "exhausted"
+        ? run
+        : exhaustLoop(
+            run,
+            "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
+          ),
+  };
 }
 
 function canonicalJson(value) {

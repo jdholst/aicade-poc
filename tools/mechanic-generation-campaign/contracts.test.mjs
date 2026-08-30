@@ -668,6 +668,58 @@ describe("campaign contracts", () => {
     expect(parsed.pendingManualQa).toEqual(pending[0]);
   });
 
+  it("preserves a pending review when provider-budget completion races with the candidate", () => {
+    const base = parseCampaignRun({
+      schemaVersion: "campaign-run/v1",
+      id: "campaign-budget-race",
+      manifestId: manifest.id,
+      manifestPath: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
+      manifestHash: "a".repeat(64),
+      cohort: "repeatability",
+      status: "running",
+      createdAt: "2026-08-30T20:00:00.000Z",
+      model: manifest.model,
+      providerModes: manifest.providerModes,
+      attemptCeiling: 10,
+      attemptIds: ["attempt-3"],
+      revision: {
+        head: "b".repeat(40),
+        revisionKey: "c".repeat(64),
+        dirty: false,
+        statusEntries: [],
+      },
+      baseUrl: "http://127.0.0.1:3117",
+      authorization: {
+        actualProviders: true,
+        authorizedAt: "2026-08-30T20:00:00.000Z",
+      },
+    });
+    const pending = {
+      manualQaId: "manual-qa-attempt-3",
+      campaignRunId: base.id,
+      attemptId: "attempt-3",
+      promptId: "baseline",
+      cohort: "repeatability",
+      revisionKey: base.revision.revisionKey,
+      requestedAt: "2026-08-30T20:01:00.000Z",
+      evidencePath: "attempt-3/manual-qa.json",
+    };
+
+    const parsed = parseCampaignRun({
+      ...base,
+      schemaVersion: "campaign-run/v2",
+      knowledgePolicy: { required: false },
+      status: "completed_not_achieved",
+      completedAt: "2026-08-30T20:01:01.000Z",
+      pendingManualQa: pending,
+      pendingManualQaQueue: [pending],
+    });
+
+    expect(parsed.status).toBe("waiting_for_manual_qa");
+    expect(parsed.completedAt).toBeUndefined();
+    expect(parsed.pendingManualQaQueue).toEqual([pending]);
+  });
+
   it("rejects duplicate durable slots and execution-policy overcommit", () => {
     const base = parseCampaignRun({
       schemaVersion: "campaign-run/v1",

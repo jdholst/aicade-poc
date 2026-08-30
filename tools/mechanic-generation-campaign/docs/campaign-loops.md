@@ -92,9 +92,9 @@ The authorization remains valid on ordinary resume because usage only decreases 
 
 ## Provider cost accounting
 
-Before each actual provider request, the loop records a stable call ID and a maximum reservation from the frozen snapshot for budget enforcement only. Valid OpenAI token usage replaces that reservation with exact calculated cost. When usage is absent, the Sparkline provider estimates tokens from that call's actual OpenAI request and response payloads. When neither is available, the call remains unknown and its reservation is retained only as unresolved budget exposure. A model-maximum reservation is never reported as provider spend. Resume settles unresolved reservations once, so interrupted evidence is not charged twice.
+Before each actual provider request, the loop verifies authorization and the stage call-count ceiling. Before dispatching a bounded attempt batch, it also checks previously settled spend. It does not calculate or enforce a theoretical model-maximum reservation. Valid OpenAI token usage adds exact calculated cost after completion. When usage is absent, the Sparkline provider estimates tokens from that call's actual OpenAI request and response payloads. When neither is available, the call remains unknown as unresolved exposure. Resume settles unresolved calls once, so interrupted evidence is not charged twice.
 
-The cost limit is a soft stop. The current request may cross it, but settled spend plus pending and unresolved exposure prevents the next provider request. Reports and the dashboard separate exact, call-derived estimated, unknown, pending, remaining, and overage amounts. Gross provider-call history never decreases. A campaign-tool repair can credit Sparkline-attributed cost while preserving gross call evidence.
+The cost limit is a soft stop. An already-authorized bounded batch may cross it. After that batch settles, settled spend or unresolved exposure prevents dispatch of the next batch. Reports and the dashboard separate exact, call-derived estimated, unknown, in-flight, remaining, and overage amounts. Gross provider-call history never decreases. A campaign-tool repair can credit Sparkline-attributed cost while preserving gross call evidence.
 
 ## Worktree preparation
 

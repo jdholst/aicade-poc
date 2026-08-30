@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyLoopBudgetExtension,
   applyFixCheckpoint,
+  authorizeActualProviderBatch,
   beginActualProviderCall,
   createLoopBudgetExtensionPreview,
   createInitialLoopRun,
@@ -118,7 +119,6 @@ describe("campaign loop state", () => {
       callId: "attempt-1:planning:1",
       stage: "planning",
       requestedAt: "2026-08-29T12:00:00.000Z",
-      reservationNanoUsd: 500_000,
     });
     expect(begun.allowed).toBe(true);
     run = settleActualProviderCallCost(begun.run, {
@@ -141,14 +141,13 @@ describe("campaign loop state", () => {
       callId: "attempt-1:contract:1",
       stage: "contract",
       requestedAt: "2026-08-29T12:00:02.000Z",
-      reservationNanoUsd: 500_000,
     });
     expect(blocked.allowed).toBe(false);
     expect(blocked.run.status).toBe("exhausted");
     expect(blocked.run.exhaustionReason).toMatch(/cost/i);
   });
 
-  it("keeps a missing-usage reservation as unresolved exposure instead of reported spend", () => {
+  it("marks missing usage unresolved without treating a pre-request estimate as spend", () => {
     let run = {
       ...initialRun(),
       pricing: {
@@ -170,7 +169,6 @@ describe("campaign loop state", () => {
       callId: "attempt-1:source:1",
       stage: "source",
       requestedAt: "2026-08-29T12:00:00.000Z",
-      reservationNanoUsd: 1_200_000,
     }).run;
     run = settleActualProviderCallCost(run, {
       callId: "attempt-1:source:1",
@@ -186,7 +184,7 @@ describe("campaign loop state", () => {
         {
           quality: "unknown",
           totalNanoUsd: 0,
-          reservationNanoUsd: 1_200_000,
+          reservationNanoUsd: 0,
         },
       ],
     });
@@ -195,6 +193,117 @@ describe("campaign loop state", () => {
     expect(remainingLoopBudgets(run).actualProviderCostNanoUsd).toBe(
       1_000_000
     );
+  });
+
+  it("authorizes a sibling from settled spend without charging in-flight estimates", () => {
+    const run = {
+      ...initialRun(),
+      status: "running",
+      pricing: {
+        path: "tools/mechanic-generation-campaign/pricing/openai-2026-08-29.json",
+        sha256: "7".repeat(64),
+        snapshotId: "openai-2026-08-29",
+      },
+      limits: { ...initialRun().limits, maxActualProviderCostNanoUsd: 500_000_000 },
+      providerCost: {
+        grossExactNanoUsd: 0,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 0,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [
+          {
+            callId: "attempt-1:planning:1",
+            stage: "planning",
+            requestedAt: "2026-08-30T20:00:00.000Z",
+            totalNanoUsd: 755_400_000,
+          },
+        ],
+        settledCalls: [],
+      },
+    };
+
+    const begun = beginActualProviderCall(run, {
+      callId: "attempt-2:planning:1",
+      stage: "planning",
+      requestedAt: "2026-08-30T20:00:01.000Z",
+    });
+
+    expect(begun.allowed).toBe(true);
+    expect(begun.run.status).toBe("running");
+    expect(begun.run.exhaustionReason).toBeUndefined();
+    expect(begun.run.providerCost.pendingReservations).toEqual([
+      expect.objectContaining({
+        callId: "attempt-1:planning:1",
+        totalNanoUsd: 755_400_000,
+      }),
+      expect.objectContaining({
+        callId: "attempt-2:planning:1",
+        totalNanoUsd: 0,
+      }),
+    ]);
+
+    const settled = settleActualProviderCallCost(begun.run, {
+      callId: "attempt-2:planning:1",
+      stage: "planning",
+      completedAt: "2026-08-30T20:00:02.000Z",
+      quality: "exact",
+      totalNanoUsd: 15_000_000,
+    });
+    expect(settled.status).toBe("running");
+    expect(remainingLoopBudgets(settled).actualProviderCostNanoUsd).toBe(
+      485_000_000
+    );
+  });
+
+  it("finishes an authorized batch after settled spend crosses the ceiling", () => {
+    let run = {
+      ...initialRun(),
+      status: "running",
+      pricing: {
+        path: "tools/mechanic-generation-campaign/pricing/openai-2026-08-29.json",
+        sha256: "7".repeat(64),
+        snapshotId: "openai-2026-08-29",
+      },
+      limits: { ...initialRun().limits, maxActualProviderCostNanoUsd: 500_000_000 },
+      providerCost: {
+        grossExactNanoUsd: 490_000_000,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 490_000_000,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [],
+        settledCalls: [],
+      },
+    };
+
+    const authorized = authorizeActualProviderBatch(run);
+    expect(authorized.allowed).toBe(true);
+    run = beginActualProviderCall(authorized.run, {
+      callId: "attempt-1:planning:1",
+      stage: "planning",
+      requestedAt: "2026-08-30T20:00:01.000Z",
+      costAuthorized: true,
+    }).run;
+    run = settleActualProviderCallCost(run, {
+      callId: "attempt-1:planning:1",
+      stage: "planning",
+      completedAt: "2026-08-30T20:00:02.000Z",
+      quality: "exact",
+      totalNanoUsd: 20_000_000,
+    });
+    expect(run.status).toBe("running");
+
+    const sameBatch = beginActualProviderCall(run, {
+      callId: "attempt-2:contract:1",
+      stage: "contract",
+      requestedAt: "2026-08-30T20:00:03.000Z",
+      costAuthorized: true,
+    });
+    expect(sameBatch.allowed).toBe(true);
+
+    const nextBatch = authorizeActualProviderBatch(sameBatch.run);
+    expect(nextBatch.allowed).toBe(false);
+    expect(nextBatch.run.status).toBe("exhausted");
+    expect(nextBatch.run.exhaustionReason).toMatch(/cost/i);
   });
 
   it("reclassifies legacy maximum-context estimates as unresolved exposure", () => {

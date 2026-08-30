@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateProviderCallCosts,
-  calculateConservativeReservation,
   calculateProviderCallCost,
   createProviderCallReceipts,
   parseOpenAiPricingSnapshot,
@@ -97,17 +96,6 @@ describe("campaign OpenAI pricing", () => {
         snapshot,
       })
     ).toThrow(/service tier/i);
-  });
-
-  it("reserves a conservative model maximum before usage is known", () => {
-    const reservation = calculateConservativeReservation({
-      model: "gpt-5.6-luna",
-      serviceTier: "default",
-      snapshot,
-    });
-    expect(reservation.quality).toBe("conservative_estimate");
-    expect(reservation.totalNanoUsd).toBeGreaterThan(0);
-    expect(reservation.assumptions).toContain("maximum_context_and_output");
   });
 
   it("aggregates exact, estimated, and unknown calls without inventing historical cost", () => {

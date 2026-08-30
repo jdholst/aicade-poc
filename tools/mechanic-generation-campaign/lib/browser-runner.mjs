@@ -366,6 +366,13 @@ async function executeCampaignAttempts({
     });
 
     if (batch.length > 0) {
+      const batchAuthorized = Object.values(run.providerModes).includes("actual")
+        ? await authorizeProviderDispatchBatch(providerCallBudget, batch)
+        : true;
+      if (!batchAuthorized) {
+        providerBudgetExhausted = true;
+        continue;
+      }
       const batchIds = new Set(batch.map(({ attemptId }) => attemptId));
       run = await updateCampaignRun(store, run, (current) => ({
         ...current,
@@ -857,6 +864,7 @@ export async function resolveInterceptedRoute({
   try {
     allowed = providerCallBudget?.begin
       ? await providerCallBudget.begin({
+          attemptId,
           callId,
           stage,
           model,
@@ -925,6 +933,16 @@ export async function resolveInterceptedRoute({
     throw error;
   }
   return { blocked: false, stage };
+}
+
+export async function authorizeProviderDispatchBatch(
+  providerCallBudget,
+  batch
+) {
+  if (!providerCallBudget?.authorizeBatch) return true;
+  return providerCallBudget.authorizeBatch({
+    attemptIds: batch.map(({ attemptId }) => attemptId),
+  });
 }
 
 async function captureActualResponse(response, capture, providerCallBudget) {

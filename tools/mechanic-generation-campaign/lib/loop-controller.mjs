@@ -14,6 +14,7 @@ import { createCampaignLoopStore } from "./loop-store.mjs";
 import { parseTemporaryFixLedger } from "./legacy-importer.mjs";
 import {
   applyLoopBudgetExtension,
+  authorizeActualProviderBatch,
   createInitialLoopRun,
   createLoopBudgetExtensionPreview,
   applyFixCheckpoint,
@@ -32,7 +33,6 @@ import {
   startLoopCampaign,
 } from "./loop-state.mjs";
 import {
-  calculateConservativeReservation,
   calculateProviderCallCost,
 } from "./pricing.mjs";
 import {
@@ -939,23 +939,29 @@ async function executeSequence({
   return { run: state.run };
 }
 
-function createProviderCallBudget(state, loopStore, pricing) {
+export function createProviderCallBudget(state, loopStore, pricing) {
+  const authorizedAttemptIds = new Set();
   return {
-    async begin({ callId, stage, model, serviceTier, requestedAt }) {
-      const reservationNanoUsd = pricing
-        ? calculateConservativeReservation({
-            model,
-            serviceTier,
-            snapshot: pricing.snapshot,
-          }).totalNanoUsd
-        : 0;
+    async authorizeBatch({ attemptIds }) {
+      let allowed = false;
+      await mutateLoopState(state, loopStore, (current) => {
+        const result = authorizeActualProviderBatch(current);
+        allowed = result.allowed;
+        return result.run;
+      });
+      if (allowed) {
+        for (const attemptId of attemptIds) authorizedAttemptIds.add(attemptId);
+      }
+      return allowed;
+    },
+    async begin({ attemptId, callId, stage, requestedAt }) {
       let allowed = false;
       await mutateLoopState(state, loopStore, (current) => {
         const result = beginActualProviderCall(current, {
           callId,
           stage,
           requestedAt,
-          reservationNanoUsd,
+          costAuthorized: authorizedAttemptIds.has(attemptId),
         });
         allowed = result.allowed;
         return result.run;
