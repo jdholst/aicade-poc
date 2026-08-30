@@ -74,6 +74,16 @@ export function createInitialLoopRun({
     },
     knowledgeReconciliationIds: [],
     budgetExtensions: [],
+    ...(campaign.pricing
+      ? {
+          pricing: {
+            path: path.relative(controlRoot, campaign.pricing.pricingPath),
+            sha256: campaign.pricing.pricingHash,
+            snapshotId: campaign.pricing.snapshot.id,
+          },
+          providerCost: emptyProviderCost(),
+        }
+      : {}),
   };
 }
 
@@ -91,7 +101,7 @@ export function startLoopCampaign(run, {
     return exhaustLoop(run, "Global campaign-run ceiling reached.");
   }
 
-  const budgetCheckpoint = createCampaignUsageCheckpoint(run.usage);
+  const budgetCheckpoint = createCampaignUsageCheckpoint(run);
   const link = {
     campaignRunId,
     role,
@@ -298,13 +308,30 @@ export function pauseLoopForCampaignRepair(
   const resumeStatus =
     run.status === "waiting_for_manual_qa" ? "waiting_for_manual_qa" : "running";
   const creditedUsage = resumeStatus === "running"
-    ? createCampaignRepairCredit(run.usage, run.activeCampaign.budgetCheckpoint)
+    ? createCampaignRepairCredit(run, run.activeCampaign.budgetCheckpoint)
     : emptyCampaignRepairCredit();
   return {
     ...run,
     status: "waiting_for_campaign_repair",
     completedAt: undefined,
     usage: applyCampaignRepairCredit(run.usage, creditedUsage),
+    ...(run.providerCost
+      ? {
+          providerCost: {
+            ...run.providerCost,
+            attributedExactNanoUsd: Math.max(
+              0,
+              run.providerCost.attributedExactNanoUsd -
+                (creditedUsage.attributedExactNanoUsd ?? 0)
+            ),
+            attributedEstimatedNanoUsd: Math.max(
+              0,
+              run.providerCost.attributedEstimatedNanoUsd -
+                (creditedUsage.attributedEstimatedNanoUsd ?? 0)
+            ),
+          },
+        }
+      : {}),
     campaignLinks: run.campaignLinks.map((link) =>
       link.campaignRunId === run.activeCampaign.campaignRunId
         ? { ...link, status: "waiting_for_campaign_repair" }
@@ -504,6 +531,109 @@ export function recordActualProviderCall(run, stage) {
   };
 }
 
+export function beginActualProviderCall(
+  run,
+  { callId, stage, requestedAt, reservationNanoUsd = 0 }
+) {
+  if (!run.pricing) {
+    return recordActualProviderCall(run, stage);
+  }
+  if (
+    run.providerCost.settledCalls.some((call) => call.callId === callId) ||
+    run.providerCost.pendingReservations.some(
+      (reservation) => reservation.callId === callId
+    )
+  ) {
+    return { allowed: true, run };
+  }
+  const limit = run.limits.maxActualProviderCostNanoUsd;
+  const chargedAndPending = providerCostChargedAndPending(run.providerCost);
+  if (limit !== undefined && chargedAndPending >= limit) {
+    return {
+      allowed: false,
+      run:
+        run.status === "exhausted"
+          ? run
+          : exhaustLoop(run, "Actual-provider cost budget reached."),
+    };
+  }
+  const callResult = recordActualProviderCall(run, stage);
+  if (!callResult.allowed) return callResult;
+  return {
+    allowed: true,
+    run: {
+      ...callResult.run,
+      providerCost: {
+        ...callResult.run.providerCost,
+        pendingReservations: [
+          ...callResult.run.providerCost.pendingReservations,
+          {
+            callId,
+            stage,
+            requestedAt,
+            totalNanoUsd: reservationNanoUsd,
+          },
+        ],
+      },
+    },
+  };
+}
+
+export function settleActualProviderCallCost(
+  run,
+  { callId, stage, completedAt, quality, totalNanoUsd }
+) {
+  if (!run.pricing) return run;
+  if (run.providerCost.settledCalls.some((call) => call.callId === callId)) {
+    return run;
+  }
+  const pending = run.providerCost.pendingReservations.find(
+    (reservation) => reservation.callId === callId
+  );
+  const settledQuality = quality === "exact" ? "exact" : "conservative_estimate";
+  const settledNanoUsd = Number.isSafeInteger(totalNanoUsd)
+    ? totalNanoUsd
+    : pending?.totalNanoUsd;
+  if (!Number.isSafeInteger(settledNanoUsd) || settledNanoUsd < 0) {
+    throw new Error(`Provider call ${callId} has invalid settled cost.`);
+  }
+  const exactDelta = settledQuality === "exact" ? settledNanoUsd : 0;
+  const estimatedDelta = settledQuality === "conservative_estimate"
+    ? settledNanoUsd
+    : 0;
+  const next = {
+    ...run,
+    providerCost: {
+      ...run.providerCost,
+      grossExactNanoUsd: run.providerCost.grossExactNanoUsd + exactDelta,
+      grossEstimatedNanoUsd:
+        run.providerCost.grossEstimatedNanoUsd + estimatedDelta,
+      attributedExactNanoUsd:
+        run.providerCost.attributedExactNanoUsd + exactDelta,
+      attributedEstimatedNanoUsd:
+        run.providerCost.attributedEstimatedNanoUsd + estimatedDelta,
+      pendingReservations: run.providerCost.pendingReservations.filter(
+        (reservation) => reservation.callId !== callId
+      ),
+      settledCalls: [
+        ...run.providerCost.settledCalls,
+        {
+          callId,
+          stage,
+          completedAt,
+          quality: settledQuality,
+          totalNanoUsd: settledNanoUsd,
+          attributed: true,
+        },
+      ],
+    },
+  };
+  const limit = next.limits.maxActualProviderCostNanoUsd;
+  return limit !== undefined && providerCostChargedAndPending(next.providerCost) >= limit
+    ? exhaustLoop(next, "Actual-provider cost budget reached.")
+    : next;
+}
+
 export function blockLoop(run, reason, completedAt = new Date().toISOString()) {
   return {
     ...run,
@@ -554,6 +684,14 @@ export function createLoopBudgetExtensionPreview(run, additionsInput) {
     );
   }
   const additions = loopBudgetAdditionsSchema.parse(additionsInput);
+  if (
+    (additions.maxActualProviderCostNanoUsd ?? 0) > 0 &&
+    !run.pricing
+  ) {
+    throw new Error(
+      "A budget extension cannot introduce pricing into an unpriced loop."
+    );
+  }
   const resultingLimits = addLoopLimits(run.limits, additions);
   const payload = {
     schemaVersion: CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION,
@@ -627,15 +765,30 @@ export function remainingLoopBudgets(run) {
           (run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls)[stage],
       ])
     ),
+    actualProviderCostNanoUsd:
+      run.limits.maxActualProviderCostNanoUsd === undefined
+        ? undefined
+        : Math.max(
+            0,
+            run.limits.maxActualProviderCostNanoUsd -
+              providerCostChargedAndPending(run.providerCost)
+          ),
   };
 }
 
-function createCampaignUsageCheckpoint(usage) {
+function createCampaignUsageCheckpoint(run) {
   return {
-    campaignRuns: usage.campaignRuns,
-    submissions: usage.submissions,
-    auxiliaryIsolationCampaigns: usage.auxiliaryIsolationCampaigns,
-    actualProviderCalls: { ...usage.actualProviderCalls },
+    campaignRuns: run.usage.campaignRuns,
+    submissions: run.usage.submissions,
+    auxiliaryIsolationCampaigns: run.usage.auxiliaryIsolationCampaigns,
+    actualProviderCalls: { ...run.usage.actualProviderCalls },
+    ...(run.providerCost
+      ? {
+          attributedExactNanoUsd: run.providerCost.attributedExactNanoUsd,
+          attributedEstimatedNanoUsd:
+            run.providerCost.attributedEstimatedNanoUsd,
+        }
+      : {}),
   };
 }
 
@@ -648,19 +801,33 @@ function emptyCampaignRepairCredit() {
   };
 }
 
-function createCampaignRepairCredit(usage, checkpoint) {
+function createCampaignRepairCredit(run, checkpoint) {
   if (!checkpoint) return emptyCampaignRepairCredit();
   return {
-    campaignRuns: usage.campaignRuns - checkpoint.campaignRuns,
-    submissions: usage.submissions - checkpoint.submissions,
+    campaignRuns: run.usage.campaignRuns - checkpoint.campaignRuns,
+    submissions: run.usage.submissions - checkpoint.submissions,
     auxiliaryIsolationCampaigns:
-      usage.auxiliaryIsolationCampaigns - checkpoint.auxiliaryIsolationCampaigns,
+      run.usage.auxiliaryIsolationCampaigns - checkpoint.auxiliaryIsolationCampaigns,
     actualProviderCalls: Object.fromEntries(
       ACTUAL_PROVIDER_STAGES.map((stage) => [
         stage,
-        usage.actualProviderCalls[stage] - checkpoint.actualProviderCalls[stage],
+        run.usage.actualProviderCalls[stage] - checkpoint.actualProviderCalls[stage],
       ])
     ),
+    ...(run.providerCost
+      ? {
+          attributedExactNanoUsd: Math.max(
+            0,
+            run.providerCost.attributedExactNanoUsd -
+              (checkpoint.attributedExactNanoUsd ?? 0)
+          ),
+          attributedEstimatedNanoUsd: Math.max(
+            0,
+            run.providerCost.attributedEstimatedNanoUsd -
+              (checkpoint.attributedEstimatedNanoUsd ?? 0)
+          ),
+        }
+      : {}),
   };
 }
 
@@ -739,7 +906,38 @@ function addLoopLimits(limits, additions) {
         limits.actualProviderCalls[stage] + additions.actualProviderCalls[stage],
       ])
     ),
+    ...((limits.maxActualProviderCostNanoUsd !== undefined ||
+    additions.maxActualProviderCostNanoUsd !== undefined)
+      ? {
+          maxActualProviderCostNanoUsd:
+            (limits.maxActualProviderCostNanoUsd ?? 0) +
+            (additions.maxActualProviderCostNanoUsd ?? 0),
+        }
+      : {}),
   };
+}
+
+function emptyProviderCost() {
+  return {
+    grossExactNanoUsd: 0,
+    grossEstimatedNanoUsd: 0,
+    attributedExactNanoUsd: 0,
+    attributedEstimatedNanoUsd: 0,
+    pendingReservations: [],
+    settledCalls: [],
+  };
+}
+
+function providerCostChargedAndPending(providerCost) {
+  if (!providerCost) return 0;
+  return (
+    providerCost.grossExactNanoUsd +
+    providerCost.grossEstimatedNanoUsd +
+    providerCost.pendingReservations.reduce(
+      (sum, reservation) => sum + reservation.totalNanoUsd,
+      0
+    )
+  );
 }
 
 function canonicalJson(value) {

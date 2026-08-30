@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyLoopBudgetExtension,
   applyFixCheckpoint,
+  beginActualProviderCall,
   createLoopBudgetExtensionPreview,
   createInitialLoopRun,
   exhaustLoop,
@@ -11,6 +12,7 @@ import {
   rejectLoopManualQa,
   recordActualProviderCall,
   recordLoopSubmission,
+  settleActualProviderCallCost,
   resumeLoopAfterCampaignRepair,
   resumeLoopAfterManualQaApproval,
   startLoopCampaign,
@@ -90,6 +92,58 @@ describe("campaign loop state", () => {
     expect(run.currentStepIndex).toBe(1);
     expect(run.steps.map(({ status }) => status)).toEqual(["achieved", "pending"]);
     expect(run.status).toBe("running");
+  });
+
+  it("allows one cost-limit overshoot, settles it once, and blocks the next call", () => {
+    let run = {
+      ...initialRun(),
+      pricing: {
+        path: "tools/mechanic-generation-campaign/pricing/openai-2026-08-29.json",
+        sha256: "7".repeat(64),
+        snapshotId: "openai-2026-08-29",
+      },
+      limits: { ...initialRun().limits, maxActualProviderCostNanoUsd: 1_000_000 },
+      providerCost: {
+        grossExactNanoUsd: 0,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 0,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [],
+        settledCalls: [],
+      },
+    };
+    const begun = beginActualProviderCall(run, {
+      callId: "attempt-1:planning:1",
+      stage: "planning",
+      requestedAt: "2026-08-29T12:00:00.000Z",
+      reservationNanoUsd: 500_000,
+    });
+    expect(begun.allowed).toBe(true);
+    run = settleActualProviderCallCost(begun.run, {
+      callId: "attempt-1:planning:1",
+      stage: "planning",
+      completedAt: "2026-08-29T12:00:01.000Z",
+      quality: "exact",
+      totalNanoUsd: 1_200_000,
+    });
+    const repeated = settleActualProviderCallCost(run, {
+      callId: "attempt-1:planning:1",
+      stage: "planning",
+      completedAt: "2026-08-29T12:00:01.000Z",
+      quality: "exact",
+      totalNanoUsd: 1_200_000,
+    });
+    expect(repeated.providerCost.grossExactNanoUsd).toBe(1_200_000);
+
+    const blocked = beginActualProviderCall(repeated, {
+      callId: "attempt-1:contract:1",
+      stage: "contract",
+      requestedAt: "2026-08-29T12:00:02.000Z",
+      reservationNanoUsd: 500_000,
+    });
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.run.status).toBe("exhausted");
+    expect(blocked.run.exhaustionReason).toMatch(/cost/i);
   });
 
   it("refuses to advance a proof step from automated-only success evidence", () => {

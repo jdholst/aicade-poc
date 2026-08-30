@@ -74,6 +74,7 @@ const loopLimitsSchema = z
     maxSubmissions: z.number().int().positive(),
     maxAuxiliaryIsolationCampaigns: z.number().int().nonnegative(),
     actualProviderCalls: stageCountsSchema,
+    maxActualProviderCostNanoUsd: z.number().int().positive().optional(),
   })
   .strict();
 
@@ -84,6 +85,7 @@ export const loopBudgetAdditionsSchema = z
     maxSubmissions: z.number().int().nonnegative(),
     maxAuxiliaryIsolationCampaigns: z.number().int().nonnegative(),
     actualProviderCalls: stageCountsSchema,
+    maxActualProviderCostNanoUsd: z.number().int().nonnegative().optional(),
   })
   .strict()
   .superRefine((additions, context) => {
@@ -95,7 +97,8 @@ export const loopBudgetAdditionsSchema = z
       Object.values(additions.actualProviderCalls).reduce(
         (sum, count) => sum + count,
         0
-      );
+      ) +
+      (additions.maxActualProviderCostNanoUsd ?? 0);
     if (total === 0) {
       context.addIssue({
         code: "custom",
@@ -215,6 +218,8 @@ const activeCampaignSchema = z
         submissions: z.number().int().nonnegative(),
         auxiliaryIsolationCampaigns: z.number().int().nonnegative(),
         actualProviderCalls: stageCountsSchema,
+        attributedExactNanoUsd: z.number().int().nonnegative().optional(),
+        attributedEstimatedNanoUsd: z.number().int().nonnegative().optional(),
       })
       .strict()
       .optional(),
@@ -236,6 +241,8 @@ const campaignRepairSchema = z
         submissions: z.number().int().nonnegative(),
         auxiliaryIsolationCampaigns: z.number().int().nonnegative(),
         actualProviderCalls: stageCountsSchema,
+        attributedExactNanoUsd: z.number().int().nonnegative().optional(),
+        attributedEstimatedNanoUsd: z.number().int().nonnegative().optional(),
       })
       .strict(),
     priorTerminal: z
@@ -275,6 +282,45 @@ const usageSchema = z
     auxiliaryIsolationCampaigns: z.number().int().nonnegative(),
     actualProviderCalls: stageCountsSchema,
     grossActualProviderCalls: stageCountsSchema.optional(),
+  })
+  .strict();
+
+const pricingIdentitySchema = z
+  .object({
+    path: z.string().min(1),
+    sha256: sha256Schema,
+    snapshotId: z.string().min(1),
+  })
+  .strict();
+
+const providerCostSchema = z
+  .object({
+    grossExactNanoUsd: z.number().int().nonnegative(),
+    grossEstimatedNanoUsd: z.number().int().nonnegative(),
+    attributedExactNanoUsd: z.number().int().nonnegative(),
+    attributedEstimatedNanoUsd: z.number().int().nonnegative(),
+    pendingReservations: z.array(
+      z
+        .object({
+          callId: z.string().min(1),
+          stage: z.enum(["planning", "contract", "source"]),
+          requestedAt: z.string().datetime(),
+          totalNanoUsd: z.number().int().nonnegative(),
+        })
+        .strict()
+    ),
+    settledCalls: z.array(
+      z
+        .object({
+          callId: z.string().min(1),
+          stage: z.enum(["planning", "contract", "source"]),
+          completedAt: z.string().datetime(),
+          quality: z.enum(["exact", "conservative_estimate"]),
+          totalNanoUsd: z.number().int().nonnegative(),
+          attributed: z.boolean(),
+        })
+        .strict()
+    ),
   })
   .strict();
 
@@ -364,6 +410,8 @@ const campaignLoopRunBaseSchema = z
     currentStepIndex: z.number().int().nonnegative(),
     usage: usageSchema,
     limits: loopLimitsSchema,
+    pricing: pricingIdentitySchema.optional(),
+    providerCost: providerCostSchema.optional(),
     worktree: z
       .object({
         controlRoot: z.string().min(1),
@@ -443,6 +491,20 @@ function validateCurrentLoopState(run, context) {
         code: "custom",
         path: ["usage", "grossActualProviderCalls"],
         message: "A v4 loop run requires gross actual-provider usage.",
+      });
+    }
+    if (run.limits.maxActualProviderCostNanoUsd !== undefined && !run.pricing) {
+      context.addIssue({
+        code: "custom",
+        path: ["pricing"],
+        message: "A provider cost limit requires a frozen pricing snapshot.",
+      });
+    }
+    if (Boolean(run.pricing) !== Boolean(run.providerCost)) {
+      context.addIssue({
+        code: "custom",
+        path: ["providerCost"],
+        message: "Frozen pricing and provider cost accounting must be present together.",
       });
     }
     if (run.status === "exhausted" && !run.exhaustionResume) {

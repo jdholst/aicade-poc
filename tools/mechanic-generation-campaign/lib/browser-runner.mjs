@@ -27,6 +27,10 @@ import { redactSensitive } from "./redaction.mjs";
 import { inspectRevision } from "./revision.mjs";
 import { createManualQaCandidate } from "./manual-qa.mjs";
 import {
+  aggregateProviderCallCosts,
+  createProviderCallReceipts,
+} from "./pricing.mjs";
+import {
   classifyFurthestStage,
   createNextAttemptSchedule,
   createLoopbackBaseUrl,
@@ -129,6 +133,16 @@ export async function runCampaign({
             : false,
           authorizedAt: createdAt,
         },
+        ...(loaded.pricing
+          ? {
+              pricing: {
+                path: path.relative(repoRoot, loaded.pricing.pricingPath),
+                sha256: loaded.pricing.pricingHash,
+                snapshotId: loaded.pricing.snapshot.id,
+              },
+              cost: emptyCostAggregate(),
+            }
+          : {}),
       };
   validateResume(run, loaded, cohort, providerModes, revision, loopContext);
   await store.writeRun(run);
@@ -205,12 +219,15 @@ export async function runCampaign({
         attemptTimeoutMs,
         providerCallBudget,
         onSubmission,
+        pricing: loaded.pricing,
       });
       const attempt = attemptResult.attempt;
       run = attemptResult.run ?? {
         ...run,
         attemptIds: [...run.attemptIds, attempt.id],
       };
+      const attemptsAfterSubmission = await store.readAttempts(campaignRunId);
+      run = withRunCost(run, attemptsAfterSubmission);
       await store.writeRun(run);
       requireCampaignAttemptContinuation(attempt);
 
@@ -293,6 +310,7 @@ async function runBrowserAttempt({
   attemptTimeoutMs,
   providerCallBudget,
   onSubmission,
+  pricing,
 }) {
   const id = `a${String(scheduled.sequence).padStart(2, "0")}-${scheduled.promptId}`;
   const attemptDirectory = store.attemptDirectory(run.id, id);
@@ -329,6 +347,8 @@ async function runBrowserAttempt({
     onProviderBudgetExhausted: (stage) => {
       providerBudgetExhaustedStage = stage;
     },
+    attemptId: id,
+    model: manifest.model,
   });
 
   let terminal = { kind: "infrastructure_failure", text: "Attempt did not start." };
@@ -377,6 +397,14 @@ async function runBrowserAttempt({
     terminal = { kind: "infrastructure_failure", text: thrownFailure };
   }
   await Promise.all(responseCaptureTasks);
+  const providerCallReceipts = createProviderCallReceipts({
+    networkCaptures,
+    snapshot: pricing?.snapshot,
+    requestedModel: manifest.model,
+  });
+  for (const call of providerCallReceipts) {
+    await providerCallBudget?.settle?.(call);
+  }
 
   const runtimeMounted = (await page.locator("iframe").count()) > 0;
   const runtimeHealthy = terminal.kind === "ready" && !browserIssues.some((issue) => /pageerror|runtime error/i.test(issue));
@@ -444,6 +472,7 @@ async function runBrowserAttempt({
     ...(failure ? { failure } : {}),
     providerModes: run.providerModes,
     providerCalls,
+    providerCallReceiptIds: providerCallReceipts.map(({ callId }) => callId),
     fixtureCalls,
     startedAt,
     completedAt,
@@ -461,18 +490,12 @@ async function runBrowserAttempt({
     },
     recordedOutcome:
       automatedStatus === "success" ? "automated_success" : automatedStatus,
-    artifacts: ["attempt.json", "network-captures.json", "generation-run.json", "game-pack.json", "runtime-probe.json", "browser-issues.json", "terminal.png", ...(terminal.kind === "ready" && gamePack ? ["probe.png"] : [])],
+    artifacts: ["attempt.json", "provider-call-receipts.json", "network-captures.json", "generation-run.json", "game-pack.json", "runtime-probe.json", "browser-issues.json", "terminal.png", ...(terminal.kind === "ready" && gamePack ? ["probe.png"] : [])],
     temporaryFixIds: [],
-    ...(generationRun?.cost
-      ? {
-          cost: {
-            quality: generationRun.cost.quality === "exact" ? "reported" : "estimated",
-            usd: generationRun.cost.amountUsd,
-          },
-        }
-      : { cost: { quality: "unknown" } }),
+    cost: toAttemptCost(providerCallReceipts, pricing?.snapshot.id),
   };
   const evidence = {
+    "provider-call-receipts.json": providerCallReceipts,
     "network-captures.json": networkCaptures,
     "generation-run.json": generationRun,
     "game-pack.json": gamePack,
@@ -512,11 +535,17 @@ async function installProviderInterception({
   providerCallBudget,
   onActivity,
   onProviderBudgetExhausted,
+  attemptId,
+  model,
 }) {
   page.on("response", (response) => {
     const capture = actualResponseCaptures.get(response.request());
     if (!capture) return;
-    const task = captureActualResponse(response, capture).finally(onActivity);
+    const task = captureActualResponse(
+      response,
+      capture,
+      providerCallBudget
+    ).finally(onActivity);
     responseCaptureTasks.add(task);
     void task.finally(() => responseCaptureTasks.delete(task));
   });
@@ -532,6 +561,8 @@ async function installProviderInterception({
       networkCaptures,
       actualResponseCaptures,
       providerCallBudget,
+      attemptId,
+      model,
     });
     if (result?.blocked) onProviderBudgetExhausted?.(result.stage);
   });
@@ -553,6 +584,8 @@ async function installProviderInterception({
       actualResponseCaptures,
       requestBody,
       providerCallBudget,
+      attemptId,
+      model,
     });
     if (result?.blocked) onProviderBudgetExhausted?.(result.stage);
   });
@@ -568,6 +601,8 @@ export async function resolveInterceptedRoute({
   networkCaptures,
   actualResponseCaptures,
   providerCallBudget,
+  attemptId = "attempt",
+  model,
   requestBody = route.request().postDataJSON(),
 }) {
   if (mode === "fixture") {
@@ -580,7 +615,20 @@ export async function resolveInterceptedRoute({
     return;
   }
 
-  if (providerCallBudget && !(await providerCallBudget.consume(stage))) {
+  const requestedAt = new Date().toISOString();
+  const callId = `${attemptId}:${stage}:${providerCalls[stage] + 1}:${requestedAt}`;
+  const allowed = providerCallBudget?.begin
+    ? await providerCallBudget.begin({
+        callId,
+        stage,
+        model,
+        serviceTier: "default",
+        requestedAt,
+      })
+    : providerCallBudget
+      ? await providerCallBudget.consume(stage)
+      : true;
+  if (!allowed) {
     networkCaptures.push(
       redactSensitive({
         stage,
@@ -609,8 +657,10 @@ export async function resolveInterceptedRoute({
     "sec-fetch-site": "same-origin",
   };
   const capture = redactSensitive({
+    callId,
     stage,
     source: "actual",
+    requestedAt,
     request: requestBody,
     requestHeaders: {
       origin: forwardedHeaders.origin,
@@ -623,8 +673,9 @@ export async function resolveInterceptedRoute({
   return { blocked: false, stage };
 }
 
-async function captureActualResponse(response, capture) {
+async function captureActualResponse(response, capture, providerCallBudget) {
   capture.responseStatus = response.status();
+  capture.completedAt = new Date().toISOString();
   try {
     const bodyText = await response.text();
     let body = bodyText;
@@ -632,6 +683,16 @@ async function captureActualResponse(response, capture) {
       body = JSON.parse(bodyText);
     } catch {}
     capture.response = redactSensitive(body);
+    await providerCallBudget?.settle?.({
+      schemaVersion: "campaign-provider-call-receipt/v1",
+      callId: capture.callId,
+      stage: capture.stage,
+      source: "actual",
+      requestedAt: capture.requestedAt,
+      completedAt: body?.providerUsage?.completedAt ?? capture.completedAt,
+      responseStatus: capture.responseStatus,
+      ...(body?.providerUsage ? { receipt: body.providerUsage } : {}),
+    });
   } catch (error) {
     capture.responseCaptureError = error instanceof Error ? error.message : String(error);
   }
@@ -835,6 +896,51 @@ function compactRevision(revision) {
 
 function zeroStageCounts() {
   return { planning: 0, contract: 0, source: 0 };
+}
+
+function emptyCostAggregate() {
+  return {
+    exactNanoUsd: 0,
+    estimatedNanoUsd: 0,
+    totalNanoUsd: 0,
+    pricedCalls: 0,
+    unknownCalls: 0,
+  };
+}
+
+function toAttemptCost(providerCallReceipts, snapshotId) {
+  const aggregate = aggregateProviderCallCosts(providerCallReceipts);
+  const quality = aggregate.pricedCalls === 0
+    ? "unknown"
+    : aggregate.exactNanoUsd > 0 && aggregate.estimatedNanoUsd > 0
+      ? "mixed"
+      : aggregate.estimatedNanoUsd > 0
+        ? "estimated"
+        : "exact";
+  return {
+    quality,
+    ...(snapshotId ? { snapshotId } : {}),
+    ...aggregate,
+    ...(aggregate.pricedCalls > 0
+      ? { usd: aggregate.totalNanoUsd / 1_000_000_000 }
+      : {}),
+  };
+}
+
+function withRunCost(run, attempts) {
+  if (!run.pricing) return run;
+  const aggregate = attempts.reduce(
+    (total, attempt) => {
+      total.exactNanoUsd += attempt.cost?.exactNanoUsd ?? 0;
+      total.estimatedNanoUsd += attempt.cost?.estimatedNanoUsd ?? 0;
+      total.totalNanoUsd += attempt.cost?.totalNanoUsd ?? 0;
+      total.pricedCalls += attempt.cost?.pricedCalls ?? 0;
+      total.unknownCalls += attempt.cost?.unknownCalls ?? 0;
+      return total;
+    },
+    emptyCostAggregate()
+  );
+  return { ...run, cost: aggregate };
 }
 
 export class CampaignInfrastructureFailureError extends Error {

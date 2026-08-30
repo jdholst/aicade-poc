@@ -30,6 +30,7 @@ import {
   denyCampaignAttempt,
 } from "./lib/manual-qa.mjs";
 import { runCampaignReview } from "./lib/review-runner.mjs";
+import { refreshOpenAiPricing } from "./lib/pricing-refresh.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const store = createCampaignStore(repoRoot);
@@ -65,6 +66,32 @@ async function main(args) {
 
   if (command === "knowledge") {
     await handleKnowledgeCommand({ args, repoRoot });
+    return;
+  }
+
+  if (command === "pricing") {
+    const pricingCommand = args.shift();
+    if (pricingCommand !== "refresh") {
+      throw new Error("Pricing supports only the refresh command.");
+    }
+    const check = takeFlag(args, "--check");
+    const write = takeFlag(args, "--write");
+    if (check === write) {
+      throw new Error("pricing refresh requires exactly one of --check or --write.");
+    }
+    const effectiveAt = takeOption(args, "--effective-at");
+    assertNoArguments(args);
+    const result = await refreshOpenAiPricing({
+      harnessRoot: import.meta.dirname,
+      mode: write ? "write" : "check",
+      effectiveAt,
+    });
+    console.log(`${result.status.toUpperCase()} ${result.snapshot.id}`);
+    if (result.status === "drift") {
+      console.log(`Facts drift: ${result.factsDrift ? "yes" : "no"}`);
+      console.log(`Source drift: ${result.sourceDrift ? "yes" : "no"}`);
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -385,6 +412,8 @@ Usage:
   npm run campaign -- knowledge report [filters]
   npm run campaign -- knowledge context (--loop <loop-id> | --campaign <run-id>) [--json]
   npm run campaign -- knowledge reconcile (--loop <loop-id> | --campaign <run-id>) --proposal <path>
+  npm run campaign -- pricing refresh --check
+  npm run campaign -- pricing refresh --write --effective-at <YYYY-MM-DD>
   npm run campaign -- loop <validate|run|resume|extend|isolate|repair-campaign|block|conclude|discard|report|publish> [options]
 
 Run options:

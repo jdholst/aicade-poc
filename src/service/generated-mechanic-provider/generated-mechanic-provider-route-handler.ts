@@ -9,6 +9,7 @@ import {
   type MechanicSourceGenerationProvider,
 } from "@/service/mechanic-source-generation/mechanic-source-generation-provider";
 import { resolveOpenAiGenerationConfig } from "@/service/starter-project/openai-generation-config";
+import type { OpenAiProviderUsageReceipt } from "@/service/openai-provider-usage-receipt";
 
 import {
   GENERATED_MECHANIC_PROVIDER_RESPONSE_VERSION,
@@ -103,6 +104,10 @@ export function createGeneratedMechanicProviderPostHandler({
         attemptKind: providerRequest.attemptKind,
       });
     let candidate: unknown;
+    let providerUsage: OpenAiProviderUsageReceipt | undefined;
+    const onProviderUsage = (receipt: OpenAiProviderUsageReceipt) => {
+      providerUsage = receipt;
+    };
     try {
       if (providerRequest.stage === "contract") {
         candidate = await contractProvider({
@@ -125,6 +130,7 @@ export function createGeneratedMechanicProviderPostHandler({
               : {}),
           },
           signal: request.signal,
+          onProviderUsage,
         });
       } else {
         candidate = await sourceProvider({
@@ -149,6 +155,7 @@ export function createGeneratedMechanicProviderPostHandler({
               : {}),
           },
           signal: request.signal,
+          onProviderUsage,
         });
       }
     } catch (error) {
@@ -162,7 +169,8 @@ export function createGeneratedMechanicProviderPostHandler({
             message: error.message,
           },
           providerFailureStatus(error.evidence.code),
-          providerRequest
+          providerRequest,
+          providerUsage
         );
       }
 
@@ -175,7 +183,8 @@ export function createGeneratedMechanicProviderPostHandler({
               : "Generated mechanic provider request failed.",
         },
         502,
-        providerRequest
+        providerRequest,
+        providerUsage
       );
     }
 
@@ -186,7 +195,8 @@ export function createGeneratedMechanicProviderPostHandler({
           message: `Generated mechanic ${providerRequest.stage} provider request was cancelled.`,
         },
         499,
-        providerRequest
+        providerRequest,
+        providerUsage
       );
     }
 
@@ -199,7 +209,8 @@ export function createGeneratedMechanicProviderPostHandler({
             "Generated mechanic provider returned a non-JSON candidate.",
         },
         502,
-        providerRequest
+        providerRequest,
+        providerUsage
       );
     }
 
@@ -212,6 +223,7 @@ export function createGeneratedMechanicProviderPostHandler({
         attempt: providerRequest.attempt,
         attemptKind: providerRequest.attemptKind,
         candidate: candidateResult.data,
+        ...(providerUsage ? { providerUsage } : {}),
       }),
       200
     );
@@ -279,7 +291,8 @@ function failureResponse(
     stage: "contract" | "source";
     attempt: number;
     attemptKind: "initial" | "repair";
-  }>
+  }>,
+  providerUsage?: OpenAiProviderUsageReceipt
 ) {
   return jsonNoStore(
     generatedMechanicProviderResponseSchema.parse({
@@ -290,6 +303,7 @@ function failureResponse(
       attempt: correlation?.attempt ?? null,
       attemptKind: correlation?.attemptKind ?? null,
       error,
+      ...(providerUsage ? { providerUsage } : {}),
     }),
     status
   );

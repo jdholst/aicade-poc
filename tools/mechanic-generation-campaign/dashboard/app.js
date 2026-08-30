@@ -1,4 +1,7 @@
+import { createKnownCostSummary, formatNanoUsd } from "./cost.js";
+
 let snapshot = null;
+let costTimeframe = "all";
 
 const campaignFilter = document.querySelector("#campaign-filter");
 const loopFilter = document.querySelector("#loop-filter");
@@ -17,6 +20,11 @@ loopFilter.addEventListener("change", render);
 fixFilter.addEventListener("change", render);
 legacyFilter.addEventListener("change", render);
 knowledgeFilters.forEach((filter) => filter.addEventListener("change", render));
+document.querySelector("#summary").addEventListener("change", (event) => {
+  if (event.target?.id !== "cost-timeframe") return;
+  costTimeframe = event.target.value;
+  render();
+});
 
 async function refresh() {
   try {
@@ -117,13 +125,16 @@ function renderSummary(campaigns, attempts) {
   const activeFixes = snapshot.temporaryFixes.filter(({ state }) => state === "active").length;
   const actualCalls = attempts.reduce((sum, attempt) =>
     sum + Object.values(attempt.providerCalls ?? {}).reduce((value, count) => value + count, 0), 0);
-  const knownCost = attempts.reduce((sum, attempt) => sum + (attempt.cost?.usd ?? 0), 0);
+  const knownCost = createKnownCostSummary(attempts, {
+    timeframe: costTimeframe,
+    now: new Date(snapshot.generatedAt),
+  });
   document.querySelector("#summary").innerHTML = [
     stat("Loops", snapshot.loops.length, `${snapshot.loops.filter(({ status }) => status === "achieved").length} achieved`),
     stat("Campaigns", campaigns.length, `${campaigns.filter(({ status }) => status === "achieved").length} achieved`),
     stat("Submissions", attempts.length, `${successes} manually approved · ${candidates} pending`),
     stat("Actual calls", actualCalls, "Planning + contract + source"),
-    stat("Known cost", `$${knownCost.toFixed(3)}`, "Unknown cost excluded"),
+    costStat(knownCost),
     stat("Temporary fixes", activeFixes, `${snapshot.temporaryFixes.length - activeFixes} retired`),
   ].join("");
 }
@@ -182,7 +193,7 @@ function renderLoops() {
       <td><span class="badge ${loop.status}">${escapeHtml(loop.status)}</span>${loop.result ? `<br><small>${loop.result.mechanicProven ? "mechanic proven" : "sequence only"}</small>` : ""}</td>
       <td>${step ? `${escapeHtml(step.cohort)}<br><small>${escapeHtml(step.status)} · cycle ${loop.currentRevision.cycle}</small>` : "complete"}</td>
       <td><code>${shortHash(loop.currentRevision.revisionKey)}</code></td>
-      <td>${loop.usage.campaignRuns}/${loop.limits.maxCampaignRuns} campaigns<br>${loop.usage.submissions}/${loop.limits.maxSubmissions} submissions<br>${loop.usage.fixCycles}/${loop.limits.maxFixCycles} fixes</td>
+      <td>${loop.usage.campaignRuns}/${loop.limits.maxCampaignRuns} campaigns<br>${loop.usage.submissions}/${loop.limits.maxSubmissions} submissions<br>${loop.usage.fixCycles}/${loop.limits.maxFixCycles} fixes<br>${renderLoopCostBudget(loop)}</td>
       <td><small>Sparkline</small> ${stageCounts(loop.usage.actualProviderCalls)}<br><small>Gross ${stageCounts(loop.usage.grossActualProviderCalls ?? loop.usage.actualProviderCalls)}<br>remaining ${stageCounts(loop.remaining.actualProviderCalls)}</small></td>
       <td>${links}${fixLines}${repairLines}${extensionLines}${lifecycleLine}${proposedTemporary.length ? `<small>${proposedTemporary.length} proposed temporary fix(es)</small>` : ""}</td>
     </tr>`;
@@ -244,8 +255,8 @@ function renderCampaigns(campaigns) {
         : result.failureLimit === undefined
           ? ""
           : `<br><small>cohort continuing</small>`;
-    return `<tr><td><strong>${escapeHtml(campaign.manifestId)}</strong><br><small>${escapeHtml(campaign.id)}</small></td><td>${escapeHtml(campaign.cohort)}</td><td>${modeText(campaign.providerModes)}</td><td><span class="badge ${campaign.status}">${escapeHtml(campaign.status)}</span>${terminalReason}</td><td>${result.successes ?? 0}/${result.submissions ?? campaign.attempts.length}${failureProgress}${replacementProgress}</td><td>${calls}</td><td><code>${shortHash(campaign.revision.revisionKey)}</code></td></tr>`;
-  }).join("") || `<tr><td colspan="7">${empty("No campaign runs yet.")}</td></tr>`;
+    return `<tr><td><strong>${escapeHtml(campaign.manifestId)}</strong><br><small>${escapeHtml(campaign.id)}</small></td><td>${escapeHtml(campaign.cohort)}</td><td>${modeText(campaign.providerModes)}</td><td><span class="badge ${campaign.status}">${escapeHtml(campaign.status)}</span>${terminalReason}</td><td>${result.successes ?? 0}/${result.submissions ?? campaign.attempts.length}${failureProgress}${replacementProgress}</td><td>${calls}</td><td>${renderCampaignCost(campaign)}</td><td><code>${shortHash(campaign.revision.revisionKey)}</code></td></tr>`;
+  }).join("") || `<tr><td colspan="8">${empty("No campaign runs yet.")}</td></tr>`;
 }
 
 function renderAttempts(attempts) {
@@ -316,6 +327,31 @@ function syncKnowledgeFilter(filter, label, values) {
 }
 
 function stat(label, value, note) { return `<article class="stat"><p class="eyebrow">${label}</p><strong>${value}</strong><small>${note}</small></article>`; }
+function costStat(cost) {
+  const hasPricedEvidence = cost.pricedCalls > 0;
+  const value = hasPricedEvidence ? formatNanoUsd(cost.totalNanoUsd) : "—";
+  const exact = hasPricedEvidence ? formatNanoUsd(cost.exactNanoUsd) : "—";
+  const estimate = hasPricedEvidence ? formatNanoUsd(cost.estimatedNanoUsd) : "—";
+  return `<article class="stat cost-stat"><div class="stat-heading"><p class="eyebrow">Known cost</p><select id="cost-timeframe" aria-label="Known cost timeframe"><option value="day"${costTimeframe === "day" ? " selected" : ""}>Past 24 hours</option><option value="week"${costTimeframe === "week" ? " selected" : ""}>Past 7 days</option><option value="month"${costTimeframe === "month" ? " selected" : ""}>Past 30 days</option><option value="all"${costTimeframe === "all" ? " selected" : ""}>All time</option></select></div><strong>${value}</strong><small>Exact ${exact} · estimate ${estimate} · ${cost.unknownCalls} unknown call(s) excluded</small></article>`;
+}
+function renderCampaignCost(campaign) {
+  const cost = campaign.cost;
+  if (!cost || cost.pricedCalls === 0) return "—<br><small>unpriced</small>";
+  const quality = cost.estimatedNanoUsd > 0
+    ? cost.exactNanoUsd > 0 ? "mixed" : "estimated"
+    : "exact";
+  return `${formatNanoUsd(cost.totalNanoUsd)}<br><small>${quality} · ${cost.unknownCalls} unknown</small>`;
+}
+function renderLoopCostBudget(loop) {
+  if (!loop.providerCost) return "<small>cost —</small>";
+  const gross = loop.providerCost.grossExactNanoUsd + loop.providerCost.grossEstimatedNanoUsd;
+  const attributed = loop.providerCost.attributedExactNanoUsd + loop.providerCost.attributedEstimatedNanoUsd;
+  const pending = loop.providerCost.pendingReservations.reduce((sum, reservation) => sum + reservation.totalNanoUsd, 0);
+  const limit = loop.limits.maxActualProviderCostNanoUsd;
+  const remaining = loop.remaining.actualProviderCostNanoUsd;
+  const overage = limit === undefined ? 0 : Math.max(0, gross + pending - limit);
+  return `<small>cost gross ${formatNanoUsd(gross)} / ${formatNanoUsd(limit)}<br>attributed ${formatNanoUsd(attributed)} · remaining ${formatNanoUsd(remaining)}<br>exact ${formatNanoUsd(loop.providerCost.grossExactNanoUsd)} · estimate ${formatNanoUsd(loop.providerCost.grossEstimatedNanoUsd)} · pending ${formatNanoUsd(pending)} · over ${formatNanoUsd(overage)}</small>`;
+}
 function proof(label, status) { return `<span class="${status}">${label}<br><strong>${escapeHtml(humanize(status))}</strong></span>`; }
 function modeText(modes) { return Object.entries(modes).map(([stage, mode]) => `${stage[0].toUpperCase()}:${mode[0].toUpperCase()}`).join(" "); }
 function shortHash(value = "") { return value.slice(0, 9); }

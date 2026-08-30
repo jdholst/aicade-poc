@@ -13,6 +13,7 @@ import {
   type GenerationRun,
 } from "@/game-spec";
 import type { OpenAIModelId } from "@/utils/openai-utils";
+import type { OpenAiProviderUsageReporter } from "@/service/openai-provider-usage-receipt";
 
 export const MECHANIC_CONTRACT_GENERATION_TASK_ROUTE =
   "mechanic_contract_generation.primary";
@@ -36,6 +37,7 @@ export type MechanicContractGenerationProviderInput = {
   providerCredential: string;
   taskRoute: typeof MECHANIC_CONTRACT_GENERATION_TASK_ROUTE;
   generationAttempt?: MechanicContractGenerationAttempt;
+  onProviderUsage?: OpenAiProviderUsageReporter;
   signal?: AbortSignal;
 };
 

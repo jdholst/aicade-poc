@@ -79,6 +79,42 @@ describe("Generated Mechanic Provider API route", () => {
     expect(JSON.stringify(payload)).not.toContain("sk-environment");
   });
 
+  it("returns sanitized provider usage with rejected provider output", async () => {
+    const contractProvider = vi.fn(async (input) => {
+      input.onProviderUsage?.({
+        schemaVersion: "openai_provider_usage_receipt/v1",
+        responseId: "resp_contract_rejected",
+        model: "gpt-5.6-luna-2026-08-01",
+        serviceTier: "default",
+        completedAt: "2026-08-29T12:00:00.000Z",
+        usage: {
+          inputTokens: 900,
+          cachedInputTokens: 100,
+          cacheWriteInputTokens: 0,
+          outputTokens: 200,
+          totalTokens: 1_100,
+        },
+      });
+      throw new Error("provider candidate rejected");
+    });
+    const post = createGeneratedMechanicProviderPostHandler({
+      contractProvider,
+      env: { OPENAI_API_KEY: "sk-environment" },
+      sourceProvider: vi.fn(),
+    });
+
+    const response = await post(jsonRequest(createContractRequest({})));
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      providerUsage: {
+        responseId: "resp_contract_rejected",
+        usage: { totalTokens: 1_100 },
+      },
+    });
+  });
+
   it("resolves keyword and client model configuration for only the raw source provider call", async () => {
     const candidate = { sourceCandidate: true };
     const repair = {

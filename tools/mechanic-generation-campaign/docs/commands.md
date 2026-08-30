@@ -174,6 +174,24 @@ Options:
 
 The process remains active until interrupted. It polls local campaign files, serves sanitized artifacts, and shows canonical findings plus clearly labeled loop-local pending knowledge, amendments, reconciliations, and evidence references. It makes no provider calls and does not modify campaign evidence.
 
+The Known Cost selector applies only to the summary card. Campaign and loop rows always show all-time lifecycle cost so a rolling timeframe cannot conceal authorized spend.
+
+## Pricing snapshots
+
+Validate the latest committed snapshot against the official OpenAI pricing and model pages:
+
+```bash
+npm run campaign -- pricing refresh --check
+```
+
+Create a new immutable snapshot after reviewing drift:
+
+```bash
+npm run campaign -- pricing refresh --write --effective-at <YYYY-MM-DD>
+```
+
+`--write` refuses to overwrite an existing snapshot. It does not change campaign manifests or reprice existing evidence. Parsing ambiguity or missing model facts fails closed. These commands fetch documentation only and make no model-provider requests.
+
 ## Report
 
 ```bash
@@ -312,10 +330,13 @@ npm run campaign -- loop extend \
   [--add-auxiliary-isolations <number>] \
   [--add-planning-calls <number>] \
   [--add-contract-calls <number>] \
-  [--add-source-calls <number>]
+  [--add-source-calls <number>] \
+  [--add-cost-usd <amount>]
 ```
 
 At least one addition must be positive. A preview prints usage, current ceilings, additions, resulting ceilings, the recorded resume checkpoint, and a canonical extension hash. It is read-only and makes zero provider calls.
+
+`--add-cost-usd` accepts at most nine decimal places and is persisted as integer nano-USD. It can extend only a loop that already froze a pricing snapshot; it cannot introduce pricing into an unpriced loop.
 
 Apply the exact preview and resume:
 

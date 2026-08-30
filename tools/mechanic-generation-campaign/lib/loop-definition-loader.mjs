@@ -47,6 +47,14 @@ export async function loadCampaignLoopDefinition({
       `Loop model ${parsedDefinition.model} does not match campaign manifest model ${campaign.manifest.model}.`
     );
   }
+  if (
+    parsedDefinition.limits.maxActualProviderCostNanoUsd !== undefined &&
+    !campaign.pricing
+  ) {
+    throw new Error(
+      "A loop cost ceiling requires a pricing snapshot in its campaign manifest."
+    );
+  }
 
   for (const step of parsedDefinition.sequence) {
     resolveProviderModes(

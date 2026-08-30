@@ -33,6 +33,9 @@ main { width: min(1600px, 94vw); margin: 2rem auto 5rem; display: grid; gap: 1.2
 .stat { padding: 1rem; }
 .stat strong { display: block; margin-top: .35rem; font-size: 1.8rem; letter-spacing: -.04em; }
 .stat small { color: var(--muted); }
+.stat-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.cost-stat { grid-column: span 2; }
+.cost-stat select { max-width: 10rem; padding: .3rem .4rem; font-size: .72rem; }
 .two-column { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.25rem; }
 .mechanic-grid, .variation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
 .knowledge-heading { align-items: start; }
@@ -109,5 +112,6 @@ a { color: var(--blue); }
   .topbar-actions { align-items: flex-end; flex-direction: column; gap: .6rem; }
   main { width: calc(100vw - 1.2rem); margin-top: .6rem; }
   .summary-grid { grid-template-columns: 1fr; }
+  .cost-stat { grid-column: span 1; }
   .docs-sidebar nav { grid-template-columns: 1fr; }
 }

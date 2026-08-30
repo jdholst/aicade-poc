@@ -275,6 +275,14 @@ function printAuthorizationEnvelope(loaded) {
     `Actual-provider ceilings: ${formatStageCounts(loaded.definition.limits.actualProviderCalls)}`
   );
   console.log(
+    loaded.campaign.pricing
+      ? `Pricing: ${loaded.campaign.pricing.snapshot.id} (${loaded.campaign.pricing.pricingHash})`
+      : "Pricing: unpriced"
+  );
+  console.log(
+    `Actual-provider cost ceiling: ${formatNanoUsd(loaded.definition.limits.maxActualProviderCostNanoUsd)}`
+  );
+  console.log(
     `Minimum proof path: ${loaded.minimums.campaignRuns} campaigns, ${loaded.minimums.submissions} submissions, ${formatStageCounts(loaded.minimums.actualProviderCalls)}`
   );
 }
@@ -317,6 +325,30 @@ export function printLoopSummary(run) {
   console.log(
     `Actual-provider remaining: ${formatStageCounts(remaining.actualProviderCalls)}`
   );
+  if (run.providerCost) {
+    const gross =
+      run.providerCost.grossExactNanoUsd +
+      run.providerCost.grossEstimatedNanoUsd;
+    const attributed =
+      run.providerCost.attributedExactNanoUsd +
+      run.providerCost.attributedEstimatedNanoUsd;
+    const pending = run.providerCost.pendingReservations.reduce(
+      (sum, reservation) => sum + reservation.totalNanoUsd,
+      0
+    );
+    const overage = Math.max(
+      0,
+      gross + pending - (run.limits.maxActualProviderCostNanoUsd ?? Infinity)
+    );
+    console.log(
+      `Provider cost: gross ${formatNanoUsd(gross)}, attributed ${formatNanoUsd(attributed)}, exact ${formatNanoUsd(run.providerCost.grossExactNanoUsd)}, estimated ${formatNanoUsd(run.providerCost.grossEstimatedNanoUsd)}, pending ${formatNanoUsd(pending)}`
+    );
+    console.log(
+      `Provider cost budget: ${formatNanoUsd(run.limits.maxActualProviderCostNanoUsd)}; remaining ${formatNanoUsd(remaining.actualProviderCostNanoUsd)}; overage ${formatNanoUsd(overage)}`
+    );
+  } else {
+    console.log("Provider cost: —");
+  }
   for (const [index, step] of run.steps.entries()) {
     const marker = index === run.currentStepIndex ? "current" : step.status;
     console.log(
@@ -382,10 +414,11 @@ function formatStageCounts(counts) {
 }
 
 function formatLoopLimits(limits) {
-  return `${limits.maxCampaignRuns} campaigns, ${limits.maxSubmissions} submissions, ${limits.maxFixCycles} fix cycles, ${limits.maxAuxiliaryIsolationCampaigns} auxiliary isolations; actual ${formatStageCounts(limits.actualProviderCalls)}`;
+  return `${limits.maxCampaignRuns} campaigns, ${limits.maxSubmissions} submissions, ${limits.maxFixCycles} fix cycles, ${limits.maxAuxiliaryIsolationCampaigns} auxiliary isolations; actual ${formatStageCounts(limits.actualProviderCalls)}; cost ${formatNanoUsd(limits.maxActualProviderCostNanoUsd)}`;
 }
 
 function takeBudgetAdditions(args) {
+  const costUsd = takeOption(args, "--add-cost-usd");
   return {
     maxFixCycles: nonnegativeNumberOption(args, "--add-fix-cycles"),
     maxCampaignRuns: nonnegativeNumberOption(args, "--add-campaign-runs"),
@@ -399,7 +432,26 @@ function takeBudgetAdditions(args) {
       contract: nonnegativeNumberOption(args, "--add-contract-calls"),
       source: nonnegativeNumberOption(args, "--add-source-calls"),
     },
+    ...(costUsd !== undefined
+      ? { maxActualProviderCostNanoUsd: usdToNanoUsd(costUsd) }
+      : {}),
   };
+}
+
+function usdToNanoUsd(value) {
+  if (!/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,9})?$/.test(value)) {
+    throw new Error("--add-cost-usd must be a nonnegative USD amount with at most 9 decimal places.");
+  }
+  const [whole, fraction = ""] = value.split(".");
+  const nanoUsd = Number(BigInt(whole) * 1_000_000_000n + BigInt(fraction.padEnd(9, "0")));
+  if (!Number.isSafeInteger(nanoUsd)) {
+    throw new Error("--add-cost-usd exceeds safe nano-USD precision.");
+  }
+  return nanoUsd;
+}
+
+function formatNanoUsd(value) {
+  return value === undefined ? "—" : `$${(value / 1_000_000_000).toFixed(6)}`;
 }
 
 function requiredOption(args, name) {
@@ -475,6 +527,7 @@ Loop extension options:
   --add-planning-calls <number>
   --add-contract-calls <number>
   --add-source-calls <number>
+  --add-cost-usd <amount>          Add integer nano-USD capacity using a USD value with at most 9 decimals
   --authorize <extension-hash>      Apply the exact previewed extension and resume
 
 Loop runner options:

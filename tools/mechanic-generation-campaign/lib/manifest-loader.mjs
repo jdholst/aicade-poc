@@ -3,6 +3,10 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { parseCampaignManifest } from "./contracts.mjs";
+import {
+  parseOpenAiPricingSnapshot,
+  resolvePricingModel,
+} from "./pricing.mjs";
 
 export async function loadCampaignManifest(manifestPathInput) {
   const manifestPath = path.resolve(manifestPathInput);
@@ -11,6 +15,7 @@ export async function loadCampaignManifest(manifestPathInput) {
   const contents = await readFile(manifestPath, "utf8");
   const manifest = parseCampaignManifest(JSON.parse(contents));
   const fixturePaths = {};
+  let pricing;
 
   for (const stage of ["planning", "contract", "source"]) {
     const reference = manifest.fixtures[stage];
@@ -40,12 +45,35 @@ export async function loadCampaignManifest(manifestPathInput) {
   );
   await stat(probePath);
 
+  if (manifest.pricingSnapshot) {
+    const pricingPath = resolveHarnessPath(
+      harnessRoot,
+      manifestDir,
+      manifest.pricingSnapshot.path
+    );
+    const pricingContents = await readFile(pricingPath);
+    const pricingHash = createHash("sha256")
+      .update(pricingContents)
+      .digest("hex");
+    if (pricingHash !== manifest.pricingSnapshot.sha256) {
+      throw new Error(
+        `Pricing snapshot hash mismatch. Expected ${manifest.pricingSnapshot.sha256}, received ${pricingHash}.`
+      );
+    }
+    const snapshot = parseOpenAiPricingSnapshot(
+      JSON.parse(pricingContents.toString("utf8"))
+    );
+    resolvePricingModel(snapshot, manifest.model);
+    pricing = { snapshot, pricingPath, pricingHash };
+  }
+
   return {
     manifest,
     manifestPath,
     manifestHash: createHash("sha256").update(contents).digest("hex"),
     fixturePaths,
     probePath,
+    ...(pricing ? { pricing } : {}),
   };
 }
 
@@ -69,4 +97,3 @@ function resolveHarnessPath(harnessRoot, manifestDir, relativePath) {
   }
   return resolved;
 }
-

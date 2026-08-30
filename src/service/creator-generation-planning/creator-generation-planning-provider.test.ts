@@ -6,6 +6,68 @@ import { getFirstValidTopDownGameSpecFixture } from "@/runtime/phaser/top-down-g
 import { createOpenAiCreatorGenerationPlanProvider } from "./creator-generation-planning-provider";
 
 describe("OpenAI creator-generation planning provider", () => {
+  it("requests the default service tier and reports sanitized token usage", async () => {
+    const onProviderUsage = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue(
+      Response.json({
+        id: "resp_planning_123",
+        model: "gpt-5.6-luna-2026-08-01",
+        service_tier: "default",
+        created_at: 1_787_873_600,
+        usage: {
+          input_tokens: 1_200,
+          input_tokens_details: {
+            cached_tokens: 200,
+            cache_write_tokens: 100,
+          },
+          output_tokens: 300,
+          total_tokens: 1_500,
+        },
+        output: [
+          {
+            type: "function_call",
+            name: "return_top_down_creator_generation_plan",
+            arguments: JSON.stringify({
+              gameSpec: getFirstValidTopDownGameSpecFixture(),
+              mechanicIntent: createTransportIntent(),
+            }),
+          },
+        ],
+      })
+    );
+    const provider = createOpenAiCreatorGenerationPlanProvider({ fetchImpl });
+
+    await provider({
+      prompt: "Make a compact arena.",
+      model: "gpt-5.6-luna",
+      providerCredential: "sk-secret",
+      taskRoute: "spec_generation.primary",
+      availableCapabilities: ["object_read"],
+      onProviderUsage,
+    });
+
+    const requestBody = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(requestBody.service_tier).toBe("default");
+    expect(onProviderUsage).toHaveBeenCalledWith({
+      schemaVersion: "openai_provider_usage_receipt/v1",
+      responseId: "resp_planning_123",
+      model: "gpt-5.6-luna-2026-08-01",
+      serviceTier: "default",
+      createdAt: "2026-08-27T23:33:20.000Z",
+      completedAt: expect.any(String),
+      usage: {
+        inputTokens: 1_200,
+        cachedInputTokens: 200,
+        cacheWriteInputTokens: 100,
+        outputTokens: 300,
+        totalTokens: 1_500,
+      },
+    });
+    expect(JSON.stringify(onProviderUsage.mock.calls)).not.toContain(
+      "sk-secret"
+    );
+  });
+
   it("requests one combined spec-and-intent tool call without exposing the credential in its payload", async () => {
     const envelope = {
       gameSpec: getFirstValidTopDownGameSpecFixture(),

@@ -229,6 +229,7 @@ export const campaignManifestSchema = z
         envName: z.string().regex(/^[A-Z][A-Z0-9_]*$/).optional(),
       })
       .strict(),
+    pricingSnapshot: fixtureReferenceSchema.optional(),
     prompts: z.array(promptSchema).length(5),
     providerModes: providerModesSchema,
     fixtures: z
@@ -364,6 +365,7 @@ export const campaignAttemptSchema = z
         source: z.number().int().nonnegative(),
       })
       .strict(),
+    providerCallReceiptIds: z.array(z.string().min(1)).optional(),
     fixtureCalls: z
       .object({
         planning: z.number().int().nonnegative(),
@@ -392,8 +394,14 @@ export const campaignAttemptSchema = z
     temporaryFixIds: z.array(z.string().regex(/^TF-\d+$/)),
     cost: z
       .object({
-        quality: z.enum(["estimated", "reported", "unknown"]),
+        quality: z.enum(["estimated", "reported", "unknown", "exact", "mixed"]),
         usd: z.number().nonnegative().optional(),
+        snapshotId: z.string().min(1).optional(),
+        exactNanoUsd: z.number().int().nonnegative().optional(),
+        estimatedNanoUsd: z.number().int().nonnegative().optional(),
+        totalNanoUsd: z.number().int().nonnegative().optional(),
+        pricedCalls: z.number().int().nonnegative().optional(),
+        unknownCalls: z.number().int().nonnegative().optional(),
       })
       .strict()
       .optional(),
@@ -507,6 +515,24 @@ const campaignRunBaseSchema = z
         authorizedAt: z.string().datetime(),
       })
       .strict(),
+    pricing: z
+      .object({
+        path: z.string().min(1),
+        sha256: sha256Schema,
+        snapshotId: z.string().min(1),
+      })
+      .strict()
+      .optional(),
+    cost: z
+      .object({
+        exactNanoUsd: z.number().int().nonnegative(),
+        estimatedNanoUsd: z.number().int().nonnegative(),
+        totalNanoUsd: z.number().int().nonnegative(),
+        pricedCalls: z.number().int().nonnegative(),
+        unknownCalls: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
     pendingManualQa: pendingManualQaSchema.optional(),
     result: z
       .object({

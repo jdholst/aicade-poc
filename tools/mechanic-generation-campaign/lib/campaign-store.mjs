@@ -187,6 +187,8 @@ export function createCampaignStore(repoRoot) {
         providerModes: run.providerModes,
         revision: run.revision,
         knowledgePolicy: run.knowledgePolicy,
+        pricing: run.pricing,
+        cost: run.cost,
         result: run.result,
         manualQa: {
           pending: attempts.filter(({ manualQa }) => manualQa?.status === "pending").length,
@@ -202,6 +204,7 @@ export function createCampaignStore(repoRoot) {
           classification: attempt.classification,
           failure: attempt.failure,
           providerCalls: attempt.providerCalls,
+          providerCallReceiptIds: attempt.providerCallReceiptIds,
           durationMs: attempt.durationMs,
           pipelinePassed: attempt.pipelinePassed,
           externalProbePassed: attempt.externalProbePassed,

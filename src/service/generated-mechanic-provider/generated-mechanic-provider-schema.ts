@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { openAiProviderUsageReceiptSchema } from "@/service/openai-provider-usage-receipt";
 
 import {
   artifactScopedRepairArtifactIdSchema,
@@ -308,6 +309,7 @@ export const generatedMechanicProviderResponseSchema = z.discriminatedUnion(
         attempt: positiveIntegerSchema,
         attemptKind: attemptKindSchema,
         candidate: jsonValueSchema,
+        providerUsage: openAiProviderUsageReceiptSchema.optional(),
       })
       .strict(),
     z
@@ -325,6 +327,7 @@ export const generatedMechanicProviderResponseSchema = z.discriminatedUnion(
             message: z.string().min(1).max(1_000),
           })
           .strict(),
+        providerUsage: openAiProviderUsageReceiptSchema.optional(),
       })
       .strict(),
   ]

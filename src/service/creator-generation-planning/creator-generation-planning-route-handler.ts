@@ -10,6 +10,7 @@ import {
 } from "@/service/spec-generation/spec-generation-outcome";
 
 import type { CreatorGenerationPlanProvider } from "./creator-generation-planning-provider";
+import type { OpenAiProviderUsageReceipt } from "@/service/openai-provider-usage-receipt";
 import {
   generateTopDownCreatorPlan,
   type TopDownCreatorPlanResult,
@@ -104,6 +105,7 @@ export function createCreatorGenerationPlanningPostHandler({
       );
     }
 
+    let providerUsage: OpenAiProviderUsageReceipt | undefined;
     const result = withGenerationRunCorrelation(
       await generateTopDownCreatorPlan({
         availableCapabilities,
@@ -114,13 +116,19 @@ export function createCreatorGenerationPlanningPostHandler({
           requestBody.body.enteredPrompt ?? requestBody.body.prompt
         ),
         provider,
+        onProviderUsage: (receipt) => {
+          providerUsage = receipt;
+        },
         providerCredential: openAiConfigResult.config.apiKey,
         signal: request.signal,
       }),
       generationRunId
     );
 
-    return jsonNoStore(result, getSpecGenerationResultStatus(result));
+    return jsonNoStore(
+      providerUsage ? { ...result, providerUsage } : result,
+      getSpecGenerationResultStatus(result)
+    );
   };
 }
 

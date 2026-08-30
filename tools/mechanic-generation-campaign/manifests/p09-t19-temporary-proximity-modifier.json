@@ -10,6 +10,7 @@
   },
   "model": "gpt-5.6-luna",
   "credential": { "source": "keyword_env", "envName": "AICADE_CAMPAIGN_KEYWORD" },
+  "pricingSnapshot": { "path": "../pricing/openai-2026-08-29.json", "sha256": "3f36091cb61399320b75a488547febbfaf56f8cb860e04a6226a685e9d3bc27b" },
   "prompts": [
     {
       "id": "baseline",

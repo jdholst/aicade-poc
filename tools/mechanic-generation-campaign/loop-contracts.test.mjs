@@ -19,7 +19,7 @@ function validDefinition() {
     id: "p09-t17-proof-loop",
     manifest: {
       path: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
-      sha256: "9c7eeaa6e656167531c2e322c28535a8a71f4c5d11df594cdd207068a0f57d99",
+      sha256: "7ded16f312e25c1c4f04e46320dbe5003942675cd8dedb06a93be0116ad2f13c",
       probeSha256: "4dc1c0b63661c708a9c326a377f1f1d5be62a03ff1f5d0a1519dd579936002df",
     },
     model: "gpt-5.6-luna",

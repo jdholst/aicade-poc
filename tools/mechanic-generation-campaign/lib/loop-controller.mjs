@@ -23,11 +23,17 @@ import {
   finishSequenceCampaign,
   invalidateLoop,
   pauseLoopForCampaignRepair,
+  beginActualProviderCall,
   recordActualProviderCall,
   recordLoopSubmission,
   resumeLoopAfterCampaignRepair,
+  settleActualProviderCallCost,
   startLoopCampaign,
 } from "./loop-state.mjs";
+import {
+  calculateConservativeReservation,
+  calculateProviderCallCost,
+} from "./pricing.mjs";
 import {
   changedFilesBetween,
   inspectLoopWorktree,
@@ -452,7 +458,11 @@ async function resumeActiveIsolation({
         loopStepId: profile.id,
         loopCycle: state.run.currentRevision.cycle,
       },
-      providerCallBudget: createProviderCallBudget(state, loopStore),
+      providerCallBudget: createProviderCallBudget(
+        state,
+        loopStore,
+        loaded.campaign.pricing
+      ),
       onSubmission: createSubmissionRecorder(state, loopStore),
       runId: active.campaignRunId,
       resume: active.campaignRunId,
@@ -588,7 +598,11 @@ export async function runCampaignLoopIsolation({
         loopStepId: profile.id,
         loopCycle: state.run.currentRevision.cycle,
       },
-      providerCallBudget: createProviderCallBudget(state, loopStore),
+      providerCallBudget: createProviderCallBudget(
+        state,
+        loopStore,
+        loaded.campaign.pricing
+      ),
       onSubmission: createSubmissionRecorder(state, loopStore),
       runId: campaignRunId,
     });
@@ -822,7 +836,11 @@ async function executeSequence({
       await loopStore.writeRun(state.run);
     }
 
-    const providerCallBudget = createProviderCallBudget(state, loopStore);
+    const providerCallBudget = createProviderCallBudget(
+      state,
+      loopStore,
+      loaded.campaign.pricing
+    );
     const onSubmission = createSubmissionRecorder(state, loopStore);
     try {
       const result = await runCampaignFn({
@@ -898,8 +916,64 @@ async function executeSequence({
   return { run: state.run };
 }
 
-function createProviderCallBudget(state, loopStore) {
+function createProviderCallBudget(state, loopStore, pricing) {
   return {
+    async begin({ callId, stage, model, serviceTier, requestedAt }) {
+      for (const pending of [...(state.run.providerCost?.pendingReservations ?? [])]) {
+        state.run = settleActualProviderCallCost(state.run, {
+          callId: pending.callId,
+          stage: pending.stage,
+          completedAt: new Date().toISOString(),
+          quality: "conservative_estimate",
+          totalNanoUsd: pending.totalNanoUsd,
+        });
+      }
+      const reservationNanoUsd = pricing
+        ? calculateConservativeReservation({
+            model,
+            serviceTier,
+            snapshot: pricing.snapshot,
+          }).totalNanoUsd
+        : 0;
+      const result = beginActualProviderCall(state.run, {
+        callId,
+        stage,
+        requestedAt,
+        reservationNanoUsd,
+      });
+      state.run = result.run;
+      await loopStore.writeRun(state.run);
+      return result.allowed;
+    },
+    async settle(call) {
+      if (!pricing || !state.run.pricing) return;
+      let cost = call.cost;
+      if (!cost || !["exact", "conservative_estimate"].includes(cost.quality)) {
+        if (call.receipt) {
+          try {
+            cost = calculateProviderCallCost({
+              receipt: call.receipt,
+              snapshot: pricing.snapshot,
+            });
+          } catch {
+            cost = undefined;
+          }
+        }
+        cost ??= calculateConservativeReservation({
+          model: state.run.model,
+          serviceTier: call.receipt?.serviceTier ?? "default",
+          snapshot: pricing.snapshot,
+        });
+      }
+      state.run = settleActualProviderCallCost(state.run, {
+        callId: call.callId,
+        stage: call.stage,
+        completedAt: call.completedAt ?? new Date().toISOString(),
+        quality: cost.quality,
+        totalNanoUsd: cost.totalNanoUsd,
+      });
+      await loopStore.writeRun(state.run);
+    },
     async consume(stage) {
       const result = recordActualProviderCall(state.run, stage);
       state.run = result.run;

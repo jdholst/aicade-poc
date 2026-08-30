@@ -2,6 +2,7 @@ import {
   OPENAI_REQUEST_TIMEOUT_MS,
   OPENAI_RESPONSES_URL,
 } from "@/constants";
+import { reportOpenAiProviderUsage } from "@/service/openai-provider-usage-receipt";
 
 import { createMechanicContractGenerationSystemPrompt } from "./mechanic-contract-generation-prompt";
 import {
@@ -26,6 +27,11 @@ type ResponseOutputItem = {
 };
 
 type OpenAIResponsePayload = {
+  id?: string;
+  model?: string;
+  service_tier?: string;
+  created_at?: number;
+  usage?: unknown;
   error?: {
     code?: string;
     message?: string;
@@ -77,6 +83,7 @@ export function createOpenAiMechanicContractProvider({
         signal: controller.signal,
         body: JSON.stringify({
           model: input.model,
+          service_tier: "default",
           reasoning: {
             effort: "medium",
           },
@@ -111,6 +118,7 @@ export function createOpenAiMechanicContractProvider({
         cache: "no-store",
       });
       payload = await readOpenAIResponsePayload(response, controller.signal);
+      reportOpenAiProviderUsage(input.onProviderUsage, payload);
     } catch (error) {
       if (cancelled) {
         throw createMechanicContractProviderError(

@@ -13,6 +13,49 @@ import {
 import { createOpenAiMechanicSourceProvider } from "./mechanic-source-generation-provider";
 
 describe("OpenAI mechanic source provider", () => {
+  it("requests the default service tier and reports sanitized usage", async () => {
+    const onProviderUsage = vi.fn();
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        id: "resp_source_123",
+        model: "gpt-5.6-luna-2026-08-01",
+        service_tier: "default",
+        usage: {
+          input_tokens: 2_000,
+          input_tokens_details: {
+            cached_tokens: 1_000,
+            cache_write_tokens: 200,
+          },
+          output_tokens: 500,
+          total_tokens: 2_500,
+        },
+        output: [],
+      })
+    );
+    const provider = createOpenAiMechanicSourceProvider({ fetchImpl });
+
+    await expect(
+      provider({ ...createProviderInput(), onProviderUsage })
+    ).rejects.toMatchObject({
+      evidence: { code: "invalid_provider_output" },
+    });
+
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(body.service_tier).toBe("default");
+    expect(onProviderUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responseId: "resp_source_123",
+        usage: {
+          inputTokens: 2_000,
+          cachedInputTokens: 1_000,
+          cacheWriteInputTokens: 200,
+          outputTokens: 500,
+          totalTokens: 2_500,
+        },
+      })
+    );
+  });
+
   it("requests and returns one strict Generated Mechanic Source candidate", async () => {
     const candidate = {
       schemaVersion: "generated_mechanic_source_candidate/v1",

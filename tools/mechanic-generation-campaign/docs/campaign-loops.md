@@ -50,18 +50,27 @@ Every `campaign-loop-manifest/v1` contains one exact campaign manifest, its exte
       "planning": 30,
       "contract": 60,
       "source": 60
-    }
+    },
+    "maxActualProviderCostNanoUsd": 25000000000
   }
 }
 ```
 
 The values above illustrate the shape only. Choose and authorize limits for each loop explicitly. Validation rejects a definition that cannot contain one complete pass through its sequence.
 
+The cost ceiling is optional. When present, the referenced campaign manifest must freeze a pricing snapshot. A frozen snapshot without a cost ceiling records cost without enforcing a limit. A cost ceiling without a snapshot is invalid.
+
 ## One-time authorization
 
 Run validation first. Present the complete sequence, provider modes, campaign ceiling, submission ceiling, fix-cycle ceiling, isolation ceiling, and per-stage actual-provider ceilings once. Start the loop with the exact printed definition hash after authorization.
 
-The authorization remains valid on ordinary resume because usage only decreases the remaining envelope. Changing the definition, manifest, prompts, thresholds, probe, model, provider modes, or original ceilings invalidates the loop. An exhausted loop can receive a separately hash-authorized additive extension without changing its frozen definition. Per-step retry limits and per-profile isolation limits remain fixed.
+The authorization remains valid on ordinary resume because usage only decreases the remaining envelope. Changing the definition, manifest, prompts, thresholds, probe, model, provider modes, pricing identity, or original ceilings invalidates the loop. An exhausted loop can receive a separately hash-authorized additive extension without changing its frozen definition. Per-step retry limits and per-profile isolation limits remain fixed.
+
+## Provider cost accounting
+
+Before each actual provider request, the loop records a stable call ID and a conservative maximum reservation from the frozen snapshot. Valid returned usage replaces that reservation with exact calculated cost. Missing or malformed usage keeps the reservation as a conservative estimate. Resume settles unresolved reservations once, so interrupted evidence is not charged twice.
+
+The cost limit is a soft stop. The current request may cross it, but settled spend plus pending reservations prevents the next provider request. Reports and the dashboard separate exact, estimated, pending, remaining, and overage amounts. Gross spend never decreases. A campaign-tool repair can credit Sparkline-attributed cost while preserving gross spend.
 
 ## Worktree preparation
 
@@ -138,7 +147,7 @@ The loop branch and worktree remain after a stop until an explicit lifecycle com
 
 ### Extend and resume
 
-Only an `exhausted` loop can be extended. Budget additions are available for fix cycles, campaign runs, submissions, auxiliary isolation campaigns, and planning, contract, and source provider calls. At least one addition must be positive.
+Only an `exhausted` loop can be extended. Budget additions are available for fix cycles, campaign runs, submissions, auxiliary isolation campaigns, planning, contract, and source provider calls, and USD cost. At least one addition must be positive. Cost can be extended only when pricing was already frozen for the loop.
 
 Run `loop extend` without `--authorize` first. The read-only preview reports current usage, old ceilings, additions, resulting ceilings, the exhaustion resume checkpoint, and a canonical extension hash. It changes no evidence and makes no provider calls. Supplying that exact hash applies the extension once and resumes from the checkpoint. A loop exhausted during an active campaign continues that campaign. A loop exhausted while waiting for a fix remains there unless a verified fix report is supplied.
 

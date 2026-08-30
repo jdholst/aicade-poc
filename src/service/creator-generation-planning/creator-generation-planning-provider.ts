@@ -7,6 +7,10 @@ import {
   SpecGenerationProviderError,
 } from "@/service/spec-generation/spec-generation-outcome";
 import type { SpecGenerationProviderInput } from "@/service/spec-generation/spec-generation-service";
+import {
+  reportOpenAiProviderUsage,
+  type OpenAiProviderUsageReporter,
+} from "@/service/openai-provider-usage-receipt";
 
 import { createCreatorGenerationPlanningSystemPrompt } from "./creator-generation-planning-prompt";
 import {
@@ -21,6 +25,11 @@ type ResponsesFunctionCall = {
 };
 
 type OpenAiResponsePayload = {
+  id?: string;
+  model?: string;
+  service_tier?: string;
+  created_at?: number;
+  usage?: unknown;
   error?: {
     code?: string;
     message?: string;
@@ -37,6 +46,7 @@ type OpenAiResponsePayload = {
 export type CreatorGenerationPlanProviderInput = SpecGenerationProviderInput &
   Readonly<{
     availableCapabilities: readonly StableId[];
+    onProviderUsage?: OpenAiProviderUsageReporter;
     signal?: AbortSignal;
   }>;
 
@@ -82,6 +92,7 @@ export function createOpenAiCreatorGenerationPlanProvider({
         signal: controller.signal,
         body: JSON.stringify({
           model: input.model,
+          service_tier: "default",
           reasoning: {
             effort: "medium",
           },
@@ -116,6 +127,7 @@ export function createOpenAiCreatorGenerationPlanProvider({
         cache: "no-store",
       });
       payload = await readOpenAiResponsePayload(response);
+      reportOpenAiProviderUsage(input.onProviderUsage, payload);
       if (cancelled || timedOut) {
         throw new DOMException("Aborted", "AbortError");
       }

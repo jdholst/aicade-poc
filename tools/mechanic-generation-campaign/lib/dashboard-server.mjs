@@ -69,6 +69,11 @@ export async function buildDashboardSnapshot(
         attempts: await Promise.all(
           attempts.map(async (attempt) => ({
             ...attempt,
+            providerCallReceipts: await readAttemptProviderCallReceipts(
+              store,
+              run.id,
+              attempt.id
+            ),
             manualQaEvidence:
               attempt.manualQa && typeof store.readManualQa === "function"
                 ? await store.readManualQa(run.id, attempt.id)
@@ -382,6 +387,25 @@ async function readJsonLines(filePath) {
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line));
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function readAttemptProviderCallReceipts(store, campaignRunId, attemptId) {
+  if (typeof store.attemptDirectory !== "function") return [];
+  try {
+    const value = JSON.parse(
+      await readFile(
+        path.join(
+          store.attemptDirectory(campaignRunId, attemptId),
+          "provider-call-receipts.json"
+        ),
+        "utf8"
+      )
+    );
+    return Array.isArray(value) ? value : [];
   } catch (error) {
     if (error?.code === "ENOENT") return [];
     throw error;

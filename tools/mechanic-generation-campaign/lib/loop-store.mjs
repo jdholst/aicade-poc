@@ -129,6 +129,8 @@ export function createCampaignLoopStore(repoRoot) {
         currentRevision: run.currentRevision,
         usage: run.usage,
         limits: run.limits,
+        pricing: run.pricing,
+        providerCost: run.providerCost,
         branch: run.worktree.branch,
         steps: run.steps,
         campaignLinks: run.campaignLinks,

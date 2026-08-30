@@ -28,6 +28,8 @@ npm run campaign -- validate --manifest p09-t17-projectile
 
 Validation checks the manifest contract, five frozen prompts, fixture references and hashes, external probe, and configured credential environment. Use `--structure-only` only when no provider-backed run will start.
 
+When the manifest includes pricing, validation also checks the immutable snapshot hash and model coverage. Use `npm run campaign -- pricing refresh --check` to compare the latest snapshot with the official OpenAI documentation before authorizing a new loop.
+
 ## Run the smallest full-pipeline campaign
 
 A discovery cohort submits the baseline prompt once. The following configuration makes planning, contract, and source generation actual provider calls:

@@ -16,6 +16,7 @@ import {
 } from "@/service/spec-generation/spec-generation-service";
 
 import type { CreatorGenerationPlanProvider } from "./creator-generation-planning-provider";
+import type { OpenAiProviderUsageReporter } from "@/service/openai-provider-usage-receipt";
 import { applyTopDownCreatorOwnedObjectRediscoveryPolicy } from "./creator-generation-owned-object-policy";
 import { applyTopDownCreatorPerceptibilityFloor } from "./creator-generation-perceptibility-policy";
 import {
@@ -31,6 +32,7 @@ export type GenerateTopDownCreatorPlanInput = Omit<
     availableCapabilities: readonly StableId[];
     generationRunId: StableId;
     provider: CreatorGenerationPlanProvider;
+    onProviderUsage?: OpenAiProviderUsageReporter;
     signal?: AbortSignal;
   }>;
 
@@ -47,6 +49,7 @@ export async function generateTopDownCreatorPlan({
   availableCapabilities: availableCapabilitiesInput,
   generationRunId: generationRunIdInput,
   provider,
+  onProviderUsage,
   signal,
   ...specGenerationInput
 }: GenerateTopDownCreatorPlanInput): Promise<TopDownCreatorPlanResult> {
@@ -63,6 +66,7 @@ export async function generateTopDownCreatorPlan({
         await provider({
           ...providerInput,
           availableCapabilities,
+          ...(onProviderUsage ? { onProviderUsage } : {}),
           ...(signal ? { signal } : {}),
         })
       );

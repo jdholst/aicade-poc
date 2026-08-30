@@ -3,6 +3,10 @@ import {
   OPENAI_RESPONSES_URL,
 } from "@/constants";
 import type { OpenAIModelId } from "@/utils/openai-utils";
+import {
+  reportOpenAiProviderUsage,
+  type OpenAiProviderUsageReporter,
+} from "@/service/openai-provider-usage-receipt";
 
 import { createMechanicSourceGenerationSystemPrompt } from "./mechanic-source-generation-prompt";
 import type { MechanicSourceGenerationGuidanceInput } from "./mechanic-source-generation-prompt";
@@ -24,6 +28,11 @@ type ResponseOutputItem = {
 };
 
 type OpenAIResponsePayload = {
+  id?: string;
+  model?: string;
+  service_tier?: string;
+  created_at?: number;
+  usage?: unknown;
   error?: {
     message?: string;
   };
@@ -34,6 +43,7 @@ export type MechanicSourceGenerationProviderInput =
   MechanicSourceGenerationGuidanceInput & {
     model: OpenAIModelId;
     providerCredential: string;
+    onProviderUsage?: OpenAiProviderUsageReporter;
     signal?: AbortSignal;
   };
 
@@ -122,6 +132,7 @@ export function createOpenAiMechanicSourceProvider({
         signal: controller.signal,
         body: JSON.stringify({
           model: input.model,
+          service_tier: "default",
           reasoning: { effort: "medium" },
           parallel_tool_calls: false,
           tool_choice: {
@@ -154,6 +165,7 @@ export function createOpenAiMechanicSourceProvider({
         cache: "no-store",
       });
       payload = await readOpenAIResponsePayload(response, controller.signal);
+      reportOpenAiProviderUsage(input.onProviderUsage, payload);
     } catch (error) {
       if (cancelled) {
         throw createMechanicSourceProviderError(

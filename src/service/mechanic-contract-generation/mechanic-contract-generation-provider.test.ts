@@ -68,6 +68,45 @@ const providerInput: MechanicContractGenerationProviderInput = {
 };
 
 describe("OpenAI mechanic contract provider", () => {
+  it("reports usage even when structured provider output is rejected", async () => {
+    const onProviderUsage = vi.fn();
+    const provider = createOpenAiMechanicContractProvider({
+      fetchImpl: async () =>
+        Response.json({
+          id: "resp_contract_invalid",
+          model: "gpt-5.6-luna-2026-08-01",
+          service_tier: "default",
+          usage: {
+            input_tokens: 800,
+            input_tokens_details: { cached_tokens: 50 },
+            output_tokens: 100,
+            total_tokens: 900,
+          },
+          output: [],
+        }),
+    });
+
+    await expect(
+      provider({ ...providerInput, onProviderUsage })
+    ).rejects.toMatchObject({
+      evidence: { code: "invalid_provider_output" },
+    });
+
+    expect(onProviderUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responseId: "resp_contract_invalid",
+        model: "gpt-5.6-luna-2026-08-01",
+        usage: {
+          inputTokens: 800,
+          cachedInputTokens: 50,
+          cacheWriteInputTokens: 0,
+          outputTokens: 100,
+          totalTokens: 900,
+        },
+      })
+    );
+  });
+
   it("requests only a structured Generated Mechanic Contract", async () => {
     const candidate = {
       schemaVersion: "generated-mechanic-contract/v1",
