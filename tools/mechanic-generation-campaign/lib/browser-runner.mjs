@@ -1344,6 +1344,12 @@ async function launchBrowser(chromium, headed) {
         async close() {
           await browserServer.kill();
         },
+        forceKill() {
+          const processHandle = browserServer.process();
+          if (processHandle.exitCode === null) {
+            processHandle.kill("SIGKILL");
+          }
+        },
       };
     } catch (error) {
       await browserServer.kill();
@@ -1362,6 +1368,7 @@ export async function createCampaignBrowserPool({
   headed,
   executionPolicy,
   launchBrowserFn = launchBrowser,
+  closeTimeoutMs = 5_000,
 }) {
   const processCount = executionPolicy.mode === "parallel"
     ? executionPolicy.maxConcurrentAttempts
@@ -1384,7 +1391,9 @@ export async function createCampaignBrowserPool({
   const failedLaunch = launchResults.find(({ status }) => status === "rejected");
   if (failedLaunch) {
     await Promise.allSettled(
-      browserResources.map((resource) => resource.close())
+      browserResources.map((resource) =>
+        closeBrowserResource(resource, closeTimeoutMs)
+      )
     );
     throw failedLaunch.reason;
   }
@@ -1414,12 +1423,27 @@ export async function createCampaignBrowserPool({
       if (closed) return;
       closed = true;
       await Promise.allSettled(
-        browserResources.map((resource) => resource.close())
+        browserResources.map((resource) =>
+          closeBrowserResource(resource, closeTimeoutMs)
+        )
       );
       available.length = 0;
       leased.clear();
     },
   };
+}
+
+async function closeBrowserResource(resource, timeoutMs) {
+  let timeout;
+  await Promise.race([
+    Promise.resolve().then(() => resource.close()),
+    new Promise((resolve) => {
+      timeout = setTimeout(() => {
+        resource.forceKill?.();
+        resolve();
+      }, timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timeout));
 }
 
 async function waitForUrl(baseUrl, processHandle) {

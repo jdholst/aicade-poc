@@ -737,6 +737,102 @@ describe("campaign loop controller", () => {
     expect(resumed.run.campaignRepairs[0].status).toBe("completed");
   });
 
+  it("hydrates a durable campaign QA queue before assigning repair credit", async () => {
+    const pendingManualQa = {
+      manualQaId: "manual-qa-a05-baseline",
+      campaignRunId: "campaign-1",
+      attemptId: "a05-baseline",
+      promptId: "baseline",
+      cohort: "repeatability",
+      revisionKey: "a".repeat(64),
+      requestedAt: "2026-08-30T22:00:00.000Z",
+      evidencePath: "a05-baseline/manual-qa.json",
+    };
+    const run = {
+      id: "loop-1",
+      status: "running",
+      currentRevision: { revisionKey: "a".repeat(64) },
+      activeCampaign: {
+        campaignRunId: "campaign-1",
+        role: "sequence",
+        stepId: "repeatability",
+        budgetCheckpoint: {
+          campaignRuns: 0,
+          submissions: 0,
+          auxiliaryIsolationCampaigns: 0,
+          actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+        },
+      },
+      pendingManualQa: undefined,
+      pendingManualQaQueue: [],
+      usage: {
+        fixCycles: 0,
+        campaignRuns: 1,
+        submissions: 5,
+        auxiliaryIsolationCampaigns: 0,
+        actualProviderCalls: { planning: 5, contract: 5, source: 9 },
+        grossActualProviderCalls: { planning: 5, contract: 5, source: 9 },
+      },
+      campaignLinks: [
+        {
+          campaignRunId: "campaign-1",
+          role: "sequence",
+          stepId: "repeatability",
+          status: "running",
+        },
+      ],
+      campaignRepairs: [],
+    };
+    let writtenRun;
+    let campaignRun = {
+      id: "campaign-1",
+      loopId: "loop-1",
+      status: "waiting_for_manual_qa",
+      revision: { revisionKey: "a".repeat(64) },
+      pendingManualQa,
+      pendingManualQaQueue: [pendingManualQa],
+    };
+
+    const paused = await pauseCampaignLoopForRepair({
+      repoRoot: "/repo",
+      loopId: "loop-1",
+      reason: "Browser teardown stalled after durable campaign evidence.",
+      loopStore: {
+        async initialize() {},
+        async readRun() {
+          return run;
+        },
+        async writeRun(value) {
+          writtenRun = value;
+        },
+      },
+      campaignStore: {
+        async initialize() {},
+        async readRun() {
+          return campaignRun;
+        },
+        async updateRun(_campaignRunId, update) {
+          campaignRun = await update(campaignRun);
+          return campaignRun;
+        },
+      },
+      now: () => new Date("2026-08-30T22:01:00.000Z"),
+    });
+
+    expect(paused.run).toBe(writtenRun);
+    expect(paused.run.status).toBe("waiting_for_campaign_repair");
+    expect(paused.run.pendingManualQa).toEqual(pendingManualQa);
+    expect(paused.run.usage).toEqual(run.usage);
+    expect(paused.run.campaignRepairs[0]).toMatchObject({
+      resumeStatus: "waiting_for_manual_qa",
+      creditedUsage: {
+        campaignRuns: 0,
+        submissions: 0,
+        actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+      },
+    });
+  });
+
   it("reconciles a completed active campaign to its persisted manual-QA gate without provider work", async () => {
     const fixture = await createRepositoryFixture({ singleStepFix: true });
     const loopStore = createCampaignLoopStore(fixture.repoRoot);

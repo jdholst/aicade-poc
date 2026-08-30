@@ -193,7 +193,7 @@ export async function resumeCampaignLoop({
         "Campaign-tool repair cannot change the frozen Sparkline worktree revision."
       );
     }
-    await restoreCampaignManualQaCheckpoint({ run, campaignStore });
+    run = await restoreCampaignManualQaCheckpoint({ run, campaignStore });
     run = resumeLoopAfterCampaignRepair(run);
     await loopStore.writeRun(run);
     if (
@@ -319,49 +319,51 @@ export async function resumeCampaignLoop({
 }
 
 async function restoreCampaignManualQaCheckpoint({ run, campaignStore }) {
-  const queue = run.pendingManualQaQueue?.length
-    ? run.pendingManualQaQueue
-    : run.pendingManualQa
-      ? [run.pendingManualQa]
-      : [];
   const active = run.activeCampaign;
-  if (queue.length === 0 || active?.role !== "sequence") return;
+  if (active?.role !== "sequence") return run;
   try {
-    await campaignStore.updateRun(active.campaignRunId, (campaignRun) => {
-      if (
-        campaignRun.loopId !== run.id ||
-        campaignRun.revision.revisionKey !== run.currentRevision.revisionKey ||
-        queue.some(
-          (pending) =>
-            !campaignRun.pendingManualQaQueue.some(
-              (candidate) =>
-                candidate.attemptId === pending.attemptId &&
-                candidate.manualQaId === pending.manualQaId
-            )
-        )
-      ) {
-        throw new Error(
-          `Campaign ${active.campaignRunId} does not match the preserved manual-QA checkpoint.`
-        );
-      }
-      if (
-        !["running", "interrupted", "waiting_for_manual_qa"].includes(
-          campaignRun.status
-        )
-      ) {
-        throw new Error(
-          `Campaign ${active.campaignRunId} cannot restore manual QA from status ${campaignRun.status}.`
-        );
-      }
-      return {
-        ...campaignRun,
-        status: "waiting_for_manual_qa",
-        completedAt: undefined,
-        invalidReason: undefined,
-      };
-    });
+    let campaignRun = await campaignStore.readRun(active.campaignRunId);
+    const queue = campaignRun.pendingManualQaQueue?.length
+      ? campaignRun.pendingManualQaQueue
+      : campaignRun.pendingManualQa
+        ? [campaignRun.pendingManualQa]
+        : [];
+    if (queue.length === 0) return run;
+    if (
+      campaignRun.loopId !== run.id ||
+      campaignRun.revision.revisionKey !== run.currentRevision.revisionKey
+    ) {
+      throw new Error(
+        `Campaign ${active.campaignRunId} does not match the preserved manual-QA checkpoint.`
+      );
+    }
+    if (
+      !["running", "interrupted", "waiting_for_manual_qa"].includes(
+        campaignRun.status
+      )
+    ) {
+      throw new Error(
+        `Campaign ${active.campaignRunId} cannot restore manual QA from status ${campaignRun.status}.`
+      );
+    }
+    if (campaignRun.status !== "waiting_for_manual_qa") {
+      campaignRun = await campaignStore.updateRun(
+        active.campaignRunId,
+        (current) => ({
+          ...current,
+          status: "waiting_for_manual_qa",
+          completedAt: undefined,
+          invalidReason: undefined,
+        })
+      );
+    }
+    return {
+      ...run,
+      pendingManualQa: queue[0],
+      pendingManualQaQueue: queue,
+    };
   } catch (error) {
-    if (error?.code === "ENOENT") return;
+    if (error?.code === "ENOENT") return run;
     throw error;
   }
 }
@@ -772,7 +774,7 @@ export async function pauseCampaignLoopForRepair({
   campaignStore = createCampaignStore(repoRoot),
   now = () => new Date(),
 }) {
-  await loopStore.initialize();
+  await Promise.all([loopStore.initialize(), campaignStore.initialize?.()]);
   let run = await loopStore.readRun(loopId);
   let priorTerminal;
   if (!run.activeCampaign && campaignRunId) {
@@ -809,6 +811,7 @@ export async function pauseCampaignLoopForRepair({
       `Campaign loop ${loopId} has no active campaign to repair; pass --campaign for terminal recovery.`
     );
   }
+  run = await restoreCampaignManualQaCheckpoint({ run, campaignStore });
   if (
     campaignRunId &&
     run.activeCampaign.campaignRunId !== campaignRunId

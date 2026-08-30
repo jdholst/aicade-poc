@@ -75,6 +75,30 @@ describe("campaign browser runner", () => {
     expect(terminated.sort()).toEqual([1, 2, 3]);
   });
 
+  it("bounds browser-process teardown when a termination promise never settles", async () => {
+    let forceKilled = false;
+    const pool = await createCampaignBrowserPool({
+      chromium: {},
+      headed: false,
+      executionPolicy: {
+        mode: "sequential",
+        maxConcurrentAttempts: 1,
+      },
+      closeTimeoutMs: 1,
+      launchBrowserFn: async () => ({
+        browser: { id: 1 },
+        close: () => new Promise(() => {}),
+        forceKill() {
+          forceKilled = true;
+        },
+      }),
+    });
+
+    await pool.close();
+
+    expect(forceKilled).toBe(true);
+  });
+
   it("authorizes the bounded attempt batch before dispatch", async () => {
     const observed = [];
     const allowed = await authorizeProviderDispatchBatch(
