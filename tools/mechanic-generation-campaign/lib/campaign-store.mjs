@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { randomUUID } from "node:crypto";
 import {
   parseCampaignAttempt,
   parseCampaignManualQa,
@@ -224,7 +225,7 @@ export function createCampaignStore(repoRoot) {
 }
 
 export async function writeJsonAtomic(filePath, value) {
-  const temporaryPath = `${filePath}.tmp-${process.pid}`;
+  const temporaryPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
   await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await rename(temporaryPath, filePath);
 }

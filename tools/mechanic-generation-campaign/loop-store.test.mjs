@@ -107,6 +107,16 @@ describe("campaign loop store", () => {
     expect((await store.listRuns()).map(({ id }) => id)).toEqual([run.id]);
   });
 
+  it("supports concurrent atomic writes to one loop state file", async () => {
+    const { store, run } = await createFixture();
+
+    await Promise.all(
+      Array.from({ length: 8 }, () => store.writeRun(run))
+    );
+
+    expect(await store.readRun(run.id)).toEqual(run);
+  });
+
   it("upserts one sanitized lifecycle summary without control or worktree paths", async () => {
     const { store, run } = await createFixture();
     await store.writeRun({
