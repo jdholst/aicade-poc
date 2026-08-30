@@ -22,7 +22,7 @@
     <main>
       <section id="summary" class="summary-grid"></section>
 
-      <section class="panel">
+      <section id="dashboard-loops" class="panel">
         <div class="panel-heading">
           <div><p class="eyebrow">Orchestration</p><h2>Campaign loops</h2></div>
           <select id="loop-filter" aria-label="Filter campaign loops"><option value="all">All loops</option></select>
@@ -68,7 +68,7 @@
         </article>
       </section>
 
-      <section class="panel">
+      <section id="dashboard-campaigns" class="panel">
         <div class="panel-heading">
           <div><p class="eyebrow">Current revision</p><h2>Campaign runs</h2></div>
           <select id="campaign-filter" aria-label="Filter campaign runs"><option value="all">All campaigns</option></select>
@@ -76,7 +76,7 @@
         <div class="table-wrap"><table><thead><tr><th>Campaign</th><th>Cohort</th><th>Mode</th><th>Status</th><th>Success</th><th>Calls</th><th>Revision</th></tr></thead><tbody id="campaigns"></tbody></table></div>
       </section>
 
-      <section class="panel">
+      <section id="dashboard-attempts" class="panel">
         <div class="panel-heading"><div><p class="eyebrow">Submissions</p><h2>Attempts</h2></div></div>
         <div class="table-wrap"><table><thead><tr><th>Attempt</th><th>Prompt</th><th>Outcome</th><th>Furthest stage</th><th>Classification</th><th>Duration</th><th>Artifacts</th></tr></thead><tbody id="attempts"></tbody></table></div>
       </section>
@@ -86,7 +86,7 @@
         <div id="variation" class="variation-grid"></div>
       </section>
 
-      <section class="panel">
+      <section id="dashboard-fixes" class="panel">
         <div class="panel-heading">
           <div><p class="eyebrow">Architecture debt</p><h2>Temporary fixes</h2></div>
           <select id="fix-filter" aria-label="Filter temporary fixes"><option value="all">All fixes</option><option value="active">Active</option><option value="retired">Retired</option></select>

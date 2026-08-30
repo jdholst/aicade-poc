@@ -10,6 +10,7 @@ import {
   createCampaignKnowledgeStore,
   knowledgeEntriesDigest,
 } from "./knowledge.mjs";
+import { buildCampaignLoopEvidence } from "./loop-evidence.mjs";
 import { createCampaignLoopStore } from "./loop-store.mjs";
 import { remainingLoopBudgets } from "./loop-state.mjs";
 
@@ -222,14 +223,45 @@ export function resolveArtifactPath(artifactRoot, relativePathInput) {
   return resolved;
 }
 
-export async function startDashboardServer({ repoRoot, store, port = 4310 }) {
+export async function startDashboardServer({
+  repoRoot,
+  store,
+  loopStore = createCampaignLoopStore(repoRoot),
+  port = 4310,
+}) {
   const dashboardRoot = path.resolve(import.meta.dirname, "../dashboard");
   const documentationRoot = path.resolve(import.meta.dirname, "../docs");
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
       if (url.pathname === "/api/snapshot") {
-        return sendJson(response, 200, await buildDashboardSnapshot(repoRoot, store));
+        return sendJson(
+          response,
+          200,
+          await buildDashboardSnapshot(repoRoot, store, loopStore)
+        );
+      }
+      if (url.pathname === "/api/evidence") {
+        const loopId = url.searchParams.get("loop");
+        if (!loopId) {
+          return sendJson(response, 400, {
+            error: "The loop query parameter is required.",
+          });
+        }
+        try {
+          return sendJson(
+            response,
+            200,
+            await buildCampaignLoopEvidence({ loopId, store, loopStore })
+          );
+        } catch (error) {
+          const status = evidenceErrorStatus(error);
+          return sendJson(response, status, {
+            error: status === 404
+              ? `Unknown loop "${loopId}".`
+              : "Campaign loop evidence could not be loaded.",
+          });
+        }
       }
       if (url.pathname.startsWith("/artifacts/")) {
         const filePath = resolveArtifactPath(
@@ -244,6 +276,10 @@ export async function startDashboardServer({ repoRoot, store, port = 4310 }) {
           url.pathname.slice("/documentation/".length)
         );
         return await sendFile(response, filePath);
+      }
+
+      if (["/evidence", "/evidence/"].includes(url.pathname)) {
+        return await sendFile(response, path.join(dashboardRoot, "evidence.html"));
       }
 
       const assetPath = url.pathname === "/"
@@ -261,12 +297,26 @@ export async function startDashboardServer({ repoRoot, store, port = 4310 }) {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", resolve);
   });
+  const address = server.address();
+  const actualPort = typeof address === "object" && address ? address.port : port;
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: `http://127.0.0.1:${actualPort}`,
     close: () => new Promise((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve()))
     ),
   };
+}
+
+function evidenceErrorStatus(error) {
+  if (
+    error?.code === "ENOENT" ||
+    /^(Unknown loop|Unsafe loop path segment|Loop path escapes)/.test(
+      error instanceof Error ? error.message : String(error)
+    )
+  ) {
+    return 404;
+  }
+  return 500;
 }
 
 function createStageSurvival(attempts) {

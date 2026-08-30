@@ -1,4 +1,7 @@
+import { paginateItems } from "./pagination.js";
+
 let snapshot = null;
+const paginationPages = new Map();
 
 const campaignFilter = document.querySelector("#campaign-filter");
 const loopFilter = document.querySelector("#loop-filter");
@@ -12,11 +15,77 @@ const knowledgeFilters = [
   "classification",
   "manifest",
 ].map((name) => document.querySelector(`#knowledge-${name}-filter`));
-campaignFilter.addEventListener("change", render);
-loopFilter.addEventListener("change", render);
-fixFilter.addEventListener("change", render);
-legacyFilter.addEventListener("change", render);
-knowledgeFilters.forEach((filter) => filter.addEventListener("change", render));
+campaignFilter.addEventListener("change", () => resetPagination(["campaigns", "attempts", "manual-qa"]));
+loopFilter.addEventListener("change", () => resetPagination(["loops"]));
+fixFilter.addEventListener("change", () => resetPagination(["fixes"]));
+legacyFilter.addEventListener("change", () => resetPagination(["legacy"]));
+knowledgeFilters.forEach((filter) => filter.addEventListener("change", () => resetPagination(["knowledge"])));
+
+function resetPagination(sectionIds) {
+  sectionIds.forEach((sectionId) => paginationPages.set(sectionId, 1));
+  render();
+}
+
+function paginated(sectionId, items) {
+  const result = paginateItems(items, paginationPages.get(sectionId) ?? 1);
+  paginationPages.set(sectionId, result.page);
+  renderPagination(sectionId, result);
+  return result.items;
+}
+
+function renderPagination(sectionId, result) {
+  const list = document.querySelector(`#${sectionId}`);
+  let controls = document.querySelector(`[data-pagination-for="${sectionId}"]`);
+  if (!controls) {
+    controls = document.createElement("nav");
+    controls.className = "pagination";
+    controls.dataset.paginationFor = sectionId;
+    controls.setAttribute("aria-label", `${sectionId.replaceAll("-", " ")} pagination`);
+    const anchor = list.closest(".table-wrap") ?? list;
+    anchor.after(controls);
+  }
+
+  controls.innerHTML = `
+    <span>Showing ${result.start}–${result.end} of ${result.total}</span>
+    <div class="pagination-actions">
+      <button type="button" data-page-direction="previous"${result.hasPrevious ? "" : " disabled"}>Previous</button>
+      <span>Page ${result.page} of ${result.pageCount}</span>
+      <button type="button" data-page-direction="next"${result.hasNext ? "" : " disabled"}>Next</button>
+    </div>`;
+  controls.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
+    paginationPages.set(sectionId, result.page + (button.dataset.pageDirection === "next" ? 1 : -1));
+    render();
+  }));
+}
+
+function initializeCollapsiblePanels() {
+  document.querySelectorAll("main > .panel, .two-column > .panel").forEach((panel, index) => {
+    const heading = panel.querySelector(":scope > .panel-heading");
+    if (!heading) return;
+
+    const content = document.createElement("div");
+    content.className = "panel-content";
+    content.id = `${panel.id || `dashboard-panel-${index}`}-content`;
+    [...panel.children].filter((child) => child !== heading).forEach((child) => content.append(child));
+    panel.append(content);
+
+    const title = heading.querySelector("h2")?.textContent ?? "section";
+    const toggle = document.createElement("button");
+    toggle.className = "section-toggle";
+    toggle.type = "button";
+    toggle.setAttribute("aria-controls", content.id);
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.setAttribute("aria-label", `Collapse ${title}`);
+    toggle.textContent = "−";
+    toggle.addEventListener("click", () => {
+      const collapsed = panel.classList.toggle("is-collapsed");
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+      toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${title}`);
+      toggle.textContent = collapsed ? "+" : "−";
+    });
+    panel.append(toggle);
+  });
+}
 
 async function refresh() {
   try {
@@ -72,7 +141,7 @@ function renderKnowledge() {
     (classification === "all" || finding.scope.classifications.length === 0 || finding.scope.classifications.includes(classification)) &&
     (manifest === "all" || finding.scope.applicability === "pipeline_general" || finding.scope.manifestIds.includes(manifest))
   );
-  document.querySelector("#knowledge").innerHTML = findings.map((finding) => `
+  document.querySelector("#knowledge").innerHTML = paginated("knowledge", findings).map((finding) => `
     <article class="knowledge-card canonical">
       <div class="knowledge-card-heading"><strong>${escapeHtml(finding.id)} · r${finding.revision}</strong><span class="badge ${finding.status}">${escapeHtml(finding.status)}</span></div>
       <h3>${escapeHtml(finding.title)}</h3>
@@ -119,18 +188,18 @@ function renderSummary(campaigns, attempts) {
     sum + Object.values(attempt.providerCalls ?? {}).reduce((value, count) => value + count, 0), 0);
   const knownCost = attempts.reduce((sum, attempt) => sum + (attempt.cost?.usd ?? 0), 0);
   document.querySelector("#summary").innerHTML = [
-    stat("Loops", snapshot.loops.length, `${snapshot.loops.filter(({ status }) => status === "achieved").length} achieved`),
-    stat("Campaigns", campaigns.length, `${campaigns.filter(({ status }) => status === "achieved").length} achieved`),
-    stat("Submissions", attempts.length, `${successes} manually approved · ${candidates} pending`),
-    stat("Actual calls", actualCalls, "Planning + contract + source"),
-    stat("Known cost", `$${knownCost.toFixed(3)}`, "Unknown cost excluded"),
-    stat("Temporary fixes", activeFixes, `${snapshot.temporaryFixes.length - activeFixes} retired`),
+    summaryStatLink("Loops", snapshot.loops.length, `${snapshot.loops.filter(({ status }) => status === "achieved").length} achieved`, "#dashboard-loops"),
+    summaryStatLink("Campaigns", campaigns.length, `${campaigns.filter(({ status }) => status === "achieved").length} achieved`, "#dashboard-campaigns"),
+    summaryStatLink("Submissions", attempts.length, `${successes} manually approved · ${candidates} pending`, "#dashboard-attempts"),
+    summaryStatLink("Actual calls", actualCalls, "Planning + contract + source", "#dashboard-campaigns"),
+    summaryStatLink("Known cost", `$${knownCost.toFixed(3)}`, "Unknown cost excluded", "#dashboard-attempts"),
+    summaryStatLink("Temporary fixes", activeFixes, `${snapshot.temporaryFixes.length - activeFixes} retired`, "#dashboard-fixes"),
   ].join("");
 }
 
 function renderManualQa(attempts) {
   const reviewed = attempts.filter(({ manualQaEvidence, manualQa }) => manualQaEvidence || manualQa);
-  document.querySelector("#manual-qa").innerHTML = reviewed.map((attempt) => {
+  document.querySelector("#manual-qa").innerHTML = paginated("manual-qa", reviewed).map((attempt) => {
     const evidence = attempt.manualQaEvidence;
     const status = evidence?.status ?? attempt.manualQa.status;
     const reason = evidence?.denialReason;
@@ -157,25 +226,8 @@ function renderLoops() {
   const loops = loopFilter.value === "all"
     ? snapshot.loops
     : snapshot.loops.filter(({ id }) => id === loopFilter.value);
-  document.querySelector("#loops").innerHTML = loops.map((loop) => {
+  document.querySelector("#loops").innerHTML = paginated("loops", loops).map((loop) => {
     const step = loop.steps[loop.currentStepIndex] ?? loop.steps.at(-1);
-    const fixes = loop.fixes ?? [];
-    const proposedTemporary = fixes.filter(({ kind }) => kind === "temporary");
-    const links = loop.campaignLinks.map(({ campaignRunId, role, status }) =>
-      `<span class="evidence-line">${escapeHtml(role)} · ${escapeHtml(campaignRunId)} · ${escapeHtml(status)}</span>`
-    ).join("");
-    const fixLines = fixes.map((fix) =>
-      `<span class="evidence-line"><a href="/artifacts/loops/${encodeURIComponent(loop.id)}/fixes/${encodeURIComponent(fix.id)}.json" target="_blank"><strong>${escapeHtml(fix.id)}</strong></a> · ${escapeHtml(fix.kind)}${fix.temporaryFixIds?.length ? ` · ${escapeHtml(fix.temporaryFixIds.join(", "))} · proposed/unmerged` : ""}</span>`
-    ).join("");
-    const extensionLines = (loop.budgetExtensions ?? []).map((extension) =>
-      `<span class="evidence-line">extended · ${escapeHtml(extension.authorizationHash.slice(0, 12))} · revision ${extension.appliedAtRevision}</span>`
-    ).join("");
-    const repairLines = (loop.campaignRepairs ?? []).map((repair) =>
-      `<span class="evidence-line">campaign repair · ${escapeHtml(repair.id)} · ${escapeHtml(repair.status)} · credited ${repair.creditedUsage.campaignRuns} campaign(s), ${repair.creditedUsage.submissions} submission(s)</span>`
-    ).join("");
-    const lifecycleLine = loop.lifecycle
-      ? `<span class="evidence-line">${escapeHtml(loop.lifecycle.action)} from ${escapeHtml(loop.lifecycle.previousStatus)} · worktree and branch removed</span>`
-      : "";
     const branch = loop.lifecycle ? `${loop.worktree.branch} · removed` : loop.worktree.branch;
     return `<tr>
       <td><strong>${escapeHtml(loop.manifestId)}</strong><br><small>${escapeHtml(loop.id)}</small><br><small>${escapeHtml(branch)}</small></td>
@@ -184,13 +236,13 @@ function renderLoops() {
       <td><code>${shortHash(loop.currentRevision.revisionKey)}</code></td>
       <td>${loop.usage.campaignRuns}/${loop.limits.maxCampaignRuns} campaigns<br>${loop.usage.submissions}/${loop.limits.maxSubmissions} submissions<br>${loop.usage.fixCycles}/${loop.limits.maxFixCycles} fixes</td>
       <td><small>Sparkline</small> ${stageCounts(loop.usage.actualProviderCalls)}<br><small>Gross ${stageCounts(loop.usage.grossActualProviderCalls ?? loop.usage.actualProviderCalls)}<br>remaining ${stageCounts(loop.remaining.actualProviderCalls)}</small></td>
-      <td>${links}${fixLines}${repairLines}${extensionLines}${lifecycleLine}${proposedTemporary.length ? `<small>${proposedTemporary.length} proposed temporary fix(es)</small>` : ""}</td>
+      <td><a class="evidence-view-link" href="/evidence?loop=${encodeURIComponent(loop.id)}">View</a></td>
     </tr>`;
   }).join("") || `<tr><td colspan="7">${empty("No campaign loops yet.")}</td></tr>`;
 }
 
 function renderMechanics() {
-  const items = snapshot.mechanics.map((mechanic) => `
+  const items = paginated("mechanics", snapshot.mechanics).map((mechanic) => `
     <article class="mechanic">
       <span class="badge ${mechanic.proven ? "active-proof" : "missing"}">${mechanic.proven ? "Proven" : "Not proven"}</span>
       <h3>${escapeHtml(mechanic.manifestId)}</h3>
@@ -221,14 +273,14 @@ function renderFailures(attempts) {
     result[attempt.classification ?? "unknown"] = (result[attempt.classification ?? "unknown"] ?? 0) + 1;
     return result;
   }, {});
-  document.querySelector("#failures").innerHTML = Object.entries(counts)
-    .sort((left, right) => right[1] - left[1])
+  const failures = Object.entries(counts).sort((left, right) => right[1] - left[1]);
+  document.querySelector("#failures").innerHTML = failures
     .map(([name, count]) => `<div class="failure"><span>${escapeHtml(humanize(name))}</span><strong>${count}</strong></div>`)
     .join("") || empty("No failures in this selection.");
 }
 
 function renderCampaigns(campaigns) {
-  document.querySelector("#campaigns").innerHTML = campaigns.map((campaign) => {
+  document.querySelector("#campaigns").innerHTML = paginated("campaigns", campaigns).map((campaign) => {
     const calls = campaign.attempts.reduce((total, attempt) => total + Object.values(attempt.providerCalls ?? {}).reduce((sum, value) => sum + value, 0), 0);
     const result = campaign.result ?? {};
     const failureProgress = result.failureLimit === undefined
@@ -249,7 +301,7 @@ function renderCampaigns(campaigns) {
 }
 
 function renderAttempts(attempts) {
-  document.querySelector("#attempts").innerHTML = attempts.map((attempt) => {
+  document.querySelector("#attempts").innerHTML = paginated("attempts", attempts).map((attempt) => {
     const links = (attempt.artifacts ?? []).map((file) => `<a href="/artifacts/${encodeURIComponent(attempt.campaignRunId)}/${encodeURIComponent(attempt.id)}/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a>`).join(" · ");
     const manualStatus = attempt.manualQaEvidence?.status ?? attempt.manualQa?.status;
     const submissionKind = attempt.submissionKind === "replacement"
@@ -262,15 +314,16 @@ function renderAttempts(attempts) {
 function renderVariation(campaigns) {
   const ids = new Set(campaigns.map(({ id }) => id));
   const cohorts = snapshot.promptVariation.filter(({ campaignRunId }) => ids.has(campaignRunId));
-  document.querySelector("#variation").innerHTML = cohorts.flatMap((cohort) => cohort.prompts.map((prompt) => `
+  const prompts = cohorts.flatMap((cohort) => cohort.prompts.map((prompt) => ({ cohort, prompt })));
+  document.querySelector("#variation").innerHTML = prompts.map(({ cohort, prompt }) => `
     <article class="variation-card"><p class="eyebrow">${escapeHtml(cohort.manifestId)}</p><h3>${escapeHtml(humanize(prompt.promptId))}</h3><strong>${prompt.successes}/${prompt.submissions}</strong><small> successful submissions</small></article>
-  `)).join("") || empty("No variation cohort has run yet.");
+  `).join("") || empty("No variation cohort has run yet.");
 }
 
 function renderFixes() {
   const selected = fixFilter.value;
   const fixes = snapshot.temporaryFixes.filter((fix) => selected === "all" || fix.state === selected);
-  document.querySelector("#fixes").innerHTML = fixes.map((fix) => `
+  document.querySelector("#fixes").innerHTML = paginated("fixes", fixes).map((fix) => `
     <article class="fix"><span class="badge ${fix.state}">${escapeHtml(fix.state)}</span><h3>${escapeHtml(fix.id)} · ${escapeHtml(fix.title)}</h3><p>${escapeHtml(fix.status)}</p><details><summary>Replacement and removal</summary><p><strong>Replacement:</strong> ${escapeHtml(fix.robustReplacement ?? "Not recorded")}</p><p><strong>Removal:</strong> ${escapeHtml(fix.removalCriteria ?? "Not recorded")}</p></details></article>
   `).join("") || empty("No temporary fixes match this filter.");
 }
@@ -278,7 +331,7 @@ function renderFixes() {
 function renderLegacy() {
   const selected = legacyFilter.value;
   const attempts = snapshot.legacyAttempts.filter((attempt) => selected === "all" || attempt.completeness === selected);
-  document.querySelector("#legacy").innerHTML = attempts.map((attempt) => `
+  document.querySelector("#legacy").innerHTML = paginated("legacy", attempts).map((attempt) => `
     <tr><td><strong>${escapeHtml(attempt.id)}</strong><br><span class="badge ${attempt.completeness}">${escapeHtml(attempt.completeness)}</span></td><td>${escapeHtml(attempt.recordedOutcome ?? "Unknown")}${attempt.adjudicatedOutcome ? `<br><small>Later: ${escapeHtml(attempt.adjudicatedOutcome)}</small>` : ""}</td><td>${escapeHtml(attempt.furthestStage ?? "Not recorded")}</td><td>${escapeHtml(attempt.classification ?? "Not recorded")}</td><td><code>${escapeHtml(attempt.source.path)}:${attempt.source.line}</code><br><small>${escapeHtml(attempt.source.heading)}</small></td></tr>
   `).join("");
 }
@@ -316,6 +369,7 @@ function syncKnowledgeFilter(filter, label, values) {
 }
 
 function stat(label, value, note) { return `<article class="stat"><p class="eyebrow">${label}</p><strong>${value}</strong><small>${note}</small></article>`; }
+function summaryStatLink(label, value, note, target) { return `<a class="stat stat-link" href="${target}"><p class="eyebrow">${label}</p><strong>${value}</strong><small>${note}</small></a>`; }
 function proof(label, status) { return `<span class="${status}">${label}<br><strong>${escapeHtml(humanize(status))}</strong></span>`; }
 function modeText(modes) { return Object.entries(modes).map(([stage, mode]) => `${stage[0].toUpperCase()}:${mode[0].toUpperCase()}`).join(" "); }
 function shortHash(value = "") { return value.slice(0, 9); }
@@ -326,5 +380,6 @@ function empty(message) { return `<p class="empty">${escapeHtml(message)}</p>`; 
 function isManuallyApprovedSuccess(attempt) { return attempt.status === "success" && (attempt.manualQaEvidence?.status ?? attempt.manualQa?.status) === "approved"; }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]); }
 
+initializeCollapsiblePanels();
 await refresh();
 setInterval(refresh, 1000);

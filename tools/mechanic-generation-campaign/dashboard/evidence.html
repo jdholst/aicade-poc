@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Campaign Loop Evidence</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="evidence-title">
+        <a class="evidence-back-link" href="/" aria-label="Back to main dashboard"><span aria-hidden="true">←</span> Back to dashboard</a>
+        <p class="eyebrow">AI-Cade internal QA</p>
+        <h1>Campaign loop evidence</h1>
+      </div>
+      <div class="topbar-actions">
+        <div class="live"><span></span><strong>Live local data</strong><small id="updated">Loading evidence</small></div>
+      </div>
+    </header>
+
+    <main class="evidence-main">
+      <section id="evidence-content" aria-live="polite">
+        <div class="panel evidence-state"><p class="eyebrow">Loading</p><h2>Reading loop evidence…</h2></div>
+      </section>
+    </main>
+    <script type="module" src="/evidence.js"></script>
+  </body>
+</html>
