@@ -73,6 +73,10 @@ describe("campaign dashboard data", () => {
       expect(commands).toContain(`npm run campaign -- loop ${command}`);
     }
     expect(dashboard).toContain('id="loops"');
+    expect(dashboard).toContain('id="dashboard-loops"');
+    expect(dashboard).toContain('id="dashboard-campaigns"');
+    expect(dashboard).toContain('id="dashboard-attempts"');
+    expect(dashboard).toContain('id="dashboard-fixes"');
     expect(dashboard).toContain('id="manual-qa"');
     expect(dashboard).toContain('id="knowledge"');
     expect(dashboard).toContain('id="knowledge-status-filter"');
@@ -85,7 +89,44 @@ describe("campaign dashboard data", () => {
     expect(dashboardApp).toContain("denialReason");
     expect(dashboardApp).toContain("loop.lifecycle");
     expect(dashboardApp).toContain("grossActualProviderCalls");
-    expect(dashboardApp).toContain("campaign repair");
+    expect(dashboardApp).toContain('class="evidence-view-link"');
+    expect(dashboardApp).toContain('href="/evidence?loop=${encodeURIComponent(loop.id)}"');
+    expect(dashboardApp).not.toContain("loop.campaignLinks.map");
+    expect(dashboardApp).not.toContain("repair.creditedUsage");
+    expect(dashboardApp).toContain("summaryStatLink");
+    expect(dashboardApp).toContain('"#dashboard-loops"');
+    expect(dashboardApp).toContain('"#dashboard-campaigns"');
+    expect(dashboardApp).toContain('"#dashboard-attempts"');
+    expect(dashboardApp).toContain('"#dashboard-fixes"');
+    expect(dashboardStyles).toContain("scroll-behavior: smooth");
+    expect(dashboardStyles).toContain(".stat-link");
+    expect(dashboardApp).toContain("initializeCollapsiblePanels");
+    expect(dashboardApp).toContain("panel.append(toggle)");
+    expect(dashboardApp).toContain("section-toggle");
+    expect(dashboardApp).toContain("aria-expanded");
+    expect(dashboardStyles).toContain(".section-toggle");
+    expect(dashboardStyles).toContain(".panel { position: relative;");
+    expect(dashboardStyles).toContain("position: absolute");
+    expect(dashboardStyles).toContain(".panel.is-collapsed .panel-content");
+    for (const sectionId of [
+      "loops",
+      "knowledge",
+      "mechanics",
+      "manual-qa",
+      "campaigns",
+      "attempts",
+      "fixes",
+      "legacy",
+    ]) {
+      expect(dashboardApp).toContain(`paginated("${sectionId}"`);
+    }
+    for (const sectionId of ["stages", "failures", "variation"]) {
+      expect(dashboardApp).not.toContain(`paginated("${sectionId}"`);
+    }
+    expect(dashboardApp).toContain("data-page-direction");
+    expect(dashboardApp).toContain("Showing ${result.start}–${result.end} of ${result.total}");
+    expect(dashboardStyles).toContain(".pagination {");
+    expect(dashboardStyles).toContain(".pagination-actions");
     expect(dashboardApp).toContain("failure_limit_reached");
     expect(dashboardApp).toContain("remainingFailureTolerance");
     expect(dashboardApp).toContain("replacementSubmissions");
