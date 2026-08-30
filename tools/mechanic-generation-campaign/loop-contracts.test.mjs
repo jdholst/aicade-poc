@@ -108,6 +108,52 @@ describe("campaign loop definitions", () => {
     );
   });
 
+  it("freezes an explicit parallel execution policy on new repeatability steps", async () => {
+    const definition = validDefinition();
+    definition.sequence = [
+      {
+        id: "repeat",
+        cohort: "repeatability",
+        providerModes: {
+          planning: "actual",
+          contract: "actual",
+          source: "actual",
+        },
+        maxCampaignRunsPerRevision: 1,
+        retryableClassifications: [],
+        executionPolicy: {
+          mode: "parallel",
+          maxConcurrentAttempts: 3,
+          maxPendingManualQa: 3,
+          stageConcurrency: { planning: 2, contract: 3, source: 2 },
+          scheduleOrder: "round_robin",
+        },
+      },
+    ];
+    definition.limits.maxSubmissions = 10;
+    definition.limits.actualProviderCalls = {
+      planning: 10,
+      contract: 10,
+      source: 10,
+    };
+
+    expect(parseCampaignLoopManifest(definition).sequence[0].executionPolicy).toEqual(
+      definition.sequence[0].executionPolicy
+    );
+    const loaded = await loadCampaignLoopDefinition({
+      definition,
+      definitionPath: path.join(repoRoot, ".qa", "parallel-loop.json"),
+      repoRoot,
+    });
+    expect(loaded.executionPolicies.repeat).toMatchObject({
+      mode: "parallel",
+      maxConcurrentAttempts: 3,
+      maxPendingManualQa: 3,
+      scheduleOrder: "round_robin",
+    });
+    expect(loaded.executionPolicies.repeat.hash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
   it("reserves the optional variation replacement in the proof-sequence authorization", () => {
     const prompts = [
       "baseline",

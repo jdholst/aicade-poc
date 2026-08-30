@@ -124,13 +124,18 @@ export async function runCampaignReview({
   store,
   loopStore,
   campaignRunId,
+  attemptId,
   port = 3117,
   inspectRevisionFn = inspectRevision,
   headed = true,
   now = () => new Date(),
 }) {
   await store.initialize();
-  const [run, attempt, manualQa] = await loadPendingReview(store, campaignRunId);
+  const [run, attempt, manualQa] = await loadPendingReview(
+    store,
+    campaignRunId,
+    attemptId
+  );
   await verifyManualQaCandidate(store, manualQa);
   const executionRoot = await resolveExecutionRoot({ repoRoot, run, loopStore });
   const revision = await inspectRevisionFn(executionRoot);
@@ -289,14 +294,25 @@ export async function runCampaignReview({
   }
 }
 
-async function loadPendingReview(store, campaignRunId) {
+export async function loadPendingReview(store, campaignRunId, attemptId) {
   const run = await store.readRun(campaignRunId);
-  if (run.status !== "waiting_for_manual_qa" || !run.pendingManualQa) {
-    throw new Error(`Campaign ${campaignRunId} is not waiting for manual QA.`);
+  const queue = run.pendingManualQaQueue?.length
+    ? run.pendingManualQaQueue
+    : run.pendingManualQa
+      ? [run.pendingManualQa]
+      : [];
+  const selected = attemptId
+    ? queue.find((pending) => pending.attemptId === attemptId)
+    : queue[0];
+  if (
+    !["running", "waiting_for_manual_qa", "interrupted"].includes(run.status) ||
+    !selected
+  ) {
+    throw new Error(`Campaign ${campaignRunId} has no matching pending manual QA candidate.`);
   }
   const [attempt, manualQa] = await Promise.all([
-    store.readAttempt(campaignRunId, run.pendingManualQa.attemptId),
-    store.readManualQa(campaignRunId, run.pendingManualQa.attemptId),
+    store.readAttempt(campaignRunId, selected.attemptId),
+    store.readManualQa(campaignRunId, selected.attemptId),
   ]);
   if (manualQa.status !== "pending") {
     throw new Error(`Manual QA candidate is already ${manualQa.status}.`);
@@ -337,23 +353,45 @@ function assertRestoredRecords(storage, records) {
 }
 
 async function appendReviewSession(store, manualQa, session) {
-  await store.writeManualQa({
-    ...manualQa,
-    reviewSessions: [...manualQa.reviewSessions, session],
-  });
+  const append = async () => {
+    const latest = await store.readManualQa(
+      manualQa.campaignRunId,
+      manualQa.attemptId
+    );
+    await store.writeManualQa({
+      ...latest,
+      reviewSessions: [...latest.reviewSessions, session],
+    });
+  };
+  if (typeof store.withManualQaLock === "function") {
+    await store.withManualQaLock(manualQa.campaignRunId, manualQa.attemptId, append);
+  } else {
+    await append();
+  }
 }
 
 async function replaceReviewSession(store, originalManualQa, session) {
-  const latest = await store.readManualQa(
-    originalManualQa.campaignRunId,
-    originalManualQa.attemptId
-  );
-  await store.writeManualQa({
-    ...latest,
-    reviewSessions: latest.reviewSessions.map((existing) =>
-      existing.id === session.id ? session : existing
-    ),
-  });
+  const replace = async () => {
+    const latest = await store.readManualQa(
+      originalManualQa.campaignRunId,
+      originalManualQa.attemptId
+    );
+    await store.writeManualQa({
+      ...latest,
+      reviewSessions: latest.reviewSessions.map((existing) =>
+        existing.id === session.id ? session : existing
+      ),
+    });
+  };
+  if (typeof store.withManualQaLock === "function") {
+    await store.withManualQaLock(
+      originalManualQa.campaignRunId,
+      originalManualQa.attemptId,
+      replace
+    );
+  } else {
+    await replace();
+  }
 }
 
 export async function pauseReviewForCampaignRepair({

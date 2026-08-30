@@ -1,13 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { randomUUID } from "node:crypto";
 import {
   parseCampaignAttempt,
   parseCampaignManualQa,
   parseCampaignRun,
 } from "./contracts.mjs";
 import { redactSensitive } from "./redaction.mjs";
+import { acquireFileLock, withFileLock } from "./file-lock.mjs";
+import { clusterCampaignFailures } from "./failure-clusters.mjs";
 
 export function createCampaignStore(repoRoot) {
   const artifactRoot = path.join(repoRoot, ".qa", "mechanic-generation-campaign");
@@ -44,6 +46,36 @@ export function createCampaignStore(repoRoot) {
           )
         )
       );
+    },
+    async updateRun(campaignRunId, update, { expectedStateRevision } = {}) {
+      const directory = safeChild(artifactRoot, campaignRunId);
+      await mkdir(directory, { recursive: true });
+      return withFileLock(path.join(directory, "campaign-run.lock"), async () => {
+        const current = await this.readRun(campaignRunId);
+        if (
+          expectedStateRevision !== undefined &&
+          current.stateRevision !== expectedStateRevision
+        ) {
+          throw new Error(
+            `Campaign state revision changed from ${expectedStateRevision} to ${current.stateRevision}.`
+          );
+        }
+        const updated = await update(structuredClone(current));
+        const next = parseCampaignRun({
+          ...updated,
+          stateRevision: current.stateRevision + 1,
+        });
+        await writeJsonAtomic(path.join(directory, "campaign-run.json"), next);
+        return next;
+      });
+    },
+    async acquireRunExecutionLock(campaignRunId) {
+      const directory = safeChild(artifactRoot, campaignRunId);
+      await mkdir(directory, { recursive: true });
+      return acquireFileLock(path.join(directory, "campaign-execution.lock"), {
+        timeoutMs: 100,
+        retryMs: 20,
+      });
     },
     async writeAttempt(attemptInput, evidence = {}) {
       const attempt = parseCampaignAttempt(attemptInput);
@@ -134,6 +166,14 @@ export function createCampaignStore(repoRoot) {
         )
       );
     },
+    async withManualQaLock(campaignRunId, attemptId, operation) {
+      const directory = safeChild(
+        safeChild(artifactRoot, campaignRunId),
+        attemptId
+      );
+      await mkdir(directory, { recursive: true });
+      return withFileLock(path.join(directory, "manual-qa.lock"), operation);
+    },
     async listRuns() {
       let entries;
       try {
@@ -186,6 +226,7 @@ export function createCampaignStore(repoRoot) {
         completedAt: run.completedAt,
         model: run.model,
         providerModes: run.providerModes,
+        executionPolicy: run.executionPolicy,
         revision: run.revision,
         knowledgePolicy: run.knowledgePolicy,
         pricing: run.pricing,
@@ -196,6 +237,7 @@ export function createCampaignStore(repoRoot) {
           approved: attempts.filter(({ manualQa }) => manualQa?.status === "approved").length,
           denied: attempts.filter(({ manualQa }) => manualQa?.status === "denied").length,
         },
+        failureClusters: clusterCampaignFailures(attempts),
         attempts: attempts.map((attempt) => ({
           id: attempt.id,
           sequence: attempt.sequence,

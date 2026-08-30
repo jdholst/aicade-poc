@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { readCampaignBrowserStorage } from "./lib/browser-storage.mjs";
 import {
   installReviewProviderBlocking,
+  loadPendingReview,
   pauseReviewForCampaignRepair,
   restoreCandidateStorage,
   waitForRestoredCandidateRuntime,
@@ -29,6 +30,42 @@ afterEach(async () => {
 });
 
 describe("manual QA candidate replay", () => {
+  it("selects one exact candidate from a parallel manual-QA queue", async () => {
+    const queue = [
+      { attemptId: "a01-baseline" },
+      { attemptId: "a02-baseline" },
+    ];
+    const store = {
+      async readRun() {
+        return {
+          id: "campaign-1",
+          status: "running",
+          pendingManualQa: queue[0],
+          pendingManualQaQueue: queue,
+        };
+      },
+      async readAttempt(_campaignId, attemptId) {
+        return { id: attemptId };
+      },
+      async readManualQa(_campaignId, attemptId) {
+        return { id: `qa-${attemptId}`, attemptId, status: "pending" };
+      },
+    };
+
+    await expect(loadPendingReview(store, "campaign-1", "a02-baseline"))
+      .resolves.toEqual([
+        expect.objectContaining({ id: "campaign-1" }),
+        { id: "a02-baseline" },
+        { id: "qa-a02-baseline", attemptId: "a02-baseline", status: "pending" },
+      ]);
+    await expect(loadPendingReview(store, "campaign-1"))
+      .resolves.toEqual([
+        expect.objectContaining({ id: "campaign-1" }),
+        { id: "a01-baseline" },
+        { id: "qa-a01-baseline", attemptId: "a01-baseline", status: "pending" },
+      ]);
+  });
+
   it("recognizes the current routed generated-mechanic runtime during replay", async () => {
     document.body.replaceChildren();
     Object.defineProperty(document.body, "innerText", {

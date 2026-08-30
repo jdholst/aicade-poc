@@ -190,6 +190,11 @@ describe("campaign dashboard data", () => {
     expect(dashboardApp).toContain("remainingFailureTolerance");
     expect(dashboardApp).toContain("replacementSubmissions");
     expect(dashboardApp).toContain("submissionKind");
+    expect(dashboardApp).toContain("executionPolicy");
+    expect(dashboardApp).toContain("attemptSlots");
+    expect(dashboardApp).toContain("pendingManualQaQueue");
+    expect(dashboardApp).toContain("pending review max");
+    expect(dashboardApp).toContain("failureClusters");
     expect(dashboardStyles).toContain(".concluded");
     expect(dashboardStyles).toContain(".discarded");
   });

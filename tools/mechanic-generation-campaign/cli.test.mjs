@@ -20,13 +20,17 @@ describe("campaign manual-QA CLI", () => {
       readFile(cliPath, "utf8"),
     ]);
 
-    expect(stdout).toContain("review --campaign <run-id>");
+    expect(stdout).toContain("review --campaign <run-id> [--attempt <attempt-id>]");
     expect(stdout).toContain("approve --campaign <run-id> --attempt <attempt-id>");
     expect(stdout).toContain("deny --campaign <run-id> --attempt <attempt-id> --reason <text>");
     expect(cliSource).toContain("Failures:");
     expect(cliSource).toContain("Remaining failure tolerance:");
     expect(cliSource).toContain("Replacement submissions:");
     expect(cliSource).toContain("failure_limit_reached");
+    expect(stdout).toContain("--execution-mode <sequential|parallel>");
+    expect(stdout).toContain("--max-concurrent-attempts <1..3>");
+    expect(stdout).toContain("--max-pending-manual-qa <1..3>");
+    expect(cliSource).toContain("Failure clusters");
   });
 
   it("rejects denial without a non-empty reason before reading campaign evidence", async () => {
@@ -41,6 +45,27 @@ describe("campaign manual-QA CLI", () => {
       ])
     ).rejects.toMatchObject({
       stderr: expect.stringMatching(/Missing required option --reason/),
+    });
+  });
+
+  it("rejects parallel execution outside repeatability and variation before provider authorization", async () => {
+    await expect(
+      execFileAsync(process.execPath, [
+        cliPath,
+        "run",
+        "--manifest",
+        "p09-t17-projectile",
+        "--cohort",
+        "discovery",
+        "--execution-mode",
+        "parallel",
+        "--max-concurrent-attempts",
+        "3",
+        "--max-pending-manual-qa",
+        "3",
+      ])
+    ).rejects.toMatchObject({
+      stderr: expect.stringMatching(/repeatability or variation/i),
     });
   });
 

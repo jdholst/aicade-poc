@@ -28,6 +28,7 @@ export async function createManualQaCandidate({
   gamePackRecord,
   evidence = {},
   requestedAt = new Date().toISOString(),
+  persistRun = true,
 }) {
   const run = parseCampaignRun(runInput);
   const attempt = structuredClone(attemptInput);
@@ -95,15 +96,34 @@ export async function createManualQaCandidate({
       ]),
     ],
   });
-  const pendingRun = parseCampaignRun({
-    ...run,
-    status: "waiting_for_manual_qa",
-    completedAt: undefined,
-    attemptIds: run.attemptIds.includes(attempt.id)
-      ? run.attemptIds
-      : [...run.attemptIds, attempt.id],
-    pendingManualQa,
-  });
+  const createPendingRun = (currentRun) => {
+    const queue = [
+      ...(currentRun.pendingManualQaQueue ?? []),
+      pendingManualQa,
+    ].filter(
+      (entry, index, entries) =>
+        entries.findIndex(({ manualQaId }) => manualQaId === entry.manualQaId) ===
+        index
+    );
+    const status = currentRun.executionPolicy.mode === "parallel"
+      ? "running"
+      : "waiting_for_manual_qa";
+    return parseCampaignRun({
+      ...currentRun,
+      status,
+      completedAt: undefined,
+      attemptIds: currentRun.attemptIds.includes(attempt.id)
+        ? currentRun.attemptIds
+        : [...currentRun.attemptIds, attempt.id],
+      attemptSlots: currentRun.attemptSlots.map((slot) =>
+        slot.attemptId === attempt.id
+          ? { ...slot, status: "awaiting_manual_qa", updatedAt: requestedAt }
+          : slot
+      ),
+      pendingManualQa: queue[0],
+      pendingManualQaQueue: queue,
+    });
+  };
 
   await store.writeAttempt(pendingAttempt, {
     ...evidence,
@@ -111,7 +131,9 @@ export async function createManualQaCandidate({
     [RAW_GAME_PACK_FILE]: gamePackRecord,
   });
   await store.writeManualQa(manualQa);
-  await store.writeRun(pendingRun);
+  const pendingRun = persistRun
+    ? await persistCampaignRun(store, run, createPendingRun)
+    : createPendingRun(run);
   return { run: pendingRun, attempt: pendingAttempt, manualQa };
 }
 
@@ -157,6 +179,31 @@ export async function denyCampaignAttempt({
 }
 
 async function decideCampaignAttempt({
+  store,
+  campaignRunId,
+  attemptId,
+  verdict,
+  note,
+  reason,
+  decidedAt,
+  loopStore,
+}) {
+  const decide = () => decideCampaignAttemptUnlocked({
+    store,
+    campaignRunId,
+    attemptId,
+    verdict,
+    note,
+    reason,
+    decidedAt,
+    loopStore,
+  });
+  return typeof store.withManualQaLock === "function"
+    ? store.withManualQaLock(campaignRunId, attemptId, decide)
+    : decide();
+}
+
+async function decideCampaignAttemptUnlocked({
   store,
   campaignRunId,
   attemptId,
@@ -249,29 +296,32 @@ async function decideCampaignAttempt({
         }
       : {}),
   };
-  const decidedRun = parseCampaignRun(
-    campaignContinues
-      ? {
-          ...run,
-          status: "running",
-          completedAt: undefined,
-          pendingManualQa: undefined,
-          result,
-        }
-      : {
-          ...run,
-          status: "completed_not_achieved",
-          completedAt: decidedAt,
-          pendingManualQa: undefined,
-          result,
-        }
-  );
-
   await store.writeManualQa(decidedManualQa);
   await store.writeAttempt(decidedAttempt);
-  await store.writeRun(decidedRun);
+  const decidedRun = await persistCampaignRun(store, run, (currentRun) => {
+    const pendingManualQaQueue = currentRun.pendingManualQaQueue.filter(
+      ({ attemptId: pendingAttemptId }) => pendingAttemptId !== attemptId
+    );
+    const status = campaignContinues
+      ? "running"
+      : "completed_not_achieved";
+    return parseCampaignRun({
+      ...currentRun,
+      status,
+      completedAt: campaignContinues ? undefined : decidedAt,
+      pendingManualQa: pendingManualQaQueue[0],
+      pendingManualQaQueue,
+      attemptSlots: currentRun.attemptSlots.map((slot) =>
+        slot.attemptId === attemptId
+          ? { ...slot, status: "completed", updatedAt: decidedAt }
+          : slot
+      ),
+      result,
+    });
+  });
   const loopRun = await updateLinkedLoop({
     campaignRun: run,
+    attemptId,
     verdict,
     campaignContinues,
     decidedAt,
@@ -322,14 +372,18 @@ function assertArtifactIdentity(run, attempt, manualQa) {
 
 function assertPendingCandidate(run, attempt, manualQa, linkedLoop) {
   const campaignCandidateIsStale =
-    run.status !== "waiting_for_manual_qa" ||
-    run.pendingManualQa?.attemptId !== attempt.id ||
-    run.pendingManualQa?.manualQaId !== manualQa.id;
+    !["running", "waiting_for_manual_qa"].includes(run.status) ||
+    !run.pendingManualQaQueue.some(
+      ({ attemptId, manualQaId }) =>
+        attemptId === attempt.id && manualQaId === manualQa.id
+    );
   const repairPending =
     linkedLoop?.status === "waiting_for_campaign_repair" &&
     linkedLoop.activeCampaign?.campaignRunId === run.id &&
-    linkedLoop.pendingManualQa?.attemptId === attempt.id &&
-    linkedLoop.pendingManualQa?.manualQaId === manualQa.id &&
+    (linkedLoop.pendingManualQaQueue ?? [linkedLoop.pendingManualQa]).some(
+      (pending) =>
+        pending?.attemptId === attempt.id && pending?.manualQaId === manualQa.id
+    ) &&
     linkedLoop.campaignRepairs?.some(
       (repair) =>
         repair.status === "pending" &&
@@ -343,6 +397,7 @@ function assertPendingCandidate(run, attempt, manualQa, linkedLoop) {
 
 async function updateLinkedLoop({
   campaignRun,
+  attemptId,
   verdict,
   campaignContinues,
   decidedAt,
@@ -352,16 +407,35 @@ async function updateLinkedLoop({
   if (!loopStore) {
     throw new Error("A loop-linked manual QA verdict requires the campaign loop store.");
   }
-  const loopRun = await loopStore.readRun(campaignRun.loopId);
-  const updated = verdict === "approved" || campaignContinues
-    ? resumeLoopAfterManualQaApproval(loopRun, {
-        campaignRunId: campaignRun.id,
-        completedAt: decidedAt,
-      })
-    : rejectLoopManualQa(loopRun, {
-        campaignRunId: campaignRun.id,
-        completedAt: decidedAt,
-      });
+  const update = (loopRun) =>
+    verdict === "approved" || campaignContinues
+      ? resumeLoopAfterManualQaApproval(loopRun, {
+          campaignRunId: campaignRun.id,
+          attemptId,
+          completedAt: decidedAt,
+        })
+      : rejectLoopManualQa(loopRun, {
+          campaignRunId: campaignRun.id,
+          attemptId,
+          completedAt: decidedAt,
+        });
+  if (typeof loopStore.updateRun === "function") {
+    return loopStore.updateRun(campaignRun.loopId, update);
+  }
+  const updated = update(await loopStore.readRun(campaignRun.loopId));
   await loopStore.writeRun(updated);
   return updated;
+}
+
+async function persistCampaignRun(store, fallbackRun, update) {
+  if (typeof store.updateRun === "function") {
+    try {
+      return await store.updateRun(fallbackRun.id, update);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  const next = update(fallbackRun);
+  await store.writeRun(next);
+  return next;
 }

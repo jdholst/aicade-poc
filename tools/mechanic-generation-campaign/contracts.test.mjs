@@ -11,6 +11,7 @@ import {
 } from "./lib/contracts.mjs";
 import { redactSensitive } from "./lib/redaction.mjs";
 import { loadCampaignManifest } from "./lib/manifest-loader.mjs";
+import { resolveExecutionPolicy } from "./lib/parallel-execution.mjs";
 
 const manifest = {
   schemaVersion: "campaign-manifest/v1",
@@ -215,6 +216,45 @@ describe("campaign contracts", () => {
       failures: 3,
       remainingFailureTolerance: 0,
       terminalReason: "failure_limit_reached",
+    });
+  });
+
+  it("continues parallel generation while reviewed-risk capacity remains", () => {
+    const candidate = {
+      ...successAttempt(1),
+      status: "awaiting_manual_qa",
+      classification: "awaiting_manual_qa",
+      manualQa: {
+        id: "manual-qa-attempt-1",
+        path: "attempt-1/manual-qa.json",
+        status: "pending",
+      },
+    };
+
+    expect(scoreCampaign("repeatability", manifest, [candidate])).toMatchObject({
+      status: "running",
+      automatedCandidates: 1,
+      submissions: 1,
+    });
+    expect(
+      scoreCampaign(
+        "repeatability",
+        manifest,
+        Array.from({ length: 10 }, (_, index) => ({
+          ...candidate,
+          id: `attempt-${index + 1}`,
+          sequence: index + 1,
+          manualQa: {
+            ...candidate.manualQa,
+            id: `manual-qa-attempt-${index + 1}`,
+            path: `attempt-${index + 1}/manual-qa.json`,
+          },
+        }))
+      )
+    ).toMatchObject({
+      status: "waiting_for_manual_qa",
+      automatedCandidates: 10,
+      submissions: 10,
     });
   });
 
@@ -543,8 +583,7 @@ describe("campaign contracts", () => {
     };
 
     expect(() => parseCampaignRun(run)).toThrow(/pending manual qa/i);
-    expect(
-      parseCampaignRun({
+    const parsed = parseCampaignRun({
         ...run,
         pendingManualQa: {
           manualQaId: "manual-qa-attempt-1",
@@ -556,8 +595,139 @@ describe("campaign contracts", () => {
           requestedAt: "2026-08-23T15:01:00.000Z",
           evidencePath: "attempt-1/manual-qa.json",
         },
-      }).status
-    ).toBe("waiting_for_manual_qa");
+      });
+    expect(parsed).toMatchObject({
+      status: "waiting_for_manual_qa",
+      stateRevision: 0,
+      executionPolicy: {
+        mode: "sequential",
+        maxConcurrentAttempts: 1,
+      },
+      pendingManualQaQueue: [parsed.pendingManualQa],
+      attemptSlots: [],
+    });
+  });
+
+  it("accepts multiple queued reviews while a parallel proof campaign remains active", () => {
+    const legacy = parseCampaignRun({
+      schemaVersion: "campaign-run/v1",
+      id: "campaign-parallel",
+      manifestId: manifest.id,
+      manifestPath: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
+      manifestHash: "a".repeat(64),
+      cohort: "repeatability",
+      status: "running",
+      createdAt: "2026-08-23T15:00:00.000Z",
+      model: manifest.model,
+      providerModes: manifest.providerModes,
+      attemptCeiling: 10,
+      attemptIds: [],
+      revision: {
+        head: "b".repeat(40),
+        revisionKey: "c".repeat(64),
+        dirty: false,
+        statusEntries: [],
+      },
+      baseUrl: "http://127.0.0.1:3117",
+      authorization: {
+        actualProviders: true,
+        authorizedAt: "2026-08-23T15:00:00.000Z",
+      },
+    });
+    const pending = [1, 2].map((sequence) => ({
+      manualQaId: `manual-qa-attempt-${sequence}`,
+      campaignRunId: legacy.id,
+      attemptId: `attempt-${sequence}`,
+      promptId: "baseline",
+      cohort: "repeatability",
+      revisionKey: legacy.revision.revisionKey,
+      requestedAt: `2026-08-23T15:0${sequence}:00.000Z`,
+      evidencePath: `attempt-${sequence}/manual-qa.json`,
+    }));
+    const parsed = parseCampaignRun({
+      ...legacy,
+      schemaVersion: "campaign-run/v2",
+      knowledgePolicy: { required: false },
+      executionPolicy: resolveExecutionPolicy({
+        cohort: "repeatability",
+        policy: {
+          mode: "parallel",
+          maxConcurrentAttempts: 3,
+          maxPendingManualQa: 3,
+          stageConcurrency: { planning: 3, contract: 3, source: 3 },
+          scheduleOrder: "round_robin",
+        },
+      }),
+      pendingManualQaQueue: pending,
+      stateRevision: 4,
+      attemptSlots: [],
+    });
+
+    expect(parsed.status).toBe("running");
+    expect(parsed.pendingManualQaQueue).toEqual(pending);
+    expect(parsed.pendingManualQa).toEqual(pending[0]);
+  });
+
+  it("rejects duplicate durable slots and execution-policy overcommit", () => {
+    const base = parseCampaignRun({
+      schemaVersion: "campaign-run/v1",
+      id: "campaign-slot-validation",
+      manifestId: manifest.id,
+      manifestPath: "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
+      manifestHash: "a".repeat(64),
+      cohort: "repeatability",
+      status: "running",
+      createdAt: "2026-08-23T15:00:00.000Z",
+      model: manifest.model,
+      providerModes: manifest.providerModes,
+      attemptCeiling: 10,
+      attemptIds: [],
+      revision: {
+        head: "b".repeat(40),
+        revisionKey: "c".repeat(64),
+        dirty: false,
+        statusEntries: [],
+      },
+      baseUrl: "http://127.0.0.1:3117",
+      authorization: {
+        actualProviders: true,
+        authorizedAt: "2026-08-23T15:00:00.000Z",
+      },
+    });
+    const policy = resolveExecutionPolicy({
+      cohort: "repeatability",
+      policy: {
+        mode: "parallel",
+        maxConcurrentAttempts: 2,
+        maxPendingManualQa: 2,
+      },
+    });
+    const slot = (sequence) => ({
+      attemptId: `attempt-${sequence}`,
+      sequence,
+      promptId: "baseline",
+      submissionKind: "scheduled",
+      status: "running",
+      leaseId: `lease-${sequence}`,
+      leaseOwner: "worker-pool",
+      leasedAt: "2026-08-23T15:01:00.000Z",
+      updatedAt: "2026-08-23T15:01:00.000Z",
+    });
+
+    expect(() =>
+      parseCampaignRun({
+        ...base,
+        executionPolicy: policy,
+        attemptSlots: [slot(1), slot(1)],
+      })
+    ).toThrow(/slot ids|sequence numbers/i);
+    expect(() =>
+      parseCampaignRun({
+        ...base,
+        executionPolicy: policy,
+        attemptSlots: [slot(1), slot(2), slot(3)],
+      })
+    ).toThrow(/active attempt slots/i);
   });
 });
 

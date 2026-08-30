@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { parseCampaignLoopManifest } from "./loop-contracts.mjs";
 import { loadCampaignManifest } from "./manifest-loader.mjs";
+import { resolveExecutionPolicy } from "./parallel-execution.mjs";
 import { maximumCampaignSubmissions, resolveProviderModes } from "./runner-policy.mjs";
 
 export async function loadCampaignLoopDefinition({
@@ -56,12 +57,17 @@ export async function loadCampaignLoopDefinition({
     );
   }
 
+  const executionPolicies = {};
   for (const step of parsedDefinition.sequence) {
     resolveProviderModes(
       step.cohort,
       step.providerModes,
       campaign.manifest.fixtures
     );
+    executionPolicies[step.id] = resolveExecutionPolicy({
+      cohort: step.cohort,
+      policy: step.executionPolicy,
+    });
   }
   for (const profile of parsedDefinition.isolationProfiles) {
     resolveProviderModes(
@@ -88,6 +94,7 @@ export async function loadCampaignLoopDefinition({
     campaign,
     probeHash,
     minimums,
+    executionPolicies,
   };
 }
 

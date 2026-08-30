@@ -274,10 +274,12 @@ function renderLoops() {
   document.querySelector("#loops").innerHTML = paginated("loops", loops).map((loop) => {
     const step = loop.steps[loop.currentStepIndex] ?? loop.steps.at(-1);
     const branch = loop.lifecycle ? `${loop.worktree.branch} · removed` : loop.worktree.branch;
+    const pendingReviews = loop.pendingManualQaQueue?.length
+      ?? (loop.pendingManualQa ? 1 : 0);
     return `<tr>
       <td><strong>${escapeHtml(loop.manifestId)}</strong><br><small>${escapeHtml(loop.id)}</small><br><small>${escapeHtml(branch)}</small></td>
       <td><span class="badge ${loop.status}">${escapeHtml(loop.status)}</span>${loop.result ? `<br><small>${loop.result.mechanicProven ? "mechanic proven" : "sequence only"}</small>` : ""}</td>
-      <td>${step ? `${escapeHtml(step.cohort)}<br><small>${escapeHtml(step.status)} · cycle ${loop.currentRevision.cycle}</small>` : "complete"}</td>
+      <td>${step ? `${escapeHtml(step.cohort)}<br><small>${escapeHtml(step.status)} · cycle ${loop.currentRevision.cycle}</small>${pendingReviews ? `<br><small>${pendingReviews} pending review${pendingReviews === 1 ? "" : "s"}</small>` : ""}` : "complete"}</td>
       <td><code>${shortHash(loop.currentRevision.revisionKey)}</code></td>
       <td>${loop.usage.campaignRuns}/${loop.limits.maxCampaignRuns} campaigns<br>${loop.usage.submissions}/${loop.limits.maxSubmissions} submissions<br>${loop.usage.fixCycles}/${loop.limits.maxFixCycles} fixes<br>${renderLoopCostBudget(loop)}</td>
       <td><small>Sparkline</small> ${stageCounts(loop.usage.actualProviderCalls)}<br><small>Gross ${stageCounts(loop.usage.grossActualProviderCalls ?? loop.usage.actualProviderCalls)}<br>remaining ${stageCounts(loop.remaining.actualProviderCalls)}</small></td>
@@ -341,7 +343,22 @@ function renderCampaigns(campaigns) {
         : result.failureLimit === undefined
           ? ""
           : `<br><small>cohort continuing</small>`;
-    return `<tr><td><strong>${escapeHtml(campaign.manifestId)}</strong><br><small>${escapeHtml(campaign.id)}</small></td><td>${escapeHtml(campaign.cohort)}</td><td>${modeText(campaign.providerModes)}</td><td><span class="badge ${campaign.status}">${escapeHtml(campaign.status)}</span>${terminalReason}</td><td>${result.successes ?? 0}/${result.submissions ?? campaign.attempts.length}${failureProgress}${replacementProgress}</td><td>${calls}</td><td>${renderCampaignCost(campaign)}</td><td><code>${shortHash(campaign.revision.revisionKey)}</code></td></tr>`;
+    const execution = campaign.executionPolicy;
+    const activeSlots = (campaign.attemptSlots ?? []).filter(({ status }) =>
+      ["reserved", "running"].includes(status)
+    ).length;
+    const pendingReviews = campaign.pendingManualQaQueue?.length
+      ?? (campaign.pendingManualQa ? 1 : 0);
+    const executionSummary = execution
+      ? `<br><small>${escapeHtml(execution.mode)} · ${execution.maxConcurrentAttempts} active max · ${execution.maxPendingManualQa} pending review max</small>`
+      : `<br><small>sequential legacy record</small>`;
+    const liveProgress = activeSlots || pendingReviews
+      ? `<br><small>${activeSlots} active · ${pendingReviews} pending review</small>`
+      : "";
+    const clusterSummary = campaign.failureClusters?.length
+      ? `<br><small>${campaign.failureClusters.length} failure cluster${campaign.failureClusters.length === 1 ? "" : "s"}: ${campaign.failureClusters.map(({ id, count }) => `${escapeHtml(id)} (${count})`).join(", ")}</small>`
+      : "";
+    return `<tr><td><strong>${escapeHtml(campaign.manifestId)}</strong><br><small>${escapeHtml(campaign.id)}</small></td><td>${escapeHtml(campaign.cohort)}</td><td>${modeText(campaign.providerModes)}${executionSummary}</td><td><span class="badge ${campaign.status}">${escapeHtml(campaign.status)}</span>${terminalReason}${liveProgress}${clusterSummary}</td><td>${result.successes ?? 0}/${result.submissions ?? campaign.attempts.length}${failureProgress}${replacementProgress}</td><td>${calls}</td><td>${renderCampaignCost(campaign)}</td><td><code>${shortHash(campaign.revision.revisionKey)}</code></td></tr>`;
   }).join("") || `<tr><td colspan="8">${empty("No campaign runs yet.")}</td></tr>`;
 }
 

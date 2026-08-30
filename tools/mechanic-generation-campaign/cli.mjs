@@ -20,6 +20,8 @@ import {
   maximumCampaignSubmissions,
   resolveProviderModes,
 } from "./lib/runner-policy.mjs";
+import { resolveExecutionPolicy } from "./lib/parallel-execution.mjs";
+import { clusterCampaignFailures } from "./lib/failure-clusters.mjs";
 import { handleLoopCommand } from "./lib/loop-cli.mjs";
 import {
   assertCampaignKnowledgeReconciled,
@@ -113,6 +115,10 @@ async function main(args) {
       .filter(([, mode]) => mode === "actual")
       .map(([stage]) => stage);
     const resume = takeOption(args, "--resume");
+    const executionPolicyInput = parseExecutionPolicyOptions(args);
+    const executionPolicy = resume && !executionPolicyInput
+      ? undefined
+      : resolveExecutionPolicy({ cohort, policy: executionPolicyInput });
     let authorized =
       takeFlag(args, "--authorize-actual") ||
       process.env.AICADE_CAMPAIGN_ACTUAL_AUTHORIZED === "1";
@@ -130,6 +136,12 @@ async function main(args) {
     console.log(`Cohort: ${cohort}`);
     console.log(`Submission ceiling: ${submissionCeiling}`);
     console.log(`Provider modes: ${formatProviderModes(providerModes)}`);
+    if (executionPolicy) {
+      console.log(
+        `Execution: ${executionPolicy.mode} · max ${executionPolicy.maxConcurrentAttempts} active · max ${executionPolicy.maxPendingManualQa} pending review`
+      );
+      console.log(`Execution policy hash: ${executionPolicy.hash}`);
+    }
     const result = await runCampaign({
       repoRoot,
       manifestPath,
@@ -145,6 +157,7 @@ async function main(args) {
         Number(process.env.AICADE_CAMPAIGN_ATTEMPT_TIMEOUT_MS ?? 300_000)
       ),
       actualProviderAuthorized: authorized,
+      executionPolicy,
     });
     assertNoArguments(args);
     printRunSummary(result.run, result.attempts);
@@ -153,6 +166,7 @@ async function main(args) {
 
   if (command === "review") {
     const campaignRunId = requiredOption(args, "--campaign");
+    const attemptId = takeOption(args, "--attempt");
     const port = numberOption(args, "--port", 3117);
     assertNoArguments(args);
     await loopStore.initialize();
@@ -161,6 +175,7 @@ async function main(args) {
       store,
       loopStore,
       campaignRunId,
+      attemptId,
       port,
       headed: true,
     });
@@ -319,6 +334,68 @@ function parseProviderModes(value) {
   return modes;
 }
 
+function parseExecutionPolicyOptions(args) {
+  const mode = takeOption(args, "--execution-mode");
+  const maxConcurrentAttempts = takeOption(args, "--max-concurrent-attempts");
+  const maxPendingManualQa = takeOption(args, "--max-pending-manual-qa");
+  const planningConcurrency = takeOption(args, "--planning-concurrency");
+  const contractConcurrency = takeOption(args, "--contract-concurrency");
+  const sourceConcurrency = takeOption(args, "--source-concurrency");
+  const scheduleOrder = takeOption(args, "--schedule-order");
+  const hasExecutionOption = [
+    mode,
+    maxConcurrentAttempts,
+    maxPendingManualQa,
+    planningConcurrency,
+    contractConcurrency,
+    sourceConcurrency,
+    scheduleOrder,
+  ].some((value) => value !== undefined);
+  if (!hasExecutionOption) return undefined;
+  if (!mode) {
+    throw new Error("Parallel execution options require --execution-mode.");
+  }
+  if (mode === "parallel" && (!maxConcurrentAttempts || !maxPendingManualQa)) {
+    throw new Error(
+      "Parallel execution requires --max-concurrent-attempts and --max-pending-manual-qa."
+    );
+  }
+  const stageValues = [planningConcurrency, contractConcurrency, sourceConcurrency];
+  const hasStageConcurrency = stageValues.some((value) => value !== undefined);
+  if (hasStageConcurrency && stageValues.some((value) => value === undefined)) {
+    throw new Error(
+      "Stage concurrency requires planning, contract, and source values together."
+    );
+  }
+  return {
+    mode,
+    ...(maxConcurrentAttempts
+      ? { maxConcurrentAttempts: parsePositiveInteger(maxConcurrentAttempts, "--max-concurrent-attempts") }
+      : {}),
+    ...(maxPendingManualQa
+      ? { maxPendingManualQa: parsePositiveInteger(maxPendingManualQa, "--max-pending-manual-qa") }
+      : {}),
+    ...(hasStageConcurrency
+      ? {
+          stageConcurrency: {
+            planning: parsePositiveInteger(planningConcurrency, "--planning-concurrency"),
+            contract: parsePositiveInteger(contractConcurrency, "--contract-concurrency"),
+            source: parsePositiveInteger(sourceConcurrency, "--source-concurrency"),
+          },
+        }
+      : {}),
+    ...(scheduleOrder ? { scheduleOrder } : {}),
+  };
+}
+
+function parsePositiveInteger(value, option) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${option} must be a positive integer.`);
+  }
+  return parsed;
+}
+
 function requiredOption(args, name) {
   const value = takeOption(args, name);
   if (!value) throw new Error(`Missing required option ${name}.`);
@@ -362,6 +439,18 @@ function printRunSummary(run, attempts) {
   console.log(`Status: ${run.status}`);
   console.log(`Revision: ${run.revision.revisionKey}`);
   console.log(`Submissions: ${attempts.length}/${run.attemptCeiling}`);
+  if (run.executionPolicy) {
+    console.log(
+      `Execution: ${run.executionPolicy.mode} · ${run.executionPolicy.maxConcurrentAttempts} active · ${run.executionPolicy.maxPendingManualQa} pending review max`
+    );
+    console.log(`Execution policy hash: ${run.executionPolicy.hash}`);
+  }
+  const activeSlots = (run.attemptSlots ?? []).filter(({ status }) =>
+    ["reserved", "running"].includes(status)
+  );
+  if (activeSlots.length > 0) {
+    console.log(`Active attempt slots: ${activeSlots.map(({ attemptId }) => attemptId).join(", ")}`);
+  }
   if (run.result?.failureLimit !== undefined) {
     console.log(`Failures: ${run.result.failures ?? 0}/${run.result.failureLimit}`);
     console.log(
@@ -382,9 +471,25 @@ function printRunSummary(run, attempts) {
       `${attempt.id}:${replacement} ${attempt.status} at ${attempt.furthestStage} (${formatProviderModes(attempt.providerModes)})`
     );
   }
-  if (run.pendingManualQa) {
-    console.log(`Pending manual QA: ${run.pendingManualQa.attemptId}`);
-    console.log(`Review: npm run campaign -- review --campaign ${run.id}`);
+  const failureClusters = clusterCampaignFailures(attempts);
+  if (failureClusters.length > 0) {
+    console.log(`Failure clusters (${failureClusters.length}):`);
+    for (const cluster of failureClusters) {
+      console.log(
+        `  ${cluster.id}: ${cluster.count} at ${cluster.furthestStage} (${cluster.classification}) · ${cluster.attemptIds.join(", ")}`
+      );
+    }
+  }
+  const pendingReviews = run.pendingManualQaQueue?.length
+    ? run.pendingManualQaQueue
+    : run.pendingManualQa
+      ? [run.pendingManualQa]
+      : [];
+  if (pendingReviews.length > 0) {
+    console.log(`Pending manual QA (${pendingReviews.length}):`);
+    for (const pending of pendingReviews) {
+      console.log(`  ${pending.attemptId}: npm run campaign -- review --campaign ${run.id} --attempt ${pending.attemptId}`);
+    }
   }
 }
 
@@ -401,7 +506,7 @@ function printHelp() {
 Usage:
   npm run campaign -- validate --manifest <id-or-path> [--structure-only]
   npm run campaign -- run --manifest <id-or-path> --cohort <discovery|isolation|repeatability|variation> [options]
-  npm run campaign -- review --campaign <run-id> [--port 3117]
+  npm run campaign -- review --campaign <run-id> [--attempt <attempt-id>] [--port 3117]
   npm run campaign -- approve --campaign <run-id> --attempt <attempt-id> [--note <text>]
   npm run campaign -- deny --campaign <run-id> --attempt <attempt-id> --reason <text>
   npm run campaign -- dashboard [--port 4310]
@@ -418,6 +523,18 @@ Usage:
 
 Run options:
   --provider-modes planning=<actual|fixture>,contract=<actual|fixture>,source=<actual|fixture>
+  --execution-mode <sequential|parallel>
+                           Parallel is opt-in and limited to repeatability or variation
+  --max-concurrent-attempts <1..3>
+                           Maximum active browser attempts for a parallel run
+  --max-pending-manual-qa <1..3>
+                           Maximum queued candidates awaiting human review
+  --planning-concurrency <1..3>
+  --contract-concurrency <1..3>
+  --source-concurrency <1..3>
+                           Optional per-stage limits; provide all three together
+  --schedule-order <legacy_prompt_major|round_robin>
+                           Parallel variation defaults to round-robin ordering
   --authorize-actual       One authorization for the bounded campaign
   --base-url <url>         Attach to an existing server instead of build/start
   --headed                 Show the browser

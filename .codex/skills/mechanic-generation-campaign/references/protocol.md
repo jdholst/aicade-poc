@@ -9,6 +9,14 @@
 
 A mechanic is proven only when discovery, repeatability, and variation are achieved with the same revision, model, and provider modes.
 
+New repeatability and variation campaigns may explicitly freeze bounded parallel execution. Discovery, isolation, existing frozen campaigns, and omitted policies remain sequential. Parallel execution is capped at three active attempts and three pending reviews. The dispatcher must preserve:
+
+```text
+active attempts + pending manual reviews <= failure limit - counted failures
+```
+
+Parallel variation uses round-robin base prompt order unless the frozen policy explicitly selects legacy prompt-major order. Each attempt receives a durable slot, isolated browser context, artifact directory, and provider-call identity before launch.
+
 ## Cost evidence
 
 The campaign manifest may freeze one `openai-pricing-snapshot/v1` by path and SHA-256 hash. Every actual planning, contract, source, and repair request writes one sanitized receipt with its completion time, resolved model, service tier, token usage, and integer nano-USD cost. Fixture calls cost zero and produce no actual-provider receipt.
@@ -59,6 +67,8 @@ Fixture-backed isolation may diagnose a failure while a loop is waiting for a fi
 
 Repeatability and variation continue after their first and second qualifying failures. Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion do not. The third qualifying failure ends the campaign and moves a linked loop to `waiting_for_fix`; an accepted fix begins a new revision cycle at discovery. The maximum full proof envelope is 22 submissions: one discovery, ten repeatability, and up to eleven variation.
 
+The first and second failures do not authorize a fix. At the third, group failed attempts by classification, furthest stage, and normalized failure signature. Up to three read-only diagnostic subagents may inspect separate clusters. They report evidence and hypotheses to the primary agent, which owns the combined diagnosis, source changes, tests, knowledge reconciliation, and one verified fix checkpoint.
+
 Campaign-tool defects are repaired outside the loop's Sparkline budget. A thrown campaign-runner defect or persisted infrastructure failure moves the loop to `waiting_for_campaign_repair`, preserves the candidate revision, and credits the invalidated campaign, submission, isolation, and Sparkline-attributed provider usage. Gross actual-provider calls remain append-only and enforce the authorization ceiling. Repair `tools/mechanic-generation-campaign/` in the control checkout, then resume without a fix report or proof reset. Runtime readiness requires the exact editor message `Runtime is running in the sandbox.` plus a generated iframe with source; timeout evidence includes the observed editor state.
 
 A verified fix commit starts a new revision cycle and resets every sequence step. Campaign links and fix checkpoints remain append-only. Global usage does not reset.
@@ -75,7 +85,7 @@ Only an `exhausted` loop can be extended. The extension is additive to global fi
 
 Conclude and discard require explicit user direction. Conclusion verifies the clean recorded control checkout and continuous accepted-fix chain, merges verified fixes when necessary, then removes the local worktree and branch. Discard removes them without merging or recording a QA verdict. Dirty or revision-mismatched discard requires a separate force approval after the exact paths are reported. Neither action pushes, switches the control branch, deletes a remote branch, or removes campaign evidence.
 
-Manual review consumes no campaign or provider budget and has no timeout. The review command restores only the frozen GenerationRun and GamePack into a clean browser context, blocks provider endpoints, verifies editor mount and runtime health, and remains open until approval, denial, or interruption. A detector or harness exception leaves the verdict pending and moves a linked loop to `waiting_for_campaign_repair`. Only an explicit human denial turns observed gameplay into `manual_qa_rejected` Sparkline evidence.
+Manual review consumes no campaign or provider budget and has no timeout. Parallel candidates are stored as an ordered queue; each review and verdict command targets one exact attempt and removes only that entry. The review command restores only the frozen GenerationRun and GamePack into a clean browser context, blocks provider endpoints, verifies editor mount and runtime health, and remains open until approval, denial, or interruption. A detector or harness exception leaves the verdict pending and moves a linked loop to `waiting_for_campaign_repair`. Only an explicit human denial turns observed gameplay into `manual_qa_rejected` Sparkline evidence.
 
 Loop execution worktrees live under the adjacent `.qa/<repository>/mechanic-generation-campaign-worktrees/` root. Campaign evidence remains under the control checkout's ignored `.qa/mechanic-generation-campaign/` root. Never move a loop worktree beneath the control checkout because nested package roots can change production build behavior.
 

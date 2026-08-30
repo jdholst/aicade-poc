@@ -872,6 +872,7 @@ async function executeSequence({
         ),
         cohort: step.cohort,
         providerModes: step.providerModes,
+        executionPolicy: step.executionPolicy,
         headed,
         port,
         attemptTimeoutMs,
@@ -921,6 +922,7 @@ async function executeSequence({
         status: result.run.status,
         attempts: result.attempts,
         pendingManualQa: result.run.pendingManualQa,
+        pendingManualQaQueue: result.run.pendingManualQaQueue,
       });
       await loopStore.writeRun(state.run);
     } catch (error) {
@@ -940,14 +942,6 @@ async function executeSequence({
 function createProviderCallBudget(state, loopStore, pricing) {
   return {
     async begin({ callId, stage, model, serviceTier, requestedAt }) {
-      for (const pending of [...(state.run.providerCost?.pendingReservations ?? [])]) {
-        state.run = settleActualProviderCallCost(state.run, {
-          callId: pending.callId,
-          stage: pending.stage,
-          completedAt: new Date().toISOString(),
-          quality: "unknown",
-        });
-      }
       const reservationNanoUsd = pricing
         ? calculateConservativeReservation({
             model,
@@ -955,15 +949,18 @@ function createProviderCallBudget(state, loopStore, pricing) {
             snapshot: pricing.snapshot,
           }).totalNanoUsd
         : 0;
-      const result = beginActualProviderCall(state.run, {
-        callId,
-        stage,
-        requestedAt,
-        reservationNanoUsd,
+      let allowed = false;
+      await mutateLoopState(state, loopStore, (current) => {
+        const result = beginActualProviderCall(current, {
+          callId,
+          stage,
+          requestedAt,
+          reservationNanoUsd,
+        });
+        allowed = result.allowed;
+        return result.run;
       });
-      state.run = result.run;
-      await loopStore.writeRun(state.run);
-      return result.allowed;
+      return allowed;
     },
     async settle(call) {
       if (!pricing || !state.run.pricing) return;
@@ -984,33 +981,55 @@ function createProviderCallBudget(state, loopStore, pricing) {
         }
         cost ??= { quality: "unknown" };
       }
-      state.run = settleActualProviderCallCost(state.run, {
-        callId: call.callId,
-        stage: call.stage,
-        completedAt: call.completedAt ?? new Date().toISOString(),
-        quality: cost.quality,
-        totalNanoUsd: cost.totalNanoUsd,
-      });
-      await loopStore.writeRun(state.run);
+      await mutateLoopState(state, loopStore, (current) =>
+        settleActualProviderCallCost(current, {
+          callId: call.callId,
+          stage: call.stage,
+          completedAt: call.completedAt ?? new Date().toISOString(),
+          quality: cost.quality,
+          totalNanoUsd: cost.totalNanoUsd,
+        })
+      );
     },
     async consume(stage) {
-      const result = recordActualProviderCall(state.run, stage);
-      state.run = result.run;
-      await loopStore.writeRun(state.run);
-      return result.allowed;
+      let allowed = false;
+      await mutateLoopState(state, loopStore, (current) => {
+        const result = recordActualProviderCall(current, stage);
+        allowed = result.allowed;
+        return result.run;
+      });
+      return allowed;
     },
   };
 }
 
 function createSubmissionRecorder(state, loopStore) {
   return async () => {
-    const result = recordLoopSubmission(state.run);
-    state.run = result.run;
-    await loopStore.writeRun(state.run);
-    if (!result.allowed) {
+    let allowed = false;
+    await mutateLoopState(state, loopStore, (current) => {
+      const result = recordLoopSubmission(current);
+      allowed = result.allowed;
+      return result.run;
+    });
+    if (!allowed) {
       throw new Error("Loop submission ceiling reached before editor submission.");
     }
   };
+}
+
+async function mutateLoopState(state, loopStore, update) {
+  const previous = state.mutationQueue ?? Promise.resolve();
+  const operation = previous.then(async () => {
+    state.run = typeof loopStore.updateRun === "function"
+      ? await loopStore.updateRun(state.run.id, update)
+      : update(state.run);
+    if (typeof loopStore.updateRun !== "function") {
+      await loopStore.writeRun(state.run);
+    }
+    return state.run;
+  });
+  state.mutationQueue = operation.catch(() => {});
+  return operation;
 }
 
 async function recoverMisclassifiedCompletedRepair({ run, campaignStore }) {

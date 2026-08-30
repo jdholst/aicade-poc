@@ -13,6 +13,7 @@ import {
 import { buildCampaignLoopEvidence } from "./loop-evidence.mjs";
 import { createCampaignLoopStore } from "./loop-store.mjs";
 import { remainingLoopBudgets } from "./loop-state.mjs";
+import { clusterCampaignFailures } from "./failure-clusters.mjs";
 
 const PIPELINE_STAGES = [
   "submission",
@@ -65,22 +66,24 @@ export async function buildDashboardSnapshot(
   const campaigns = await Promise.all(
     runs.map(async (run) => {
       const attempts = await store.readAttempts(run.id);
+      const enrichedAttempts = await Promise.all(
+        attempts.map(async (attempt) => ({
+          ...attempt,
+          providerCallReceipts: await readAttemptProviderCallReceipts(
+            store,
+            run.id,
+            attempt.id
+          ),
+          manualQaEvidence:
+            attempt.manualQa && typeof store.readManualQa === "function"
+              ? await store.readManualQa(run.id, attempt.id)
+              : null,
+        }))
+      );
       return {
         ...run,
-        attempts: await Promise.all(
-          attempts.map(async (attempt) => ({
-            ...attempt,
-            providerCallReceipts: await readAttemptProviderCallReceipts(
-              store,
-              run.id,
-              attempt.id
-            ),
-            manualQaEvidence:
-              attempt.manualQa && typeof store.readManualQa === "function"
-                ? await store.readManualQa(run.id, attempt.id)
-                : null,
-          }))
-        ),
+        attempts: enrichedAttempts,
+        failureClusters: clusterCampaignFailures(enrichedAttempts),
       };
     })
   );

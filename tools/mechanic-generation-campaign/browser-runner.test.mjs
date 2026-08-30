@@ -3,12 +3,59 @@ import { describe, expect, it } from "vitest";
 import {
   CampaignInfrastructureFailureError,
   createCampaignActivityTracker,
+  reconcileResumableRun,
   requireCampaignAttemptContinuation,
   submitCampaignPrompt,
   waitForCampaignEditorTerminalState,
 } from "./lib/browser-runner.mjs";
 
 describe("campaign browser runner", () => {
+  it("recovers durable slots and exact pending candidates after interruption", async () => {
+    const pendingAttempt = {
+      id: "a01-baseline",
+      promptId: "baseline",
+      status: "awaiting_manual_qa",
+      manualQa: { id: "manual-qa-a01-baseline", path: "a01-baseline/manual-qa.json", status: "pending" },
+    };
+    const run = {
+      id: "campaign-1",
+      cohort: "repeatability",
+      attemptIds: [],
+      revision: { revisionKey: "a".repeat(64) },
+      attemptSlots: [
+        { attemptId: "a01-baseline", sequence: 1, status: "running" },
+        { attemptId: "a02-baseline", sequence: 2, status: "reserved" },
+      ],
+      pendingManualQaQueue: [],
+    };
+    const store = {
+      async readAttempts() {
+        return [pendingAttempt];
+      },
+      async readManualQa() {
+        return {
+          id: "manual-qa-a01-baseline",
+          status: "pending",
+          requestedAt: "2026-08-30T12:00:00.000Z",
+        };
+      },
+    };
+
+    const recovered = await reconcileResumableRun(store, run);
+
+    expect(recovered.attemptIds).toEqual(["a01-baseline"]);
+    expect(recovered.attemptSlots).toEqual([
+      expect.objectContaining({ attemptId: "a01-baseline", status: "awaiting_manual_qa" }),
+      expect.objectContaining({ attemptId: "a02-baseline", status: "interrupted" }),
+    ]);
+    expect(recovered.pendingManualQaQueue).toEqual([
+      expect.objectContaining({
+        manualQaId: "manual-qa-a01-baseline",
+        attemptId: "a01-baseline",
+      }),
+    ]);
+  });
+
   it("waits for editor hydration before entering and submitting a prompt", async () => {
     const events = [];
     const page = createPromptPageDouble(events);

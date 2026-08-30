@@ -38,6 +38,28 @@ Every `campaign-loop-manifest/v1` contains one exact campaign manifest, its exte
         "provider_failure",
         "infrastructure_failure"
       ]
+    },
+    {
+      "id": "repeatability",
+      "cohort": "repeatability",
+      "providerModes": {
+        "planning": "actual",
+        "contract": "actual",
+        "source": "actual"
+      },
+      "executionPolicy": {
+        "mode": "parallel",
+        "maxConcurrentAttempts": 3,
+        "maxPendingManualQa": 3,
+        "stageConcurrency": {
+          "planning": 2,
+          "contract": 3,
+          "source": 2
+        },
+        "scheduleOrder": "round_robin"
+      },
+      "maxCampaignRunsPerRevision": 1,
+      "retryableClassifications": []
     }
   ],
   "isolationProfiles": [],
@@ -57,6 +79,8 @@ Every `campaign-loop-manifest/v1` contains one exact campaign manifest, its exte
 ```
 
 The values above illustrate the shape only. Choose and authorize limits for each loop explicitly. Validation rejects a definition that cannot contain one complete pass through its sequence.
+
+An omitted execution policy is frozen as sequential behavior when the linked campaign starts. Parallel policy is valid only for repeatability and variation, with limits from one through three. The definition hash binds every execution-policy field, and validation prints the normalized policy hash for each sequence step. Existing frozen definitions never opt into parallel execution silently.
 
 The cost ceiling is optional. When present, the referenced campaign manifest must freeze a pricing snapshot. A frozen snapshot without a cost ceiling records cost without enforcing a limit. A cost ceiling without a snapshot is invalid.
 
@@ -89,6 +113,8 @@ When a full-actual proof submission passes the automated pipeline and external p
 
 Repeatability and variation each stop immediately at three qualifying failures. Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion do not. Variation can use one targeted replacement after its ten base submissions when both submissions for exactly one prompt failed and no third failure occurred. A complete proof definition must therefore authorize up to 22 submissions and matching per-stage actual-provider calls.
 
+Parallel proof steps dispatch only while active attempts plus pending manual reviews fit inside the remaining failure tolerance. A step with no counted failures can have at most three candidates at risk. After those attempts drain, the loop waits for exact per-attempt verdicts. The first and second qualifying failures do not start a fix. The third ends the campaign, preserves all failure clusters, and moves the loop to `waiting_for_fix`.
+
 When a campaign fails, the loop checks only that campaign's failed attempts. It starts another campaign on the same revision only when every failure classification is listed by the current step and its same-revision run limit remains.
 
 A defect owned by `tools/mechanic-generation-campaign/` does not enter the Sparkline fix flow. A thrown campaign-runner defect pauses at `waiting_for_campaign_repair`, preserves the active candidate and Sparkline revision, and credits the invalidated campaign, submission, isolation, and Sparkline-attributed provider usage. Gross actual-provider calls remain append-only and continue to enforce the authorization ceiling. Repair and verify the campaign tool in the control checkout, then run `loop resume` without a fix report. This does not consume a fix cycle or reset proof.
@@ -98,6 +124,8 @@ The browser runner treats `Runtime is running in the sandbox.` plus a generated 
 Manual-review detector failures follow the same path and leave the exact verdict candidate pending. The user may still explicitly approve or deny that candidate while repair is pending. The harness never converts its own failure into a gameplay denial.
 
 Otherwise the loop enters `waiting_for_fix`. The agent may run an authorized isolation profile, then work only inside the loop worktree. Before diagnosis, `knowledge context --loop <id>` selects applicable and related canonical findings and all unreconciled linked evidence. The diagnosis cites applicable `KF-*` IDs. A proposal then accounts for every evidence item and either changes compiled guidance or records an explicit no-change reason.
+
+At the third failure, normalize failures into clusters by classification, furthest stage, and failure signature. The primary agent may assign at most three clusters to read-only diagnostic subagents. Subagents report evidence and hypotheses only. The primary agent consolidates overlapping causes, chooses one mechanic-general fix, performs every edit and verification step, and records one fix checkpoint. Fixing each failed output independently is not permitted because one pipeline defect may explain several attempts.
 
 A fix report must describe one clean committed revision and list passing verification. A temporary fix must also update the canonical temporary-fix ledger. The same commit includes the code fix and `generation-knowledge.json` with exactly one new `KR-*` reconciliation. The CLI independently reloads the prior Git version, recomputes context, replays the journal operation, and verifies the source loop, fix, trigger campaign, digests, consulted findings, and evidence dispositions before accepting the report.
 

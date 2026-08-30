@@ -354,6 +354,58 @@ describe("campaign loop state", () => {
     expect(resumed.usage).toEqual(usageBefore);
   });
 
+  it("removes only the decided candidate from a parallel manual-QA queue", () => {
+    let run = startLoopCampaign(initialRun(), {
+      campaignRunId: "discovery-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    run = finishSequenceCampaign(run, definition, {
+      campaignRunId: "discovery-1",
+      status: "achieved",
+      attempts: [
+        {
+          status: "success",
+          classification: "success",
+          manualQa: { status: "approved" },
+        },
+      ],
+    });
+    run = startLoopCampaign(run, {
+      campaignRunId: "repeatability-1",
+      role: "sequence",
+      stepId: "repeat",
+    });
+    const queue = ["attempt-1", "attempt-2"].map((attemptId) => ({
+      manualQaId: `manual-qa-${attemptId}`,
+      campaignRunId: "repeatability-1",
+      attemptId,
+      promptId: "baseline",
+      cohort: "repeatability",
+      revisionKey: revisionA.revisionKey,
+      requestedAt: "2026-08-23T15:01:00.000Z",
+      evidencePath: `${attemptId}/manual-qa.json`,
+    }));
+    run = finishSequenceCampaign(run, definition, {
+      campaignRunId: "repeatability-1",
+      status: "waiting_for_manual_qa",
+      attempts: [],
+      pendingManualQaQueue: queue,
+    });
+
+    const resumed = resumeLoopAfterManualQaApproval(run, {
+      campaignRunId: "repeatability-1",
+      attemptId: "attempt-1",
+    });
+
+    expect(resumed.status).toBe("running");
+    expect(resumed.pendingManualQa?.attemptId).toBe("attempt-2");
+    expect(resumed.pendingManualQaQueue.map(({ attemptId }) => attemptId)).toEqual([
+      "attempt-2",
+    ]);
+    expect(resumed.campaignLinks.at(-1).status).toBe("running");
+  });
+
   it("pauses a frozen manual-QA candidate for an out-of-band campaign repair without spending budget", () => {
     let run = startLoopCampaign(initialRun(), {
       campaignRunId: "discovery-1",
