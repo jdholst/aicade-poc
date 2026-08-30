@@ -1,9 +1,17 @@
-import { createKnownCostSummary, formatNanoUsd } from "./cost.js";
+import {
+  DEFAULT_COST_TIMEFRAME,
+  createKnownCostSeries,
+  createKnownCostSummary,
+  formatNanoUsd,
+  formatSummaryCost,
+} from "./cost.js";
 import { installCostCardNavigationGuard } from "./cost-card-navigation.js";
+import { installCostHistoryChart } from "./cost-chart.js";
 import { paginateItems } from "./pagination.js";
 
 let snapshot = null;
-let costTimeframe = "all";
+let costTimeframe = DEFAULT_COST_TIMEFRAME;
+let costGroupBy = "day";
 let deferredRefreshRender = false;
 const paginationPages = new Map();
 
@@ -36,6 +44,15 @@ const costCardNavigationGuard = installCostCardNavigationGuard(document.querySel
     render();
   },
 });
+const costHistoryChart = installCostHistoryChart(
+  document.querySelector("#dashboard-cost-history"),
+  {
+    onGroupByChange(value) {
+      costGroupBy = value;
+      render();
+    },
+  }
+);
 
 function resetPagination(sectionIds) {
   sectionIds.forEach((sectionId) => paginationPages.set(sectionId, 1));
@@ -126,6 +143,7 @@ function render() {
     campaign.attempts.map((attempt) => ({ ...attempt, campaignRunId: campaign.id }))
   );
   renderSummary(campaigns, attempts);
+  renderCostHistory(attempts);
   renderLoops();
   renderKnowledge();
   renderMechanics();
@@ -137,6 +155,13 @@ function render() {
   renderVariation(campaigns);
   renderFixes();
   renderLegacy();
+}
+
+function renderCostHistory(attempts) {
+  costHistoryChart.render(createKnownCostSeries(attempts, {
+    groupBy: costGroupBy,
+    now: new Date(snapshot.generatedAt),
+  }));
 }
 
 function renderKnowledge() {
@@ -390,8 +415,8 @@ function syncKnowledgeFilter(filter, label, values) {
 
 function costStat(cost) {
   const hasPricedEvidence = cost.pricedCalls > 0;
-  const value = hasPricedEvidence ? formatNanoUsd(cost.totalNanoUsd) : "—";
-  return `<article class="stat cost-stat stat-link"><a class="cost-stat-link" href="#dashboard-attempts" aria-label="Go to submissions"></a><div class="stat-heading"><p class="eyebrow">Known cost</p><select id="cost-timeframe" aria-label="Known cost timeframe"><option value="day"${costTimeframe === "day" ? " selected" : ""}>Past 24 hours</option><option value="week"${costTimeframe === "week" ? " selected" : ""}>Past 7 days</option><option value="month"${costTimeframe === "month" ? " selected" : ""}>Past 30 days</option><option value="all"${costTimeframe === "all" ? " selected" : ""}>All time</option></select></div><strong>${value}</strong></article>`;
+  const value = hasPricedEvidence ? formatSummaryCost(cost.totalNanoUsd) : "—";
+  return `<article class="stat cost-stat stat-link"><a class="cost-stat-link" href="#dashboard-cost-history" aria-label="Go to known cost history"></a><div class="stat-heading"><p class="eyebrow">Known cost</p><select id="cost-timeframe" aria-label="Known cost timeframe"><option value="day"${costTimeframe === "day" ? " selected" : ""}>Past 24 hours</option><option value="week"${costTimeframe === "week" ? " selected" : ""}>Past 7 days</option><option value="month"${costTimeframe === "month" ? " selected" : ""}>Past 30 days</option><option value="all"${costTimeframe === "all" ? " selected" : ""}>All time</option></select></div><strong>${value}</strong></article>`;
 }
 function renderCampaignCost(campaign) {
   const cost = campaign.cost;
