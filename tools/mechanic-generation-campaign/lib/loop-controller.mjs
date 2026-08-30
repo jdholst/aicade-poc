@@ -224,6 +224,17 @@ export async function resumeCampaignLoop({
     throw error;
   }
 
+  const reconciledManualQaRun = await reconcileActiveCampaignManualQa({
+    run,
+    loaded,
+    campaignStore,
+  });
+  if (reconciledManualQaRun !== run) {
+    run = reconciledManualQaRun;
+    await loopStore.writeRun(run);
+    return { run };
+  }
+
   if (run.status === "waiting_for_fix") {
     if (!fixReportPath) {
       throw new Error("A loop waiting for a fix requires --fix-report.");
@@ -303,6 +314,57 @@ export async function resumeCampaignLoop({
     headed,
     port,
     attemptTimeoutMs,
+  });
+}
+
+async function reconcileActiveCampaignManualQa({
+  run,
+  loaded,
+  campaignStore,
+}) {
+  const active = run.activeCampaign;
+  if (
+    !["running", "interrupted"].includes(run.status) ||
+    active?.role !== "sequence"
+  ) {
+    return run;
+  }
+  let campaignRun;
+  try {
+    campaignRun = await campaignStore.readRun(active.campaignRunId);
+  } catch (error) {
+    if (error?.code === "ENOENT") return run;
+    throw error;
+  }
+  if (campaignRun.status !== "waiting_for_manual_qa") {
+    return run;
+  }
+  if (
+    campaignRun.loopId !== run.id ||
+    campaignRun.loopStepId !== active.stepId ||
+    campaignRun.revision?.revisionKey !== run.currentRevision.revisionKey
+  ) {
+    throw new Error(
+      `Completed campaign ${active.campaignRunId} does not match its active loop checkpoint.`
+    );
+  }
+  const pendingManualQaQueue = campaignRun.pendingManualQaQueue?.length
+    ? campaignRun.pendingManualQaQueue
+    : campaignRun.pendingManualQa
+      ? [campaignRun.pendingManualQa]
+      : [];
+  if (pendingManualQaQueue.length === 0) {
+    throw new Error(
+      `Completed campaign ${active.campaignRunId} has no pending manual-QA evidence.`
+    );
+  }
+  const attempts = await campaignStore.readAttempts(active.campaignRunId);
+  return finishSequenceCampaign(run, loaded.definition, {
+    campaignRunId: active.campaignRunId,
+    status: campaignRun.status,
+    attempts,
+    pendingManualQa: pendingManualQaQueue[0],
+    pendingManualQaQueue,
   });
 }
 

@@ -1335,10 +1335,25 @@ function compactTerminalText(text) {
 }
 
 async function launchBrowser(chromium, headed) {
+  const launch = async (options) => {
+    const browserServer = await chromium.launchServer(options);
+    try {
+      const browser = await chromium.connect(browserServer.wsEndpoint());
+      return {
+        browser,
+        async close() {
+          await browserServer.kill();
+        },
+      };
+    } catch (error) {
+      await browserServer.kill();
+      throw error;
+    }
+  };
   try {
-    return await chromium.launch({ channel: "chrome", headless: !headed });
+    return await launch({ channel: "chrome", headless: !headed });
   } catch {
-    return chromium.launch({ headless: !headed });
+    return launch({ headless: !headed });
   }
 }
 
@@ -1356,36 +1371,51 @@ export async function createCampaignBrowserPool({
       launchBrowserFn(chromium, headed)
     )
   );
-  const browsers = launchResults
+  const browserResources = launchResults
     .filter(({ status }) => status === "fulfilled")
-    .map(({ value }) => value);
+    .map(({ value }) =>
+      value?.browser && typeof value.close === "function"
+        ? value
+        : {
+            browser: value,
+            close: () => value.close(),
+          }
+    );
   const failedLaunch = launchResults.find(({ status }) => status === "rejected");
   if (failedLaunch) {
-    await Promise.allSettled(browsers.map((browser) => browser.close()));
+    await Promise.allSettled(
+      browserResources.map((resource) => resource.close())
+    );
     throw failedLaunch.reason;
   }
-  const available = [...browsers];
+  const available = [...browserResources];
   const leased = new Set();
+  const resourcesByBrowser = new Map(
+    browserResources.map((resource) => [resource.browser, resource])
+  );
   let closed = false;
   return {
     claim() {
       if (closed || available.length === 0) {
         throw new Error("No isolated campaign browser process is available.");
       }
-      const browser = available.shift();
-      leased.add(browser);
-      return browser;
+      const resource = available.shift();
+      leased.add(resource);
+      return resource.browser;
     },
     release(browser) {
-      if (closed || !leased.delete(browser)) {
+      const resource = resourcesByBrowser.get(browser);
+      if (closed || !resource || !leased.delete(resource)) {
         throw new Error("Campaign browser process was not leased by this pool.");
       }
-      available.push(browser);
+      available.push(resource);
     },
     async close() {
       if (closed) return;
       closed = true;
-      await Promise.allSettled(browsers.map((browser) => browser.close()));
+      await Promise.allSettled(
+        browserResources.map((resource) => resource.close())
+      );
       available.length = 0;
       leased.clear();
     },

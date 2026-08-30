@@ -46,6 +46,35 @@ describe("campaign browser runner", () => {
     expect(closed.sort()).toEqual([1, 2, 3]);
   });
 
+  it("closes isolated browser processes through their force-termination handles", async () => {
+    const terminated = [];
+    let launched = 0;
+    const pool = await createCampaignBrowserPool({
+      chromium: {},
+      headed: false,
+      executionPolicy: {
+        mode: "parallel",
+        maxConcurrentAttempts: 3,
+      },
+      launchBrowserFn: async () => {
+        const id = ++launched;
+        return {
+          browser: { id },
+          async close() {
+            terminated.push(id);
+          },
+        };
+      },
+    });
+
+    pool.claim();
+    pool.claim();
+    pool.claim();
+    await pool.close();
+
+    expect(terminated.sort()).toEqual([1, 2, 3]);
+  });
+
   it("authorizes the bounded attempt batch before dispatch", async () => {
     const observed = [];
     const allowed = await authorizeProviderDispatchBatch(

@@ -737,6 +737,93 @@ describe("campaign loop controller", () => {
     expect(resumed.run.campaignRepairs[0].status).toBe("completed");
   });
 
+  it("reconciles a completed active campaign to its persisted manual-QA gate without provider work", async () => {
+    const fixture = await createRepositoryFixture({ singleStepFix: true });
+    const loopStore = createCampaignLoopStore(fixture.repoRoot);
+    const campaignStore = createCampaignStore(fixture.repoRoot);
+    const validation = await validateCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+    });
+    const inspectWorktreeFn = async ({ path: worktreePath, branch }) => ({
+      path: worktreePath,
+      branch,
+      head: fixture.head,
+      revisionKey: validation.revision.revisionKey,
+      dirty: false,
+      statusEntries: [],
+    });
+    let activeRun;
+    const started = await startCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      definitionPath: fixture.definitionPath,
+      authorization: validation.definitionHash,
+      loopStore,
+      campaignStore,
+      runCampaignFn: async (input) => {
+        activeRun = await loopStore.readRun(input.loopContext.loopId);
+        return {
+          run: {
+            id: input.runId,
+            status: "waiting_for_manual_qa",
+            pendingManualQa: {
+              manualQaId: "manual-qa-a1",
+              campaignRunId: input.runId,
+              attemptId: "a1",
+              promptId: "baseline",
+              cohort: "discovery",
+              revisionKey: validation.revision.revisionKey,
+              requestedAt: "2026-08-30T21:00:00.000Z",
+              evidencePath: "a1/manual-qa.json",
+            },
+          },
+          attempts: [{ id: "a1", status: "awaiting_manual_qa" }],
+        };
+      },
+      prepareWorktreeFn: async ({ controlRoot, loopId }) => ({
+        path: controlRoot,
+        branch: `codex/campaign-loop-${loopId}`,
+      }),
+      inspectWorktreeFn,
+      now: () => new Date("2026-08-30T20:59:00.000Z"),
+    });
+    expect(started.run.status).toBe("waiting_for_manual_qa");
+    await loopStore.writeRun(activeRun);
+    const candidate = started.run.pendingManualQa;
+    const resumed = await resumeCampaignLoop({
+      repoRoot: fixture.repoRoot,
+      loopId: activeRun.id,
+      loopStore,
+      campaignStore: {
+        async initialize() {},
+        async readRun(campaignRunId) {
+          return {
+            id: campaignRunId,
+            loopId: activeRun.id,
+            loopStepId: activeRun.activeCampaign.stepId,
+            status: "waiting_for_manual_qa",
+            revision: {
+              revisionKey: activeRun.currentRevision.revisionKey,
+            },
+            pendingManualQa: candidate,
+            pendingManualQaQueue: [candidate],
+          };
+        },
+        async readAttempts() {
+          return [{ id: "a1", status: "awaiting_manual_qa" }];
+        },
+      },
+      runCampaignFn: async () => {
+        throw new Error("Provider campaign must not replay after durable completion.");
+      },
+      inspectWorktreeFn,
+    });
+
+    expect(resumed.run.status).toBe("waiting_for_manual_qa");
+    expect(resumed.run.pendingManualQaQueue).toEqual([candidate]);
+    expect(resumed.run.usage).toEqual(activeRun.usage);
+  });
+
   it("classifies a thrown campaign-runner defect as out-of-band repair instead of a Sparkline fix", async () => {
     const fixture = await createRepositoryFixture({ singleStepFix: true });
     const loopStore = createCampaignLoopStore(fixture.repoRoot);
