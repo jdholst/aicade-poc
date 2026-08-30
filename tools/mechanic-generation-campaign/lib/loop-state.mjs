@@ -300,14 +300,17 @@ export function resumeLoopAfterManualQaApproval(
   const remainingQueue = queue.filter(
     ({ attemptId: pendingAttemptId }) => pendingAttemptId !== decidedAttemptId
   );
+  const status = remainingQueue.length > 0
+    ? "waiting_for_manual_qa"
+    : "running";
   return {
     ...pendingRun,
-    status: "running",
+    status,
     pendingManualQa: remainingQueue[0],
     pendingManualQaQueue: remainingQueue,
     campaignLinks: pendingRun.campaignLinks.map((link) =>
       link.campaignRunId === campaignRunId
-        ? { ...link, status: "running" }
+        ? { ...link, status }
         : link
     ),
   };
@@ -326,8 +329,12 @@ export function pauseLoopForCampaignRepair(
   if (run.status === "waiting_for_campaign_repair") {
     throw new Error("The campaign loop is already waiting for a campaign repair.");
   }
+  const hasPendingManualQa =
+    (run.pendingManualQaQueue?.length ?? (run.pendingManualQa ? 1 : 0)) > 0;
   const resumeStatus =
-    run.status === "waiting_for_manual_qa" ? "waiting_for_manual_qa" : "running";
+    run.status === "waiting_for_manual_qa" || hasPendingManualQa
+      ? "waiting_for_manual_qa"
+      : "running";
   const creditedUsage = resumeStatus === "running"
     ? createCampaignRepairCredit(run, run.activeCampaign.budgetCheckpoint)
     : emptyCampaignRepairCredit();
@@ -391,21 +398,48 @@ export function resumeLoopAfterCampaignRepair(
   if (run.activeCampaign?.campaignRunId !== repair.campaignRunId) {
     throw new Error("The pending campaign repair does not match the active campaign.");
   }
-  const replacesRunningCampaign = repair.resumeStatus === "running";
+  const hasPendingManualQa =
+    (run.pendingManualQaQueue?.length ?? (run.pendingManualQa ? 1 : 0)) > 0;
+  const restoresMisclassifiedCredit =
+    hasPendingManualQa && repair.resumeStatus === "running";
+  const replacesRunningCampaign =
+    repair.resumeStatus === "running" && !hasPendingManualQa;
   const replacedSequenceStepId =
     replacesRunningCampaign && run.activeCampaign.role === "sequence"
       ? run.activeCampaign.stepId
       : undefined;
   return {
     ...run,
-    status:
-      replacesRunningCampaign && run.activeCampaign.role === "isolation"
+    status: hasPendingManualQa
+      ? "waiting_for_manual_qa"
+      : replacesRunningCampaign && run.activeCampaign.role === "isolation"
         ? "waiting_for_fix"
         : repair.resumeStatus,
     completedAt: undefined,
     activeCampaign: replacesRunningCampaign ? undefined : run.activeCampaign,
     pendingManualQa: replacesRunningCampaign ? undefined : run.pendingManualQa,
-    usage: run.usage,
+    usage: restoresMisclassifiedCredit
+      ? restoreCampaignRepairCredit(run.usage, repair.creditedUsage)
+      : run.usage,
+    ...(run.providerCost
+      ? {
+          providerCost: restoresMisclassifiedCredit
+            ? {
+                ...run.providerCost,
+                attributedExactNanoUsd: Math.min(
+                  run.providerCost.grossExactNanoUsd,
+                  run.providerCost.attributedExactNanoUsd +
+                    (repair.creditedUsage.attributedExactNanoUsd ?? 0)
+                ),
+                attributedEstimatedNanoUsd: Math.min(
+                  run.providerCost.grossEstimatedNanoUsd,
+                  run.providerCost.attributedEstimatedNanoUsd +
+                    (repair.creditedUsage.attributedEstimatedNanoUsd ?? 0)
+                ),
+              }
+            : run.providerCost,
+        }
+      : {}),
     steps: replacedSequenceStepId
       ? run.steps.map((step) =>
           step.id === replacedSequenceStepId
@@ -420,9 +454,11 @@ export function resumeLoopAfterCampaignRepair(
       link.campaignRunId === repair.campaignRunId
         ? {
             ...link,
-            status: replacesRunningCampaign
-              ? "campaign_repair_replaced"
-              : repair.resumeStatus,
+            status: hasPendingManualQa
+              ? "waiting_for_manual_qa"
+              : replacesRunningCampaign
+                ? "campaign_repair_replaced"
+                : repair.resumeStatus,
           }
         : link
     ),
@@ -980,6 +1016,22 @@ function applyCampaignRepairCredit(usage, credit) {
       ACTUAL_PROVIDER_STAGES.map((stage) => [
         stage,
         usage.actualProviderCalls[stage] - credit.actualProviderCalls[stage],
+      ])
+    ),
+  };
+}
+
+function restoreCampaignRepairCredit(usage, credit) {
+  return {
+    ...usage,
+    campaignRuns: usage.campaignRuns + credit.campaignRuns,
+    submissions: usage.submissions + credit.submissions,
+    auxiliaryIsolationCampaigns:
+      usage.auxiliaryIsolationCampaigns + credit.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        usage.actualProviderCalls[stage] + credit.actualProviderCalls[stage],
       ])
     ),
   };

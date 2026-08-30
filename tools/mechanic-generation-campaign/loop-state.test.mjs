@@ -507,12 +507,12 @@ describe("campaign loop state", () => {
       attemptId: "attempt-1",
     });
 
-    expect(resumed.status).toBe("running");
+    expect(resumed.status).toBe("waiting_for_manual_qa");
     expect(resumed.pendingManualQa?.attemptId).toBe("attempt-2");
     expect(resumed.pendingManualQaQueue.map(({ attemptId }) => attemptId)).toEqual([
       "attempt-2",
     ]);
-    expect(resumed.campaignLinks.at(-1).status).toBe("running");
+    expect(resumed.campaignLinks.at(-1).status).toBe("waiting_for_manual_qa");
   });
 
   it("pauses a frozen manual-QA candidate for an out-of-band campaign repair without spending budget", () => {
@@ -613,6 +613,99 @@ describe("campaign loop state", () => {
       status: "completed",
       completedAt: "2026-08-23T15:03:00.000Z",
     });
+  });
+
+  it("restores usage when a queued manual-QA repair was misclassified as a running campaign", () => {
+    let run = {
+      ...initialRun(),
+      providerCost: {
+        grossExactNanoUsd: 0,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 0,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [],
+        settledCalls: [],
+      },
+    };
+    run = startLoopCampaign(run, {
+      campaignRunId: "repeatability-1",
+      role: "sequence",
+      stepId: "discover",
+    });
+    run = recordLoopSubmission(run).run;
+    run = recordActualProviderCall(run, "planning").run;
+    run = {
+      ...run,
+      status: "waiting_for_manual_qa",
+      pendingManualQa: {
+        manualQaId: "manual-qa-attempt-2",
+        campaignRunId: "repeatability-1",
+        attemptId: "attempt-2",
+        promptId: "baseline",
+        cohort: "repeatability",
+        revisionKey: revisionA.revisionKey,
+        requestedAt: "2026-08-23T15:02:00.000Z",
+        evidencePath: "attempt-2/manual-qa.json",
+      },
+      providerCost: {
+        ...run.providerCost,
+        grossExactNanoUsd: 123,
+        attributedExactNanoUsd: 123,
+      },
+    };
+    run = { ...run, pendingManualQaQueue: [run.pendingManualQa] };
+    const chargedUsage = structuredClone(run.usage);
+    const creditedUsage = {
+      campaignRuns: 1,
+      submissions: 1,
+      auxiliaryIsolationCampaigns: 0,
+      actualProviderCalls: { planning: 1, contract: 0, source: 0 },
+      attributedExactNanoUsd: 123,
+      attributedEstimatedNanoUsd: 0,
+    };
+    const misclassified = {
+      ...run,
+      status: "waiting_for_campaign_repair",
+      usage: {
+        ...run.usage,
+        campaignRuns: 0,
+        submissions: 0,
+        actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+      },
+      providerCost: {
+        ...run.providerCost,
+        attributedExactNanoUsd: 0,
+      },
+      campaignLinks: run.campaignLinks.map((link) => ({
+        ...link,
+        status: "waiting_for_campaign_repair",
+      })),
+      campaignRepairs: [
+        {
+          id: "campaign-repair-legacy",
+          campaignRunId: "repeatability-1",
+          reason: "A queued verdict was incorrectly resumed.",
+          detectedAt: "2026-08-23T15:03:00.000Z",
+          resumeStatus: "running",
+          status: "pending",
+          creditedUsage,
+        },
+      ],
+    };
+
+    const resumed = resumeLoopAfterCampaignRepair(misclassified, {
+      completedAt: "2026-08-23T15:04:00.000Z",
+    });
+
+    expect(resumed.status).toBe("waiting_for_manual_qa");
+    expect(resumed.activeCampaign?.campaignRunId).toBe("repeatability-1");
+    expect(resumed.pendingManualQa?.attemptId).toBe("attempt-2");
+    expect(resumed.usage).toEqual(chargedUsage);
+    expect(resumed.providerCost).toMatchObject({
+      grossExactNanoUsd: 123,
+      attributedExactNanoUsd: 123,
+    });
+    expect(resumed.campaignLinks[0].status).toBe("waiting_for_manual_qa");
   });
 
   it("replaces a running campaign after campaign repair without charging the discarded run", () => {

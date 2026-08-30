@@ -302,13 +302,15 @@ async function decideCampaignAttemptUnlocked({
     const pendingManualQaQueue = currentRun.pendingManualQaQueue.filter(
       ({ attemptId: pendingAttemptId }) => pendingAttemptId !== attemptId
     );
-    const status = campaignContinues
-      ? "running"
-      : "completed_not_achieved";
+    const status = pendingManualQaQueue.length > 0
+      ? "waiting_for_manual_qa"
+      : campaignContinues
+        ? "running"
+        : "completed_not_achieved";
     return parseCampaignRun({
       ...currentRun,
       status,
-      completedAt: campaignContinues ? undefined : decidedAt,
+      completedAt: status === "completed_not_achieved" ? decidedAt : undefined,
       pendingManualQa: pendingManualQaQueue[0],
       pendingManualQaQueue,
       attemptSlots: currentRun.attemptSlots.map((slot) =>

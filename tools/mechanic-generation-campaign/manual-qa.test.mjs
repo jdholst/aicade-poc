@@ -209,18 +209,24 @@ describe("manual gameplay QA", () => {
       "a01-baseline",
       "a02-baseline",
     ]);
+    const loopStore = await attachLoop(store, second.run);
 
     const approved = await approveCampaignAttempt({
       store,
+      loopStore,
       campaignRunId: "campaign-1",
       attemptId: "a01-baseline",
       decidedAt: "2026-08-23T15:05:00.000Z",
     });
-    expect(approved.run.status).toBe("running");
+    expect(approved.run.status).toBe("waiting_for_manual_qa");
     expect(approved.run.pendingManualQaQueue.map(({ attemptId }) => attemptId)).toEqual([
       "a02-baseline",
     ]);
     expect(approved.run.pendingManualQa.attemptId).toBe("a02-baseline");
+    expect(approved.loopRun.status).toBe("waiting_for_manual_qa");
+    expect(approved.loopRun.pendingManualQaQueue).toEqual([
+      expect.objectContaining({ attemptId: "a02-baseline" }),
+    ]);
   });
 
   it("approves idempotently and resumes the frozen campaign without provider calls", async () => {
@@ -660,6 +666,7 @@ async function attachLoop(store, campaignRun) {
     status: "waiting_for_manual_qa",
     attempts: [],
     pendingManualQa: campaignRun.pendingManualQa,
+    pendingManualQaQueue: campaignRun.pendingManualQaQueue,
   });
   await loopStore.writeRun(loop);
 
