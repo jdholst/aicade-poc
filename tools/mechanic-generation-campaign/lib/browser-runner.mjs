@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -32,12 +33,19 @@ import {
 } from "./pricing.mjs";
 import {
   classifyFurthestStage,
+  createAttemptSchedule,
   createNextAttemptSchedule,
   createLoopbackBaseUrl,
   maximumCampaignSubmissions,
   resolveProviderCredentialInput,
   resolveProviderModes,
 } from "./runner-policy.mjs";
+import {
+  calculateDispatchCapacity,
+  createDispatchBatch,
+  createStageConcurrencyController,
+  resolveExecutionPolicy,
+} from "./parallel-execution.mjs";
 
 const GENERATED_MECHANIC_RUNTIME_PATH = "/runtime/phaser-generated";
 
@@ -58,6 +66,7 @@ export async function runCampaign({
   onSubmission,
   runId,
   actualProviderAuthorized = false,
+  executionPolicy: executionPolicyInput,
 }) {
   const loaded = await loadCampaignManifest(manifestPath);
   const store = providedStore ?? createCampaignStore(repoRoot);
@@ -90,6 +99,10 @@ export async function runCampaign({
   const createdAt = new Date().toISOString();
   const campaignRunId =
     resume ?? runId ?? createCampaignRunId(loaded.manifest.id, cohort, createdAt);
+  const requestedExecutionPolicy = resolveExecutionPolicy({
+    cohort,
+    policy: executionPolicyInput,
+  });
   const baseUrl = attachedBaseUrl ?? createLoopbackBaseUrl(port);
   const attemptCeiling = maximumCampaignSubmissions(
     cohort,
@@ -114,6 +127,10 @@ export async function runCampaign({
         providerModes,
         attemptCeiling,
         attemptIds: [],
+        executionPolicy: requestedExecutionPolicy,
+        stateRevision: 0,
+        attemptSlots: [],
+        pendingManualQaQueue: [],
         knowledgePolicy: {
           required: true,
           baselineManifestDigest,
@@ -144,18 +161,30 @@ export async function runCampaign({
             }
           : {}),
       };
-  validateResume(run, loaded, cohort, providerModes, revision, loopContext);
-  await store.writeRun(run);
-
-  const fixtures = await loadFixtures(loaded.fixturePaths);
-  const probeModule = await import(pathToFileURL(loaded.probePath).href);
-  if (typeof probeModule.runProbe !== "function") {
-    throw new Error(`Campaign probe ${loaded.probePath} does not export runProbe().`);
-  }
-
+  validateResume(
+    run,
+    loaded,
+    cohort,
+    providerModes,
+    revision,
+    loopContext,
+    executionPolicyInput ? requestedExecutionPolicy : undefined
+  );
+  const releaseExecutionLock = typeof store.acquireRunExecutionLock === "function"
+    ? await store.acquireRunExecutionLock(campaignRunId)
+    : async () => {};
   let server = null;
   let browser = null;
   try {
+    if (resume) {
+      run = await reconcileResumableRun(store, run);
+    }
+    await store.writeRun(run);
+    const fixtures = await loadFixtures(loaded.fixturePaths);
+    const probeModule = await import(pathToFileURL(loaded.probePath).href);
+    if (typeof probeModule.runProbe !== "function") {
+      throw new Error(`Campaign probe ${loaded.probePath} does not export runProbe().`);
+    }
     const campaignDirectory = store.campaignDirectory(campaignRunId);
     await mkdir(campaignDirectory, { recursive: true });
     if (!attachedBaseUrl) {
@@ -178,125 +207,301 @@ export async function runCampaign({
 
     const { chromium } = await import("@playwright/test");
     browser = await launchBrowser(chromium, headed);
-    run = {
-      ...run,
+    run = await updateCampaignRun(store, run, (current) => ({
+      ...current,
       status: "running",
-      startedAt: run.startedAt ?? new Date().toISOString(),
-    };
-    await store.writeRun(run);
+      completedAt: undefined,
+      startedAt: current.startedAt ?? new Date().toISOString(),
+    }));
 
-    while (true) {
-      const existingAttempts = await store.readAttempts(campaignRunId);
-      const currentScore = scoreCampaign(cohort, loaded.manifest, existingAttempts);
-      const scheduled = createNextAttemptSchedule({
-        cohort,
-        prompts: loaded.manifest.prompts,
-        attempts: existingAttempts,
-        score: currentScore,
-      });
-      if (!scheduled) break;
-      const beforeAttemptRevision = await inspectRevision(repoRoot);
-      if (beforeAttemptRevision.revisionKey !== run.revision.revisionKey) {
-        run = {
-          ...run,
-          status: "invalid",
-          completedAt: new Date().toISOString(),
-          invalidReason: "Repository revision changed before the next submission.",
-        };
-        await store.writeRun(run);
-        return { run, attempts: await store.readAttempts(campaignRunId) };
-      }
-
-      const attemptResult = await runBrowserAttempt({
-        browser,
-        store,
-        run,
-        manifest: loaded.manifest,
-        scheduled,
-        fixtures,
-        probe: probeModule.runProbe,
-        headed,
-        attemptTimeoutMs,
-        providerCallBudget,
-        onSubmission,
-        pricing: loaded.pricing,
-      });
-      const attempt = attemptResult.attempt;
-      run = attemptResult.run ?? {
-        ...run,
-        attemptIds: [...run.attemptIds, attempt.id],
-      };
-      const attemptsAfterSubmission = await store.readAttempts(campaignRunId);
-      run = withRunCost(run, attemptsAfterSubmission);
-      await store.writeRun(run);
-      requireCampaignAttemptContinuation(attempt);
-
-      if (attempt.classification === "provider_call_budget_exhausted") {
-        break;
-      }
-
-      const afterAttemptRevision = await inspectRevision(repoRoot);
-      if (afterAttemptRevision.revisionKey !== run.revision.revisionKey) {
-        run = {
-          ...run,
-          status: "invalid",
-          completedAt: new Date().toISOString(),
-          invalidReason: "Repository revision changed during a submitted attempt.",
-        };
-        await store.writeRun(run);
-        return { run, attempts: await store.readAttempts(campaignRunId) };
-      }
-      if (attempt.status === "awaiting_manual_qa") {
-        break;
-      }
-    }
-
-    const attempts = await store.readAttempts(campaignRunId);
-    if (run.status === "waiting_for_manual_qa") {
-      return { run, attempts };
-    }
-    const score = scoreCampaign(cohort, loaded.manifest, attempts);
-    run = {
-      ...run,
-      status: attempts.some(
-        ({ classification }) =>
-          classification === "provider_call_budget_exhausted"
-      )
-        ? "completed_not_achieved"
-        : score.status,
-      completedAt: new Date().toISOString(),
-      result: {
-        successes: score.successes,
-        diagnosticSuccesses: score.diagnosticSuccesses,
-        submissions: score.submissions,
-        qualifiesForMechanicProof: score.qualifiesForMechanicProof,
-        missingSuccessfulPromptIds: score.missingSuccessfulPromptIds,
-        failures: score.failures,
-        failureLimit: score.failureLimit,
-        remainingFailureTolerance: score.remainingFailureTolerance,
-        baseSubmissions: score.baseSubmissions,
-        replacementSubmissions: score.replacementSubmissions,
-        ...(score.terminalReason ? { terminalReason: score.terminalReason } : {}),
-        ...(score.replacementPromptId
-          ? { replacementPromptId: score.replacementPromptId }
-          : {}),
-      },
-    };
-    await store.writeRun(run);
-    return { run, attempts };
+    return await executeCampaignAttempts({
+      repoRoot,
+      browser,
+      store,
+      run,
+      manifest: loaded.manifest,
+      fixtures,
+      probe: probeModule.runProbe,
+      attemptTimeoutMs,
+      providerCallBudget,
+      onSubmission,
+      pricing: loaded.pricing,
+    });
   } catch (error) {
-    run = {
-      ...run,
+    run = await updateCampaignRun(store, run, (current) => ({
+      ...current,
       status: "interrupted",
       completedAt: new Date().toISOString(),
       invalidReason: error instanceof Error ? error.message : String(error),
-    };
-    await store.writeRun(run);
+    }));
     throw error;
   } finally {
     await browser?.close();
     await stopProcess(server);
+    await releaseExecutionLock();
   }
+}
+
+export async function reconcileResumableRun(store, run) {
+  const attempts = await store.readAttempts(run.id);
+  const attemptsById = new Map(attempts.map((attempt) => [attempt.id, attempt]));
+  const pendingManualQaQueue = [];
+  for (const attempt of attempts) {
+    if (
+      attempt.status !== "awaiting_manual_qa" ||
+      attempt.manualQa?.status !== "pending"
+    ) {
+      continue;
+    }
+    const manualQa = await store.readManualQa(run.id, attempt.id);
+    if (manualQa.status !== "pending") continue;
+    pendingManualQaQueue.push({
+      manualQaId: manualQa.id,
+      campaignRunId: run.id,
+      attemptId: attempt.id,
+      promptId: attempt.promptId,
+      cohort: run.cohort,
+      revisionKey: run.revision.revisionKey,
+      requestedAt: manualQa.requestedAt,
+      evidencePath: attempt.manualQa.path,
+    });
+  }
+  const updatedAt = new Date().toISOString();
+  return {
+    ...run,
+    attemptIds: [...new Set([...run.attemptIds, ...attempts.map(({ id }) => id)])],
+    attemptSlots: run.attemptSlots.map((slot) => {
+      const attempt = attemptsById.get(slot.attemptId);
+      if (attempt) {
+        return {
+          ...slot,
+          status: attempt.status === "awaiting_manual_qa"
+            ? "awaiting_manual_qa"
+            : "completed",
+          updatedAt,
+        };
+      }
+      return ["reserved", "running"].includes(slot.status)
+        ? { ...slot, status: "interrupted", updatedAt }
+        : slot;
+    }),
+    pendingManualQa: pendingManualQaQueue[0],
+    pendingManualQaQueue,
+  };
+}
+
+async function executeCampaignAttempts({
+  repoRoot,
+  browser,
+  store,
+  run: initialRun,
+  manifest,
+  fixtures,
+  probe,
+  attemptTimeoutMs,
+  providerCallBudget,
+  onSubmission,
+  pricing,
+}) {
+  let run = initialRun;
+  const active = new Map();
+  const leaseOwner = `campaign-pool-${process.pid}-${randomUUID()}`;
+  const stageConcurrency = createStageConcurrencyController(run.executionPolicy);
+  let stoppingError = null;
+  let providerBudgetExhausted = false;
+  let invalidReason = null;
+
+  while (true) {
+    run = await store.readRun(run.id);
+    const attempts = await store.readAttempts(run.id);
+    const score = scoreCampaign(run.cohort, manifest, attempts);
+    const baseSchedule = createAttemptSchedule(
+      run.cohort,
+      manifest.prompts,
+      run.executionPolicy
+    );
+    const baseClaimed = baseSchedule.every(({ sequence }) =>
+      attempts.some((attempt) => attempt.sequence === sequence) ||
+      run.attemptSlots.some(
+        (slot) =>
+          slot.sequence === sequence &&
+          !["cancelled", "interrupted"].includes(slot.status)
+      )
+    );
+    const replacement = baseClaimed && active.size === 0
+      ? createNextAttemptSchedule({
+          cohort: run.cohort,
+          prompts: manifest.prompts,
+          attempts,
+          score,
+          executionPolicy: run.executionPolicy,
+        })
+      : null;
+    const schedule = replacement ? [...baseSchedule, replacement] : baseSchedule;
+
+    if (!stoppingError && !providerBudgetExhausted && !invalidReason) {
+      const revision = await inspectRevision(repoRoot);
+      if (revision.revisionKey !== run.revision.revisionKey) {
+        invalidReason = "Repository revision changed before the next submission.";
+      }
+    }
+
+    const capacity =
+      stoppingError || providerBudgetExhausted || invalidReason ||
+      ["achieved", "completed_not_achieved"].includes(score.status)
+        ? 0
+        : calculateDispatchCapacity({
+            policy: run.executionPolicy,
+            failureLimit: score.failureLimit,
+            countedFailures: score.failures,
+            activeAttempts: active.size,
+            pendingManualQa: run.pendingManualQaQueue.length,
+          });
+    const batch = createDispatchBatch({
+      schedule,
+      attempts,
+      slots: run.attemptSlots,
+      capacity,
+      leaseOwner,
+    });
+
+    if (batch.length > 0) {
+      const batchIds = new Set(batch.map(({ attemptId }) => attemptId));
+      run = await updateCampaignRun(store, run, (current) => ({
+        ...current,
+        attemptSlots: [
+          ...current.attemptSlots.filter(
+            ({ attemptId }) => !batchIds.has(attemptId)
+          ),
+          ...batch,
+        ],
+      }));
+      const startedAt = new Date().toISOString();
+      run = await updateCampaignRun(store, run, (current) => ({
+        ...current,
+        attemptSlots: current.attemptSlots.map((slot) =>
+          batchIds.has(slot.attemptId)
+            ? { ...slot, status: "running", updatedAt: startedAt }
+            : slot
+        ),
+      }));
+      for (const slot of batch) {
+        const scheduled = schedule.find(({ sequence }) => sequence === slot.sequence);
+        const task = runBrowserAttempt({
+          browser,
+          store,
+          run,
+          manifest,
+          scheduled,
+          fixtures,
+          probe,
+          attemptTimeoutMs,
+          providerCallBudget,
+          onSubmission,
+          pricing,
+          stageConcurrency,
+        }).then(
+          (result) => ({ slot, result }),
+          (error) => ({ slot, error })
+        );
+        active.set(slot.attemptId, task);
+      }
+      continue;
+    }
+
+    if (active.size === 0) {
+      if (stoppingError) throw stoppingError;
+      break;
+    }
+
+    const settled = await Promise.race(active.values());
+    active.delete(settled.slot.attemptId);
+    if (settled.error) {
+      const failedAt = new Date().toISOString();
+      run = await updateCampaignRun(store, run, (current) => ({
+        ...current,
+        attemptSlots: current.attemptSlots.map((slot) =>
+          slot.attemptId === settled.slot.attemptId
+            ? { ...slot, status: "interrupted", updatedAt: failedAt }
+            : slot
+        ),
+      }));
+      stoppingError ??= settled.error;
+      continue;
+    }
+
+    const attempt = settled.result.attempt;
+    const pendingManualQa = settled.result.pendingManualQa;
+    const attemptsAfterSubmission = await store.readAttempts(run.id);
+    const completedAt = new Date().toISOString();
+    run = await updateCampaignRun(store, run, (current) => {
+      const queue = pendingManualQa
+        ? [...current.pendingManualQaQueue, pendingManualQa].filter(
+            (entry, index, entries) =>
+              entries.findIndex(
+                ({ manualQaId }) => manualQaId === entry.manualQaId
+              ) === index
+          )
+        : current.pendingManualQaQueue;
+      return withRunCost(
+        {
+          ...current,
+          attemptIds: current.attemptIds.includes(attempt.id)
+            ? current.attemptIds
+            : [...current.attemptIds, attempt.id],
+          pendingManualQa: queue[0],
+          pendingManualQaQueue: queue,
+          attemptSlots: current.attemptSlots.map((slot) =>
+            slot.attemptId === attempt.id
+              ? {
+                  ...slot,
+                  status: pendingManualQa
+                    ? "awaiting_manual_qa"
+                    : "completed",
+                  updatedAt: completedAt,
+                }
+              : slot
+          ),
+        },
+        attemptsAfterSubmission
+      );
+    });
+
+    if (attempt.classification === "provider_call_budget_exhausted") {
+      providerBudgetExhausted = true;
+    }
+    try {
+      requireCampaignAttemptContinuation(attempt);
+    } catch (error) {
+      stoppingError ??= error;
+    }
+    const afterAttemptRevision = await inspectRevision(repoRoot);
+    if (afterAttemptRevision.revisionKey !== run.revision.revisionKey) {
+      invalidReason = "Repository revision changed during a submitted attempt.";
+    }
+  }
+
+  const attempts = await store.readAttempts(run.id);
+  const score = scoreCampaign(run.cohort, manifest, attempts);
+  const terminalStatus = providerBudgetExhausted
+    ? "completed_not_achieved"
+    : invalidReason
+      ? "invalid"
+      : run.pendingManualQaQueue.length > 0
+        ? "waiting_for_manual_qa"
+        : score.status;
+  const terminal = ["achieved", "completed_not_achieved", "invalid"].includes(
+    terminalStatus
+  );
+  run = await updateCampaignRun(store, run, (current) => ({
+    ...current,
+    status: terminalStatus,
+    completedAt: terminal ? new Date().toISOString() : undefined,
+    ...(invalidReason ? { invalidReason } : {}),
+    pendingManualQa: current.pendingManualQaQueue[0],
+    result: campaignScoreResult(score),
+  }));
+  return { run, attempts };
 }
 
 async function runBrowserAttempt({
@@ -311,6 +516,7 @@ async function runBrowserAttempt({
   providerCallBudget,
   onSubmission,
   pricing,
+  stageConcurrency,
 }) {
   const id = `a${String(scheduled.sequence).padStart(2, "0")}-${scheduled.promptId}`;
   const attemptDirectory = store.attemptDirectory(run.id, id);
@@ -343,6 +549,7 @@ async function runBrowserAttempt({
     actualResponseCaptures,
     responseCaptureTasks,
     providerCallBudget,
+    stageConcurrency,
     onActivity: () => terminalActivity.record(),
     onProviderBudgetExhausted: (stage) => {
       providerBudgetExhaustedStage = stage;
@@ -503,7 +710,7 @@ async function runBrowserAttempt({
     "browser-issues.json": browserIssues,
   };
   let storedAttempt = attempt;
-  let pendingRun = null;
+  let pendingManualQa = null;
   if (manualQaRequired) {
     const candidate = await createManualQaCandidate({
       store,
@@ -513,14 +720,17 @@ async function runBrowserAttempt({
       gamePackRecord: latestGamePackRecord(storage),
       evidence,
       requestedAt: completedAt,
+      persistRun: false,
     });
     storedAttempt = candidate.attempt;
-    pendingRun = candidate.run;
+    pendingManualQa = candidate.run.pendingManualQaQueue.find(
+      ({ attemptId }) => attemptId === candidate.attempt.id
+    );
   } else {
     await store.writeAttempt(attempt, evidence);
   }
   await context.close();
-  return { attempt: storedAttempt, run: pendingRun };
+  return { attempt: storedAttempt, pendingManualQa };
 }
 
 async function installProviderInterception({
@@ -533,6 +743,7 @@ async function installProviderInterception({
   actualResponseCaptures,
   responseCaptureTasks,
   providerCallBudget,
+  stageConcurrency,
   onActivity,
   onProviderBudgetExhausted,
   attemptId,
@@ -545,9 +756,28 @@ async function installProviderInterception({
       response,
       capture,
       providerCallBudget
-    ).finally(onActivity);
+    ).finally(() => {
+      capture.releaseStagePermit?.();
+      actualResponseCaptures.delete(response.request());
+      onActivity();
+    });
     responseCaptureTasks.add(task);
     void task.finally(() => responseCaptureTasks.delete(task));
+  });
+  page.on("requestfailed", (request) => {
+    const capture = actualResponseCaptures.get(request);
+    if (!capture) return;
+    capture.releaseStagePermit?.();
+    actualResponseCaptures.delete(request);
+    const task = providerCallBudget?.settle?.({
+      callId: capture.callId,
+      stage: capture.stage,
+      completedAt: new Date().toISOString(),
+    });
+    if (task) {
+      responseCaptureTasks.add(task);
+      void task.finally(() => responseCaptureTasks.delete(task));
+    }
   });
   await page.route("**/api/creator-generation-planning", async (route) => {
     onActivity();
@@ -561,6 +791,7 @@ async function installProviderInterception({
       networkCaptures,
       actualResponseCaptures,
       providerCallBudget,
+      stageConcurrency,
       attemptId,
       model,
     });
@@ -584,6 +815,7 @@ async function installProviderInterception({
       actualResponseCaptures,
       requestBody,
       providerCallBudget,
+      stageConcurrency,
       attemptId,
       model,
     });
@@ -601,6 +833,7 @@ export async function resolveInterceptedRoute({
   networkCaptures,
   actualResponseCaptures,
   providerCallBudget,
+  stageConcurrency,
   attemptId = "attempt",
   model,
   requestBody = route.request().postDataJSON(),
@@ -616,19 +849,29 @@ export async function resolveInterceptedRoute({
   }
 
   const requestedAt = new Date().toISOString();
+  const releaseStagePermit = stageConcurrency
+    ? await stageConcurrency.acquire(stage)
+    : () => {};
   const callId = `${attemptId}:${stage}:${providerCalls[stage] + 1}:${requestedAt}`;
-  const allowed = providerCallBudget?.begin
-    ? await providerCallBudget.begin({
-        callId,
-        stage,
-        model,
-        serviceTier: "default",
-        requestedAt,
-      })
-    : providerCallBudget
-      ? await providerCallBudget.consume(stage)
-      : true;
+  let allowed;
+  try {
+    allowed = providerCallBudget?.begin
+      ? await providerCallBudget.begin({
+          callId,
+          stage,
+          model,
+          serviceTier: "default",
+          requestedAt,
+        })
+      : providerCallBudget
+        ? await providerCallBudget.consume(stage)
+        : true;
+  } catch (error) {
+    releaseStagePermit();
+    throw error;
+  }
   if (!allowed) {
+    releaseStagePermit();
     networkCaptures.push(
       redactSensitive({
         stage,
@@ -668,8 +911,19 @@ export async function resolveInterceptedRoute({
     },
   });
   networkCaptures.push(capture);
+  Object.defineProperty(capture, "releaseStagePermit", {
+    configurable: true,
+    enumerable: false,
+    value: releaseStagePermit,
+  });
   actualResponseCaptures?.set(request, capture);
-  await route.continue({ headers: forwardedHeaders });
+  try {
+    await route.continue({ headers: forwardedHeaders });
+  } catch (error) {
+    actualResponseCaptures?.delete(request);
+    releaseStagePermit();
+    throw error;
+  }
   return { blocked: false, stage };
 }
 
@@ -863,7 +1117,15 @@ async function loadFixtures(fixturePaths) {
   );
 }
 
-function validateResume(run, loaded, cohort, providerModes, revision, loopContext) {
+function validateResume(
+  run,
+  loaded,
+  cohort,
+  providerModes,
+  revision,
+  loopContext,
+  requestedExecutionPolicy
+) {
   if (
     run.manifestId !== loaded.manifest.id ||
     run.manifestHash !== loaded.manifestHash ||
@@ -882,6 +1144,14 @@ function validateResume(run, loaded, cohort, providerModes, revision, loopContex
   }
   if (run.revision.revisionKey !== revision.revisionKey) {
     throw new Error("Cannot resume a campaign on a different repository revision.");
+  }
+  if (
+    requestedExecutionPolicy &&
+    run.executionPolicy.hash !== requestedExecutionPolicy.hash
+  ) {
+    throw new Error(
+      "Resume execution policy does not match the frozen campaign run."
+    );
   }
 }
 
@@ -941,6 +1211,34 @@ function withRunCost(run, attempts) {
     emptyCostAggregate()
   );
   return { ...run, cost: aggregate };
+}
+
+function campaignScoreResult(score) {
+  return {
+    successes: score.successes,
+    diagnosticSuccesses: score.diagnosticSuccesses,
+    submissions: score.submissions,
+    qualifiesForMechanicProof: score.qualifiesForMechanicProof,
+    missingSuccessfulPromptIds: score.missingSuccessfulPromptIds,
+    failures: score.failures,
+    failureLimit: score.failureLimit,
+    remainingFailureTolerance: score.remainingFailureTolerance,
+    baseSubmissions: score.baseSubmissions,
+    replacementSubmissions: score.replacementSubmissions,
+    ...(score.terminalReason ? { terminalReason: score.terminalReason } : {}),
+    ...(score.replacementPromptId
+      ? { replacementPromptId: score.replacementPromptId }
+      : {}),
+  };
+}
+
+async function updateCampaignRun(store, fallbackRun, update) {
+  if (typeof store.updateRun === "function") {
+    return store.updateRun(fallbackRun.id, update);
+  }
+  const next = update(fallbackRun);
+  await store.writeRun(next);
+  return store.readRun(fallbackRun.id);
 }
 
 export class CampaignInfrastructureFailureError extends Error {

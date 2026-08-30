@@ -15,6 +15,7 @@ import {
 } from "./loop-contracts.mjs";
 import { redactSensitive } from "./redaction.mjs";
 import { writeJsonAtomic } from "./campaign-store.mjs";
+import { withFileLock } from "./file-lock.mjs";
 
 export function createCampaignLoopStore(repoRoot) {
   const artifactRoot = path.join(
@@ -66,6 +67,28 @@ export function createCampaignLoopStore(repoRoot) {
           )
         )
       );
+    },
+    async updateRun(loopId, update, { expectedStateRevision } = {}) {
+      const directory = safeChild(artifactRoot, loopId);
+      await mkdir(directory, { recursive: true });
+      return withFileLock(path.join(directory, "loop-run.lock"), async () => {
+        const current = await this.readRun(loopId);
+        if (
+          expectedStateRevision !== undefined &&
+          current.stateRevision !== expectedStateRevision
+        ) {
+          throw new Error(
+            `Loop state revision changed from ${expectedStateRevision} to ${current.stateRevision}.`
+          );
+        }
+        const updated = await update(structuredClone(current));
+        const next = parseCampaignLoopRun({
+          ...updated,
+          stateRevision: current.stateRevision + 1,
+        });
+        await writeJsonAtomic(path.join(directory, "loop-run.json"), next);
+        return next;
+      });
     },
     async listRuns() {
       const entries = await readDirectoryOrEmpty(artifactRoot);
@@ -138,10 +161,11 @@ export function createCampaignLoopStore(repoRoot) {
         knowledgeReconciliationIds: run.knowledgeReconciliationIds,
         campaignRepairs: run.campaignRepairs,
         manualQa: {
-          pending: run.pendingManualQa ? 1 : 0,
-          pendingReview: run.pendingManualQa,
+          pending: run.pendingManualQaQueue?.length ?? (run.pendingManualQa ? 1 : 0),
+          pendingReviews: run.pendingManualQaQueue ?? (run.pendingManualQa ? [run.pendingManualQa] : []),
         },
         pendingManualQa: run.pendingManualQa,
+        pendingManualQaQueue: run.pendingManualQaQueue,
         fixes: fixes.map((fix) => ({
           id: fix.id,
           triggerCampaignRunId: fix.triggerCampaignRunId,

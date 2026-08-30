@@ -67,6 +67,9 @@ export function createInitialLoopRun({
     })),
     campaignLinks: [],
     fixCheckpointIds: [],
+    stateRevision: 0,
+    pendingManualQa: undefined,
+    pendingManualQaQueue: [],
     campaignRepairs: [],
     knowledgePolicy: {
       required: true,
@@ -159,19 +162,23 @@ export function finishSequenceCampaign(run, definition, {
   status,
   attempts,
   pendingManualQa,
+  pendingManualQaQueue,
   completedAt = new Date().toISOString(),
 }) {
   assertActiveCampaign(run, campaignRunId, "sequence");
   const stepDefinition = definition.sequence[run.currentStepIndex];
   const currentStep = run.steps[run.currentStepIndex];
   if (status === "waiting_for_manual_qa") {
-    if (!pendingManualQa) {
+    const queue = pendingManualQaQueue ??
+      (pendingManualQa ? [pendingManualQa] : []);
+    if (queue.length === 0) {
       throw new Error("A campaign waiting for manual QA requires its pending review reference.");
     }
     return {
       ...run,
       status: "waiting_for_manual_qa",
-      pendingManualQa,
+      pendingManualQa: queue[0],
+      pendingManualQaQueue: queue,
       campaignLinks: run.campaignLinks.map((link) =>
         link.campaignRunId === campaignRunId
           ? { ...link, status: "waiting_for_manual_qa" }
@@ -268,22 +275,36 @@ export function finishIsolationCampaign(run, {
 
 export function resumeLoopAfterManualQaApproval(
   run,
-  { campaignRunId, completedAt }
+  { campaignRunId, attemptId, completedAt }
 ) {
   const pendingRun = run.status === "waiting_for_campaign_repair"
     ? resumeLoopAfterCampaignRepair(run, { completedAt })
     : run;
   assertActiveCampaign(pendingRun, campaignRunId, "sequence");
+  const queue = pendingRun.pendingManualQaQueue?.length
+    ? pendingRun.pendingManualQaQueue
+    : pendingRun.pendingManualQa
+      ? [pendingRun.pendingManualQa]
+      : [];
+  const decidedAttemptId = attemptId ?? queue[0]?.attemptId;
   if (
-    pendingRun.status !== "waiting_for_manual_qa" ||
-    pendingRun.pendingManualQa?.campaignRunId !== campaignRunId
+    !["running", "waiting_for_manual_qa"].includes(pendingRun.status) ||
+    !queue.some(
+      (pending) =>
+        pending.campaignRunId === campaignRunId &&
+        pending.attemptId === decidedAttemptId
+    )
   ) {
     throw new Error("Loop does not have the requested pending manual QA candidate.");
   }
+  const remainingQueue = queue.filter(
+    ({ attemptId: pendingAttemptId }) => pendingAttemptId !== decidedAttemptId
+  );
   return {
     ...pendingRun,
     status: "running",
-    pendingManualQa: undefined,
+    pendingManualQa: remainingQueue[0],
+    pendingManualQaQueue: remainingQueue,
     campaignLinks: pendingRun.campaignLinks.map((link) =>
       link.campaignRunId === campaignRunId
         ? { ...link, status: "running" }
@@ -415,15 +436,25 @@ export function resumeLoopAfterCampaignRepair(
 
 export function rejectLoopManualQa(
   run,
-  { campaignRunId, completedAt = new Date().toISOString() }
+  { campaignRunId, attemptId, completedAt = new Date().toISOString() }
 ) {
   const pendingRun = run.status === "waiting_for_campaign_repair"
     ? resumeLoopAfterCampaignRepair(run, { completedAt })
     : run;
   assertActiveCampaign(pendingRun, campaignRunId, "sequence");
+  const queue = pendingRun.pendingManualQaQueue?.length
+    ? pendingRun.pendingManualQaQueue
+    : pendingRun.pendingManualQa
+      ? [pendingRun.pendingManualQa]
+      : [];
+  const decidedAttemptId = attemptId ?? queue[0]?.attemptId;
   if (
-    pendingRun.status !== "waiting_for_manual_qa" ||
-    pendingRun.pendingManualQa?.campaignRunId !== campaignRunId
+    !["running", "waiting_for_manual_qa"].includes(pendingRun.status) ||
+    !queue.some(
+      (pending) =>
+        pending.campaignRunId === campaignRunId &&
+        pending.attemptId === decidedAttemptId
+    )
   ) {
     throw new Error("Loop does not have the requested pending manual QA candidate.");
   }
@@ -431,6 +462,7 @@ export function rejectLoopManualQa(
     ...pendingRun,
     status: "waiting_for_fix",
     pendingManualQa: undefined,
+    pendingManualQaQueue: [],
     activeCampaign: undefined,
     campaignLinks: pendingRun.campaignLinks.map((link) =>
       link.campaignRunId === campaignRunId

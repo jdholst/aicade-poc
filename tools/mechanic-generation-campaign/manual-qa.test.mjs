@@ -19,6 +19,7 @@ import {
   createManualQaCandidate,
   denyCampaignAttempt,
 } from "./lib/manual-qa.mjs";
+import { resolveExecutionPolicy } from "./lib/parallel-execution.mjs";
 
 function pendingAttempt({ sequence = 1, cohort = "discovery" } = {}) {
   return {
@@ -101,6 +102,25 @@ function recordedFailure(sequence, cohort = "repeatability") {
   };
 }
 
+function storageRecord(kind, sequence) {
+  const id = `${kind}-${sequence}`;
+  return kind === "generation-run"
+    ? {
+        id,
+        recordVersion: 1,
+        status: "succeeded",
+        updatedAt: "2026-08-23T15:01:00.000Z",
+        generationRun: { id, status: "succeeded" },
+      }
+    : {
+        id,
+        recordVersion: 1,
+        gamePackSchemaVersion: "game-pack/v1",
+        updatedAt: "2026-08-23T15:01:00.000Z",
+        gamePack: { id, updatedAt: "2026-08-23T15:01:00.000Z" },
+      };
+}
+
 async function createPendingStore({ cohort = "discovery", priorFailures = 0 } = {}) {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), "campaign-manual-qa-"));
   const store = createCampaignStore(repoRoot);
@@ -146,6 +166,61 @@ describe("manual gameplay QA", () => {
       expect.objectContaining({ kind: "game_pack", sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }),
     ]);
     expect(await store.readManualQa("campaign-1", "a01-baseline")).toEqual(manualQa);
+  });
+
+  it("queues parallel candidates and removes only the decided review", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "campaign-manual-qa-queue-"));
+    const store = createCampaignStore(repoRoot);
+    await store.initialize();
+    const executionPolicy = resolveExecutionPolicy({
+      cohort: "repeatability",
+      policy: {
+        mode: "parallel",
+        maxConcurrentAttempts: 3,
+        maxPendingManualQa: 3,
+      },
+    });
+    const initialRun = {
+      ...pendingRun({ cohort: "repeatability" }),
+      schemaVersion: "campaign-run/v2",
+      knowledgePolicy: { required: false },
+      executionPolicy,
+    };
+
+    const first = await createManualQaCandidate({
+      store,
+      run: initialRun,
+      attempt: pendingAttempt({ sequence: 1, cohort: "repeatability" }),
+      generationRunRecord: storageRecord("generation-run", 1),
+      gamePackRecord: storageRecord("game-pack", 1),
+      requestedAt: "2026-08-23T15:01:00.000Z",
+    });
+    const second = await createManualQaCandidate({
+      store,
+      run: first.run,
+      attempt: pendingAttempt({ sequence: 2, cohort: "repeatability" }),
+      generationRunRecord: storageRecord("generation-run", 2),
+      gamePackRecord: storageRecord("game-pack", 2),
+      requestedAt: "2026-08-23T15:02:00.000Z",
+    });
+
+    expect(second.run.status).toBe("running");
+    expect(second.run.pendingManualQaQueue.map(({ attemptId }) => attemptId)).toEqual([
+      "a01-baseline",
+      "a02-baseline",
+    ]);
+
+    const approved = await approveCampaignAttempt({
+      store,
+      campaignRunId: "campaign-1",
+      attemptId: "a01-baseline",
+      decidedAt: "2026-08-23T15:05:00.000Z",
+    });
+    expect(approved.run.status).toBe("running");
+    expect(approved.run.pendingManualQaQueue.map(({ attemptId }) => attemptId)).toEqual([
+      "a02-baseline",
+    ]);
+    expect(approved.run.pendingManualQa.attemptId).toBe("a02-baseline");
   });
 
   it("approves idempotently and resumes the frozen campaign without provider calls", async () => {
@@ -212,6 +287,44 @@ describe("manual gameplay QA", () => {
         attemptId: "a01-baseline",
       })
     ).rejects.toThrow(/conflicting/i);
+  });
+
+  it("serializes conflicting verdicts so campaign evidence cannot split", async () => {
+    const { store } = await createPendingStore();
+
+    const decisions = await Promise.allSettled([
+      approveCampaignAttempt({
+        store,
+        campaignRunId: "campaign-1",
+        attemptId: "a01-baseline",
+        decidedAt: "2026-08-23T15:05:00.000Z",
+      }),
+      denyCampaignAttempt({
+        store,
+        campaignRunId: "campaign-1",
+        attemptId: "a01-baseline",
+        reason: "Concurrent denial must not overwrite approval.",
+        decidedAt: "2026-08-23T15:05:01.000Z",
+      }),
+    ]);
+
+    expect(decisions.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(decisions.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    const [manualQa, attempt, run] = await Promise.all([
+      store.readManualQa("campaign-1", "a01-baseline"),
+      store.readAttempt("campaign-1", "a01-baseline"),
+      store.readRun("campaign-1"),
+    ]);
+    if (manualQa.status === "approved") {
+      expect(attempt).toMatchObject({ status: "success", manualQa: { status: "approved" } });
+      expect(run.status).toBe("running");
+    } else {
+      expect(attempt).toMatchObject({
+        status: "mechanic_incorrect",
+        manualQa: { status: "denied" },
+      });
+      expect(run.status).toBe("completed_not_achieved");
+    }
   });
 
   it("keeps the first two repeatability denials in the active campaign and stops on the third", async () => {

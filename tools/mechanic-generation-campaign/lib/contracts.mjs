@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  executionPolicyHash,
+  resolveExecutionPolicy,
+} from "./parallel-execution.mjs";
+
 export const CAMPAIGN_MANIFEST_SCHEMA_VERSION = "campaign-manifest/v1";
 export const CAMPAIGN_RUN_SCHEMA_VERSION = "campaign-run/v2";
 const CAMPAIGN_RUN_SCHEMA_VERSION_V1 = "campaign-run/v1";
@@ -92,6 +97,57 @@ export const campaignKnowledgePolicySchema = z
   });
 const manualQaStatusSchema = z.enum(["pending", "approved", "denied"]);
 
+export const campaignExecutionPolicyInputSchema = z
+  .object({
+    mode: z.enum(["sequential", "parallel"]),
+    maxConcurrentAttempts: z.number().int().min(1).max(3),
+    maxPendingManualQa: z.number().int().min(1).max(3),
+    stageConcurrency: z
+      .object({
+        planning: z.number().int().min(1).max(3),
+        contract: z.number().int().min(1).max(3),
+        source: z.number().int().min(1).max(3),
+      })
+      .strict()
+      .optional(),
+    scheduleOrder: z
+      .enum(["legacy_prompt_major", "round_robin"])
+      .optional(),
+  })
+  .strict();
+
+export const campaignExecutionPolicySchema = campaignExecutionPolicyInputSchema
+  .extend({
+    stageConcurrency: z
+      .object({
+        planning: z.number().int().min(1).max(3),
+        contract: z.number().int().min(1).max(3),
+        source: z.number().int().min(1).max(3),
+      })
+      .strict(),
+    scheduleOrder: z.enum(["legacy_prompt_major", "round_robin"]),
+    hash: sha256Schema,
+  })
+  .strict()
+  .superRefine((policy, context) => {
+    if (policy.hash !== executionPolicyHash(policy)) {
+      context.addIssue({
+        code: "custom",
+        path: ["hash"],
+        message: "Campaign execution policy hash does not match its frozen fields.",
+      });
+    }
+    for (const [stage, limit] of Object.entries(policy.stageConcurrency)) {
+      if (limit > policy.maxConcurrentAttempts) {
+        context.addIssue({
+          code: "custom",
+          path: ["stageConcurrency", stage],
+          message: `${stage} concurrency cannot exceed maxConcurrentAttempts.`,
+        });
+      }
+    }
+  });
+
 export const manualQaReferenceSchema = z
   .object({
     id: z.string().min(1),
@@ -110,6 +166,28 @@ export const pendingManualQaSchema = z
     revisionKey: z.string().min(1),
     requestedAt: z.string().datetime(),
     evidencePath: z.string().trim().min(1),
+  })
+  .strict();
+
+export const campaignAttemptSlotSchema = z
+  .object({
+    attemptId: z.string().min(1),
+    sequence: z.number().int().positive(),
+    promptId: z.string().min(1),
+    submissionKind: z.enum(["scheduled", "replacement"]),
+    replacementForPromptId: z.string().min(1).optional(),
+    status: z.enum([
+      "reserved",
+      "running",
+      "awaiting_manual_qa",
+      "completed",
+      "interrupted",
+      "cancelled",
+    ]),
+    leaseId: z.string().min(1),
+    leaseOwner: z.string().min(1),
+    leasedAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
   })
   .strict();
 
@@ -533,7 +611,11 @@ const campaignRunBaseSchema = z
       })
       .strict()
       .optional(),
+    executionPolicy: campaignExecutionPolicySchema.optional(),
+    stateRevision: z.number().int().nonnegative().optional(),
+    attemptSlots: z.array(campaignAttemptSlotSchema).optional(),
     pendingManualQa: pendingManualQaSchema.optional(),
+    pendingManualQaQueue: z.array(pendingManualQaSchema).optional(),
     result: z
       .object({
         successes: z.number().int().nonnegative(),
@@ -569,18 +651,78 @@ export const campaignRunSchema = campaignRunBaseSchema
   .superRefine(validateCampaignRunState);
 
 function validateCampaignRunState(run, context) {
-    if (run.status === "waiting_for_manual_qa" && !run.pendingManualQa) {
+    const pendingQueue = run.pendingManualQaQueue ??
+      (run.pendingManualQa ? [run.pendingManualQa] : []);
+    if (run.status === "waiting_for_manual_qa" && pendingQueue.length === 0) {
       context.addIssue({
         code: "custom",
-        path: ["pendingManualQa"],
+        path: ["pendingManualQaQueue"],
         message: "A campaign waiting for manual QA requires a pending manual QA reference.",
       });
     }
-    if (run.status !== "waiting_for_manual_qa" && run.pendingManualQa) {
+    if (
+      pendingQueue.length > 0 &&
+      !["running", "waiting_for_manual_qa", "interrupted"].includes(run.status)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["pendingManualQaQueue"],
+        message: "Pending manual QA is allowed only while a campaign is active or waiting for review.",
+      });
+    }
+    if (
+      run.pendingManualQa &&
+      pendingQueue[0]?.manualQaId !== run.pendingManualQa.manualQaId
+    ) {
       context.addIssue({
         code: "custom",
         path: ["pendingManualQa"],
-        message: "Pending manual QA is allowed only while the campaign is waiting for manual QA.",
+        message: "The compatibility pending review must be first in the review queue.",
+      });
+    }
+    if (
+      run.executionPolicy &&
+      pendingQueue.length > run.executionPolicy.maxPendingManualQa
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["pendingManualQaQueue"],
+        message: "Pending manual QA exceeds the frozen execution-policy limit.",
+      });
+    }
+    if (new Set(pendingQueue.map(({ manualQaId }) => manualQaId)).size !== pendingQueue.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["pendingManualQaQueue"],
+        message: "Pending manual QA references must be unique.",
+      });
+    }
+    const slots = run.attemptSlots ?? [];
+    if (new Set(slots.map(({ attemptId }) => attemptId)).size !== slots.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["attemptSlots"],
+        message: "Attempt slot IDs must be unique.",
+      });
+    }
+    if (new Set(slots.map(({ sequence }) => sequence)).size !== slots.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["attemptSlots"],
+        message: "Attempt slot sequence numbers must be unique.",
+      });
+    }
+    const activeSlots = slots.filter(({ status }) =>
+      ["reserved", "running"].includes(status)
+    ).length;
+    if (
+      run.executionPolicy &&
+      activeSlots > run.executionPolicy.maxConcurrentAttempts
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["attemptSlots"],
+        message: "Active attempt slots exceed the frozen execution-policy limit.",
       });
     }
 }
@@ -596,13 +738,34 @@ export function parseCampaignAttempt(input) {
 export function parseCampaignRun(input) {
   if (input?.schemaVersion === CAMPAIGN_RUN_SCHEMA_VERSION_V1) {
     const run = campaignRunV1Schema.parse(input);
-    return campaignRunSchema.parse({
+    return normalizeCampaignRun({
       ...run,
       schemaVersion: CAMPAIGN_RUN_SCHEMA_VERSION,
       knowledgePolicy: { required: false },
     });
   }
-  return campaignRunSchema.parse(input);
+  return normalizeCampaignRun(input);
+}
+
+function normalizeCampaignRun(input) {
+  const prepared =
+    input?.pendingManualQa === undefined &&
+    !["running", "waiting_for_manual_qa", "interrupted"].includes(input?.status)
+      ? { ...input, pendingManualQaQueue: [] }
+      : input;
+  const parsed = campaignRunSchema.parse(prepared);
+  const executionPolicy = parsed.executionPolicy ??
+    resolveExecutionPolicy({ cohort: parsed.cohort });
+  const pendingManualQaQueue = parsed.pendingManualQaQueue ??
+    (parsed.pendingManualQa ? [parsed.pendingManualQa] : []);
+  return campaignRunSchema.parse({
+    ...parsed,
+    executionPolicy,
+    stateRevision: parsed.stateRevision ?? 0,
+    attemptSlots: parsed.attemptSlots ?? [],
+    pendingManualQaQueue,
+    pendingManualQa: pendingManualQaQueue[0],
+  });
 }
 
 export function parseCampaignManualQa(input) {
@@ -700,12 +863,11 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
     return result;
   }
 
-  if (automatedCandidates > 0) {
-    result.status = "waiting_for_manual_qa";
-    return result;
-  }
-
   if (cohort === "discovery") {
+    if (automatedCandidates > 0) {
+      result.status = "waiting_for_manual_qa";
+      return result;
+    }
     result.qualifiesForMechanicProof = successes >= 1;
     result.status = successes >= 1
       ? "achieved"
@@ -731,6 +893,8 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
     result.status =
       baseSubmissions < manifest.cohorts.repeatability.maxAttempts
         ? "running"
+        : automatedCandidates > 0
+          ? "waiting_for_manual_qa"
         : result.qualifiesForMechanicProof
           ? "achieved"
           : "completed_not_achieved";
@@ -755,6 +919,10 @@ export function scoreCampaign(cohort, manifestInput, attemptInputs) {
     const expectedBaseSubmissions =
       manifest.prompts.length * manifest.cohorts.variation.runsPerPrompt;
     if (baseSubmissions < expectedBaseSubmissions) {
+      return result;
+    }
+    if (automatedCandidates > 0) {
+      result.status = "waiting_for_manual_qa";
       return result;
     }
     if (result.qualifiesForMechanicProof) {

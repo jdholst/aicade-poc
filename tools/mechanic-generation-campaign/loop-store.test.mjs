@@ -107,6 +107,27 @@ describe("campaign loop store", () => {
     expect((await store.listRuns()).map(({ id }) => id)).toEqual([run.id]);
   });
 
+  it("serializes concurrent loop budget updates", async () => {
+    const { store, run } = await createFixture();
+    await store.writeRun(run);
+
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        store.updateRun(run.id, (current) => ({
+          ...current,
+          usage: {
+            ...current.usage,
+            submissions: current.usage.submissions + 1,
+          },
+        }))
+      )
+    );
+
+    const updated = await store.readRun(run.id);
+    expect(updated.stateRevision).toBe(8);
+    expect(updated.usage.submissions).toBe(8);
+  });
+
   it("upserts one sanitized lifecycle summary without control or worktree paths", async () => {
     const { store, run } = await createFixture();
     await store.writeRun({

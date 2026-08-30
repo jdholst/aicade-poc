@@ -46,10 +46,10 @@ Before running it, state the one-submission ceiling and all three provider modes
 
 ## Review an automated candidate
 
-A full-actual proof run pauses at `waiting_for_manual_qa`. Launch the exact frozen output:
+A full-actual proof run pauses at `waiting_for_manual_qa`. A parallel run can queue as many as three exact candidates. Launch one candidate by attempt ID:
 
 ```bash
-npm run campaign -- review --campaign <campaign-id>
+npm run campaign -- review --campaign <campaign-id> --attempt <attempt-id>
 ```
 
 Wait for `READY FOR MANUAL QA`, play the game in the headed browser, and explicitly approve or deny the attempt in another terminal:
@@ -62,6 +62,26 @@ npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reaso
 The review and verdict commands make zero provider calls. Approval lets the same frozen campaign resume without another authorization. Discovery denial is terminal. Repeatability and variation continue after denial one or two and enter a linked loop fix cycle only at the third qualifying failure. A campaign-tool or review-detector defect instead pauses at `waiting_for_campaign_repair`; repair the tool in the control checkout and resume without a Sparkline fix cycle or regenerated candidate.
 
 Campaign browser readiness requires `Runtime is running in the sandbox.` and a generated iframe with source. If that observation times out, the attempt retains the editor snapshot and a linked loop stops at `waiting_for_campaign_repair` before another submission.
+
+## Opt into bounded parallel proof runs
+
+Discovery and isolation remain sequential. A new repeatability or variation run can explicitly freeze a parallel execution policy:
+
+```bash
+npm run campaign -- run \
+  --manifest p09-t17-projectile \
+  --cohort repeatability \
+  --provider-modes planning=actual,contract=actual,source=actual \
+  --execution-mode parallel \
+  --max-concurrent-attempts 3 \
+  --max-pending-manual-qa 3 \
+  --planning-concurrency 2 \
+  --contract-concurrency 3 \
+  --source-concurrency 2 \
+  --authorize-actual
+```
+
+The runner uses one production server and isolated browser contexts. It never allows active attempts plus pending reviews to exceed the remaining three-failure tolerance. A batch therefore contains at most three candidates. Review every queued candidate and resume the same campaign to dispatch the next bounded batch. Existing frozen campaigns remain sequential when resumed.
 
 ## Review the result
 

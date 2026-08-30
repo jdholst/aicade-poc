@@ -25,13 +25,22 @@ export function createLoopbackBaseUrl(port) {
   return `http://localhost:${port}`;
 }
 
-export function createAttemptSchedule(cohort, prompts) {
+export function createAttemptSchedule(cohort, prompts, executionPolicy = {}) {
   const baseline = prompts.find((prompt) => prompt.id === "baseline");
   if (!baseline) {
     throw new Error("Campaign manifest requires a baseline prompt.");
   }
 
   if (cohort === "variation") {
+    if (executionPolicy.scheduleOrder === "round_robin") {
+      return [1, 2].flatMap((run) =>
+        prompts.map((prompt, promptIndex) => ({
+          sequence: (run - 1) * prompts.length + promptIndex + 1,
+          promptId: prompt.id,
+          prompt: prompt.text,
+        }))
+      );
+    }
     return prompts.flatMap((prompt, promptIndex) =>
       [1, 2].map((run) => ({
         sequence: promptIndex * 2 + run,
@@ -56,13 +65,19 @@ export function maximumCampaignSubmissions(cohort, prompts, cohortPolicy) {
   );
 }
 
-export function createNextAttemptSchedule({ cohort, prompts, attempts, score }) {
+export function createNextAttemptSchedule({
+  cohort,
+  prompts,
+  attempts,
+  score,
+  executionPolicy,
+}) {
   if (score.status !== "running") return null;
 
   const scheduledAttempts = attempts.filter(
     (attempt) => attempt.submissionKind !== "replacement"
   );
-  const baseSchedule = createAttemptSchedule(cohort, prompts);
+  const baseSchedule = createAttemptSchedule(cohort, prompts, executionPolicy);
   if (scheduledAttempts.length < baseSchedule.length) {
     return baseSchedule[scheduledAttempts.length];
   }

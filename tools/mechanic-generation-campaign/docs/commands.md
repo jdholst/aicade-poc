@@ -46,6 +46,11 @@ npm run campaign -- run \
   --manifest <id-or-path> \
   --cohort <discovery|isolation|repeatability|variation> \
   [--provider-modes planning=<actual|fixture>,contract=<actual|fixture>,source=<actual|fixture>] \
+  [--execution-mode <sequential|parallel>] \
+  [--max-concurrent-attempts <1..3>] \
+  [--max-pending-manual-qa <1..3>] \
+  [--planning-concurrency <1..3> --contract-concurrency <1..3> --source-concurrency <1..3>] \
+  [--schedule-order <legacy_prompt_major|round_robin>] \
   [--authorize-actual] \
   [--base-url <url>] \
   [--headed] \
@@ -64,6 +69,11 @@ Required arguments:
 Options:
 
 - `--provider-modes <modes>` overrides the manifest modes. Supply all three stages exactly once. Each mode is `actual` or `fixture`; fixture mode requires a fixture reference in the manifest. Variation requires actual planning.
+- `--execution-mode <mode>` freezes `sequential` or `parallel`. Parallel is opt-in for new repeatability and variation runs only. Discovery, isolation, existing frozen runs, and omitted policies remain sequential.
+- `--max-concurrent-attempts <1..3>` is required for parallel execution and caps active browser attempts.
+- `--max-pending-manual-qa <1..3>` is required for parallel execution and caps queued human-review candidates.
+- `--planning-concurrency`, `--contract-concurrency`, and `--source-concurrency` are optional per-stage actual-request limits. Provide all three together. Each must not exceed the active-attempt limit.
+- `--schedule-order` freezes prompt ordering. Parallel variation defaults to `round_robin`; sequential records use `legacy_prompt_major` unless explicitly set.
 - `--authorize-actual` confirms campaign-level authorization when at least one stage is actual. `AICADE_CAMPAIGN_ACTUAL_AUTHORIZED=1` is the non-command equivalent for an already authorized bounded run.
 - `--base-url <url>` attaches to an existing server instead of creating a production build/server.
 - `--headed` shows the Playwright browser.
@@ -83,20 +93,24 @@ Side effects:
 - Actual modes can make paid provider calls.
 - Fixture modes fulfill matching browser requests without upstream provider calls.
 - A clean browser context is created for every submission.
+- Parallel runs share one production build, server, and browser process while preserving isolated browser contexts and artifact directories.
+- Attempt slots are durably reserved before launch. Cross-process locks and monotonic state revisions prevent concurrent provider, submission, review, and verdict writes from overwriting one another.
+- Active attempts plus pending reviews can never exceed the remaining failure tolerance.
 - Sanitized attempts, network envelopes, storage records, logs, screenshots, timelines, and probe evidence are written under `.qa/mechanic-generation-campaign/`.
 - No Sparkline source or temporary-fix ledger entry is edited.
 
-Output: campaign ID, state, revision key, submission count, and a terminal line for every attempt. A full-actual proof candidate stops at `waiting_for_manual_qa`.
+Output: campaign ID, state, revision key, execution-policy hash, submission count, durable active slots, failure clusters, pending review commands, and a terminal line for every attempt. A full-actual proof candidate stops at `waiting_for_manual_qa` when its bounded batch has drained.
 
 ## Review gameplay
 
 ```bash
-npm run campaign -- review --campaign <campaign-id> [--port <number>]
+npm run campaign -- review --campaign <campaign-id> [--attempt <attempt-id>] [--port <number>]
 ```
 
 Purpose: open the exact frozen automated candidate for human gameplay review.
 
-- `--campaign <campaign-id>` is required and must be `waiting_for_manual_qa`.
+- `--campaign <campaign-id>` is required and must have a pending candidate. A parallel campaign may still be `running` while its review queue is non-empty.
+- `--attempt <attempt-id>` selects one exact queued candidate. It is optional only when reviewing the first queue entry.
 - `--port <number>` selects the candidate production-server port. Default: `3117`.
 
 The command verifies the revision and candidate hashes, starts the candidate worktree's production server, launches a headed clean browser, restores only the recorded GenerationRun and GamePack, blocks both generation-provider endpoints, and reports `READY FOR MANUAL QA` after editor mount and runtime health pass. It remains open without a timeout until a verdict or interruption. It makes zero provider calls.

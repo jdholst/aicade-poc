@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   CAMPAIGN_COHORTS,
+  campaignExecutionPolicyInputSchema,
   campaignKnowledgePolicySchema,
   pendingManualQaSchema,
 } from "./contracts.mjs";
@@ -115,6 +116,7 @@ const loopStepSchema = z
     maxCampaignRunsPerRevision: z.number().int().positive(),
     retryableClassifications: z
       .array(z.enum(CAMPAIGN_LOOP_RETRYABLE_CLASSIFICATIONS)),
+    executionPolicy: campaignExecutionPolicyInputSchema.optional(),
   })
   .strict();
 
@@ -424,6 +426,8 @@ const campaignLoopRunBaseSchema = z
     fixCheckpointIds: z.array(z.string().min(1)),
     activeCampaign: activeCampaignSchema.optional(),
     pendingManualQa: pendingManualQaSchema.optional(),
+    pendingManualQaQueue: z.array(pendingManualQaSchema).optional(),
+    stateRevision: z.number().int().nonnegative().optional(),
     invalidReason: z.string().min(1).optional(),
     blockedReason: z.string().min(1).optional(),
     exhaustionReason: z.string().min(1).optional(),
@@ -577,11 +581,13 @@ function validateManualQaState(run, context) {
   const repairResumesManualQa =
     run.status === "waiting_for_campaign_repair" &&
     pendingRepair[0]?.resumeStatus === "waiting_for_manual_qa";
+  const pendingQueue = run.pendingManualQaQueue ??
+    (run.pendingManualQa ? [run.pendingManualQa] : []);
   if (run.status === "waiting_for_manual_qa" || repairResumesManualQa) {
-    if (!run.pendingManualQa) {
+    if (pendingQueue.length === 0) {
       context.addIssue({
         code: "custom",
-        path: ["pendingManualQa"],
+        path: ["pendingManualQaQueue"],
         message: "A loop waiting for manual QA requires a pending manual QA reference.",
       });
     }
@@ -592,11 +598,26 @@ function validateManualQaState(run, context) {
         message: "A loop waiting for manual QA must preserve its active sequence campaign.",
       });
     }
-  } else if (run.pendingManualQa) {
+  } else if (
+    pendingQueue.length > 0 &&
+    !["running", "interrupted", "waiting_for_campaign_repair"].includes(
+      run.status
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["pendingManualQaQueue"],
+      message: "Pending manual QA is allowed only while the loop campaign is active or waiting for review.",
+    });
+  }
+  if (
+    run.pendingManualQa &&
+    pendingQueue[0]?.manualQaId !== run.pendingManualQa.manualQaId
+  ) {
     context.addIssue({
       code: "custom",
       path: ["pendingManualQa"],
-      message: "Pending manual QA is allowed only while the loop is waiting for manual QA.",
+      message: "The compatibility pending review must be first in the loop review queue.",
     });
   }
 }
@@ -676,24 +697,53 @@ export function parseCampaignLoopRun(input) {
   }
   if (input?.schemaVersion === CAMPAIGN_LOOP_RUN_SCHEMA_VERSION_V3) {
     const run = campaignLoopRunV3Schema.parse(input);
-    return campaignLoopRunSchema.parse({
+    return normalizeCampaignLoopRun({
       ...run,
       schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
       usage: withGrossProviderUsage(run.usage),
       campaignRepairs: [],
     });
   }
-  return campaignLoopRunSchema.parse(input);
+  return normalizeCampaignLoopRun(input);
 }
 
 function migrateLegacyLoopRun(run) {
-  return campaignLoopRunSchema.parse({
+  return normalizeCampaignLoopRun({
     ...run,
     schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
     usage: withGrossProviderUsage(run.usage),
     knowledgePolicy: { required: false },
     knowledgeReconciliationIds: [],
     campaignRepairs: [],
+  });
+}
+
+function normalizeCampaignLoopRun(input) {
+  let prepared = input;
+  if (
+    input?.pendingManualQa &&
+    (input.pendingManualQaQueue?.length ?? 0) === 0
+  ) {
+    prepared = { ...input, pendingManualQaQueue: [input.pendingManualQa] };
+  } else if (
+    input?.pendingManualQa === undefined &&
+    ![
+      "running",
+      "waiting_for_manual_qa",
+      "waiting_for_campaign_repair",
+      "interrupted",
+    ].includes(input?.status)
+  ) {
+    prepared = { ...input, pendingManualQaQueue: [] };
+  }
+  const parsed = campaignLoopRunSchema.parse(prepared);
+  const pendingManualQaQueue = parsed.pendingManualQaQueue ??
+    (parsed.pendingManualQa ? [parsed.pendingManualQa] : []);
+  return campaignLoopRunSchema.parse({
+    ...parsed,
+    stateRevision: parsed.stateRevision ?? 0,
+    pendingManualQaQueue,
+    pendingManualQa: pendingManualQaQueue[0],
   });
 }
 

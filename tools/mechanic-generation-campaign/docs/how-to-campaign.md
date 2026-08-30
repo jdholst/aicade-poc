@@ -20,7 +20,8 @@ Before a provider-backed run:
 3. Resolve planning, contract, and source to `actual` or `fixture`.
 4. Record the model and repository revision identity.
 5. State the submission ceiling and actual-provider stages.
-6. Obtain one authorization for that exact bounded campaign.
+6. Choose `sequential` or an explicit bounded `parallel` execution policy. Parallel is valid only for new repeatability or variation runs and is capped at three active attempts and three pending reviews.
+7. Obtain one authorization for that exact bounded campaign and execution-policy hash.
 
 Actual-provider authorization applies to the frozen attempt ceiling. A new campaign, changed manifest, changed provider configuration, or changed source revision requires a new campaign boundary.
 
@@ -38,6 +39,27 @@ By default, the runner creates a dedicated production build/server on port `3117
 
 Use `--base-url` to attach to a server you already control. Use `--headed` when visible browser inspection is useful.
 
+For a new parallel repeatability or variation campaign, add:
+
+```bash
+--execution-mode parallel \
+--max-concurrent-attempts 3 \
+--max-pending-manual-qa 3 \
+--planning-concurrency 2 \
+--contract-concurrency 3 \
+--source-concurrency 2
+```
+
+All three stage limits are optional as a group. When omitted, each uses the active-attempt limit. Parallel variation defaults to round-robin prompt order so one prompt does not consume both of its base slots before the other variants receive a slot. Existing frozen runs and runs without `--execution-mode parallel` remain sequential with the legacy prompt order.
+
+The dispatcher reserves a durable attempt slot before launching its clean browser context. It enforces:
+
+```text
+active attempts + pending manual reviews <= failure limit - counted failures
+```
+
+This prevents already-dispatched work from carrying the campaign past its third qualifying failure. One build, server, and browser process are shared; attempts use isolated contexts, artifact directories, provider-call IDs, and stage-concurrency permits.
+
 ## Resume an interrupted campaign
 
 ```bash
@@ -54,7 +76,7 @@ Resume preserves prior submissions and continues only the remaining frozen sched
 An automated full-actual pipeline and probe pass is recorded as `awaiting_manual_qa`, not `success`. Open the exact frozen GenerationRun and GamePack:
 
 ```bash
-npm run campaign -- review --campaign <campaign-id>
+npm run campaign -- review --campaign <campaign-id> --attempt <attempt-id>
 ```
 
 The review command verifies artifact hashes and revision identity, starts the candidate's production server, restores the exact IndexedDB records into a clean headed browser, blocks generation-provider requests, and reports `READY FOR MANUAL QA` only after editor mount and runtime health pass. It has no timeout and can be reopened after interruption.
@@ -67,6 +89,8 @@ npm run campaign -- deny --campaign <campaign-id> --attempt <attempt-id> --reaso
 ```
 
 Approval changes the attempt to `success`; resume the same campaign or loop to continue. Denial records `manual_qa_rejected`. Discovery denial is terminal. A first or second repeatability or variation denial resumes the same campaign. The third qualifying failure ends the campaign and sends a linked loop to `waiting_for_fix`.
+
+Parallel candidates form a queue. Approving or denying one attempt removes only that exact candidate. Review and decide every remaining queue entry before resuming generation. The campaign report prints a review command for each pending attempt.
 
 ## Interpret evidence
 
@@ -99,6 +123,8 @@ Use these classifications:
 - `success`: the exact full-actual candidate was manually approved.
 
 Preserve the originally recorded outcome. Add later adjudication separately when deeper review changes the interpretation.
+
+After a campaign reaches its third qualifying failure, group the failures by classification, furthest stage, and normalized failure text before diagnosis. Up to three read-only diagnostic agents may inspect separate clusters. The primary agent owns the combined hypothesis, all source edits, tests, knowledge reconciliation, and the single fix checkpoint. The first and second failures remain evidence inside the active campaign and do not authorize a fix cycle.
 
 ## Report and publish
 

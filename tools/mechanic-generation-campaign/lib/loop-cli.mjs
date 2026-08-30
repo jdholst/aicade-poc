@@ -264,8 +264,9 @@ function printAuthorizationEnvelope(loaded) {
   console.log(`Revision: ${loaded.revision.revisionKey}`);
   console.log("Sequence:");
   for (const step of loaded.definition.sequence) {
+    const execution = loaded.executionPolicies[step.id];
     console.log(
-      `  ${step.id}: ${step.cohort}; ${formatProviderModes(step.providerModes)}; max ${step.maxCampaignRunsPerRevision} campaign(s) per revision; retry ${step.retryableClassifications.join(", ") || "none"}`
+      `  ${step.id}: ${step.cohort}; ${formatProviderModes(step.providerModes)}; ${execution.mode} execution (${execution.maxConcurrentAttempts} active, ${execution.maxPendingManualQa} pending review, ${execution.hash}); max ${step.maxCampaignRunsPerRevision} campaign(s) per revision; retry ${step.retryableClassifications.join(", ") || "none"}`
     );
   }
   console.log(
@@ -359,13 +360,19 @@ export function printLoopSummary(run) {
     console.log(`Sequence achieved: ${run.result.sequenceAchieved}`);
     console.log(`Mechanic proven: ${run.result.mechanicProven}`);
   }
-  if (run.pendingManualQa) {
-    console.log(
-      `Pending manual QA: ${run.pendingManualQa.campaignRunId}/${run.pendingManualQa.attemptId}`
-    );
-    console.log(
-      `Review: npm run campaign -- review --campaign ${run.pendingManualQa.campaignRunId}`
-    );
+  const pendingReviews = run.pendingManualQaQueue?.length
+    ? run.pendingManualQaQueue
+    : run.pendingManualQa
+      ? [run.pendingManualQa]
+      : [];
+  if (pendingReviews.length > 0) {
+    console.log(`Pending manual QA (${pendingReviews.length}):`);
+    for (const pending of pendingReviews) {
+      console.log(`  ${pending.campaignRunId}/${pending.attemptId}`);
+      console.log(
+        `  Review: npm run campaign -- review --campaign ${pending.campaignRunId} --attempt ${pending.attemptId}`
+      );
+    }
   }
   if (run.campaignRepairs?.length) {
     const pendingRepairs = run.campaignRepairs.filter(
