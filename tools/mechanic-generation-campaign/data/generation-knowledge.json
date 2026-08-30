@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 29,
-  "updatedAt": "2026-08-30T22:13:28Z",
+  "revision": 30,
+  "updatedAt": "2026-08-30T22:27:14Z",
   "entries": [
     {
       "status": "active",
@@ -6923,6 +6923,54 @@
       "createdAt": "2026-08-30T22:13:28Z",
       "priorManifestDigest": "465077dbf18a6918da817c62a6c744e73fee1e26825e420c64f08655251d5eb0",
       "resultingManifestDigest": "d430cb14c2b072fc6aa11839123fd5fb0efb9fe9ad452fa796451d25864f47a4"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t17-20260830-conclusion",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t17-projectile-proof-loop-20260830t195935706z"
+      },
+      "consultedManifestDigest": "d430cb14c2b072fc6aa11839123fd5fb0efb9fe9ad452fa796451d25864f47a4",
+      "contextDigest": "f634145d768a5037949433b42fceaf65253357fecad4ad8b85b603e541818473",
+      "consultedFindingIds": [
+        "KF-0001",
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0026"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z/fix-cycle-1",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "The verified mechanic-general fix implements the existing scenario-local liveness and cleanup-capable scenario guidance and passed the full validation gate."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-discovery-c1-r2/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The actual planning request returned HTTP 502 with only a generic provider failure and no structured planning, contract, source, or evaluator defect to compile into generation guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-isolation-contract-fixture-c1-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The authorized isolation independently reproduced the same planning HTTP 502 before its contract fixture or source stage ran, confirming an upstream provider boundary without reusable pipeline guidance."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "The accepted fix already records the durable scenario-local lifecycle rule. The two terminal planning-provider failures contain no structured Sparkline defect and therefore do not justify adding, amending, confirming, or retiring compiled generation guidance.",
+      "createdAt": "2026-08-30T22:27:14Z",
+      "priorManifestDigest": "d430cb14c2b072fc6aa11839123fd5fb0efb9fe9ad452fa796451d25864f47a4",
+      "resultingManifestDigest": "24db3f6f403733b9e5fae8149b299877cd89f4e1ffd59455cd4a4e82e9c6ab8d"
     }
   ]
 }
