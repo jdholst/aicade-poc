@@ -28,10 +28,25 @@ export function installCostCardNavigationGuard(
     }, 0);
   }
 
-  function suppressNavigation(event) {
-    if (!navigationSuppressed || !event.target.closest?.(".cost-stat-link")) return;
+  function handleNavigation(event) {
+    const link = event.target.closest?.(".cost-stat-link");
+    if (!link) return;
+    if (navigationSuppressed) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const href = link.getAttribute("href");
+    const target = href?.startsWith("#")
+      ? summary.ownerDocument.querySelector(href)
+      : null;
+    if (!target) return;
+
     event.preventDefault();
-    event.stopPropagation();
+    const view = summary.ownerDocument.defaultView;
+    if (view.location.hash !== href) view.history.pushState(null, "", href);
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function changeTimeframe(event) {
@@ -43,7 +58,7 @@ export function installCostCardNavigationGuard(
   summary.addEventListener("pointerdown", activate);
   summary.addEventListener("focusin", activate);
   summary.addEventListener("focusout", scheduleRelease);
-  summary.addEventListener("click", suppressNavigation, true);
+  summary.addEventListener("click", handleNavigation, true);
   summary.addEventListener("change", changeTimeframe);
 
   return {

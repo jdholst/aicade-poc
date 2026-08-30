@@ -174,7 +174,7 @@ Options:
 
 The process remains active until interrupted. It polls local campaign files, serves sanitized artifacts, and shows canonical findings plus clearly labeled loop-local pending knowledge, amendments, reconciliations, and evidence references. It makes no provider calls and does not modify campaign evidence.
 
-The Known Cost selector applies only to the summary card. Campaign and loop rows always show all-time lifecycle cost so a rolling timeframe cannot conceal authorized spend.
+The Known Cost selector applies only to the rolling summary card. The separate Known Cost history chart always covers all priced evidence and groups all priced history by UTC day, ISO week, or calendar month. Its bars combine exact and conservative-estimate cost while hover, keyboard focus, and the accessible data table preserve the breakdown. Unknown historical cost remains excluded. Campaign and loop rows always show all-time lifecycle cost so neither dashboard control can conceal authorized spend.
 
 ## Pricing snapshots
 

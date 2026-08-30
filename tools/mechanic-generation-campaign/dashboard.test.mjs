@@ -18,6 +18,28 @@ import {
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 
 describe("campaign dashboard data", () => {
+  it("places known cost after stage survival and classifications", async () => {
+    const dashboard = await readFile(
+      path.join(
+        repoRoot,
+        "tools",
+        "mechanic-generation-campaign",
+        "dashboard",
+        "index.html"
+      ),
+      "utf8"
+    );
+    const stageSurvival = dashboard.indexOf('id="stages"');
+    const classifications = dashboard.indexOf('id="failures"');
+    const knownCost = dashboard.indexOf('id="dashboard-cost-history"');
+    const campaignRuns = dashboard.indexOf('id="dashboard-campaigns"');
+
+    expect(stageSurvival).toBeGreaterThan(-1);
+    expect(classifications).toBeGreaterThan(stageSurvival);
+    expect(knownCost).toBeGreaterThan(classifications);
+    expect(campaignRuns).toBeGreaterThan(knownCost);
+  });
+
   it("links to agent-readable documentation covering every campaign command", async () => {
     const dashboardRoot = path.join(
       repoRoot,
@@ -74,6 +96,15 @@ describe("campaign dashboard data", () => {
     }
     expect(dashboard).toContain('id="loops"');
     expect(dashboard).toContain('id="dashboard-loops"');
+    expect(dashboard).toContain('id="dashboard-cost-history"');
+    expect(dashboard).toContain('id="cost-group-by"');
+    expect(dashboard).toContain('<option value="day">Day</option>');
+    expect(dashboard).toContain('<option value="week">Week</option>');
+    expect(dashboard).toContain('<option value="month">Month</option>');
+    expect(dashboard).toContain('data-cost-chart-scroll');
+    expect(dashboard).toContain('data-cost-table-body');
+    expect(dashboard).toContain('<div class="visually-hidden">\n          <table>');
+    expect(dashboard).not.toContain('<table class="visually-hidden">');
     expect(dashboard).toContain('id="dashboard-campaigns"');
     expect(dashboard).toContain('id="dashboard-attempts"');
     expect(dashboard).toContain('id="dashboard-fixes"');
@@ -94,19 +125,30 @@ describe("campaign dashboard data", () => {
     expect(dashboardApp).not.toContain("loop.campaignLinks.map");
     expect(dashboardApp).not.toContain("repair.creditedUsage");
     expect(dashboardApp).toContain("summaryStatLink");
+    expect(dashboardApp).toContain("createKnownCostSeries");
+    expect(dashboardApp).toContain("installCostHistoryChart");
+    expect(dashboardApp).toContain("renderCostHistory");
+    expect(dashboardApp).toContain('cost-stat-link" href="#dashboard-cost-history"');
     expect(dashboardApp).toContain('"#dashboard-loops"');
     expect(dashboardApp).toContain('"#dashboard-campaigns"');
     expect(dashboardApp).toContain('"#dashboard-attempts"');
     expect(dashboardApp).toContain('"#dashboard-fixes"');
     expect(dashboardStyles).toContain("scroll-behavior: smooth");
     expect(dashboardStyles).toContain(".stat-link");
+    expect(dashboardStyles).toContain(".cost-history-chart-scroll");
+    expect(dashboardStyles).toContain(".cost-history-tooltip");
+    expect(dashboardStyles).toContain(".cost-history-chart[hidden]");
+    expect(dashboardStyles).toContain(".visually-hidden");
     expect(dashboardStyles).not.toContain(".cost-stat { position: relative; grid-column: span 2; }");
     expect(dashboardStyles).not.toContain(".cost-stat { grid-column: span 1; }");
     expect(dashboardStyles).toContain(
       ".cost-stat .stat-heading { position: relative; z-index: 2; flex-wrap: wrap; }"
     );
     expect(dashboardStyles).toContain(
-      ".cost-stat:focus-within .cost-stat-link, .cost-stat.is-cost-timeframe-active .cost-stat-link { pointer-events: none; }"
+      ".cost-stat.is-cost-timeframe-active .cost-stat-link { pointer-events: none; }"
+    );
+    expect(dashboardStyles).not.toContain(
+      ".cost-stat:focus-within .cost-stat-link"
     );
     expect(dashboardStyles).toContain(
       ".cost-stat:focus-within, .cost-stat:focus-within:hover, .cost-stat.is-cost-timeframe-active, .cost-stat.is-cost-timeframe-active:hover { border-color: var(--line); box-shadow: 0 18px 50px rgba(0,0,0,.16); transform: none; }"
@@ -120,6 +162,7 @@ describe("campaign dashboard data", () => {
     expect(dashboardApp).toContain("panel.append(toggle)");
     expect(dashboardApp).toContain("section-toggle");
     expect(dashboardApp).toContain("aria-expanded");
+    expect(commands).toContain("groups all priced history by UTC day, ISO week, or calendar month");
     expect(dashboardStyles).toContain(".section-toggle");
     expect(dashboardStyles).toContain(".panel { position: relative;");
     expect(dashboardStyles).toContain("position: absolute");

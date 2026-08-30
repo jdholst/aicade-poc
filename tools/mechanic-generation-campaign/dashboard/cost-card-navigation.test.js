@@ -46,4 +46,32 @@ describe("cost card navigation guard", () => {
     expect(link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))).toBe(true);
     expect(navigations).toBe(1);
   });
+
+  it("navigates the card to the known cost history section", () => {
+    document.body.innerHTML = `
+      <section id="summary">
+        <article class="cost-stat">
+          <a class="cost-stat-link" href="#dashboard-cost-history">Known cost history</a>
+          <select id="cost-timeframe"><option value="week">Past 7 days</option></select>
+        </article>
+      </section>
+      <section id="dashboard-cost-history"></section>
+    `;
+    const summary = document.querySelector("#summary");
+    const link = document.querySelector(".cost-stat-link");
+    const target = document.querySelector("#dashboard-cost-history");
+    target.scrollIntoView = vi.fn();
+    window.history.replaceState(null, "", "#dashboard-attempts");
+
+    installCostCardNavigationGuard(summary, {
+      onTimeframeChange() {},
+    });
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(window.location.hash).toBe("#dashboard-cost-history");
+    expect(target.scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
 });
