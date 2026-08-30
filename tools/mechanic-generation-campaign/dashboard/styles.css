@@ -67,7 +67,7 @@ main { width: min(1600px, 94vw); margin: 2rem auto 5rem; display: grid; gap: 1.2
 .cost-history-chart-frame { position: relative; min-height: 300px; }
 .cost-history-chart { display: block; max-width: none; }
 .cost-history-chart[hidden], .cost-history-chart-scroll[hidden], .cost-history-tooltip[hidden] { display: none; }
-.cost-history-tooltip { position: absolute; z-index: 3; display: grid; min-width: 11rem; transform: translate(-50%, -100%); border: 1px solid var(--line); background: #0b1216; box-shadow: 0 12px 30px rgba(0,0,0,.35); padding: .6rem .7rem; pointer-events: none; }
+.cost-history-tooltip { position: absolute; z-index: 3; display: grid; min-width: 11rem; border: 1px solid var(--line); background: #0b1216; box-shadow: 0 12px 30px rgba(0,0,0,.35); padding: .6rem .7rem; pointer-events: none; }
 .cost-history-tooltip strong { margin-bottom: .2rem; }
 .cost-history-tooltip span { color: var(--muted); font-size: .72rem; }
 .cost-history-excluded { margin-top: .5rem; color: var(--muted); font-size: .72rem; }

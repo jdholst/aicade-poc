@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCostChartLayout,
+  createCostTooltipPosition,
   hitTestCostChartBar,
   installCostHistoryChart,
 } from "./cost-chart.js";
@@ -27,6 +28,21 @@ describe("known cost history chart", () => {
       layout.bars[0].y + 2
     )?.index).toBe(0);
     expect(hitTestCostChartBar(layout, 2, 2)).toBeNull();
+  });
+
+  it("keeps a tooltip inside the visible chart viewport when a tall bar reaches the top", () => {
+    expect(createCostTooltipPosition({
+      bar: { x: 20, y: 24, width: 40, height: 200 },
+      tooltipWidth: 176,
+      tooltipHeight: 100,
+      viewportLeft: 0,
+      viewportWidth: 320,
+      chartHeight: 300,
+    })).toEqual({
+      left: 8,
+      top: 32,
+      placement: "below",
+    });
   });
 
   it("renders high-DPI chart evidence and keeps the grouping control interactive", () => {
