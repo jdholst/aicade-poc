@@ -7,6 +7,7 @@ import {
 } from "./cost.js";
 import { installCostCardNavigationGuard } from "./cost-card-navigation.js";
 import { installCostHistoryChart } from "./cost-chart.js";
+import { installDashboardInteractionGuard } from "./dashboard-interaction-guard.js";
 import { paginateItems } from "./pagination.js";
 
 let snapshot = null;
@@ -34,14 +35,17 @@ legacyFilter.addEventListener("change", () => resetPagination(["legacy"]));
 knowledgeFilters.forEach((filter) => filter.addEventListener("change", () => resetPagination(["knowledge"])));
 const costCardNavigationGuard = installCostCardNavigationGuard(document.querySelector("#summary"), {
   onInteractionEnd() {
-    if (!deferredRefreshRender) return;
-    deferredRefreshRender = false;
-    render();
+    flushDeferredRefreshRender();
   },
   onTimeframeChange(value) {
     costTimeframe = value;
     deferredRefreshRender = false;
     render();
+  },
+});
+const dashboardInteractionGuard = installDashboardInteractionGuard(document, {
+  onInteractionEnd() {
+    flushDeferredRefreshRender();
   },
 });
 const costHistoryChart = installCostHistoryChart(
@@ -53,6 +57,13 @@ const costHistoryChart = installCostHistoryChart(
     },
   }
 );
+
+function flushDeferredRefreshRender() {
+  if (!deferredRefreshRender) return;
+  if (costCardNavigationGuard.isActive() || dashboardInteractionGuard.isActive()) return;
+  deferredRefreshRender = false;
+  render();
+}
 
 function resetPagination(sectionIds) {
   sectionIds.forEach((sectionId) => paginationPages.set(sectionId, 1));
@@ -129,7 +140,9 @@ async function refresh() {
     syncCampaignOptions();
     syncLoopOptions();
     syncKnowledgeOptions();
-    if (costCardNavigationGuard.isActive()) deferredRefreshRender = true;
+    if (costCardNavigationGuard.isActive() || dashboardInteractionGuard.isActive()) {
+      deferredRefreshRender = true;
+    }
     else render();
   } catch (error) {
     document.querySelector("#updated").textContent = error.message;

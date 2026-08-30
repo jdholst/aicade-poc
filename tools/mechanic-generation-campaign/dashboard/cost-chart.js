@@ -49,6 +49,34 @@ export function hitTestCostChartBar(layout, x, y) {
   ) ?? null;
 }
 
+export function createCostTooltipPosition({
+  bar,
+  tooltipWidth,
+  tooltipHeight,
+  viewportLeft,
+  viewportWidth,
+  chartHeight,
+}) {
+  const margin = 8;
+  const gap = 8;
+  const desiredLeft = bar.x + bar.width / 2 - tooltipWidth / 2;
+  const minimumLeft = viewportLeft + margin;
+  const maximumLeft = viewportLeft + viewportWidth - tooltipWidth - margin;
+  const left = maximumLeft < minimumLeft
+    ? minimumLeft
+    : Math.max(minimumLeft, Math.min(desiredLeft, maximumLeft));
+  const aboveTop = bar.y - gap - tooltipHeight;
+  const placement = aboveTop >= margin ? "above" : "below";
+  const desiredTop = placement === "above" ? aboveTop : bar.y + gap;
+  const maximumTop = Math.max(margin, chartHeight - tooltipHeight - margin);
+
+  return {
+    left,
+    top: Math.max(margin, Math.min(desiredTop, maximumTop)),
+    placement,
+  };
+}
+
 export function installCostHistoryChart(
   root,
   {
@@ -136,9 +164,19 @@ export function installCostHistoryChart(
       tooltipLine("span", `Estimate ${formatNanoUsd(bucket.estimatedNanoUsd)}`),
       tooltipLine("span", `${bucket.pricedCalls} priced call${bucket.pricedCalls === 1 ? "" : "s"}`)
     );
-    tooltip.style.left = `${bar.x + bar.width / 2}px`;
-    tooltip.style.top = `${Math.max(4, bar.y - 8)}px`;
     tooltip.hidden = false;
+    const tooltipBounds = tooltip.getBoundingClientRect();
+    const position = createCostTooltipPosition({
+      bar,
+      tooltipWidth: tooltipBounds.width || tooltip.offsetWidth || 176,
+      tooltipHeight: tooltipBounds.height || tooltip.offsetHeight || 100,
+      viewportLeft: scroll.scrollLeft,
+      viewportWidth: scroll.clientWidth || layout.width,
+      chartHeight: layout.height,
+    });
+    tooltip.style.left = `${position.left}px`;
+    tooltip.style.top = `${position.top}px`;
+    tooltip.dataset.placement = position.placement;
     draw();
   }
 
