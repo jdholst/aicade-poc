@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 28,
-  "updatedAt": "2026-08-29T21:36:59.864Z",
+  "revision": 29,
+  "updatedAt": "2026-08-30T22:13:28Z",
   "entries": [
     {
       "status": "active",
@@ -107,7 +107,7 @@
         ]
       },
       "id": "KF-0003",
-      "revision": 2,
+      "revision": 3,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -164,6 +164,39 @@
           "outcome": "provider_output_rejected",
           "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":150,\"targetInteractionsDelta\":1}]}.",
           "observedAt": "2026-08-29T20:55:04.233Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a02-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+          "attemptId": "a02-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":216,\"targetInteractionsDelta\":1}]}",
+          "observedAt": "2026-08-30T20:53:48.827Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a04-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+          "attemptId": "a04-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":360,\"targetInteractionsDelta\":1}]}",
+          "observedAt": "2026-08-30T21:59:44.857Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a06-baseline",
+          "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+          "attemptId": "a06-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"player_projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":120,\"targetInteractionsDelta\":1}]}",
+          "observedAt": "2026-08-30T22:08:48.328Z"
         }
       ],
       "amendments": [
@@ -234,10 +267,70 @@
               "observedAt": "2026-08-29T20:55:04.233Z"
             }
           ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-08-30T22:13:28Z",
+          "reason": "Three independent actual-provider repeatability failures reproduce the scenario-local liveness defect while satisfying creation, actor origin, motion, target interaction, and cleanup.",
+          "previous": {
+            "status": "active",
+            "confidence": "confirmed",
+            "title": "Post-action owned-object liveness is scenario-local",
+            "guidance": "Require an owned object to remain active through a post-action observation only when that exact scenario explicitly declares a positive final owned_object_count. When a time-advancing scenario has no positive count requirement, accept complete lifecycle evidence that proves actor-origin creation and bounded motion even if valid target interaction or cleanup destroys the transient before final observation.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a02-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+              "attemptId": "a02-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":216,\"targetInteractionsDelta\":1}]}",
+              "observedAt": "2026-08-30T20:53:48.827Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a04-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+              "attemptId": "a04-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":360,\"targetInteractionsDelta\":1}]}",
+              "observedAt": "2026-08-30T21:59:44.857Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a06-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+              "attemptId": "a06-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"player_projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":120,\"targetInteractionsDelta\":1}]}",
+              "observedAt": "2026-08-30T22:08:48.328Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-24T02:43:38.000Z",
-      "updatedAt": "2026-08-29T21:36:59.864Z"
+      "updatedAt": "2026-08-30T22:13:28Z"
     },
     {
       "status": "active",
@@ -6647,6 +6740,189 @@
       "createdAt": "2026-08-29T21:36:59.864Z",
       "priorManifestDigest": "fc49fb3a03093fab3647d6c2885182a510e969254cd09b218194c4b068c6e0fc",
       "resultingManifestDigest": "465077dbf18a6918da817c62a6c744e73fee1e26825e420c64f08655251d5eb0"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t17-20260830-fix-cycle-1",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260830t195935706z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2"
+      },
+      "consultedManifestDigest": "465077dbf18a6918da817c62a6c744e73fee1e26825e420c64f08655251d5eb0",
+      "contextDigest": "c1bc018668eca7f4614a7d056a315528c2756f746cd1d441152bb0cfc1dd718f",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0007",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0024",
+        "KF-0025",
+        "KF-0026"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-discovery-c0-r1/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "The discovery candidate passed explicit manual gameplay QA under the existing recurring lifecycle guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r1/a02-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The attempt was stopped by the campaign tool's incorrect pre-request provider-budget reservation and never reached the provider, so it does not inform mechanic generation."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The attempt was stopped by the campaign tool's incorrect pre-request provider-budget reservation and never reached the provider, so it does not inform mechanic generation."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r1/a03-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r1/a04-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The generic assembly failure came from campaign browser-process interference repaired outside Sparkline fix cycles and provides no reusable mechanic-generation evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r1/a05-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The generic assembly failure came from campaign browser-process interference repaired outside Sparkline fix cycles and provides no reusable mechanic-generation evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r1/a06-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The generic assembly failure came from campaign browser-process interference repaired outside Sparkline fix cycles and provides no reusable mechanic-generation evidence."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-isolation-source-fixture-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The source fixture referenced private state absent from the actual contract, so the capability-incompatible diagnostic cannot isolate source-provider behavior."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a02-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "The source created at actor origin, traveled, interacted with the target, and destroyed the transient, but the evaluator imposed final liveness on a scenario without a positive owned-object-count assertion."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a03-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a04-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "A second independent source completed actor-origin creation, travel, target interaction, and cleanup, then failed only because a separate cleanup scenario imposed progress liveness."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a05-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "This actual-provider repeatability candidate passed explicit manual gameplay QA."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a06-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0003",
+            "KF-0008"
+          ],
+          "rationale": "A third independent source completed actor-origin creation, travel, target interaction, and cleanup, confirming that liveness must be selected only by a positive count in the same scenario."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0003",
+          "expectedRevision": 2,
+          "confidence": "confirmed",
+          "reason": "Three independent actual-provider repeatability failures reproduce the scenario-local liveness defect while satisfying creation, actor origin, motion, target interaction, and cleanup.",
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a02-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+              "attemptId": "a02-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":216,\"targetInteractionsDelta\":1}]}",
+              "observedAt": "2026-08-30T20:53:48.827Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a04-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+              "attemptId": "a04-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":360,\"targetInteractionsDelta\":1}]}",
+              "observedAt": "2026-08-30T21:59:44.857Z"
+            },
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2/a06-baseline",
+              "campaignRunId": "p09-t17-projectile-proof-loop-20260830t195935706z-repeatability-c0-r2",
+              "attemptId": "a06-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"player_projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":120,\"targetInteractionsDelta\":1}]}",
+              "observedAt": "2026-08-30T22:08:48.328Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-08-30T22:13:28Z",
+      "priorManifestDigest": "465077dbf18a6918da817c62a6c744e73fee1e26825e420c64f08655251d5eb0",
+      "resultingManifestDigest": "d430cb14c2b072fc6aa11839123fd5fb0efb9fe9ad452fa796451d25864f47a4"
     }
   ]
 }

@@ -819,22 +819,10 @@ export function createGeneratedMechanicExternalObservations(
             observation.operator !== "at_most" &&
             observation.value > 0
         );
-        const requiresOwnedObjectCleanup = scenario.observations.some(
-          (observation) =>
-            observation.kind === "owned_object_count" &&
-            contract.ownedObjects.some(
-              ({ id }) => id === observation.archetypeId
-            ) &&
-            (observation.operator === "equals" ||
-              observation.operator === "at_most") &&
-            observation.value === 0
-        );
         const lifecycleKind = observesLifecycleAfterAction
-          ? requiresOwnedObjectCleanup
-            ? ("owned_object_lifecycle_after_action" as const)
-            : requiresPositiveOwnedObjectCount || cleanupScenarios.length > 0
-              ? ("owned_object_lifecycle_progress_after_action" as const)
-              : ("owned_object_lifecycle_after_action" as const)
+          ? requiresPositiveOwnedObjectCount
+            ? ("owned_object_lifecycle_progress_after_action" as const)
+            : ("owned_object_lifecycle_after_action" as const)
           : requiresPositiveOwnedObjectCount
             ? ("owned_object_creation_after_action" as const)
             : ("owned_object_lifecycle_unchanged_after_action" as const);
