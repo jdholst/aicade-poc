@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 33,
-  "updatedAt": "2026-08-31T20:56:17Z",
+  "revision": 34,
+  "updatedAt": "2026-08-31T22:05:44Z",
   "entries": [
     {
       "status": "active",
@@ -2906,6 +2906,47 @@
       "amendments": [],
       "createdAt": "2026-08-29T06:30:02Z",
       "updatedAt": "2026-08-29T06:30:02Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Owned-object lifecycle evidence does not require motion",
+      "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "routing",
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation",
+          "handoff",
+          "runtime_health"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0027",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_health",
+          "quality": "actual_submission",
+          "outcome": "semantic_runtime_failure",
+          "summary": "Actual planning produced a truthful autonomous seeded hazard spawner with bounded owned objects and object_create, object_destroy, random_next, and time_schedule authority but no motion. Routing returned independent_visible_effect_unavailable before contract or source calls, so the external probe observed no accepted artifact or lifecycle.",
+          "observedAt": "2026-08-31T21:34:04.541Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:05:44Z",
+      "updatedAt": "2026-08-31T22:05:44Z"
     }
   ],
   "reconciliations": [
@@ -7230,6 +7271,95 @@
       "createdAt": "2026-08-31T20:56:17Z",
       "priorManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f",
       "resultingManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-2-20260831t220544z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3"
+      },
+      "consultedManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5",
+      "contextDigest": "48db95132aa6c1a2d86966961ad00b228bf4a58fc3212639345558150ac31945",
+      "consultedFindingIds": [
+        "KF-0001",
+        "KF-0025"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-1",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "The verified autonomous-install fix preserved the existing KF-0025 contract and prompt guidance for moving owned objects. The next actual attempt failed before contract and source generation, so this evidence does not broaden that moving-object scheduling rule."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r2/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This provider failure came from the operator sourcing .env.local before .env, which overwrote the configured keyword. The environment files and campaign propagation were valid, the invalid campaign and attributed planning usage were repaired, and the corrected retry reached planning, so this attempt does not add reusable evidence to KF-0001."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The corrected actual planning call truthfully produced an autonomous bounded hazard lifecycle with object_create, object_destroy, random_next, and time_schedule but no motion. Routing rejected only the absent object_motion_write capability, proving that the retained independent-effect gate incorrectly required invented travel before contract and source generation."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Owned-object lifecycle evidence does not require motion",
+            "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "routing",
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation",
+                "handoff",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0027",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_health",
+                "quality": "actual_submission",
+                "outcome": "semantic_runtime_failure",
+                "summary": "Actual planning produced a truthful autonomous seeded hazard spawner with bounded owned objects and object_create, object_destroy, random_next, and time_schedule authority but no motion. Routing returned independent_visible_effect_unavailable before contract or source calls, so the external probe observed no accepted artifact or lifecycle.",
+                "observedAt": "2026-08-31T21:34:04.541Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:05:44Z",
+            "updatedAt": "2026-08-31T22:05:44Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T22:05:44Z",
+      "priorManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5",
+      "resultingManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c"
     }
   ]
 }

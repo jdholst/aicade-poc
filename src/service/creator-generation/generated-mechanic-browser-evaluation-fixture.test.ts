@@ -520,7 +520,6 @@ describe("generated mechanic browser evaluation fixture", () => {
       connections: [],
       ownedObjects: ["hazard"],
       requiredCapabilities: [
-        "object_motion_write",
         "object_create",
         "object_destroy",
       ],
@@ -536,7 +535,6 @@ describe("generated mechanic browser evaluation fixture", () => {
       ownedObjects: [{ id: "hazard", objectKind: "hazard", maximumInstances: 2 }],
       lifecycle: { ...baseContract.lifecycle, callbacks: ["install"] },
       capabilities: [
-        "object_motion_write",
         "object_create",
         "object_destroy",
       ],
@@ -808,7 +806,7 @@ describe("generated mechanic browser evaluation fixture", () => {
           contract,
           gameSpec
         )
-    ).toThrow(/object_motion_write/);
+    ).toThrow(/bound-entity motion or a mechanic-owned create\/destroy lifecycle/);
   });
 
   it("observes only bindings that resolve exact routed-intent entities", () => {

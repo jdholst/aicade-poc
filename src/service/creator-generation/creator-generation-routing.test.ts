@@ -148,6 +148,42 @@ describe("createCreatorGenerationRouting", () => {
     });
   });
 
+  it("admits an autonomous owned-object lifecycle without invented motion", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const result = createCreatorGenerationRouting({
+      availableCapabilities: TOP_DOWN_CREATOR_GENERATION_HOST_CAPABILITY_IDS,
+      baseGameSpec: gameSpec,
+      generationRunId: "generation_run_stationary_hazard_spawner",
+      intent: createIntent({
+        actors: [gameSpec.entities[0]!.role],
+        behaviors: ["spawn_seeded_stationary_hazards"],
+        connections: [],
+        ownedObjects: ["spawned_hazard"],
+        outcomes: ["hazards_spawn_and_expire_over_time"],
+        references: [{ kind: "entity", id: gameSpec.entities[0]!.id }],
+        requiredCapabilities: [
+          "object_create",
+          "object_destroy",
+          "random_next",
+          "time_schedule",
+        ],
+        triggers: ["install"],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      kind: "generated_mechanic",
+      generationRunId: "generation_run_stationary_hazard_spawner",
+      intent: {
+        triggers: ["install"],
+        connections: [],
+        requiredCapabilities: expect.not.arrayContaining([
+          "object_motion_write",
+        ]),
+      },
+    });
+  });
+
   it("does not normalize multiple action-specific logical triggers", () => {
     const result = createCreatorGenerationRouting({
       availableCapabilities: ["object_motion_write"],

@@ -2,7 +2,6 @@ import type { MechanicIntent } from "@/game-spec";
 
 const TRANSIENT_OWNED_OBJECT_LIFECYCLE_CAPABILITIES = [
   "object_create",
-  "object_motion_write",
   "object_destroy",
 ] as const;
 

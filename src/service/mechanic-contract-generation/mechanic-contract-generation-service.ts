@@ -448,7 +448,7 @@ function appendTransientLifetimeFinalCountIssues(
   const requiredCapabilities = new Set(intent.requiredCapabilities);
   if (
     intent.ownedObjects.length === 0 ||
-    !["object_create", "object_motion_write", "object_destroy"].every(
+    !["object_create", "object_destroy"].every(
       (capabilityId) => requiredCapabilities.has(capabilityId)
     )
   ) {

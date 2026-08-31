@@ -143,16 +143,23 @@ export function validateGeneratedMechanicTopDownHostAdmission({
         "The retained top-down generated-mechanic host requires exactly one single-entity binding per routed intent entity reference and rejects supporting, duplicate, or otherwise non-routed bindings.",
     });
   }
-  const hasMotionEffect = contract.capabilities.includes("object_motion_write");
-  if (
-    !hasMotionEffect ||
-    !intent.requiredCapabilities.includes("object_motion_write")
-  ) {
+  const hasMotionEffect =
+    contract.capabilities.includes("object_motion_write") &&
+    intent.requiredCapabilities.includes("object_motion_write");
+  const hasOwnedObjectLifecycleEffect =
+    contract.ownedObjects.length > 0 &&
+    intent.ownedObjects.length > 0 &&
+    ["object_create", "object_destroy"].every(
+      (capabilityId) =>
+        contract.capabilities.includes(capabilityId) &&
+        intent.requiredCapabilities.includes(capabilityId)
+    );
+  if (!hasMotionEffect && !hasOwnedObjectLifecycleEffect) {
     issues.push({
       path: "contract.capabilities",
       code: "missing_independent_effect_capability",
       message:
-        "The retained top-down generated-mechanic host requires routed intent and contract capability object_motion_write so evaluator-authored evidence can prove an independently visible effect.",
+        "The retained top-down generated-mechanic host requires matching routed intent and contract authority for either bound-entity motion or a mechanic-owned create/destroy lifecycle.",
     });
   }
   const supportedIntentTriggers = new Set(["install", "logical_action"]);

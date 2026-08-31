@@ -516,6 +516,9 @@ async function runScenario(
   >();
   const causalExternalObservationBaselines = new Map<StableId, JsonValue>();
   const issues: GeneratedMechanicScenarioEvaluationEvidence["issues"][number][] = [];
+  const requiresOwnedObjectTravel = input.contract.capabilities.includes(
+    "object_motion_write"
+  );
   let runtime: GeneratedMechanicEvaluationRuntime | undefined;
 
   try {
@@ -589,7 +592,8 @@ async function runScenario(
               await observeExternal(
                 activeRuntime,
                 external.observation,
-                causalBaselines[index]
+                causalBaselines[index],
+                requiresOwnedObjectTravel
               )
             );
           }
@@ -617,7 +621,8 @@ async function runScenario(
             await observeExternal(
               activeRuntime,
               external.observation,
-              baseline
+              baseline,
+              requiresOwnedObjectTravel
             )
           );
         }
@@ -636,7 +641,8 @@ async function runScenario(
               : await observeExternal(
                   activeRuntime,
                   external.observation,
-                  undefined
+                  undefined,
+                  requiresOwnedObjectTravel
                 );
           if (!observed) {
             throw new Error(
@@ -772,7 +778,8 @@ function observesExternalAfterScenario(
 async function observeExternal(
   runtime: GeneratedMechanicEvaluationRuntime,
   observation: ExternalAcceptanceObservationAssertion,
-  baseline: JsonValue | undefined
+  baseline: JsonValue | undefined,
+  requiresOwnedObjectTravel: boolean
 ): Promise<Omit<ExternalObservationEvidence, "id" | "source">> {
   if (isOwnedObjectLifecycleObservation(observation)) {
     if (!runtime.readOwnedObjectActivity) {
@@ -830,7 +837,7 @@ async function observeExternal(
               (!("requireActorOrigin" in observation) ||
                 observation.requireActorOrigin !== true ||
                 actorOriginCreations === created) &&
-              simulatedDistanceTraveled > 0 &&
+              (!requiresOwnedObjectTravel || simulatedDistanceTraveled > 0) &&
               (!("requireTargetInteraction" in observation) ||
                 observation.requireTargetInteraction !== true ||
                 targetInteractions > 0)
@@ -838,7 +845,7 @@ async function observeExternal(
               (!("requireActorOrigin" in observation) ||
                 observation.requireActorOrigin !== true ||
                 actorOriginCreations === created) &&
-              simulatedDistanceTraveled > 0 &&
+              (!requiresOwnedObjectTravel || simulatedDistanceTraveled > 0) &&
               (!("requireTargetInteraction" in observation) ||
                 observation.requireTargetInteraction !== true ||
                 targetInteractions > 0) &&

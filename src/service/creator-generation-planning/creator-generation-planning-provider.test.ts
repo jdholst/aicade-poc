@@ -176,7 +176,7 @@ describe("OpenAI creator-generation planning provider", () => {
       '"supportedGeneratedTriggerIds": [\n    "install",\n    "logical_action"\n  ]'
     );
     expect(requestBody.instructions).toContain(
-      '"requiredIndependentEffectCapability": "object_motion_write"'
+      '"ownedObjectLifecycle": [\n      "object_create",\n      "object_destroy"\n    ]'
     );
     expect(requestBody.instructions).toContain(
       '"requiredInputConnection": "creator-controlled only: exactly one input connection whose port is an exact active gameSpec control action ID; autonomous install behavior has no connections"'
@@ -242,7 +242,10 @@ describe("OpenAI creator-generation planning provider", () => {
       "put its stable archetype token in mechanicIntent.ownedObjects"
     );
     expect(requestBody.instructions).toContain(
-      "object_create, object_motion_write, and object_destroy"
+      "include object_create and object_destroy in mechanicIntent.requiredCapabilities"
+    );
+    expect(requestBody.instructions).toContain(
+      "Include object_motion_write only when the accepted behavior actually moves the owned object"
     );
     expect(requestBody.instructions).toContain(
       "include object_read when the owned object's initial position or motion depends on a bound actor's live transform"

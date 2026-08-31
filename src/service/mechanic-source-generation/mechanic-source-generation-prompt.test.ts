@@ -747,6 +747,69 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
   });
 
+  it("does not invent travel while repairing a stationary owned-object lifecycle", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "evaluation.scenarios.transient.externalObservations.0",
+          code: "external_observation_failed",
+          message:
+            'Evaluator-authored observation 0 "owned_object_lifecycle_after_install" failed. Actual: {"deltas":[{"activeDelta":0,"actorOriginCreationsDelta":0,"createdDelta":1,"destroyedDelta":1,"simulatedDistanceTraveledDelta":0,"targetInteractionsDelta":0}]}.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      capabilities: ["object_create", "object_destroy", "time_schedule"],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract,
+      grant: createMechanicSourceGenerationGrant(
+        createGrant("object_create", "object_destroy", "time_schedule")
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "Because object_motion_write is absent, travel is not acceptance evidence"
+    );
+    expect(prompt).not.toContain(
+      "simulatedDistanceTraveledDelta must be positive through finite nonzero owned-object motion"
+    );
+    expect(prompt).not.toContain(
+      "preserve bounded travel and target interaction while the object remains active"
+    );
+  });
+
   it("turns active owned-object progress failures into post-action lifecycle guidance", () => {
     const intent = createIntent();
     const repair = {

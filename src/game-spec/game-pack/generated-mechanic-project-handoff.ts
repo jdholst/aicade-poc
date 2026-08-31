@@ -3639,6 +3639,7 @@ function externalObservationEvidenceActualMatchesAssertion({
   const expectedArchetypeIds = contract.ownedObjects.map(({ id }) => id);
   const requiresTargetInteraction =
     scenarioRequiresTargetInteractionForHandoff(contract, scenario);
+  const requiresTravel = contract.capabilities.includes("object_motion_write");
   const requiresActorOrigin =
     (contract.intentLineage?.actors.length ?? 0) > 0 &&
     (contract.intentLineage?.spatialRules.length ?? 0) > 0 &&
@@ -3694,12 +3695,12 @@ function externalObservationEvidenceActualMatchesAssertion({
           created > 0 &&
           active === created - destroyed &&
           (!requiresActorOrigin || actorOriginCreations === created) &&
-          traveled > 0 &&
+          (!requiresTravel || traveled > 0) &&
           (!requiresTargetInteraction || targetInteractions > 0)
       : entry.active === baseline.active &&
           created > 0 &&
           (!requiresActorOrigin || actorOriginCreations === created) &&
-          traveled > 0 &&
+          (!requiresTravel || traveled > 0) &&
           destroyed >= created &&
           (!requiresTargetInteraction || targetInteractions > 0);
   });
@@ -3758,7 +3759,7 @@ function requiresOwnedObjectLifecycleForHandoff(
   const capabilities = new Set(contract.capabilities);
   return (
     contract.ownedObjects.length > 0 &&
-    ["object_create", "object_motion_write", "object_destroy"].every(
+    ["object_create", "object_destroy"].every(
       (capabilityId) => capabilities.has(capabilityId)
     )
   );

@@ -144,8 +144,8 @@ export function createCreatorGenerationRouting({
       evidence: {
         stage: "routing" as const,
         code: "capability_gap" as const,
-        missingCapabilities: generatedHostIntent.requiredCapabilities.includes(
-          "object_motion_write"
+        missingCapabilities: hasGeneratedHostIndependentEffect(
+          generatedHostIntent
         )
           ? []
           : ["object_motion_write"],
@@ -219,12 +219,12 @@ function getGeneratedHostIntentIssues(
   baseGameSpec: TopDownGameSpec
 ): readonly CreatorGenerationRoutingIssue[] {
   const issues: CreatorGenerationRoutingIssue[] = [];
-  if (!intent.requiredCapabilities.includes("object_motion_write")) {
+  if (!hasGeneratedHostIndependentEffect(intent)) {
     issues.push({
       path: "intent.requiredCapabilities",
       code: "independent_visible_effect_unavailable",
       message:
-        "The current top-down generated-mechanic host accepts only intents whose requested behavior has an independently visible bound-entity motion effect.",
+        "The current top-down generated-mechanic host requires either an independently visible bound-entity motion effect or a bounded mechanic-owned create/destroy lifecycle.",
     });
   }
   if (!intent.references.some(({ kind }) => kind === "entity")) {
@@ -306,6 +306,16 @@ function getGeneratedHostIntentIssues(
     });
   }
   return freeze(issues);
+}
+
+function hasGeneratedHostIndependentEffect(intent: MechanicIntent): boolean {
+  return (
+    intent.requiredCapabilities.includes("object_motion_write") ||
+    (intent.ownedObjects.length > 0 &&
+      ["object_create", "object_destroy"].every((capabilityId) =>
+        intent.requiredCapabilities.includes(capabilityId)
+      ))
+  );
 }
 
 function createClarificationFailure(

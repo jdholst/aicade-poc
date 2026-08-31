@@ -145,9 +145,9 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "Advancing beyond a *_until deadline does not reset the stored deadline to its initial sentinel"
     );
     expect(prompt).toContain('"resourceBudgetProfile": "phase_9_fixed_budget"');
-    expect(prompt).toContain(
-      '"requiredIndependentEffectCapability": "object_motion_write"'
-    );
+    expect(prompt).toContain('"ownedObjectLifecycle": [');
+    expect(prompt).toContain('"object_create"');
+    expect(prompt).toContain('"object_destroy"');
     expect(prompt).toContain('"requiredTrigger": "logical_action"');
     expect(prompt).toContain('"ownedObjects": true');
     expect(prompt).toContain('"id": "object_create"');
@@ -178,7 +178,7 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       '"routedActionConnection": "exactly one accepted intent input connection whose port is an exact active logical action"'
     );
     expect(prompt).toContain(
-      "evaluator-authored observations must instead prove owned-object creation, nonzero travel over simulated time"
+      "explicit cleanup, and nonzero travel only when object_motion_write is declared"
     );
     expect(prompt).toContain(
       "If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
@@ -196,7 +196,7 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "actor-origin lifecycle evidence"
     );
     expect(prompt).toContain(
-      "does not require the transient object_create, object_motion_write, and object_destroy lifecycle"
+      "does not require a mechanic-owned object_create and object_destroy lifecycle"
     );
     expect(prompt).not.toContain("declare no mechanic-owned objects");
     expect(prompt).toContain(

@@ -698,16 +698,19 @@ export function createGeneratedMechanicExternalObservations(
       "Top-down generated mechanic evaluation requires the exact trusted intent lineage stamped by contract generation."
     );
   }
-  if (!contract.capabilities.includes("object_motion_write")) {
+  const requiresTransientLifecycle =
+    requiresTransientOwnedObjectLifecycle(intent, contract);
+  if (
+    !contract.capabilities.includes("object_motion_write") &&
+    !requiresTransientLifecycle
+  ) {
     throw new TypeError(
-      "Top-down generated mechanic evaluation requires object_motion_write for independently visible evidence."
+      "Top-down generated mechanic evaluation requires bound-entity motion or a mechanic-owned create/destroy lifecycle for independently visible evidence."
     );
   }
   const activeEntitiesById = new Map(
     gameSpec.entities.map((entity) => [entity.id, entity] as const)
   );
-  const requiresTransientLifecycle =
-    requiresTransientOwnedObjectLifecycle(intent, contract);
   const requiresActorOrigin =
     requiresTransientLifecycle &&
     intent.actors.length > 0 &&
@@ -917,11 +920,7 @@ function requiresTransientOwnedObjectLifecycle(
   return (
     intent.ownedObjects.length > 0 &&
     contract.ownedObjects.length > 0 &&
-    [
-      "object_create",
-      "object_motion_write",
-      "object_destroy",
-    ].every(
+    ["object_create", "object_destroy"].every(
       (capabilityId) =>
         requiredCapabilities.has(capabilityId) &&
         declaredCapabilities.has(capabilityId)

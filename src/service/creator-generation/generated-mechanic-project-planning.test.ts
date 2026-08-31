@@ -214,6 +214,59 @@ describe("generated mechanic project planning", () => {
     ).toEqual({ success: true, data: contract });
   });
 
+  it("admits a stationary autonomous owned-object lifecycle as independent evidence", () => {
+    const baseContract = createContract();
+    const intent: MechanicIntent = {
+      ...createIntent(),
+      triggers: ["install"],
+      connections: [],
+      ownedObjects: ["hazard"],
+      requiredCapabilities: [
+        "object_create",
+        "object_destroy",
+        "time_schedule",
+      ],
+    };
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        connections: [],
+        ownedObjects: ["hazard"],
+        requiredCapabilities: [
+          "object_create",
+          "object_destroy",
+          "time_schedule",
+        ],
+      },
+      behavior: { ...baseContract.behavior, triggers: ["install"] },
+      lifecycle: {
+        ...baseContract.lifecycle,
+        callbacks: ["install", "scheduled"],
+      },
+      ownedObjects: [
+        { id: "hazard", objectKind: "hazard", maximumInstances: 4 },
+      ],
+      capabilities: ["object_create", "object_destroy", "time_schedule"],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 4,
+      },
+      scenarios: baseContract.scenarios.map((scenario) => ({
+        ...scenario,
+        steps: [{ kind: "advance_time" as const, milliseconds: 500 }],
+      })),
+    };
+
+    expect(
+      validateGeneratedMechanicTopDownHostAdmission({
+        contract,
+        catalog: createGeneratedMechanicReferenceCatalog(createBaseGameSpec()),
+        intent,
+      })
+    ).toEqual({ success: true, data: contract });
+  });
+
   it.each([
     { caseName: "missing", connections: [] },
     {

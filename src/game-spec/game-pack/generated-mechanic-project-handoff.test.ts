@@ -287,7 +287,9 @@ describe("generated mechanic project handoff", () => {
         { id: "projectile", objectKind: "projectile", maximumInstances: 1 },
       ],
       capabilities: [
-        ...context.contract.capabilities,
+        ...context.contract.capabilities.filter(
+          (capabilityId) => capabilityId !== "object_motion_write"
+        ),
         "object_read",
         "object_create",
         "object_destroy",
@@ -483,14 +485,10 @@ describe("generated mechanic project handoff", () => {
             if (scenarioId === "projectile_lifecycle") {
               activity.active = 0;
               activity.destroyed = 1;
-              activity.simulatedDistanceTraveled = 12;
               activity.targetInteractions = 1;
-            } else if (scenarioId === "projectile_progress") {
-              activity.simulatedDistanceTraveled = 12;
             } else if (scenarioId === "projectile_unasserted_cleanup") {
               activity.active = 0;
               activity.destroyed = 1;
-              activity.simulatedDistanceTraveled = 12;
             }
           },
           dispose: async () => undefined,
