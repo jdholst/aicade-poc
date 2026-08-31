@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 30,
-  "updatedAt": "2026-08-30T22:27:14Z",
+  "revision": 31,
+  "updatedAt": "2026-08-31T01:42:44.000Z",
   "entries": [
     {
       "status": "active",
@@ -6971,6 +6971,173 @@
       "createdAt": "2026-08-30T22:27:14Z",
       "priorManifestDigest": "d430cb14c2b072fc6aa11839123fd5fb0efb9fe9ad452fa796451d25864f47a4",
       "resultingManifestDigest": "24db3f6f403733b9e5fae8149b299877cd89f4e1ffd59455cd4a4e82e9c6ab8d"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t17-20260830t225237326z-fix-cycle-1",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t17-projectile-proof-loop-20260830t225237326z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1"
+      },
+      "consultedManifestDigest": "24db3f6f403733b9e5fae8149b299877cd89f4e1ffd59455cd4a4e82e9c6ab8d",
+      "contextDigest": "c8ce49f7234038cf1b5661b3d7bfecbcec88262a0e752e9dbb3712cb07d6f015",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-discovery-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approved discovery candidate proves that revision's gameplay result but does not isolate the later non-player materialization defect."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approved short-lived projectile is valid cohort evidence, but its lifetime observation does not diagnose the later missing runtime handle."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a02-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to repeatability proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a03-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to repeatability proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a06-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to repeatability proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a05-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to repeatability proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a04-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to repeatability proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a07-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0018"
+          ],
+          "rationale": "The rejected false final state after the mechanic wrote true is another instance of post-action observations contradicting reachable accepted writes."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a09-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to repeatability proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a08-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approved slow projectile records gameplay variation, but speed alone does not diagnose the later missing runtime handle."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-repeatability-c0-r1/a10-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to repeatability proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to variation proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a02-plain_paraphrase",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to variation proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a03-constraints_first",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to variation proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a05-compact",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to variation proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a06-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approval contributes to variation proof but does not distinguish the materialization failure or add reusable guidance."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a04-outcomes_first",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The approved candidate's rapid-fire crash note is retained for later resource-budget investigation, but no structured budget-limit evidence links it to this materialization fix."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a08-constraints_first",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0012"
+          ],
+          "rationale": "Terminal runtime evidence shows a bound non-player entity lacked a usable Phaser handle, directly applying the existing active-mechanic materialization rule."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a07-plain_paraphrase",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0012",
+            "KF-0022"
+          ],
+          "rationale": "Terminal structured runtime evidence overrides the stale repaired contract text and shows the same missing bound-entity Phaser handle."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c0-r1/a09-outcomes_first",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The callback-local checkDelay scope error is a separate single-attempt source-generation cluster and does not justify broad guidance or inclusion in this fix."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "Existing KF-0012 already states the mechanic-general materialization rule used by this fix, KF-0022 governs the stale-versus-terminal evidence conflict, and the remaining evidence does not require compiled guidance changes.",
+      "createdAt": "2026-08-31T01:42:44.000Z",
+      "priorManifestDigest": "24db3f6f403733b9e5fae8149b299877cd89f4e1ffd59455cd4a4e82e9c6ab8d",
+      "resultingManifestDigest": "788ee89f504da715bdc86e2bedf4ea828dc088a54418bb45bc64a0d2e903bc73"
     }
   ]
 }

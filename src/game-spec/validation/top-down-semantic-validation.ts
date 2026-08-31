@@ -192,6 +192,19 @@ function addUnusedModuleIssues(
   for (const entity of spec.entities) {
     if (
       entity.role !== "player" &&
+      context.spawnZoneEntityIds.has(entity.id) &&
+      !context.activeMechanicEntityIds.has(entity.id)
+    ) {
+      issues.push({
+        path: `entities.${entity.id}`,
+        message:
+          "A spawn zone does not materialize a non-player entity. Reference it from an allowed active mechanic.",
+      });
+      continue;
+    }
+
+    if (
+      entity.role !== "player" &&
       !context.spawnZoneEntityIds.has(entity.id) &&
       !context.activeMechanicEntityIds.has(entity.id)
     ) {
