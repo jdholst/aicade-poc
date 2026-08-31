@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 31,
-  "updatedAt": "2026-08-31T01:42:44.000Z",
+  "revision": 32,
+  "updatedAt": "2026-08-31T04:52:49Z",
   "entries": [
     {
       "status": "active",
@@ -7138,6 +7138,70 @@
       "createdAt": "2026-08-31T01:42:44.000Z",
       "priorManifestDigest": "24db3f6f403733b9e5fae8149b299877cd89f4e1ffd59455cd4a4e82e9c6ab8d",
       "resultingManifestDigest": "788ee89f504da715bdc86e2bedf4ea828dc088a54418bb45bc64a0d2e903bc73"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t17-20260831-conclusion",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t17-projectile-proof-loop-20260830t225237326z"
+      },
+      "consultedManifestDigest": "788ee89f504da715bdc86e2bedf4ea828dc088a54418bb45bc64a0d2e903bc73",
+      "contextDigest": "1dbb0ae2250189a9540504ebf6847ee61e73ffc2d659db553037d1540ba2be99",
+      "consultedFindingIds": [
+        "KF-0006",
+        "KF-0012",
+        "KF-0019",
+        "KF-0022"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z/fix-cycle-1",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0012",
+            "KF-0022"
+          ],
+          "rationale": "The verified fix applied the existing mechanic-general active-mechanic materialization rule, preserved terminal structured runtime evidence as authoritative, and enabled the resumed variation cohort to achieve proof."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c1-r2/a07-plain_paraphrase",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0012"
+          ],
+          "rationale": "The approved actual-provider candidate confirms that the repaired planning path materialized the required live target and produced a playable projectile mechanic under the plain-paraphrase prompt."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c1-r2/a08-constraints_first",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0012"
+          ],
+          "rationale": "The approved actual-provider candidate independently confirms live target materialization and playable projectile behavior under the constraints-first prompt."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c1-r2/a09-outcomes_first",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0012"
+          ],
+          "rationale": "The approved actual-provider candidate independently confirms live target materialization and playable projectile behavior under the outcomes-first prompt."
+        },
+        {
+          "evidenceId": "p09-t17-projectile-proof-loop-20260830t225237326z-variation-c1-r2/a10-compact",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0012"
+          ],
+          "rationale": "The approved actual-provider candidate independently confirms live target materialization and playable projectile behavior under the compact prompt, completing the ten-slot variation cohort."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "KF-0012 already contains the durable mechanic-general materialization guidance verified by the fix and four final approvals. KF-0022 correctly governed terminal evidence precedence, while KF-0006 and KF-0019 were consulted but require no change because the resumed cohort produced no broker-closure or callback-budget failures.",
+      "createdAt": "2026-08-31T04:52:49Z",
+      "priorManifestDigest": "788ee89f504da715bdc86e2bedf4ea828dc088a54418bb45bc64a0d2e903bc73",
+      "resultingManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f"
     }
   ]
 }
