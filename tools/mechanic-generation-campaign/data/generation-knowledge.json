@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 39,
-  "updatedAt": "2026-08-31T23:30:00Z",
+  "revision": 40,
+  "updatedAt": "2026-08-31T23:41:21Z",
   "entries": [
     {
       "status": "active",
@@ -3217,6 +3217,41 @@
       "amendments": [],
       "createdAt": "2026-08-31T23:30:00Z",
       "updatedAt": "2026-08-31T23:30:00Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Contract repairs need one closed invariant checklist",
+      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported path without changing unrelated checklist items.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0034",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Initial contract generation omitted state_write despite changed final private state. Repair attempt 2 restored state_write but inserted dispatch_action into an autonomous install scenario. Repair attempt 3 removed that action but dropped required object_read. Repair attempt 4 restored object_read but reintroduced dispatch_action, exhausting contract repair.",
+          "observedAt": "2026-08-31T23:34:57.123Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:41:21Z",
+      "updatedAt": "2026-08-31T23:41:21Z"
     }
   ],
   "reconciliations": [
@@ -8166,6 +8201,96 @@
       "createdAt": "2026-08-31T23:30:00Z",
       "priorManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475",
       "resultingManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-8-20260831t234121z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-8",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9"
+      },
+      "consultedManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd",
+      "contextDigest": "d69cde39418650eb221d94212d01556208f9cac8e85a54a1a0ab1dda40229678",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0033"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-7",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0033"
+          ],
+          "rationale": "The current run reached four actual contract-provider calls without repeating the prior HTTP schema rejection, confirming that the source-guidance transport field now crosses both strict boundaries."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0034"
+          ],
+          "rationale": "Successive contract repairs alternated among required state_write, autonomous scenario trigger mode, and required object_read. Each repair corrected its current issue but broke a different invariant, showing that repair guidance must present those independent manifests as one closed pre-return checklist."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract repairs need one closed invariant checklist",
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported path without changing unrelated checklist items.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0034",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9",
+                "attemptId": "a01-baseline",
+                "stage": "contract_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Initial contract generation omitted state_write despite changed final private state. Repair attempt 2 restored state_write but inserted dispatch_action into an autonomous install scenario. Repair attempt 3 removed that action but dropped required object_read. Repair attempt 4 restored object_read but reintroduced dispatch_action, exhausting contract repair.",
+                "observedAt": "2026-08-31T23:34:57.123Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:41:21Z",
+            "updatedAt": "2026-08-31T23:41:21Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:41:21Z",
+      "priorManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd",
+      "resultingManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e"
     }
   ]
 }

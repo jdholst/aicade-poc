@@ -108,6 +108,13 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       )}`
     );
     expect(prompt).toContain(
+      `Exact required capability manifest JSON:\n${JSON.stringify(
+        ["object_read", "object_motion_write"],
+        null,
+        2
+      )}`
+    );
+    expect(prompt).toContain(
       "Copy every trigger and outcome token verbatim into behavior.triggers and behavior.outcomes"
     );
     expect(prompt).toContain(
@@ -118,6 +125,9 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "Replace contract.bindings with exactly one binding for each entry in the exact required binding-reference manifest"
+    );
+    expect(prompt).toContain(
+      "Copy every exact capability from the required capability manifest into contract.capabilities on every initial and repair attempt"
     );
     expect(prompt).toContain('"id": "state_write"');
     expect(prompt).toContain('"kind": "stable_id"');
@@ -279,6 +289,72 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "Do not add supporting, action, objective, asset, region, owned-object, duplicate, or otherwise non-routed bindings"
     );
+    expect(prompt).toContain(
+      "Before returning any repair, recheck the required capability manifest, mandatory lifecycle callbacks, scenario trigger mode, and state-write obligations as one closed checklist"
+    );
+  });
+
+  it("keeps autonomous repair aligned with required capabilities and state writes", () => {
+    const autonomousIntent: MechanicIntent = {
+      ...intent,
+      triggers: ["install"],
+      requiredCapabilities: ["object_read", "object_create", "state_write"],
+    };
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_contract_3",
+      issues: [
+        {
+          path: "scenarios.0.steps.0.kind",
+          code: "contradiction",
+          message:
+            'Scenario action dispatch requires lifecycle callback "logical_action".',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent: autonomousIntent,
+      resolution: { ...resolution, intentId: autonomousIntent.id },
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["move_up"],
+        entity: ["player_one"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 4,
+        kind: "repair",
+        candidateArtifactId: "generation_run_contract_contract_repair_4",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      'Exact required capability manifest JSON:\n[\n  "object_read",\n  "object_create",\n  "state_write"\n]'
+    );
+    expect(prompt).toContain(
+      "For an autonomous install intent, every scenario must omit dispatch_action and the contract must not add logical_action"
+    );
+    expect(prompt).toContain(
+      "When a final state_equals differs from setup or initial state, retain state_write and preserve the asserted final value"
+    );
+    expect(prompt).toContain(
+      "When contradiction reports a missing intent-required capability, restore that exact capability without changing scenario steps or lifecycle callbacks"
+    );
   });
 
   it("tells contract repair to make post-lifetime owned-object counts zero", () => {
@@ -382,7 +458,7 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
 
     expect(prompt).toContain(JSON.stringify(repair, null, 2));
     expect(prompt).toContain(
-      "When source-use validation reports unused_capability, remove that exact capability declaration unless an accepted requirement genuinely needs it"
+      "When source-use validation reports unused_capability, remove that exact capability declaration only when it is absent from the required capability manifest"
     );
     expect(prompt).toContain(
       "Never add a meaningless capability call merely to make an unused grant appear used"

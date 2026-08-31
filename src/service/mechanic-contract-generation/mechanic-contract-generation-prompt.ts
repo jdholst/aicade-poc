@@ -84,8 +84,12 @@ export function createMechanicContractGenerationSystemPrompt({
       ? (["logical_action"] as const)
       : []),
   ];
-  const attemptGuidance = createContractAttemptGuidance(generationAttempt);
+  const requiredCapabilityIds = [...new Set(intent.requiredCapabilities)];
   const usesLogicalAction = intent.triggers.includes("logical_action");
+  const attemptGuidance = createContractAttemptGuidance(
+    generationAttempt,
+    usesLogicalAction
+  );
 
   return `
 You are producing the validated pre-implementation contract for one generated game mechanic.
@@ -109,6 +113,9 @@ ${JSON.stringify(mandatoryContractLifecycleCallbacks, null, 2)}
 
 Exact required contract binding references JSON:
 ${JSON.stringify(requiredBindingReferences, null, 2)}
+
+Exact required capability manifest JSON:
+${JSON.stringify(requiredCapabilityIds, null, 2)}
 
 Accepted generic generation evidence JSON:
 ${JSON.stringify(acceptedGenerationEvidence, null, 2)}
@@ -175,11 +182,13 @@ Contract rules:
 - Copy the exact empty ports array into contract.ports on every initial and repair attempt. Do not declare input ports, output ports, or port payloads for this retained host; the trusted logical-action connection is intent metadata, not a mechanic port.
 - Copy every exact mandatory lifecycle callback into contract.lifecycle.callbacks on every initial and repair attempt. The array must include install first and must include logical_action when it appears in the manifest. Add scheduled only when accepted one-shot timing behavior uses time_schedule; do not add gameplay_event for this retained host.
 - Replace contract.bindings with exactly one binding for each entry in the exact required binding-reference manifest. Each binding must copy that entry's referenceKind, referenceId, and cardinality literally and add only one unique stable binding id. Do not add supporting, action, objective, asset, region, owned-object, duplicate, or otherwise non-routed bindings.
+- Copy every exact capability from the required capability manifest into contract.capabilities on every initial and repair attempt. Never remove one while correcting an unrelated issue. Additional capabilities remain permitted only when accepted behavior genuinely needs them and the admitted primitive capability documentation includes them.
 - Declare only capabilities needed to express the contract, chosen from the admitted primitive capability documentation.
 - Use only the restricted config declarations above for configuration and port payloads.
 - For every accepted intent configuration entry, declare an object field with the exact same key and set its DSL default to the exact accepted scalar value so Final Game Spec materialization cannot substitute it.
 - Every privateState initialValue and every scenario state setup or state_equals value must match the exact declared private-state value type above. For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker.
 - Scenario setup is evaluated before the install callback or any generated source runs. Every state_equals setup assertion must use the exact initialValue of its matching privateState declaration; setup cannot assume an install-time mutation.
+- When a final state_equals differs from setup or initial state, retain state_write and preserve the asserted final value. Do not repair another issue by dropping state_write, deleting that observation, or changing the final value back to its setup value.
 - A single advance_time step first moves the simulation clock to that step's endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is not due until a later advance_time step. To prove repeated scheduled behavior, list one separate advance_time step for each intended recurrence instead of combining many intervals into one coarse step.
 - Exact state_equals counters must include install-time writes and only the scheduled callbacks reachable from the listed steps. For an install callback that increments once and schedules one positive-delay recurring callback, N separate interval-sized advance_time steps reach exactly N additional callback increments; one coarse N-interval step reaches only the first scheduled increment.
 - After an accepted action writes private state, every final state_equals observation must match that write or a later write caused by an explicit reachable callback. Never require the initial sentinel after an action that updates the state unless accepted behavior explicitly resets it before observations run.
@@ -203,12 +212,16 @@ Return one candidate Generated Mechanic Contract through the provided tool.
 }
 
 function createContractAttemptGuidance(
-  generationAttempt: MechanicContractGenerationPromptInput["generationAttempt"]
+  generationAttempt: MechanicContractGenerationPromptInput["generationAttempt"],
+  usesLogicalAction: boolean
 ): string {
   if (!generationAttempt) {
     return "";
   }
 
+  const scenarioTriggerRepairRule = usesLogicalAction
+    ? `- For a logical-action intent, every scenario must dispatch exactly one admitted action and lifecycle.callbacks must retain logical_action. Never replace the action path with autonomous install-only evidence.`
+    : `- For an autonomous install intent, every scenario must omit dispatch_action and the contract must not add logical_action. Replace an invented action step with the accepted install or scheduled time path; do not repair it by widening lifecycle callbacks.`;
   const repairGuidance = generationAttempt.repair
     ? `
 Exact Ticket 15 repair feedback JSON:
@@ -218,7 +231,11 @@ Repair rules:
 ${
   generationAttempt.repair.trigger === "stage_failure"
     ? `- Correct every exact path, code, and message in the stage-failure feedback. Preserve unrelated accepted contract decisions.
-- When source-use validation reports unused_capability, remove that exact capability declaration unless an accepted requirement genuinely needs it. If it is genuinely required, revise the contract so its lifecycle and scenarios make the required use unambiguous for source generation.
+- Before returning any repair, recheck the required capability manifest, mandatory lifecycle callbacks, scenario trigger mode, and state-write obligations as one closed checklist. A repair that fixes the reported path but breaks another checklist item is still invalid.
+- When source-use validation reports unused_capability, remove that exact capability declaration only when it is absent from the required capability manifest and no accepted requirement genuinely needs it. If it is required, retain it and revise the contract so its lifecycle and scenarios make the required use unambiguous for source generation.
+- When contradiction reports a missing intent-required capability, restore that exact capability without changing scenario steps or lifecycle callbacks. Recheck every other capability in the required manifest before returning.
+- When a final state_equals differs from setup or initial state, retain state_write and preserve the asserted final value. Add the missing state_write declaration without changing unrelated scenario steps, lifecycle callbacks, required capabilities, or observations.
+${scenarioTriggerRepairRule}
 - When host admission reports unsupported_runtime_ports, set contract.ports to [] exactly. Remove scenario observations, capability declarations, and lifecycle behavior that exist only to use those ports; do not replace them with another port or untrusted output path.
 - When invalid_value affects privateState or a scenario state value, replace every incompatible declaration, setup, and state_equals value for that state so all of them match its one exact declared value type. For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker.
 - For setup_observation_failed on state_equals, replace the setup value with the exact matching privateState initialValue because setup runs before install; do not change generated source to manufacture the setup state, and preserve unrelated scenario behavior.
