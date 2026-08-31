@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 36,
-  "updatedAt": "2026-08-31T22:51:38Z",
+  "revision": 37,
+  "updatedAt": "2026-08-31T23:04:37Z",
   "entries": [
     {
       "status": "active",
@@ -3109,6 +3109,42 @@
       "amendments": [],
       "createdAt": "2026-08-31T22:51:38Z",
       "updatedAt": "2026-08-31T22:51:38Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Contract-required capability use remains source-owned",
+      "guidance": "When source capability-use validation reports an unused grant, keep the failure at source repair if the accepted contract semantically requires that capability to be used. In particular, state_write is source-required when any scenario's final state_equals value differs from its setup value or the private state's initial value. Preserve the accepted contract and ask source repair to restore the required reachable call; route the failure to contract repair only when the unused authority is not required by accepted contract behavior.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0031",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted contract granted state_read and state_write and required spawn_sequence and active_spawned_hazards to change from setup values. Source repair attempt 2 removed all state calls, so both grants were reported unused. The pipeline assigned the failure to contract, invalidated the accepted contract, and spent contract attempts 2 through 4 on unrelated maximum, lifecycle, and string-length errors before repair exhaustion.",
+          "observedAt": "2026-08-31T22:57:16.134Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:04:37Z",
+      "updatedAt": "2026-08-31T23:04:37Z"
     }
   ],
   "reconciliations": [
@@ -7774,6 +7810,105 @@
       "createdAt": "2026-08-31T22:51:38Z",
       "priorManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6",
       "resultingManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-5-20260831t230437z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-5",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6"
+      },
+      "consultedManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1",
+      "contextDigest": "9b16aab9684bfede4e5a223cb12c7fcf26905d72bcfdb1785a8aa97fca083e81",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0012",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0030"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-4",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0022",
+            "KF-0030"
+          ],
+          "rationale": "The verified prior fix remains the governing first-playable boundary and corrected campaign summary precedence. The resumed attempt stopped earlier in source repair and its recorded failure correctly matched the final rejected contract repair rather than stale earlier evidence."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0031"
+          ],
+          "rationale": "The initial accepted contract required observable private-state changes and granted state_read and state_write. A source repair removed both calls, capability-use validation reported them unused, and the continuation pipeline classified the whole failure as contract-owned. That invalidated the accepted contract and exhausted three later contract repairs on unrelated drift instead of letting source repair restore the required calls."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract-required capability use remains source-owned",
+            "guidance": "When source capability-use validation reports an unused grant, keep the failure at source repair if the accepted contract semantically requires that capability to be used. In particular, state_write is source-required when any scenario's final state_equals value differs from its setup value or the private state's initial value. Preserve the accepted contract and ask source repair to restore the required reachable call; route the failure to contract repair only when the unused authority is not required by accepted contract behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0031",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The accepted contract granted state_read and state_write and required spawn_sequence and active_spawned_hazards to change from setup values. Source repair attempt 2 removed all state calls, so both grants were reported unused. The pipeline assigned the failure to contract, invalidated the accepted contract, and spent contract attempts 2 through 4 on unrelated maximum, lifecycle, and string-length errors before repair exhaustion.",
+                "observedAt": "2026-08-31T22:57:16.134Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:04:37Z",
+            "updatedAt": "2026-08-31T23:04:37Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:04:37Z",
+      "priorManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1",
+      "resultingManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d"
     }
   ]
 }

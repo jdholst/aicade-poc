@@ -340,7 +340,7 @@ export function createContinueGeneratedMechanicGeneration({
           await fixture.dispose();
         }
         if (!generated.success) {
-          return sourceFailure(generated);
+          return sourceFailure(generated, contractStage.contract);
         }
 
         const sourceArtifact = generated.data.artifact;
@@ -606,20 +606,62 @@ function sourceFailure(
   generated: Extract<
     GenerateBuildAndExecuteMechanicSourceResult,
     { success: false }
-  >
+  >,
+  contract: GeneratedMechanicContract
 ) {
-  const unusedGrantIsContractOwned = generated.evidence.issues.some(
+  const unusedCapabilityIssues = generated.evidence.issues.filter(
     ({ code }) => code === "unused_capability"
+  );
+  const missingContractRequiredUse = unusedCapabilityIssues.some((issue) =>
+    issueNamesContractRequiredCapability(issue, contract)
   );
   return {
     success: false as const,
     evidence: {
-      responsibleStage: unusedGrantIsContractOwned
+      responsibleStage:
+        unusedCapabilityIssues.length > 0 && !missingContractRequiredUse
         ? ("contract" as const)
         : ("source" as const),
       issues: generated.evidence.issues,
     },
   };
+}
+
+function issueNamesContractRequiredCapability(
+  issue: ArtifactScopedRepairIssue,
+  contract: GeneratedMechanicContract
+): boolean {
+  const capabilityIndexMatch = /^grant\.capabilities\.(\d+)$/.exec(issue.path);
+  const capabilityId = capabilityIndexMatch
+    ? contract.capabilities[Number(capabilityIndexMatch[1])]
+    : undefined;
+  return capabilityId === "state_write" && contractRequiresStateWrite(contract);
+}
+
+function contractRequiresStateWrite(
+  contract: GeneratedMechanicContract
+): boolean {
+  const initialValuesByStateId = new Map(
+    contract.privateState.map((state) => [state.id, state.initialValue])
+  );
+  return contract.scenarios.some((scenario) =>
+    scenario.observations.some((observation) => {
+      if (observation.kind !== "state_equals") {
+        return false;
+      }
+      const setupValue = scenario.setup.find(
+        (candidate) =>
+          candidate.kind === "state_equals" &&
+          candidate.stateId === observation.stateId
+      );
+      return !Object.is(
+        observation.value,
+        setupValue?.kind === "state_equals"
+          ? setupValue.value
+          : initialValuesByStateId.get(observation.stateId)
+      );
+    })
+  );
 }
 
 function foundationIssues(
