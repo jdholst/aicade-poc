@@ -48,15 +48,33 @@ function findExactGeneratedActionId(
     : undefined;
 }
 
+function hasExactAutonomousInstallContract(
+  project: PreparedGeneratedMechanicRuntimeProject
+): boolean {
+  const { contract } = project.dependency;
+  return (
+    contract.behavior.triggers.length === 1 &&
+    contract.behavior.triggers[0] === "install" &&
+    contract.lifecycle.callbacks.includes("install") &&
+    !contract.lifecycle.callbacks.includes("logical_action") &&
+    contract.scenarios.every((scenario) =>
+      scenario.steps.every((step) => step.kind !== "dispatch_action")
+    )
+  );
+}
+
 function authenticateGeneratedInputEvidence(
   evidence: RuntimeValidationEvidence,
   expectedActionId: string | undefined
 ): RuntimeValidationEvidence {
-  if (evidence.checkId !== "input_response" || evidence.status !== "passed") {
+  if (
+    evidence.checkId !== "input_response" ||
+    evidence.status !== "passed" ||
+    expectedActionId === undefined
+  ) {
     return evidence;
   }
   if (
-    expectedActionId &&
     evidence.evidence?.generatedActionId === expectedActionId &&
     evidence.evidence.generatedActionDispatched === true
   ) {
@@ -142,6 +160,9 @@ export function createGeneratedMechanicPhaserRuntimeController({
   }
   const browserWindow: Window & typeof globalThis = ownerWindow;
   const firstPlayableActionId = findExactGeneratedActionId(
+    generatedMechanicProject
+  );
+  const hasAutonomousFirstPlayableContract = hasExactAutonomousInstallContract(
     generatedMechanicProject
   );
 
@@ -563,17 +584,21 @@ export function createGeneratedMechanicPhaserRuntimeController({
     if (!request || request.commandSent || !commandsReady) {
       return;
     }
-    if (!firstPlayableActionId) {
+    if (!firstPlayableActionId && !hasAutonomousFirstPlayableContract) {
       failClosed(
         "The generated mechanic runtime project did not retain one exact logical action for first-playable validation."
       );
       return;
     }
     if (
-      postCommand({
-        type: "game-run-first-playable-checks",
-        actionId: firstPlayableActionId,
-      })
+      postCommand(
+        firstPlayableActionId
+          ? {
+              type: "game-run-first-playable-checks",
+              actionId: firstPlayableActionId,
+            }
+          : { type: "game-run-first-playable-checks" }
+      )
     ) {
       request.commandSent = true;
       clearFirstPlayableDeadline();

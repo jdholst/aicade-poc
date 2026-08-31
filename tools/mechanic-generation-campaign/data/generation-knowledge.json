@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 35,
-  "updatedAt": "2026-08-31T22:36:43Z",
+  "revision": 36,
+  "updatedAt": "2026-08-31T22:51:38Z",
   "entries": [
     {
       "status": "active",
@@ -2329,7 +2329,7 @@
         ]
       },
       "id": "KF-0022",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -2374,6 +2374,17 @@
           "outcome": "pipeline_failure",
           "summary": "The attempt summary retained a repaired literal-type error, but terminal structured outcome evaluation_scenario_evidence_mismatch identified the later deterministic handoff failure.",
           "observedAt": "2026-08-29T05:11:05.568Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The attempt classification and furthest stage correctly identified first_playable runtime failure, but its failure summary retained an earlier contract validation issue that had been repaired. The terminal generatedMechanicOutcome instead recorded that the runtime project rejected the autonomous mechanic for lacking a logical action.",
+          "observedAt": "2026-08-31T22:41:48.232Z"
         }
       ],
       "amendments": [
@@ -2456,10 +2467,45 @@
               "observedAt": "2026-08-29T05:11:05.568Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-08-31T22:51:38Z",
+          "reason": "A new actual-provider run independently reproduced stale repaired-issue summarization while terminal structured first-playable evidence identified the later runtime failure.",
+          "previous": {
+            "status": "active",
+            "confidence": "confirmed",
+            "title": "Campaign summaries prefer terminal structured evidence",
+            "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage. When a repaired provider-stage issue and a later first-playable runtime failure coexist, preserve the repaired issue as history but report the terminal runtime receipt as the campaign failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The attempt classification and furthest stage correctly identified first_playable runtime failure, but its failure summary retained an earlier contract validation issue that had been repaired. The terminal generatedMechanicOutcome instead recorded that the runtime project rejected the autonomous mechanic for lacking a logical action.",
+              "observedAt": "2026-08-31T22:41:48.232Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T20:00:02Z",
-      "updatedAt": "2026-08-29T05:25:30Z"
+      "updatedAt": "2026-08-31T22:51:38Z"
     },
     {
       "status": "active",
@@ -3026,6 +3072,43 @@
       "amendments": [],
       "createdAt": "2026-08-31T22:36:43Z",
       "updatedAt": "2026-08-31T22:36:43Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Autonomous first-playable checks do not require a generated action",
+      "guidance": "When an accepted generated mechanic has the exact autonomous install contract shape, with install as its sole behavior trigger, no logical_action lifecycle callback, and no dispatch_action scenario steps, run first-playable checks without a generated action ID and accept ordinary trusted input-response evidence. Continue to require and authenticate one exact action for action-driven mechanics, and fail closed when an action-driven project loses or conflicts on that action.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_activation",
+          "first_playable",
+          "runtime_health"
+        ],
+        "classifications": [
+          "runtime_pipeline_failure"
+        ]
+      },
+      "id": "KF-0030",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The accepted actual-provider contract was autonomous: behavior trigger install, lifecycle callbacks install and scheduled, no connections, and no dispatch_action scenario steps. Contract repair, source generation, deterministic evaluation, and final Game Spec assembly succeeded, but first-playable boot failed because the controller required one logical action before sending a command the protocol already supports without actionId.",
+          "observedAt": "2026-08-31T22:41:48.232Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:51:38Z",
+      "updatedAt": "2026-08-31T22:51:38Z"
     }
   ],
   "reconciliations": [
@@ -7577,6 +7660,120 @@
       "createdAt": "2026-08-31T22:36:43Z",
       "priorManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c",
       "resultingManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-4-20260831t225138z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-4",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5"
+      },
+      "consultedManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6",
+      "contextDigest": "38528f07feba069dada2f0ef1f83e70666cfce293e4bb09fb3cf7ff0e83a99f9",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-3",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0028",
+            "KF-0029"
+          ],
+          "rationale": "The verified prior fix correctly separated seeded arena placement from actor-origin lineage and taught reachable recurring clock steps. The resumed actual-provider attempt passed contract repair, source generation, deterministic evaluation, and final Game Spec assembly, so those boundaries remain intact."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0022",
+            "KF-0030"
+          ],
+          "rationale": "The actual-provider autonomous install mechanic reached first-playable, where the generated Phaser controller rejected the absence of a logical action even though the protocol and contract admitted actionless first-playable checks. The campaign summary retained a repaired contract issue, while the terminal structured outcome recorded the later action requirement failure."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0022",
+          "expectedRevision": 3,
+          "confidence": "confirmed",
+          "reason": "A new actual-provider run independently reproduced stale repaired-issue summarization while terminal structured first-playable evidence identified the later runtime failure.",
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The attempt classification and furthest stage correctly identified first_playable runtime failure, but its failure summary retained an earlier contract validation issue that had been repaired. The terminal generatedMechanicOutcome instead recorded that the runtime project rejected the autonomous mechanic for lacking a logical action.",
+              "observedAt": "2026-08-31T22:41:48.232Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Autonomous first-playable checks do not require a generated action",
+            "guidance": "When an accepted generated mechanic has the exact autonomous install contract shape, with install as its sole behavior trigger, no logical_action lifecycle callback, and no dispatch_action scenario steps, run first-playable checks without a generated action ID and accept ordinary trusted input-response evidence. Continue to require and authenticate one exact action for action-driven mechanics, and fail closed when an action-driven project loses or conflicts on that action.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_activation",
+                "first_playable",
+                "runtime_health"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            },
+            "id": "KF-0030",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+                "attemptId": "a01-baseline",
+                "stage": "first_playable",
+                "quality": "actual_submission",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "The accepted actual-provider contract was autonomous: behavior trigger install, lifecycle callbacks install and scheduled, no connections, and no dispatch_action scenario steps. Contract repair, source generation, deterministic evaluation, and final Game Spec assembly succeeded, but first-playable boot failed because the controller required one logical action before sending a command the protocol already supports without actionId.",
+                "observedAt": "2026-08-31T22:41:48.232Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:51:38Z",
+            "updatedAt": "2026-08-31T22:51:38Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T22:51:38Z",
+      "priorManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6",
+      "resultingManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1"
     }
   ]
 }

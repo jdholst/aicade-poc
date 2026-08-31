@@ -206,6 +206,38 @@ describe("provider request resolution", () => {
     expect(summary).toBe("Latest source issue");
   });
 
+  it("prefers a structured terminal mechanic issue over repaired provider-stage issues", () => {
+    const summary = summarizeAttemptFailure(
+      {
+        status: "failed",
+        failureClass: "first-playable-failure",
+        artifactScopedRepair: {
+          attempts: [
+            {
+              status: "rejected",
+              issues: [{ message: "Repaired contract issue" }],
+            },
+            { status: "accepted" },
+          ],
+        },
+        metadata: {
+          generatedMechanicOutcome: {
+            status: "rejected",
+            stage: "first_playable",
+            issues: [
+              { message: "Terminal autonomous runtime failure" },
+              { message: "First-playable checks did not pass" },
+            ],
+          },
+        },
+      },
+      "generic terminal text",
+      { assertions: [] }
+    );
+
+    expect(summary).toBe("Terminal autonomous runtime failure");
+  });
+
   it("does not report a repaired source issue when the successful run stalls in the editor", () => {
     const summary = summarizeAttemptFailure(
       {
