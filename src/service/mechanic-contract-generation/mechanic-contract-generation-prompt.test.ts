@@ -190,10 +190,22 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "any time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated"
     );
     expect(prompt).toContain(
-      "retain object_read and make actor-relative creation explicit"
+      "retain object_read and preserve the exact rule in contract lineage"
     );
     expect(prompt).toContain(
       "actor-origin lifecycle evidence"
+    );
+    expect(prompt).toContain(
+      'Only the exact intent spatial rule "spawn_owned_object_at_actor_position" requires actor-origin lifecycle evidence'
+    );
+    expect(prompt).toContain(
+      "A single advance_time step first moves the simulation clock to that step's endpoint"
+    );
+    expect(prompt).toContain(
+      "A positive-delay callback scheduled during that dispatch is not due until a later advance_time step"
+    );
+    expect(prompt).toContain(
+      "Exact state_equals counters must include install-time writes and only the scheduled callbacks reachable from the listed steps"
     );
     expect(prompt).toContain(
       "does not require a mechanic-owned object_create and object_destroy lifecycle"

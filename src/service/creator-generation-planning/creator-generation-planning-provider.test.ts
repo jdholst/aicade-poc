@@ -299,6 +299,12 @@ describe("OpenAI creator-generation planning provider", () => {
     expect(requestBody.instructions).toContain(
       "use logical_action for that generated lifecycle and bind the exact active movement action through the input connection"
     );
+    expect(requestBody.instructions).toContain(
+      'Use the exact spatial rule "spawn_owned_object_at_actor_position" only when owned-object creation must use a bound actor\'s live position'
+    );
+    expect(requestBody.instructions).toContain(
+      "Arena, region, or seeded-position rules do not imply actor-origin creation"
+    );
     expect(catalog.map(({ mechanicType }: { mechanicType: string }) => mechanicType)).toEqual([
       "player_movement",
       "enemy_chase",

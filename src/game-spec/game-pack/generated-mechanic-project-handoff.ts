@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { JsonValue, StableId } from "../game-spec-schema";
 import { configDslValueMatches } from "@/game-spec/mechanics/generated-mechanic-contract";
 import { mechanicCapabilityGrantExactlyMatchesContract } from "@/game-spec/mechanics/mechanic-capability-registry";
+import { requiresOwnedObjectActorOrigin } from "@/game-spec/mechanics/mechanic-resolver";
 import type {
   GeneratedMechanicContract,
   GeneratedMechanicReferenceCatalog,
@@ -3642,7 +3643,8 @@ function externalObservationEvidenceActualMatchesAssertion({
   const requiresTravel = contract.capabilities.includes("object_motion_write");
   const requiresActorOrigin =
     (contract.intentLineage?.actors.length ?? 0) > 0 &&
-    (contract.intentLineage?.spatialRules.length ?? 0) > 0 &&
+    contract.intentLineage !== undefined &&
+    requiresOwnedObjectActorOrigin(contract.intentLineage) &&
     contract.capabilities.includes("object_read");
   const beforeEntries = ownedObjectActivityEntries(
     before,

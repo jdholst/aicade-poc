@@ -1,6 +1,7 @@
 import {
   GENERATED_MECHANIC_FIXED_STEP_INTERVAL_MILLISECONDS,
   TOP_DOWN_GENERATED_MECHANIC_EVALUATION_PROPERTY_IDS,
+  requiresOwnedObjectActorOrigin,
   type GeneratedMechanicContract,
   type MechanicCapabilityGrant,
   type MechanicIntent,
@@ -714,7 +715,7 @@ export function createGeneratedMechanicExternalObservations(
   const requiresActorOrigin =
     requiresTransientLifecycle &&
     intent.actors.length > 0 &&
-    intent.spatialRules.length > 0 &&
+    requiresOwnedObjectActorOrigin(intent) &&
     intent.requiredCapabilities.includes("object_read") &&
     contract.capabilities.includes("object_read");
   const evidenceRoles = new Set(

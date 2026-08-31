@@ -1,4 +1,7 @@
-import type { MechanicIntent } from "@/game-spec";
+import {
+  requiresOwnedObjectActorOrigin,
+  type MechanicIntent,
+} from "@/game-spec";
 
 const TRANSIENT_OWNED_OBJECT_LIFECYCLE_CAPABILITIES = [
   "object_create",
@@ -25,7 +28,7 @@ export function applyTopDownCreatorOwnedObjectRediscoveryPolicy(
   const requiresActorObservation =
     requiresTransientLifecycle &&
     intent.actors.length > 0 &&
-    intent.spatialRules.length > 0 &&
+    requiresOwnedObjectActorOrigin(intent) &&
     intent.references.some(({ kind }) => kind === "entity") &&
     !intent.requiredCapabilities.includes("object_read");
   if (!requiresRediscovery && !requiresActorObservation) {

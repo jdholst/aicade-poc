@@ -51,6 +51,15 @@ export type MechanicIntent = {
   ambiguities: readonly MechanicIntentAmbiguity[];
 };
 
+export const OWNED_OBJECT_ACTOR_ORIGIN_SPATIAL_RULE =
+  "spawn_owned_object_at_actor_position" as const;
+
+export function requiresOwnedObjectActorOrigin(
+  intent: Readonly<Pick<MechanicIntent, "spatialRules">>
+): boolean {
+  return intent.spatialRules.includes(OWNED_OBJECT_ACTOR_ORIGIN_SPATIAL_RULE);
+}
+
 export type BuiltInMechanicConfigurationField =
   | {
       key: StableId;

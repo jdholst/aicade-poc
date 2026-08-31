@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 34,
-  "updatedAt": "2026-08-31T22:05:44Z",
+  "revision": 35,
+  "updatedAt": "2026-08-31T22:36:43Z",
   "entries": [
     {
       "status": "active",
@@ -2947,6 +2947,85 @@
       "amendments": [],
       "createdAt": "2026-08-31T22:05:44Z",
       "updatedAt": "2026-08-31T22:05:44Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Actor-origin evidence requires explicit spatial lineage",
+      "guidance": "Require owned-object actor-origin evidence only when accepted intent uses the exact spatial rule spawn_owned_object_at_actor_position. Arena, region, obstacle-avoidance, and seeded-position rules do not imply actor-origin creation merely because the intent also has an actor or entity binding; do not inject object_read for those independent placement rules.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "planning",
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation",
+          "handoff",
+          "runtime_health"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0028",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The actual-provider intent used seeded arena placement rules and an entity binding but did not request actor-relative placement. Evaluator-authored lifecycle assertions nevertheless required actor origin. Generated hazards were created at seeded arena positions, yielding actorOriginCreationsDelta 0 despite successful creation and nonzero travel, and all source candidates were rejected.",
+          "observedAt": "2026-08-31T22:16:34.337Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:36:43Z",
+      "updatedAt": "2026-08-31T22:36:43Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Recurring schedule proofs require reachable clock steps",
+      "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0029",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual-provider contract scenarios expected spawn_order 1 after one interval even though install plus the due scheduled callback produced 2, and expected 6 after one coarse six-interval advance even though a positive-delay callback rescheduled at the endpoint was not reachable in that same step, producing 2. The repeated exact counter mismatches contributed to rejection across source repair attempts.",
+          "observedAt": "2026-08-31T22:16:34.337Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:36:43Z",
+      "updatedAt": "2026-08-31T22:36:43Z"
     }
   ],
   "reconciliations": [
@@ -7360,6 +7439,144 @@
       "createdAt": "2026-08-31T22:05:44Z",
       "priorManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5",
       "resultingManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-3-20260831t223643z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4"
+      },
+      "consultedManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c",
+      "contextDigest": "ccedcbca4030fee021ce8986aa916581709c72ed5904233003aa7a8e1e81bee9",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-2",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The verified prior fix remains the controlling boundary: owned-object lifecycle evidence is valid without invented motion, while motion evidence remains conditional on explicit object_motion_write authority. The current repair preserves that rule and narrows only the unrelated actor-origin inference."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0028",
+            "KF-0029"
+          ],
+          "rationale": "The actual-provider attempt exposed two reusable contract boundaries. Seeded arena placement was incorrectly treated as actor-origin creation even though the accepted spatial rules never required the bound actor position. The same attempt also declared exact spawn counters that contradicted install-time writes and the runtime clock's one-step scheduled-callback reachability."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Actor-origin evidence requires explicit spatial lineage",
+            "guidance": "Require owned-object actor-origin evidence only when accepted intent uses the exact spatial rule spawn_owned_object_at_actor_position. Arena, region, obstacle-avoidance, and seeded-position rules do not imply actor-origin creation merely because the intent also has an actor or entity binding; do not inject object_read for those independent placement rules.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation",
+                "handoff",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0028",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The actual-provider intent used seeded arena placement rules and an entity binding but did not request actor-relative placement. Evaluator-authored lifecycle assertions nevertheless required actor origin. Generated hazards were created at seeded arena positions, yielding actorOriginCreationsDelta 0 despite successful creation and nonzero travel, and all source candidates were rejected.",
+                "observedAt": "2026-08-31T22:16:34.337Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:36:43Z",
+            "updatedAt": "2026-08-31T22:36:43Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Recurring schedule proofs require reachable clock steps",
+            "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0029",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual-provider contract scenarios expected spawn_order 1 after one interval even though install plus the due scheduled callback produced 2, and expected 6 after one coarse six-interval advance even though a positive-delay callback rescheduled at the endpoint was not reachable in that same step, producing 2. The repeated exact counter mismatches contributed to rejection across source repair attempts.",
+                "observedAt": "2026-08-31T22:16:34.337Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:36:43Z",
+            "updatedAt": "2026-08-31T22:36:43Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T22:36:43Z",
+      "priorManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c",
+      "resultingManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6"
     }
   ]
 }

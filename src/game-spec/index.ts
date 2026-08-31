@@ -265,6 +265,8 @@ export {
 } from "./mechanics/mechanic-registry";
 
 export {
+  OWNED_OBJECT_ACTOR_ORIGIN_SPATIAL_RULE,
+  requiresOwnedObjectActorOrigin,
   resolveMechanicIntent,
   type BuiltInMechanicConfigurationField,
   type BuiltInMechanicCompositionResolution,
