@@ -5,6 +5,7 @@ import { createCampaignStore } from "./campaign-store.mjs";
 import {
   blockCampaignLoop,
   extendCampaignLoop,
+  migrateLegacyFixProgress,
   pauseCampaignLoopForRepair,
   reconcileCampaignLoopProviderCosts,
   recoverCampaignLoop,
@@ -78,6 +79,19 @@ export async function handleLoopCommand({ args, repoRoot }) {
       loopStore,
       campaignStore,
       ...options,
+    });
+    printLoopSummary(result.run);
+    return;
+  }
+
+  if (command === "migrate-fix-progress") {
+    const loopId = requiredOption(args, "--id");
+    assertNoArguments(args);
+    const result = await migrateLegacyFixProgress({
+      repoRoot,
+      loopId,
+      loopStore,
+      campaignStore,
     });
     printLoopSummary(result.run);
     return;
@@ -541,6 +555,7 @@ export function printLoopHelp() {
   npm run campaign -- loop run --definition <path> --authorize <definition-hash> [options]
   npm run campaign -- loop recover --id <loop-id> --state-root <path>
   npm run campaign -- loop resume --id <loop-id> [--fix-report <path>] [options]
+  npm run campaign -- loop migrate-fix-progress --id <loop-id>
   npm run campaign -- loop extend --id <loop-id> [additive budget options] [--fix-report <path>] [--authorize <extension-hash>] [options]
   npm run campaign -- loop isolate --id <loop-id> --profile <profile-id> [options]
   npm run campaign -- loop repair-campaign --id <loop-id> --reason <text> [--campaign <run-id>]

@@ -562,6 +562,109 @@ export function applyFixCheckpoint(
   };
 }
 
+export function restoreLegacyFixProgress(
+  run,
+  {
+    fixId,
+    triggerCampaignRunId,
+    carryoverAttemptRefs,
+    supersededCampaignRunIds,
+    migratedAt = new Date().toISOString(),
+  }
+) {
+  if (!run.fixCheckpointIds.includes(fixId) || run.currentRevision.cycle === 0) {
+    throw new Error("The loop does not contain the accepted fix checkpoint.");
+  }
+  if ((run.progressMigrations ?? []).some((entry) => entry.fixId === fixId)) {
+    throw new Error(`Fix checkpoint ${fixId} has already been migrated.`);
+  }
+  const triggerLink = run.campaignLinks.find(
+    (link) =>
+      link.campaignRunId === triggerCampaignRunId && link.role === "sequence"
+  );
+  const restoredStepIndex = run.steps.findIndex(
+    (step) => step.id === triggerLink?.stepId
+  );
+  if (restoredStepIndex < 0) {
+    throw new Error("The fix trigger campaign is not linked to a sequence step.");
+  }
+  if (carryoverAttemptRefs.length === 0) {
+    throw new Error("Legacy fix progress migration requires approved carryover attempts.");
+  }
+  const superseded = new Set(supersededCampaignRunIds);
+  if (
+    !run.activeCampaign ||
+    !superseded.has(run.activeCampaign.campaignRunId) ||
+    run.activeCampaign.role !== "sequence"
+  ) {
+    throw new Error("The migration must supersede the active reset campaign.");
+  }
+
+  const steps = run.steps.map((step, index) => {
+    if (index < restoredStepIndex) {
+      const achievedLink = [...run.campaignLinks]
+        .reverse()
+        .find(
+          (link) =>
+            link.role === "sequence" &&
+            link.stepId === step.id &&
+            link.status === "achieved" &&
+            link.cycle < run.currentRevision.cycle
+        );
+      if (!achievedLink) {
+        throw new Error(`Earlier step ${step.id} has no achieved checkpoint.`);
+      }
+      return {
+        ...step,
+        status: "achieved",
+        sameRevisionRuns: 0,
+        revisionKey: achievedLink.revisionKey,
+        carryoverAttemptRefs: undefined,
+      };
+    }
+    if (index === restoredStepIndex) {
+      return {
+        ...step,
+        status: "pending",
+        sameRevisionRuns: 0,
+        revisionKey: undefined,
+        carryoverAttemptRefs,
+      };
+    }
+    return step;
+  });
+
+  return {
+    ...run,
+    status: "interrupted",
+    completedAt: undefined,
+    currentStepIndex: restoredStepIndex,
+    steps,
+    campaignLinks: run.campaignLinks.map((link) =>
+      superseded.has(link.campaignRunId)
+        ? { ...link, status: "checkpoint_policy_superseded" }
+        : link
+    ),
+    activeCampaign: undefined,
+    pendingManualQa: undefined,
+    pendingManualQaQueue: [],
+    result: undefined,
+    progressMigrations: [
+      ...(run.progressMigrations ?? []),
+      {
+        id: `legacy-fix-reset-${run.currentRevision.cycle}`,
+        kind: "legacy-fix-reset",
+        fixId,
+        triggerCampaignRunId,
+        restoredStepId: steps[restoredStepIndex].id,
+        supersededCampaignRunIds,
+        carryoverAttemptRefs,
+        migratedAt,
+      },
+    ],
+  };
+}
+
 export function recordLoopSubmission(run) {
   if (run.usage.submissions >= run.limits.maxSubmissions) {
     return { allowed: false, run: exhaustLoop(run, "Submission ceiling reached.") };

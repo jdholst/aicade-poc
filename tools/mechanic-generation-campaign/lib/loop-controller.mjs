@@ -29,6 +29,7 @@ import {
   recordActualProviderCall,
   recordLoopSubmission,
   reconcileLegacyProviderCostEstimates,
+  restoreLegacyFixProgress,
   resumeLoopAfterCampaignRepair,
   settleActualProviderCallCost,
   startLoopCampaign,
@@ -324,6 +325,72 @@ export async function resumeCampaignLoop({
     port,
     attemptTimeoutMs,
   });
+}
+
+export async function migrateLegacyFixProgress({
+  repoRoot,
+  loopId,
+  loopStore = createCampaignLoopStore(repoRoot),
+  campaignStore = createCampaignStore(repoRoot),
+  now = () => new Date(),
+}) {
+  await Promise.all([loopStore.initialize(), campaignStore.initialize()]);
+  const run = await loopStore.readRun(loopId);
+  if (!run.activeCampaign || run.status !== "waiting_for_manual_qa") {
+    throw new Error(
+      "Legacy fix progress migration requires an active manual-QA reset campaign."
+    );
+  }
+  const fixes = await loopStore.readFixes(loopId);
+  const fix = fixes.find(
+    (entry) => entry.id === run.fixCheckpointIds.at(-1)
+  );
+  if (!fix || fix.afterRevision.revisionKey !== run.currentRevision.revisionKey) {
+    throw new Error("The current revision does not match the latest accepted fix.");
+  }
+  const carryoverAttemptRefs = await collectCampaignCarryoverAttemptRefs(
+    campaignStore,
+    fix.triggerCampaignRunId
+  );
+  const supersededCampaignRunIds = [run.activeCampaign.campaignRunId];
+  const migratedAt = now().toISOString();
+  const originalCampaigns = await Promise.all(
+    supersededCampaignRunIds.map((id) => campaignStore.readRun(id))
+  );
+
+  try {
+    for (const campaign of originalCampaigns) {
+      await campaignStore.updateRun(
+        campaign.id,
+        (current) => ({
+          ...current,
+          status: "invalid",
+          completedAt: migratedAt,
+          invalidReason:
+            "Superseded without a manual-QA verdict by the legacy fix-progress migration.",
+          pendingManualQa: undefined,
+          pendingManualQaQueue: [],
+        }),
+        { expectedStateRevision: campaign.stateRevision }
+      );
+    }
+    const migrated = await loopStore.updateRun(
+      loopId,
+      (current) =>
+        restoreLegacyFixProgress(current, {
+          fixId: fix.id,
+          triggerCampaignRunId: fix.triggerCampaignRunId,
+          carryoverAttemptRefs,
+          supersededCampaignRunIds,
+          migratedAt,
+        }),
+      { expectedStateRevision: run.stateRevision }
+    );
+    return { run: migrated };
+  } catch (error) {
+    await Promise.all(originalCampaigns.map((campaign) => campaignStore.writeRun(campaign)));
+    throw error;
+  }
 }
 
 async function restoreCampaignManualQaCheckpoint({ run, campaignStore }) {

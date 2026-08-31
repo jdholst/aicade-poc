@@ -16,6 +16,7 @@ import {
   remainingLoopBudgets,
   settleActualProviderCallCost,
   reconcileLegacyProviderCostEstimates,
+  restoreLegacyFixProgress,
   resumeLoopAfterCampaignRepair,
   resumeLoopAfterManualQaApproval,
   startLoopCampaign,
@@ -80,6 +81,91 @@ function initialRun(definitionInput = definition) {
 }
 
 describe("campaign loop state", () => {
+  it("restores a legacy reset to the fix trigger cohort without losing approved progress", () => {
+    const variationDefinition = {
+      ...definition,
+      sequence: [
+        definition.sequence[0],
+        definition.sequence[1],
+        {
+          ...definition.sequence[1],
+          id: "vary",
+          cohort: "variation",
+        },
+      ],
+    };
+    const carryoverAttemptRefs = [
+      {
+        campaignRunId: "variation-c0-r1",
+        attemptId: "a01-baseline",
+        sequence: 1,
+        promptId: "baseline",
+        revisionKey: revisionA.revisionKey,
+      },
+    ];
+    const reset = {
+      ...initialRun(variationDefinition),
+      status: "waiting_for_manual_qa",
+      currentRevision: { ...revisionB, cycle: 1 },
+      currentStepIndex: 0,
+      fixCheckpointIds: ["fix-cycle-1"],
+      steps: [
+        {
+          id: "discover",
+          cohort: "discovery",
+          status: "running",
+          campaignRunIds: ["discovery-c0-r1", "discovery-c1-r2"],
+          sameRevisionRuns: 1,
+        },
+        {
+          id: "repeat",
+          cohort: "repeatability",
+          status: "pending",
+          campaignRunIds: ["repeat-c0-r1"],
+          sameRevisionRuns: 0,
+        },
+        {
+          id: "vary",
+          cohort: "variation",
+          status: "pending",
+          campaignRunIds: ["variation-c0-r1"],
+          sameRevisionRuns: 0,
+        },
+      ],
+      campaignLinks: [
+        { campaignRunId: "discovery-c0-r1", role: "sequence", stepId: "discover", cycle: 0, revisionKey: revisionA.revisionKey, status: "achieved" },
+        { campaignRunId: "repeat-c0-r1", role: "sequence", stepId: "repeat", cycle: 0, revisionKey: revisionA.revisionKey, status: "achieved" },
+        { campaignRunId: "variation-c0-r1", role: "sequence", stepId: "vary", cycle: 0, revisionKey: revisionA.revisionKey, status: "completed_not_achieved" },
+        { campaignRunId: "discovery-c1-r2", role: "sequence", stepId: "discover", cycle: 1, revisionKey: revisionB.revisionKey, status: "waiting_for_manual_qa" },
+      ],
+      activeCampaign: { campaignRunId: "discovery-c1-r2", role: "sequence", stepId: "discover" },
+      pendingManualQa: { manualQaId: "manual-qa-a01-baseline", campaignRunId: "discovery-c1-r2", attemptId: "a01-baseline", promptId: "baseline", cohort: "discovery", revisionKey: revisionB.revisionKey, requestedAt: "2026-08-31T01:00:00.000Z", evidencePath: "a01-baseline/manual-qa.json" },
+    };
+
+    const migrated = restoreLegacyFixProgress(reset, {
+      fixId: "fix-cycle-1",
+      triggerCampaignRunId: "variation-c0-r1",
+      carryoverAttemptRefs,
+      supersededCampaignRunIds: ["discovery-c1-r2"],
+      migratedAt: "2026-08-31T02:00:00.000Z",
+    });
+
+    expect(migrated.status).toBe("interrupted");
+    expect(migrated.currentStepIndex).toBe(2);
+    expect(migrated.steps.map(({ status }) => status)).toEqual([
+      "achieved",
+      "achieved",
+      "pending",
+    ]);
+    expect(migrated.steps[2].carryoverAttemptRefs).toEqual(carryoverAttemptRefs);
+    expect(migrated.activeCampaign).toBeUndefined();
+    expect(migrated.pendingManualQa).toBeUndefined();
+    expect(migrated.campaignLinks.at(-1).status).toBe(
+      "checkpoint_policy_superseded"
+    );
+    expect(migrated.usage).toEqual(reset.usage);
+  });
+
   it("advances only after the current campaign itself is achieved", () => {
     let run = startLoopCampaign(initialRun(), {
       campaignRunId: "discovery-1",

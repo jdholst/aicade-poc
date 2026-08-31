@@ -345,6 +345,19 @@ const providerCostReconciliationSchema = z
   })
   .strict();
 
+const progressMigrationSchema = z
+  .object({
+    id: stableIdSchema,
+    kind: z.literal("legacy-fix-reset"),
+    fixId: stableIdSchema,
+    triggerCampaignRunId: z.string().min(1),
+    restoredStepId: stableIdSchema,
+    supersededCampaignRunIds: z.array(z.string().min(1)).min(1),
+    carryoverAttemptRefs: z.array(campaignCarryoverAttemptRefSchema).min(1),
+    migratedAt: z.string().datetime(),
+  })
+  .strict();
+
 const exhaustionResumeSchema = z
   .object({
     status: z.enum(["running", "waiting_for_fix"]),
@@ -436,6 +449,7 @@ const campaignLoopRunBaseSchema = z
     providerCostReconciliations: z
       .array(providerCostReconciliationSchema)
       .optional(),
+    progressMigrations: z.array(progressMigrationSchema).optional(),
     worktree: z
       .object({
         controlRoot: z.string().min(1),

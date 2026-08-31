@@ -131,6 +131,8 @@ A fix report must describe one clean committed revision and list passing verific
 
 Every accepted fix creates a new revision cycle and resumes the interrupted sequence step. Earlier achieved steps remain achieved. The interrupted cohort carries forward exact references to its manually approved full-actual successes, resets its failure tolerance, and schedules only failed or unfinished slots. Raw attempts remain immutable in their original campaigns, and global usage never resets.
 
+Loops whose accepted fix was applied before checkpoint preservation was introduced can be repaired once with `loop migrate-fix-progress --id <loop-id>`. The command restores the fix trigger step, carries forward only exact approved successes, marks the unnecessary reset campaign superseded without recording a verdict, preserves global usage and cost, and stops as `interrupted`. It makes no provider calls; a later explicit `loop resume` continues execution.
+
 ## Knowledge gathering and use
 
 Campaign knowledge has two layers. Campaign artifacts are immutable evidence: submitted attempts, stage outcomes, isolation results, manual-QA verdicts, accepted fixes, and terminal loop outcomes remain attached to the run that produced them. `generation-knowledge.json` is the compiled interpretation of that evidence. Its `KF-*` findings may be corrected as new evidence arrives, while stable IDs and amendment history preserve what changed and why.
