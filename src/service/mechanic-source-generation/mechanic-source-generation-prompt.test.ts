@@ -1206,6 +1206,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "a positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step"
     );
+    expect(prompt).toContain(
+      "Before returning any initial or repaired candidate, close every rendered transition obligation"
+    );
+    expect(prompt).toContain(
+      "never preserve or repeat a formula that is already proven to produce the reported actual value"
+    );
     expect(prompt).not.toContain("recurring_cleanup");
   });
 

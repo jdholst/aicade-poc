@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 40,
-  "updatedAt": "2026-08-31T23:41:21Z",
+  "revision": 41,
+  "updatedAt": "2026-08-31T23:54:39Z",
   "entries": [
     {
       "status": "active",
@@ -3252,6 +3252,41 @@
       "amendments": [],
       "createdAt": "2026-08-31T23:41:21Z",
       "updatedAt": "2026-08-31T23:41:21Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Source repairs need one closed transition checklist",
+      "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0035",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The source provider received exact setup states, ordered time advances, and required final state values. Initial source passed the exact state assertions but failed lifecycle evidence. Repairs then regressed the sequence calculation; the final repair repeated a formula yielding spawn_sequence 3 after feedback required 5, exhausting source repair despite the other terminal lifecycle issue being resolved.",
+          "observedAt": "2026-08-31T23:47:58.351Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:54:39Z",
+      "updatedAt": "2026-08-31T23:54:39Z"
     }
   ],
   "reconciliations": [
@@ -8291,6 +8326,101 @@
       "createdAt": "2026-08-31T23:41:21Z",
       "priorManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd",
       "resultingManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-9-20260831t235439z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-9",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10"
+      },
+      "consultedManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e",
+      "contextDigest": "b0a7386ec7382d744d1f67614b1ea4b58d654187443230335053fa5971f9bd81",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-8",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0034"
+          ],
+          "rationale": "The current run repaired the initially incomplete contract on attempt 2 without oscillating among the required state-write, capability, callback, or autonomous-trigger invariants, confirming the closed contract checklist from fix cycle 8."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0035"
+          ],
+          "rationale": "All four source calls received the exact independent private-state transition obligations. Attempt 4 nevertheless repeated a scheduled-callback formula that produced spawn_sequence 3 after the repair feedback required 5, while other lifecycle evidence passed. Source repair therefore needs a closed pre-return check across every rendered transition and must replace a formula already proven to produce the reported actual value."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Source repairs need one closed transition checklist",
+            "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0035",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The source provider received exact setup states, ordered time advances, and required final state values. Initial source passed the exact state assertions but failed lifecycle evidence. Repairs then regressed the sequence calculation; the final repair repeated a formula yielding spawn_sequence 3 after feedback required 5, exhausting source repair despite the other terminal lifecycle issue being resolved.",
+                "observedAt": "2026-08-31T23:47:58.351Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:54:39Z",
+            "updatedAt": "2026-08-31T23:54:39Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:54:39Z",
+      "priorManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e",
+      "resultingManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759"
     }
   ]
 }
