@@ -73,6 +73,15 @@ const fixtureReferenceSchema = z
   .strict();
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+export const campaignCarryoverAttemptRefSchema = z
+  .object({
+    campaignRunId: z.string().min(1),
+    attemptId: z.string().min(1),
+    sequence: z.number().int().positive(),
+    promptId: z.string().min(1),
+    revisionKey: sha256Schema,
+  })
+  .strict();
 export const campaignKnowledgePolicySchema = z
   .object({
     required: z.boolean(),
@@ -575,6 +584,7 @@ const campaignRunBaseSchema = z
     providerModes: providerModesSchema,
     attemptCeiling: z.number().int().positive(),
     attemptIds: z.array(z.string()),
+    carryoverAttemptRefs: z.array(campaignCarryoverAttemptRefSchema).optional(),
     loopId: z.string().min(1).optional(),
     loopStepId: z.string().min(1).optional(),
     loopCycle: z.number().int().nonnegative().optional(),
@@ -651,6 +661,37 @@ export const campaignRunSchema = campaignRunBaseSchema
   .superRefine(validateCampaignRunState);
 
 function validateCampaignRunState(run, context) {
+    const carryoverRefs = run.carryoverAttemptRefs ?? [];
+    if (carryoverRefs.length > 0 && (!run.loopId || !run.loopStepId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["carryoverAttemptRefs"],
+        message: "Carryover attempts are available only to loop-linked campaigns.",
+      });
+    }
+    if (
+      new Set(carryoverRefs.map(({ sequence }) => sequence)).size !==
+      carryoverRefs.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["carryoverAttemptRefs"],
+        message: "Carryover attempt sequences must be unique.",
+      });
+    }
+    if (
+      new Set(
+        carryoverRefs.map(
+          ({ campaignRunId, attemptId }) => `${campaignRunId}/${attemptId}`
+        )
+      ).size !== carryoverRefs.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["carryoverAttemptRefs"],
+        message: "Carryover attempt references must be unique.",
+      });
+    }
     const pendingQueue = run.pendingManualQaQueue ??
       (run.pendingManualQa ? [run.pendingManualQa] : []);
     if (run.status === "waiting_for_manual_qa" && pendingQueue.length === 0) {

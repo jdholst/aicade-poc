@@ -502,6 +502,30 @@ describe("campaign contracts", () => {
       loopCycle: 0,
       knowledgePolicy: { required: false },
     });
+
+    const carryoverAttemptRefs = [
+      {
+        campaignRunId: "campaign-0",
+        attemptId: "a01-baseline",
+        sequence: 1,
+        promptId: "baseline",
+        revisionKey: "d".repeat(64),
+      },
+    ];
+    expect(
+      parseCampaignRun({ ...run, carryoverAttemptRefs })
+        .carryoverAttemptRefs
+    ).toEqual(carryoverAttemptRefs);
+    expect(() =>
+      parseCampaignRun({
+        ...run,
+        id: "standalone-campaign",
+        loopId: undefined,
+        loopStepId: undefined,
+        loopCycle: undefined,
+        carryoverAttemptRefs,
+      })
+    ).toThrow(/loop-linked campaigns/i);
   });
 
   it("requires a knowledge baseline on new campaign runs while grandfathering v1 records", () => {

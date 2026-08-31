@@ -5,8 +5,8 @@ A campaign loop is one bounded orchestration for one mechanic. It runs an ordere
 Loop success and mechanic proof are different:
 
 - The loop is `achieved` when every configured sequence step passes.
-- The mechanic is proven only when discovery, repeatability, and variation pass on the same final revision, model, and all-actual provider configuration.
-- Successes from separate campaign runs are never pooled.
+- The mechanic is proven when discovery, repeatability, and variation pass under one frozen definition, model, all-actual provider configuration, and continuous chain of accepted fix revisions.
+- Campaign artifacts remain separate. After an accepted fix, only exact manually approved successes from the interrupted cohort are checkpointed into its next campaign; failed slots run again.
 - Isolation never contributes to proof.
 - Every automated full-actual proof success pauses at `waiting_for_manual_qa`. Only explicit approval advances the submission or cohort.
 
@@ -129,7 +129,7 @@ At the third failure, normalize failures into clusters by classification, furthe
 
 A fix report must describe one clean committed revision and list passing verification. A temporary fix must also update the canonical temporary-fix ledger. The same commit includes the code fix and `generation-knowledge.json` with exactly one new `KR-*` reconciliation. The CLI independently reloads the prior Git version, recomputes context, replays the journal operation, and verifies the source loop, fix, trigger campaign, digests, consulted findings, and evidence dispositions before accepting the report.
 
-Every accepted fix creates a new revision cycle. All sequence steps reset to pending, while prior campaigns and fixes remain linked as historical evidence. Global usage never resets.
+Every accepted fix creates a new revision cycle and resumes the interrupted sequence step. Earlier achieved steps remain achieved. The interrupted cohort carries forward exact references to its manually approved full-actual successes, resets its failure tolerance, and schedules only failed or unfinished slots. Raw attempts remain immutable in their original campaigns, and global usage never resets.
 
 ## Knowledge gathering and use
 

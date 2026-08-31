@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { runCampaign } from "./browser-runner.mjs";
 import { createCampaignStore } from "./campaign-store.mjs";
+import { collectCampaignCarryoverAttemptRefs } from "./campaign-progress.mjs";
 import {
   createCampaignKnowledgeStore,
   knowledgeEntriesDigest,
@@ -264,8 +265,15 @@ export async function resumeCampaignLoop({
       }
       throw error;
     }
+    const carryoverAttemptRefs = await collectCampaignCarryoverAttemptRefs(
+      campaignStore,
+      fix.triggerCampaignRunId
+    );
     await loopStore.writeFix(fix);
-    run = applyFixCheckpoint(run, fix, { knowledgeReconciliationId });
+    run = applyFixCheckpoint(run, fix, {
+      knowledgeReconciliationId,
+      carryoverAttemptRefs,
+    });
     await loopStore.writeRun(run);
   } else {
     if (fixReportPath) {
@@ -1051,6 +1059,8 @@ async function executeSequence({
       loaded.campaign.manifest.cohorts[step.cohort]
     );
     const active = state.run.activeCampaign;
+    const carryoverAttemptRefs =
+      state.run.steps[state.run.currentStepIndex].carryoverAttemptRefs ?? [];
     const isResume = active?.role === "sequence" && active.stepId === step.id;
     const campaignRunId = isResume
       ? active.campaignRunId
@@ -1060,7 +1070,12 @@ async function executeSequence({
       const existingAttempts = await campaignStore.readAttempts(campaignRunId);
       const capacityFailure = continuationCapacityFailure(
         state.run,
-        Math.max(0, campaignSubmissionCeiling - existingAttempts.length),
+        Math.max(
+          0,
+          campaignSubmissionCeiling -
+            carryoverAttemptRefs.length -
+            existingAttempts.length
+        ),
         step.providerModes
       );
       if (capacityFailure) {
@@ -1071,7 +1086,7 @@ async function executeSequence({
     } else {
       const capacityFailure = campaignCapacityFailure(
         state.run,
-        campaignSubmissionCeiling,
+        Math.max(0, campaignSubmissionCeiling - carryoverAttemptRefs.length),
         step.providerModes
       );
       if (capacityFailure) {
@@ -1115,6 +1130,7 @@ async function executeSequence({
         providerCallBudget,
         onSubmission,
         runId: campaignRunId,
+        carryoverAttemptRefs,
         ...(isResume ? { resume: campaignRunId } : {}),
       });
 

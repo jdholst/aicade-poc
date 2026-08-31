@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   CAMPAIGN_COHORTS,
+  campaignCarryoverAttemptRefSchema,
   campaignExecutionPolicyInputSchema,
   campaignKnowledgePolicySchema,
   pendingManualQaSchema,
@@ -185,6 +186,7 @@ const loopStepStateSchema = z
     campaignRunIds: z.array(z.string().min(1)),
     sameRevisionRuns: z.number().int().nonnegative(),
     revisionKey: sha256Schema.optional(),
+    carryoverAttemptRefs: z.array(campaignCarryoverAttemptRefSchema).optional(),
   })
   .strict();
 

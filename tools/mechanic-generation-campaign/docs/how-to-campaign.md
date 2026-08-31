@@ -137,10 +137,10 @@ Inspect attempt artifacts before publishing. Fixture-backed evidence answers onl
 
 ## Prove a mechanic
 
-Run discovery, repeatability, and variation as separate full-actual campaigns with the same revision, model, manifest, and provider modes. Authorize capacity for up to 22 submissions: one discovery, ten repeatability, ten variation base submissions, and at most one targeted variation replacement. When no replacement is needed, the sequence uses 21 submissions.
+For a no-fix proof, run discovery, repeatability, and variation as separate full-actual campaigns with the same revision, model, manifest, and provider modes. Authorize capacity for up to 22 submissions: one discovery, ten repeatability, ten variation base submissions, and at most one targeted variation replacement. When no replacement is needed, the sequence uses 21 submissions.
 
 Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count toward the three-failure limit. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion retain their existing states and do not count.
 
-A mechanic is proven only when all three cohorts pass and every counted success reaches the external mechanic probe. If source or manifest changes are needed, end the current revision cohort, implement the separately authorized fix, and begin a new proof sequence.
+A mechanic is proven only when all three cohorts pass and every counted success reaches the external mechanic probe. Standalone campaigns still require one revision per cohort. In a campaign loop, an accepted fix preserves earlier achieved cohorts and exact manually approved successes from the interrupted cohort, then reruns only failed or unfinished slots under the next accepted revision.
 
 Use a [campaign loop](campaign-loops.md) when one bounded authorization should cover repeated campaigns, diagnostic isolation, and verified pipeline fix cycles. The standalone campaign commands remain the correct boundary for one cohort with no source edits.

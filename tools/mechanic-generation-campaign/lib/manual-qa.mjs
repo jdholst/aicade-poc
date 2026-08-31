@@ -11,6 +11,10 @@ import {
   isDiagnosticSuccess,
   isFullActualSuccess,
 } from "./contracts.mjs";
+import {
+  loadCampaignCarryoverAttempts,
+  mergeCampaignProgressAttempts,
+} from "./campaign-progress.mjs";
 import { redactSensitive } from "./redaction.mjs";
 import {
   rejectLoopManualQa,
@@ -265,8 +269,13 @@ async function decideCampaignAttemptUnlocked({
           manualQa: { ...attempt.manualQa, status: "denied" },
         }
   );
-  const attempts = (await store.readAttempts(campaignRunId)).map((entry) =>
+  const currentAttempts = (await store.readAttempts(campaignRunId)).map((entry) =>
     entry.id === decidedAttempt.id ? decidedAttempt : entry
+  );
+  const carryoverAttempts = await loadCampaignCarryoverAttempts(store, run);
+  const attempts = mergeCampaignProgressAttempts(
+    carryoverAttempts,
+    currentAttempts
   );
   const failures = attempts.filter(isCountedCohortFailure).length;
   const thresholdCohort = ["repeatability", "variation"].includes(run.cohort);

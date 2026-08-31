@@ -519,7 +519,7 @@ export function rejectLoopManualQa(
 export function applyFixCheckpoint(
   run,
   fix,
-  { knowledgeReconciliationId } = {}
+  { knowledgeReconciliationId, carryoverAttemptRefs = [] } = {}
 ) {
   if (run.usage.fixCycles >= run.limits.maxFixCycles) {
     return exhaustLoop(run, "Fix-cycle ceiling reached.", undefined, {
@@ -534,17 +534,24 @@ export function applyFixCheckpoint(
       ...fix.afterRevision,
       cycle: run.currentRevision.cycle + 1,
     },
-    currentStepIndex: 0,
+    currentStepIndex: run.currentStepIndex,
     usage: {
       ...run.usage,
       fixCycles: run.usage.fixCycles + 1,
     },
-    steps: run.steps.map((step) => ({
-      ...step,
-      status: "pending",
-      sameRevisionRuns: 0,
-      revisionKey: undefined,
-    })),
+    steps: run.steps.map((step, index) =>
+      index === run.currentStepIndex
+        ? {
+            ...step,
+            status: "pending",
+            sameRevisionRuns: 0,
+            revisionKey: undefined,
+            ...(carryoverAttemptRefs.length > 0
+              ? { carryoverAttemptRefs }
+              : { carryoverAttemptRefs: undefined }),
+          }
+        : step
+    ),
     fixCheckpointIds: [...run.fixCheckpointIds, fix.id],
     knowledgeReconciliationIds: knowledgeReconciliationId
       ? [...run.knowledgeReconciliationIds, knowledgeReconciliationId]
@@ -1068,7 +1075,6 @@ function createLoopResult(steps, definition, finalRevisionKey) {
     const proof = proofSteps.get(cohort);
     return (
       proof?.state.status === "achieved" &&
-      proof.state.revisionKey === finalRevisionKey &&
       ACTUAL_PROVIDER_STAGES.every(
         (stage) => proof.step.providerModes[stage] === "actual"
       )

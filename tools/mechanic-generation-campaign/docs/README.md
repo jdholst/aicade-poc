@@ -6,7 +6,7 @@ This directory is the AI agent entry point and canonical operator documentation 
 
 - [Getting started](getting-started.md): install assumptions, credentials, validation, and the first diagnostic run.
 - [How to campaign](how-to-campaign.md): cohort selection, bounded parallel execution, queued gameplay review, resuming, publishing, and mechanic proof.
-- [Campaign loops](campaign-loops.md): bounded multi-campaign proof, failure clustering, knowledge gathering and use, fix checkpoints, revision resets, budget extensions, and stopped-session lifecycle.
+- [Campaign loops](campaign-loops.md): bounded multi-campaign proof, failure clustering, knowledge gathering and use, checkpointed cohort continuation across accepted fixes, budget extensions, and stopped-session lifecycle.
 - [Command reference](commands.md): every `npm run campaign` command, compiled-knowledge workflow, option, default, side effect, and failure condition.
 
 ## Agent workflow

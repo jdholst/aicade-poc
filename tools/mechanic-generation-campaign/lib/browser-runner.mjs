@@ -13,6 +13,10 @@ import {
 } from "./browser-storage.mjs";
 import { createCampaignStore } from "./campaign-store.mjs";
 import {
+  loadCampaignCarryoverAttempts,
+  mergeCampaignProgressAttempts,
+} from "./campaign-progress.mjs";
+import {
   createCampaignKnowledgeStore,
   knowledgeEntriesDigest,
 } from "./knowledge.mjs";
@@ -67,6 +71,7 @@ export async function runCampaign({
   runId,
   actualProviderAuthorized = false,
   executionPolicy: executionPolicyInput,
+  carryoverAttemptRefs: carryoverAttemptRefsInput,
 }) {
   const loaded = await loadCampaignManifest(manifestPath);
   const store = providedStore ?? createCampaignStore(repoRoot);
@@ -127,6 +132,9 @@ export async function runCampaign({
         providerModes,
         attemptCeiling,
         attemptIds: [],
+        ...(carryoverAttemptRefsInput?.length
+          ? { carryoverAttemptRefs: carryoverAttemptRefsInput }
+          : {}),
         executionPolicy: requestedExecutionPolicy,
         stateRevision: 0,
         attemptSlots: [],
@@ -168,7 +176,8 @@ export async function runCampaign({
     providerModes,
     revision,
     loopContext,
-    executionPolicyInput ? requestedExecutionPolicy : undefined
+    executionPolicyInput ? requestedExecutionPolicy : undefined,
+    carryoverAttemptRefsInput
   );
   const releaseExecutionLock = typeof store.acquireRunExecutionLock === "function"
     ? await store.acquireRunExecutionLock(campaignRunId)
@@ -179,6 +188,7 @@ export async function runCampaign({
     if (resume) {
       run = await reconcileResumableRun(store, run);
     }
+    const carryoverAttempts = await loadCampaignCarryoverAttempts(store, run);
     await store.writeRun(run);
     const fixtures = await loadFixtures(loaded.fixturePaths);
     const probeModule = await import(pathToFileURL(loaded.probePath).href);
@@ -230,6 +240,7 @@ export async function runCampaign({
       providerCallBudget,
       onSubmission,
       pricing: loaded.pricing,
+      carryoverAttempts,
     });
   } catch (error) {
     run = await updateCampaignRun(store, run, (current) => ({
@@ -306,6 +317,7 @@ async function executeCampaignAttempts({
   providerCallBudget,
   onSubmission,
   pricing,
+  carryoverAttempts = [],
 }) {
   let run = initialRun;
   const active = new Map();
@@ -318,14 +330,18 @@ async function executeCampaignAttempts({
   while (true) {
     run = await store.readRun(run.id);
     const attempts = await store.readAttempts(run.id);
-    const score = scoreCampaign(run.cohort, manifest, attempts);
+    const progressAttempts = mergeCampaignProgressAttempts(
+      carryoverAttempts,
+      attempts
+    );
+    const score = scoreCampaign(run.cohort, manifest, progressAttempts);
     const baseSchedule = createAttemptSchedule(
       run.cohort,
       manifest.prompts,
       run.executionPolicy
     );
     const baseClaimed = baseSchedule.every(({ sequence }) =>
-      attempts.some((attempt) => attempt.sequence === sequence) ||
+      progressAttempts.some((attempt) => attempt.sequence === sequence) ||
       run.attemptSlots.some(
         (slot) =>
           slot.sequence === sequence &&
@@ -336,7 +352,7 @@ async function executeCampaignAttempts({
       ? createNextAttemptSchedule({
           cohort: run.cohort,
           prompts: manifest.prompts,
-          attempts,
+          attempts: progressAttempts,
           score,
           executionPolicy: run.executionPolicy,
         })
@@ -363,7 +379,7 @@ async function executeCampaignAttempts({
           });
     const batch = createDispatchBatch({
       schedule,
-      attempts,
+      attempts: progressAttempts,
       slots: run.attemptSlots,
       capacity,
       leaseOwner,
@@ -495,7 +511,11 @@ async function executeCampaignAttempts({
   }
 
   const attempts = await store.readAttempts(run.id);
-  const score = scoreCampaign(run.cohort, manifest, attempts);
+  const progressAttempts = mergeCampaignProgressAttempts(
+    carryoverAttempts,
+    attempts
+  );
+  const score = scoreCampaign(run.cohort, manifest, progressAttempts);
   const terminalStatus = providerBudgetExhausted
     ? "completed_not_achieved"
     : invalidReason
@@ -514,7 +534,7 @@ async function executeCampaignAttempts({
     pendingManualQa: current.pendingManualQaQueue[0],
     result: campaignScoreResult(score),
   }));
-  return { run, attempts };
+  return { run, attempts: progressAttempts };
 }
 
 async function runBrowserAttempt({
@@ -1148,7 +1168,8 @@ function validateResume(
   providerModes,
   revision,
   loopContext,
-  requestedExecutionPolicy
+  requestedExecutionPolicy,
+  requestedCarryoverAttemptRefs
 ) {
   if (
     run.manifestId !== loaded.manifest.id ||
@@ -1175,6 +1196,15 @@ function validateResume(
   ) {
     throw new Error(
       "Resume execution policy does not match the frozen campaign run."
+    );
+  }
+  if (
+    requestedCarryoverAttemptRefs &&
+    JSON.stringify(run.carryoverAttemptRefs ?? []) !==
+      JSON.stringify(requestedCarryoverAttemptRefs)
+  ) {
+    throw new Error(
+      "Resume carryover attempts do not match the frozen campaign run."
     );
   }
 }

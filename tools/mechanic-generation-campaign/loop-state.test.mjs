@@ -58,9 +58,9 @@ const definition = {
   },
 };
 
-function initialRun() {
+function initialRun(definitionInput = definition) {
   return createInitialLoopRun({
-    definition,
+    definition: definitionInput,
     definitionPath: "/repo/.qa/ticket-17-loop.json",
     definitionHash: "3".repeat(64),
     authorizationHash: "4".repeat(64),
@@ -848,7 +848,7 @@ describe("campaign loop state", () => {
     expect(run.steps[1].sameRevisionRuns).toBe(1);
   });
 
-  it("resets proof progress on a committed fix while preserving prior evidence", () => {
+  it("resumes the interrupted cohort from approved attempt checkpoints after a committed fix", () => {
     let run = startLoopCampaign(initialRun(), {
       campaignRunId: "discovery-1",
       role: "sequence",
@@ -860,6 +860,29 @@ describe("campaign loop state", () => {
       attempts: [{ status: "success", classification: "success", manualQa: { status: "approved" } }],
     });
     run = { ...run, status: "waiting_for_fix" };
+    const carryoverAttemptRefs = [
+      {
+        campaignRunId: "repeatability-1",
+        attemptId: "a01-baseline",
+        sequence: 1,
+        promptId: "baseline",
+        revisionKey: revisionA.revisionKey,
+      },
+      {
+        campaignRunId: "repeatability-1",
+        attemptId: "a02-baseline",
+        sequence: 2,
+        promptId: "baseline",
+        revisionKey: revisionA.revisionKey,
+      },
+      {
+        campaignRunId: "repeatability-1",
+        attemptId: "a03-baseline",
+        sequence: 3,
+        promptId: "baseline",
+        revisionKey: revisionA.revisionKey,
+      },
+    ];
 
     const fixed = applyFixCheckpoint(
       run,
@@ -867,18 +890,95 @@ describe("campaign loop state", () => {
         id: "fix-cycle-1",
         afterRevision: revisionB,
       },
-      { knowledgeReconciliationId: "KR-fix-cycle-1" }
+      {
+        knowledgeReconciliationId: "KR-fix-cycle-1",
+        carryoverAttemptRefs,
+      }
     );
 
     expect(fixed.currentRevision).toEqual({ ...revisionB, cycle: 1 });
-    expect(fixed.currentStepIndex).toBe(0);
-    expect(fixed.steps.map(({ status }) => status)).toEqual(["pending", "pending"]);
+    expect(fixed.currentStepIndex).toBe(1);
+    expect(fixed.steps.map(({ status }) => status)).toEqual(["achieved", "pending"]);
+    expect(fixed.steps[0].revisionKey).toBe(revisionA.revisionKey);
+    expect(fixed.steps[1].carryoverAttemptRefs).toEqual(carryoverAttemptRefs);
     expect(fixed.campaignLinks.map(({ campaignRunId }) => campaignRunId)).toEqual([
       "discovery-1",
     ]);
     expect(fixed.fixCheckpointIds).toEqual(["fix-cycle-1"]);
     expect(fixed.knowledgeReconciliationIds).toEqual(["KR-fix-cycle-1"]);
     expect(fixed.usage.fixCycles).toBe(1);
+  });
+
+  it("proves a full sequence across a continuous accepted-fix revision chain", () => {
+    const proofDefinition = {
+      ...definition,
+      sequence: [
+        definition.sequence[0],
+        definition.sequence[1],
+        {
+          ...definition.sequence[1],
+          id: "vary",
+          cohort: "variation",
+        },
+      ],
+    };
+    const run = {
+      ...initialRun(proofDefinition),
+      status: "running",
+      currentRevision: { ...revisionB, cycle: 1 },
+      currentStepIndex: 2,
+      steps: [
+        {
+          ...initialRun(proofDefinition).steps[0],
+          status: "achieved",
+          revisionKey: revisionA.revisionKey,
+        },
+        {
+          ...initialRun(proofDefinition).steps[1],
+          status: "achieved",
+          revisionKey: revisionA.revisionKey,
+        },
+        {
+          ...initialRun(proofDefinition).steps[2],
+          status: "running",
+          campaignRunIds: ["variation-2"],
+          sameRevisionRuns: 1,
+        },
+      ],
+      activeCampaign: {
+        campaignRunId: "variation-2",
+        role: "sequence",
+        stepId: "vary",
+      },
+      campaignLinks: [
+        {
+          campaignRunId: "variation-2",
+          role: "sequence",
+          stepId: "vary",
+          cycle: 1,
+          revisionKey: revisionB.revisionKey,
+          status: "running",
+        },
+      ],
+    };
+
+    const achieved = finishSequenceCampaign(run, proofDefinition, {
+      campaignRunId: "variation-2",
+      status: "achieved",
+      attempts: [
+        {
+          status: "success",
+          classification: "success",
+          manualQa: { status: "approved" },
+        },
+      ],
+    });
+
+    expect(achieved.result).toMatchObject({
+      sequenceAchieved: true,
+      mechanicProven: true,
+      finalRevisionKey: revisionB.revisionKey,
+    });
   });
 
   it("stops before forwarding an actual provider call beyond its stage ceiling", () => {

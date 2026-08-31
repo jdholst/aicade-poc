@@ -7,7 +7,7 @@
 - `repeatability`: ten baseline submissions on one clean revision. Every automated pass pauses for review. Achieved after all ten base submissions with at least eight manually approved full-actual successes. The third qualifying failure stops the campaign immediately.
 - `variation`: five frozen prompts with two base submissions each on one clean revision. Planning remains actual. Every automated pass pauses for review. Achieved with at least eight manually approved full-actual successes and at least one approved success for every prompt. If both base submissions for exactly one prompt failed and fewer than three failures occurred, one targeted replacement may run. The third qualifying failure stops the campaign immediately.
 
-A mechanic is proven only when discovery, repeatability, and variation are achieved with the same revision, model, and provider modes.
+A standalone mechanic proof uses one revision. A campaign loop may prove the mechanic across a continuous accepted-fix revision chain when its frozen model and provider modes remain unchanged and only exact manually approved successes are checkpointed.
 
 New repeatability and variation campaigns may explicitly freeze bounded parallel execution. Discovery, isolation, existing frozen campaigns, and omitted policies remain sequential. Parallel execution is capped at three active attempts and three pending reviews. The dispatcher must preserve:
 
@@ -59,19 +59,19 @@ Treat automated classifications as provisional when evidence is incomplete. Pres
 
 ## Campaign loops
 
-A loop contains one mechanic manifest and an ordered campaign sequence. Every numeric ceiling and same-revision retry policy is explicit. Separate campaign runs remain separate evidence; their successful attempts are never pooled.
+A loop contains one mechanic manifest and an ordered campaign sequence. Every numeric ceiling and same-revision retry policy is explicit. Separate campaign runs remain separate evidence. An accepted fix may checkpoint exact manually approved successes from the interrupted cohort into its next campaign by immutable reference.
 
-An achieved custom sequence is not automatically mechanic proof. Proof still requires achieved discovery, repeatability, and variation steps on the same final revision, model, and all-actual provider configuration.
+An achieved custom sequence is not automatically mechanic proof. Proof still requires achieved discovery, repeatability, and variation steps under one frozen model, all-actual provider configuration, and continuous accepted-fix revision chain.
 
 Fixture-backed isolation may diagnose a failure while a loop is waiting for a fix. It consumes the loop's campaign, submission, isolation, and applicable provider-call budgets but does not advance a proof step.
 
-Repeatability and variation continue after their first and second qualifying failures. Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion do not. The third qualifying failure ends the campaign and moves a linked loop to `waiting_for_fix`; an accepted fix begins a new revision cycle at discovery. The maximum full proof envelope is 22 submissions: one discovery, ten repeatability, and up to eleven variation.
+Repeatability and variation continue after their first and second qualifying failures. Provider failure, rejected provider output, pipeline or runtime-pipeline failure, external mechanic-probe failure, and manual denial count. Pending review, infrastructure failure, cancellation, revision invalidation, and provider-budget exhaustion do not. The third qualifying failure ends the campaign and moves a linked loop to `waiting_for_fix`; an accepted fix begins a new revision cycle at the interrupted cohort, carries its exact approved successes, resets its failure tolerance, and reruns failed or unfinished slots. The maximum no-fix proof envelope is 22 submissions: one discovery, ten repeatability, and up to eleven variation. Fix continuations consume only their newly submitted slots from the global authorized ceilings.
 
 The first and second failures do not authorize a fix. At the third, group failed attempts by classification, furthest stage, and normalized failure signature. Up to three read-only diagnostic subagents may inspect separate clusters. They report evidence and hypotheses to the primary agent, which owns the combined diagnosis, source changes, tests, knowledge reconciliation, and one verified fix checkpoint.
 
 Campaign-tool defects are repaired outside the loop's Sparkline budget. A thrown campaign-runner defect or persisted infrastructure failure moves the loop to `waiting_for_campaign_repair`, preserves the candidate revision, and credits the invalidated campaign, submission, isolation, and Sparkline-attributed provider usage. Gross actual-provider calls remain append-only and enforce the authorization ceiling. Repair `tools/mechanic-generation-campaign/` in the control checkout, then resume without a fix report or proof reset. Runtime readiness requires the exact editor message `Runtime is running in the sandbox.` plus a generated iframe with source; timeout evidence includes the observed editor state.
 
-A verified fix commit starts a new revision cycle and resets every sequence step. Campaign links and fix checkpoints remain append-only. Global usage does not reset.
+A verified fix commit starts a new revision cycle at the interrupted sequence step. Earlier achieved steps remain achieved, exact approved successes in the interrupted cohort carry forward by immutable reference, and failed or unfinished slots run again. Campaign links and fix checkpoints remain append-only. Global usage does not reset.
 
 Every new standalone campaign and loop records the digest of `data/generation-knowledge.json` at creation. Older records are normalized with `knowledgePolicy.required: false` and remain readable and resumable.
 
