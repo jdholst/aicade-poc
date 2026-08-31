@@ -510,6 +510,136 @@ describe("campaign dashboard data", () => {
     ]);
   });
 
+  it("shows a mechanic proven when a concluded loop proves cohorts across accepted revisions", async () => {
+    const actualProviderModes = {
+      planning: "actual",
+      contract: "actual",
+      source: "actual",
+    };
+    const fakeStore = {
+      artifactRoot: path.join(repoRoot, ".qa", "mechanic-generation-campaign"),
+      async listRuns() {
+        return [
+          {
+            id: "discovery-c0-r1",
+            manifestId: "p09-t17-projectile",
+            cohort: "discovery",
+            status: "achieved",
+            createdAt: "2026-08-30T22:52:44.857Z",
+            providerModes: actualProviderModes,
+            revision: { revisionKey: "revision-before-fix" },
+            model: "gpt-5.6-luna",
+          },
+          {
+            id: "repeatability-c0-r1",
+            manifestId: "p09-t17-projectile",
+            cohort: "repeatability",
+            status: "achieved",
+            createdAt: "2026-08-30T22:57:10.549Z",
+            providerModes: actualProviderModes,
+            revision: { revisionKey: "revision-before-fix" },
+            model: "gpt-5.6-luna",
+          },
+          {
+            id: "discovery-c1-r2",
+            manifestId: "p09-t17-projectile",
+            cohort: "discovery",
+            status: "invalid",
+            createdAt: "2026-08-31T01:48:20.672Z",
+            providerModes: actualProviderModes,
+            revision: { revisionKey: "revision-after-fix" },
+            model: "gpt-5.6-luna",
+          },
+          {
+            id: "variation-c1-r2",
+            manifestId: "p09-t17-projectile",
+            cohort: "variation",
+            status: "achieved",
+            createdAt: "2026-08-31T04:40:35.443Z",
+            providerModes: actualProviderModes,
+            revision: { revisionKey: "revision-after-fix" },
+            model: "gpt-5.6-luna",
+          },
+        ];
+      },
+      async readAttempts() {
+        return [];
+      },
+    };
+    const fakeLoopStore = {
+      async listRuns() {
+        return [
+          {
+            id: "ticket-17-loop",
+            manifestId: "p09-t17-projectile",
+            model: "gpt-5.6-luna",
+            status: "concluded",
+            createdAt: "2026-08-30T22:52:37.326Z",
+            completedAt: "2026-08-31T04:50:54.000Z",
+            currentRevision: {
+              cycle: 1,
+              revisionKey: "revision-after-fix",
+            },
+            currentStepIndex: 2,
+            usage: {
+              fixCycles: 1,
+              campaignRuns: 5,
+              submissions: 25,
+              auxiliaryIsolationCampaigns: 0,
+              actualProviderCalls: { planning: 25, contract: 37, source: 39 },
+            },
+            limits: {
+              maxFixCycles: 8,
+              maxCampaignRuns: 30,
+              maxSubmissions: 192,
+              maxAuxiliaryIsolationCampaigns: 8,
+              actualProviderCalls: { planning: 191, contract: 191, source: 191 },
+            },
+            worktree: { branch: "codex/campaign-loop-ticket-17-loop", path: "/tmp/removed" },
+            steps: [
+              { id: "discovery", cohort: "discovery", status: "achieved", campaignRunIds: ["discovery-c0-r1", "discovery-c1-r2"], sameRevisionRuns: 0, revisionKey: "revision-before-fix" },
+              { id: "repeatability", cohort: "repeatability", status: "achieved", campaignRunIds: ["repeatability-c0-r1"], sameRevisionRuns: 0, revisionKey: "revision-before-fix" },
+              { id: "variation", cohort: "variation", status: "achieved", campaignRunIds: ["variation-c1-r2"], sameRevisionRuns: 1, revisionKey: "revision-after-fix" },
+            ],
+            campaignLinks: [],
+            fixCheckpointIds: ["fix-cycle-1"],
+            result: {
+              sequenceAchieved: true,
+              mechanicProven: true,
+              achievedStepIds: ["discovery", "repeatability", "variation"],
+              finalRevisionKey: "revision-after-fix",
+            },
+            lifecycle: {
+              action: "conclude",
+              at: "2026-08-31T04:52:11.568Z",
+            },
+          },
+        ];
+      },
+      async readFixes() {
+        return [];
+      },
+    };
+
+    const snapshot = await buildDashboardSnapshot(
+      repoRoot,
+      fakeStore,
+      fakeLoopStore
+    );
+
+    expect(snapshot.mechanics).toEqual([
+      expect.objectContaining({
+        manifestId: "p09-t17-projectile",
+        revisionKey: "revision-after-fix",
+        providerModes: actualProviderModes,
+        discovery: "achieved",
+        repeatability: "achieved",
+        variation: "achieved",
+        proven: true,
+      }),
+    ]);
+  });
+
   it("shows loop progress, budgets, linked campaigns, and proposed fix checkpoints", async () => {
     const fakeStore = {
       artifactRoot: path.join(repoRoot, ".qa", "mechanic-generation-campaign"),

@@ -208,7 +208,7 @@ export async function buildDashboardSnapshot(
       ({ classification }) => classification ?? "unknown"
     ),
     promptVariation: createPromptVariation(campaigns),
-    mechanics: createMechanicProof(campaigns),
+    mechanics: createMechanicProof(campaigns, loops),
   };
 }
 
@@ -356,7 +356,7 @@ function createPromptVariation(campaigns) {
     }));
 }
 
-function createMechanicProof(campaigns) {
+function createMechanicProof(campaigns, loops = []) {
   const campaignsByMechanic = new Map();
   for (const campaign of campaigns) {
     const mechanicCampaigns = campaignsByMechanic.get(campaign.manifestId) ?? [];
@@ -396,6 +396,48 @@ function createMechanicProof(campaigns) {
       variation: "missing",
       proven: false,
     };
+
+    const provenLoop = loops
+      .filter(
+        (loop) =>
+          loop.manifestId === manifestId &&
+          loop.result?.mechanicProven === true &&
+          loop.steps.some((step) =>
+            step.campaignRunIds.some((campaignRunId) =>
+              mechanicCampaigns.some((campaign) => campaign.id === campaignRunId)
+            )
+          )
+      )
+      .sort(
+        (left, right) =>
+          (right.lifecycle?.at ?? right.completedAt ?? right.createdAt ?? "")
+            .localeCompare(
+              left.lifecycle?.at ?? left.completedAt ?? left.createdAt ?? ""
+            ) || right.id.localeCompare(left.id)
+      )[0];
+    if (provenLoop) {
+      const linkedCampaignIds = new Set(
+        provenLoop.steps.flatMap((step) => step.campaignRunIds)
+      );
+      const displayCampaign = mechanicCampaigns
+        .filter((campaign) => linkedCampaignIds.has(campaign.id))
+        .sort(newestFirst)[0] ?? selectedCampaign;
+      const stepStatus = (cohort) =>
+        provenLoop.steps.find((step) => step.cohort === cohort)?.status ??
+        "missing";
+      return {
+        manifestId,
+        revisionKey:
+          provenLoop.result.finalRevisionKey ??
+          provenLoop.currentRevision.revisionKey,
+        model: provenLoop.model,
+        providerModes: displayCampaign.providerModes,
+        discovery: stepStatus("discovery"),
+        repeatability: stepStatus("repeatability"),
+        variation: stepStatus("variation"),
+        proven: true,
+      };
+    }
 
     for (const campaign of selectedProofCampaigns) {
       if (group[campaign.cohort] !== "missing") continue;
