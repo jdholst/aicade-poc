@@ -447,6 +447,67 @@ describe("campaign loop state", () => {
     ]);
   });
 
+  it("reconciles an evidence-backed pre-provider rejection to exact zero cost", () => {
+    const run = {
+      ...initialRun(),
+      status: "exhausted",
+      exhaustionReason:
+        "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate.",
+      pricing: {
+        path: "tools/mechanic-generation-campaign/pricing/openai-2026-08-29.json",
+        sha256: "7".repeat(64),
+        snapshotId: "openai-2026-08-29",
+      },
+      providerCost: {
+        grossExactNanoUsd: 21_415_800,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 15_192_550,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [],
+        settledCalls: [
+          {
+            callId: "attempt-1:planning:1",
+            stage: "planning",
+            completedAt: "2026-08-31T21:01:09.238Z",
+            quality: "unknown",
+            totalNanoUsd: 0,
+            reservationNanoUsd: 0,
+            attributed: true,
+          },
+        ],
+      },
+    };
+
+    const reconciled = reconcileLegacyProviderCostEstimates(run, {
+      id: "provider-cost-reconciliation-1",
+      reason:
+        "The captured Sparkline response proves that configuration rejected the request before any provider attempt.",
+      exactZeroCallIds: ["attempt-1:planning:1"],
+      reconciledAt: "2026-08-31T21:15:00.000Z",
+    });
+
+    expect(reconciled.providerCost.settledCalls).toEqual([
+      {
+        callId: "attempt-1:planning:1",
+        stage: "planning",
+        completedAt: "2026-08-31T21:01:09.238Z",
+        quality: "exact",
+        totalNanoUsd: 0,
+        attributed: true,
+      },
+    ]);
+    expect(reconciled.providerCostReconciliations).toEqual([
+      expect.objectContaining({
+        id: "provider-cost-reconciliation-1",
+        convertedCalls: 1,
+        removedGrossEstimatedNanoUsd: 0,
+      }),
+    ]);
+    expect(
+      authorizeActualProviderBatch({ ...reconciled, status: "running" }).allowed
+    ).toBe(true);
+  });
+
   it("refuses to advance a proof step from automated-only success evidence", () => {
     const run = startLoopCampaign(initialRun(), {
       campaignRunId: "discovery-1",

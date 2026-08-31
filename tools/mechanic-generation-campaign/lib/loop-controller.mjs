@@ -915,19 +915,82 @@ export async function reconcileCampaignLoopProviderCosts({
   loopId,
   reason,
   loopStore = createCampaignLoopStore(repoRoot),
+  campaignStore = createCampaignStore(repoRoot),
   now = () => new Date(),
 }) {
-  await loopStore.initialize();
+  await Promise.all([loopStore.initialize(), campaignStore.initialize()]);
   const run = await loopStore.readRun(loopId);
+  const exactZeroCallIds = await findEvidenceBackedExactZeroCallIds({
+    run,
+    campaignStore,
+  });
   const reconciled = reconcileLegacyProviderCostEstimates(run, {
     id: `provider-cost-reconciliation-${
       (run.providerCostReconciliations ?? []).length + 1
     }`,
     reason,
+    exactZeroCallIds,
     reconciledAt: now().toISOString(),
   });
   await loopStore.writeRun(reconciled);
   return reconciled;
+}
+
+async function findEvidenceBackedExactZeroCallIds({ run, campaignStore }) {
+  const unresolvedCallIds = new Set(
+    run.providerCost?.settledCalls
+      .filter(({ quality }) => quality === "unknown")
+      .map(({ callId }) => callId) ?? []
+  );
+  if (unresolvedCallIds.size === 0) return [];
+
+  const exactZeroCallIds = new Set();
+  for (const { campaignRunId } of run.campaignLinks) {
+    const attempts = await campaignStore.readAttempts(campaignRunId);
+    for (const attempt of attempts) {
+      let captures;
+      try {
+        captures = JSON.parse(
+          await readFile(
+            path.join(
+              campaignStore.attemptDirectory(campaignRunId, attempt.id),
+              "network-captures.json"
+            ),
+            "utf8"
+          )
+        );
+      } catch (error) {
+        if (error?.code === "ENOENT") continue;
+        throw error;
+      }
+      if (!Array.isArray(captures)) {
+        throw new Error(
+          `Campaign ${campaignRunId} attempt ${attempt.id} has invalid network capture evidence.`
+        );
+      }
+      for (const capture of captures) {
+        if (
+          unresolvedCallIds.has(capture?.callId) &&
+          isPreProviderConfigurationFailureCapture(capture)
+        ) {
+          exactZeroCallIds.add(capture.callId);
+        }
+      }
+    }
+  }
+  return [...exactZeroCallIds].sort();
+}
+
+export function isPreProviderConfigurationFailureCapture(capture) {
+  return Boolean(
+    capture?.source === "actual" &&
+      Number.isInteger(capture.responseStatus) &&
+      capture.responseStatus >= 400 &&
+      capture.response?.ok === false &&
+      capture.response?.stage === "configuration" &&
+      capture.response?.attemptCount === 0 &&
+      capture.response?.providerUsage == null
+  );
 }
 
 async function restoreTerminalPendingCandidate({

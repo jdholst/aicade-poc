@@ -20,6 +20,7 @@ import { validateFixKnowledgeCheckpoint } from "./lib/knowledge-checkpoint.mjs";
 import {
   createProviderCallBudget,
   extendCampaignLoop,
+  isPreProviderConfigurationFailureCapture,
   pauseCampaignLoopForRepair,
   recoverCampaignLoop,
   resumeCampaignLoop,
@@ -49,6 +50,34 @@ afterEach(async () => {
 });
 
 describe("campaign loop controller", () => {
+  it("requires explicit zero-attempt configuration evidence for exact-zero reconciliation", () => {
+    const capture = {
+      callId: "attempt-1:planning:1",
+      stage: "planning",
+      source: "actual",
+      responseStatus: 400,
+      response: {
+        ok: false,
+        stage: "configuration",
+        attemptCount: 0,
+      },
+    };
+
+    expect(isPreProviderConfigurationFailureCapture(capture)).toBe(true);
+    expect(
+      isPreProviderConfigurationFailureCapture({
+        ...capture,
+        response: { ...capture.response, attemptCount: 1 },
+      })
+    ).toBe(false);
+    expect(
+      isPreProviderConfigurationFailureCapture({
+        ...capture,
+        response: { ...capture.response, providerUsage: {} },
+      })
+    ).toBe(false);
+  });
+
   it("authorizes parallel provider calls from settled spend only", async () => {
     const pricingPath = path.join(
       import.meta.dirname,

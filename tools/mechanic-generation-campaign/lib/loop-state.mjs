@@ -845,7 +845,12 @@ export function settleActualProviderCallCost(
 
 export function reconcileLegacyProviderCostEstimates(
   run,
-  { id, reason, reconciledAt = new Date().toISOString() }
+  {
+    id,
+    reason,
+    exactZeroCallIds = [],
+    reconciledAt = new Date().toISOString(),
+  }
 ) {
   if (!run.providerCost) {
     throw new Error("Provider cost reconciliation requires frozen pricing.");
@@ -863,6 +868,16 @@ export function reconcileLegacyProviderCostEstimates(
   const legacyCalls = run.providerCost.settledCalls.filter(
     (call) => call.quality === "conservative_estimate"
   );
+  const exactZeroCallIdSet = new Set(exactZeroCallIds);
+  const exactZeroCalls = run.providerCost.settledCalls.filter(
+    (call) =>
+      call.quality === "unknown" && exactZeroCallIdSet.has(call.callId)
+  );
+  if (exactZeroCalls.length !== exactZeroCallIdSet.size) {
+    throw new Error(
+      "Exact-zero provider cost reconciliation requires every call ID to match one unresolved settled call."
+    );
+  }
   const removedGrossEstimatedNanoUsd = legacyCalls.reduce(
     (sum, call) => sum + call.totalNanoUsd,
     0
@@ -884,16 +899,26 @@ export function reconcileLegacyProviderCostEstimates(
         run.providerCost.attributedEstimatedNanoUsd -
           removedAttributedEstimatedNanoUsd
       ),
-      settledCalls: run.providerCost.settledCalls.map((call) =>
-        call.quality === "conservative_estimate"
-          ? {
-              ...call,
-              quality: "unknown",
-              reservationNanoUsd: call.totalNanoUsd,
-              totalNanoUsd: 0,
-            }
-          : call
-      ),
+      settledCalls: run.providerCost.settledCalls.map((call) => {
+        if (call.quality === "conservative_estimate") {
+          return {
+            ...call,
+            quality: "unknown",
+            reservationNanoUsd: call.totalNanoUsd,
+            totalNanoUsd: 0,
+          };
+        }
+        if (exactZeroCallIdSet.has(call.callId)) {
+          const settledCall = { ...call };
+          delete settledCall.reservationNanoUsd;
+          return {
+            ...settledCall,
+            quality: "exact",
+            totalNanoUsd: 0,
+          };
+        }
+        return call;
+      }),
     },
     providerCostReconciliations: [
       ...(run.providerCostReconciliations ?? []),
@@ -901,7 +926,7 @@ export function reconcileLegacyProviderCostEstimates(
         id: id.trim(),
         reason: reason.trim(),
         reconciledAt,
-        convertedCalls: legacyCalls.length,
+        convertedCalls: legacyCalls.length + exactZeroCalls.length,
         removedGrossEstimatedNanoUsd,
         removedAttributedEstimatedNanoUsd,
       },
