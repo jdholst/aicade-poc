@@ -173,13 +173,13 @@ describe("OpenAI creator-generation planning provider", () => {
       '"availableOnSelectedHost": true'
     );
     expect(requestBody.instructions).toContain(
-      '"supportedGeneratedTriggerIds": [\n    "logical_action"\n  ]'
+      '"supportedGeneratedTriggerIds": [\n    "install",\n    "logical_action"\n  ]'
     );
     expect(requestBody.instructions).toContain(
       '"requiredIndependentEffectCapability": "object_motion_write"'
     );
     expect(requestBody.instructions).toContain(
-      '"requiredInputConnection": "exactly one input connection whose port is an exact active gameSpec control action ID"'
+      '"requiredInputConnection": "creator-controlled only: exactly one input connection whose port is an exact active gameSpec control action ID; autonomous install behavior has no connections"'
     );
     expect(requestBody.instructions).toContain(
       '"requiredActorReference": "every actor must equal the role of an exact referenced gameSpec entity"'
@@ -191,7 +191,7 @@ describe("OpenAI creator-generation planning provider", () => {
       "Every generated-host target must equal the role of an exact entity reference from gameSpec"
     );
     expect(requestBody.instructions).toContain(
-      "Do not invent variants such as logical_custom_action"
+      "Do not invent trigger variants"
     );
     expect(requestBody.instructions).toContain(
       "Infer ordinary missing gameplay details instead of requesting clarification"
@@ -218,7 +218,7 @@ describe("OpenAI creator-generation planning provider", () => {
       '"minimumDurationMilliseconds": 150'
     );
     expect(requestBody.instructions).toContain(
-      "Before returning, run this generated-host alignment checklist for every material creator-controlled behavior that is not fully covered by a built-in"
+      "Before returning, run the matching generated-host alignment checklist for every material behavior that is not fully covered by a built-in"
     );
     expect(requestBody.instructions).toContain(
       "If the creator requests a new player action such as shooting, add one active control to gameSpec first"

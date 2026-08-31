@@ -188,6 +188,32 @@ describe("generated mechanic project planning", () => {
     });
   });
 
+  it("admits an autonomous install-triggered contract with no action connection", () => {
+    const baseContract = createContract();
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      behavior: { ...baseContract.behavior, triggers: ["install"] },
+      lifecycle: { ...baseContract.lifecycle, callbacks: ["install"] },
+      scenarios: baseContract.scenarios.map((scenario) => ({
+        ...scenario,
+        steps: [{ kind: "advance_time" as const, milliseconds: 100 }],
+      })),
+    };
+    const intent: MechanicIntent = {
+      ...createIntent(),
+      triggers: ["install"],
+      connections: [],
+    };
+
+    expect(
+      validateGeneratedMechanicTopDownHostAdmission({
+        contract,
+        catalog: createGeneratedMechanicReferenceCatalog(createBaseGameSpec()),
+        intent,
+      })
+    ).toEqual({ success: true, data: contract });
+  });
+
   it.each([
     { caseName: "missing", connections: [] },
     {

@@ -759,14 +759,27 @@ export function createGeneratedMechanicExternalObservations(
     connection.direction === "input" ? [connection.port] : []
   );
   const activeActionIds = new Set(gameSpec.controls.map(({ action }) => action));
+  const usesLogicalAction = intent.triggers.includes("logical_action");
+  const usesAutonomousInstall =
+    intent.triggers.length === 1 && intent.triggers[0] === "install";
   const actionId = routedInputActionIds[0];
-  if (
+  if (usesLogicalAction && (
     routedInputActionIds.length !== 1 ||
     actionId === undefined ||
     !activeActionIds.has(actionId)
-  ) {
+  )) {
     throw new TypeError(
       "Top-down generated mechanic evaluation requires exactly one trusted routed input action backed by an active Game Spec control."
+    );
+  }
+  if (!usesLogicalAction && (!usesAutonomousInstall || intent.connections.length !== 0)) {
+    throw new TypeError(
+      "Top-down generated mechanic evaluation requires either one trusted routed action or an autonomous install trigger with no connections."
+    );
+  }
+  if (usesAutonomousInstall && !requiresTransientLifecycle) {
+    throw new TypeError(
+      "Autonomous install-triggered evaluation requires an observable owned-object lifecycle."
     );
   }
   const timeAdvancingScenarios = requiresTransientLifecycle
@@ -798,16 +811,21 @@ export function createGeneratedMechanicExternalObservations(
       const scenarioActions = scenario.steps.flatMap((step) =>
         step.kind === "dispatch_action" ? [step.actionId] : []
       );
-      if (scenarioActions.length !== 1 || scenarioActions[0] !== actionId) {
+      if (usesLogicalAction && (scenarioActions.length !== 1 || scenarioActions[0] !== actionId)) {
         throw new TypeError(
           `Top-down generated mechanic scenario "${scenario.id}" must dispatch trusted routed action "${actionId}" exactly once.`
         );
       }
-      if (requiresTransientLifecycle) {
-        const actionStepIndex = scenario.steps.findIndex(
-          (step) => step.kind === "dispatch_action"
+      if (usesAutonomousInstall && scenarioActions.length !== 0) {
+        throw new TypeError(
+          `Autonomous install-triggered scenario "${scenario.id}" must not dispatch an action.`
         );
-        const observesLifecycleAfterAction = scenario.steps
+      }
+      if (requiresTransientLifecycle) {
+        const actionStepIndex = usesLogicalAction
+          ? scenario.steps.findIndex((step) => step.kind === "dispatch_action")
+          : -1;
+        const observesLifecycleAfterTrigger = scenario.steps
           .slice(actionStepIndex + 1)
           .some((step) => step.kind === "advance_time");
         const requiresPositiveOwnedObjectCount = scenario.observations.some(
@@ -819,31 +837,62 @@ export function createGeneratedMechanicExternalObservations(
             observation.operator !== "at_most" &&
             observation.value > 0
         );
-        const lifecycleKind = observesLifecycleAfterAction
+        const lifecyclePhase = observesLifecycleAfterTrigger
           ? requiresPositiveOwnedObjectCount
-            ? ("owned_object_lifecycle_progress_after_action" as const)
-            : ("owned_object_lifecycle_after_action" as const)
+            ? "progress"
+            : "complete"
           : requiresPositiveOwnedObjectCount
-            ? ("owned_object_creation_after_action" as const)
-            : ("owned_object_lifecycle_unchanged_after_action" as const);
+            ? "creation"
+            : "unchanged";
+        const lifecycleKind = usesLogicalAction
+          ? lifecyclePhase === "progress"
+            ? "owned_object_lifecycle_progress_after_action"
+            : lifecyclePhase === "complete"
+              ? "owned_object_lifecycle_after_action"
+              : lifecyclePhase === "creation"
+                ? "owned_object_creation_after_action"
+                : "owned_object_lifecycle_unchanged_after_action"
+          : lifecyclePhase === "progress"
+            ? "owned_object_lifecycle_progress_after_install"
+            : lifecyclePhase === "complete"
+              ? "owned_object_lifecycle_after_install"
+              : lifecyclePhase === "creation"
+                ? "owned_object_creation_after_install"
+                : "owned_object_lifecycle_unchanged_after_install";
         const requiresCreationProof =
-          lifecycleKind !== "owned_object_lifecycle_unchanged_after_action";
+          !lifecycleKind.includes("lifecycle_unchanged");
+        const commonObservation = {
+          archetypeIds: Object.freeze(
+            contract.ownedObjects.map(({ id }) => id)
+          ),
+          ...(requiresCreationProof && requiresActorOrigin
+            ? { requireActorOrigin: true as const }
+            : {}),
+          ...(targetInteractionScenarioIds.has(scenario.id)
+            ? { requireTargetInteraction: true as const }
+            : {}),
+        };
         return Object.freeze({
             id: `external_${scenario.id}_${lifecycleKind}`,
             scenarioId: scenario.id,
-            observation: Object.freeze({
-              kind: lifecycleKind,
-              archetypeIds: Object.freeze(
-                contract.ownedObjects.map(({ id }) => id)
-              ),
-              actionId,
-              ...(requiresCreationProof && requiresActorOrigin
-                ? { requireActorOrigin: true as const }
-                : {}),
-              ...(targetInteractionScenarioIds.has(scenario.id)
-                ? { requireTargetInteraction: true as const }
-                : {}),
-            }),
+            observation: usesLogicalAction
+              ? Object.freeze({
+                  ...commonObservation,
+                  kind: lifecycleKind as
+                    | "owned_object_lifecycle_after_action"
+                    | "owned_object_creation_after_action"
+                    | "owned_object_lifecycle_progress_after_action"
+                    | "owned_object_lifecycle_unchanged_after_action",
+                  actionId: actionId!,
+                })
+              : Object.freeze({
+                  ...commonObservation,
+                  kind: lifecycleKind as
+                    | "owned_object_lifecycle_after_install"
+                    | "owned_object_creation_after_install"
+                    | "owned_object_lifecycle_progress_after_install"
+                    | "owned_object_lifecycle_unchanged_after_install",
+                }),
           });
       }
       return Object.freeze({

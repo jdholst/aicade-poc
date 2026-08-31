@@ -510,6 +510,62 @@ describe("generated mechanic browser evaluation fixture", () => {
     ]);
   });
 
+  it("authors install-causal lifecycle proof for an autonomous transient mechanic", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      triggers: ["install"],
+      connections: [],
+      ownedObjects: ["hazard"],
+      requiredCapabilities: [
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        connections: [],
+      },
+      behavior: { ...baseContract.behavior, triggers: ["install"] },
+      ownedObjects: [{ id: "hazard", objectKind: "hazard", maximumInstances: 2 }],
+      lifecycle: { ...baseContract.lifecycle, callbacks: ["install"] },
+      capabilities: [
+        "object_motion_write",
+        "object_create",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [{ kind: "advance_time", milliseconds: 16 }],
+        },
+      ],
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_after_install",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_after_install",
+          archetypeIds: ["hazard"],
+        },
+      },
+    ]);
+  });
+
   it("authors active lifecycle progress proof when a timed scenario positively requires an owned object", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const entityId = gameSpec.entities[0].id;

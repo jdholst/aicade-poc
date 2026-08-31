@@ -161,18 +161,29 @@ export function validateGeneratedMechanicTopDownHostAdmission({
   const inputConnections = intent.connections.filter(
     ({ direction }) => direction === "input"
   );
+  const usesLogicalAction = intent.triggers.includes("logical_action");
+  const usesAutonomousInstall =
+    intent.triggers.length === 1 && intent.triggers[0] === "install";
   const routedActionId =
     intent.connections.length === 1 &&
     inputConnections.length === 1 &&
     admittedActionIds.includes(inputConnections[0]!.port)
       ? inputConnections[0]!.port
       : undefined;
-  if (!routedActionId) {
+  if (usesLogicalAction && !routedActionId) {
     issues.push({
       path: "intent.connections",
       code: "missing_exact_routed_action_connection",
       message:
         "The retained top-down generated-mechanic host requires exactly one routed intent input connection backed by an active Game Spec action.",
+    });
+  }
+  if (usesAutonomousInstall && intent.connections.length !== 0) {
+    issues.push({
+      path: "intent.connections",
+      code: "missing_exact_routed_action_connection",
+      message:
+        "An autonomous install-triggered mechanic must not declare routed action or output connections.",
     });
   }
   if (
@@ -181,13 +192,13 @@ export function validateGeneratedMechanicTopDownHostAdmission({
     intent.triggers.some(
       (trigger) => !lifecycleCallbacks.has(trigger)
     ) ||
-    !intent.triggers.includes("logical_action")
+    (!usesLogicalAction && !usesAutonomousInstall)
   ) {
     issues.push({
       path: "intent.triggers",
       code: "unsupported_runtime_trigger",
       message:
-        'The retained top-down generated-mechanic host currently admits only canonical "install" and "logical_action" routed triggers, requires logical_action for independent causal proof, and requires every routed trigger to have a matching lifecycle callback.',
+        'The retained top-down generated-mechanic host admits either canonical "logical_action" with optional "install", or exactly "install" for autonomous behavior, and requires every routed trigger to have a matching lifecycle callback.',
     });
   }
   if (contract.ports.length > 0) {
@@ -277,6 +288,19 @@ export function validateGeneratedMechanicTopDownHostAdmission({
         });
       }
     });
+  }
+  if (usesAutonomousInstall) {
+    const dispatchedActions = contract.scenarios.flatMap((scenario) =>
+      scenario.steps.filter((step) => step.kind === "dispatch_action")
+    );
+    if (dispatchedActions.length > 0) {
+      issues.push({
+        path: "contract.scenarios",
+        code: "routed_action_scenario_mismatch",
+        message:
+          "Autonomous install-triggered evaluator scenarios must not dispatch an action.",
+      });
+    }
   }
 
   return issues.length > 0

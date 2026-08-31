@@ -178,7 +178,7 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       '"routedActionConnection": "exactly one accepted intent input connection whose port is an exact active logical action"'
     );
     expect(prompt).toContain(
-      "observable owned-object creation, travel, routed-target interaction when applicable, and cleanup"
+      "evaluator-authored observations must instead prove owned-object creation, nonzero travel over simulated time"
     );
     expect(prompt).toContain(
       "If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"

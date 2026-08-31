@@ -85,6 +85,7 @@ export function createMechanicContractGenerationSystemPrompt({
       : []),
   ];
   const attemptGuidance = createContractAttemptGuidance(generationAttempt);
+  const usesLogicalAction = intent.triggers.includes("logical_action");
 
   return `
 You are producing the validated pre-implementation contract for one generated game mechanic.
@@ -132,13 +133,16 @@ ${JSON.stringify({
   routedEntityBindings:
     "exactly one single-entity binding for every intent-referenced entity, with no additional bindings",
   independentAcceptanceEvidence:
-    "every scenario must dispatch an exact active logical action; ordinary contracts must causally change referenced-entity motion, while intents that require the transient create/move/destroy lifecycle must produce observable owned-object creation, travel, routed-target interaction when applicable, and cleanup",
+    usesLogicalAction
+      ? "every scenario must dispatch the exact active logical action and prove its causal visible effect"
+      : "every scenario must omit action dispatch and prove an install-origin visible owned-object lifecycle",
   requiredIndependentEffectCapability: "object_motion_write",
-  requiredTrigger: "logical_action",
+  requiredTrigger: usesLogicalAction ? "logical_action" : "install",
   bindingPropertyIds:
     TOP_DOWN_GENERATED_MECHANIC_EVALUATION_PROPERTY_IDS,
-  routedActionConnection:
-    "exactly one accepted intent input connection whose port is an exact active logical action",
+  routedActionConnection: usesLogicalAction
+    ? "exactly one accepted intent input connection whose port is an exact active logical action"
+    : "none for autonomous install-triggered behavior",
   privateStateIsIndependentAcceptanceEvidence: false,
   ports: false,
   ownedObjects: true,
@@ -185,7 +189,7 @@ Contract rules:
 - Generated source cannot deactivate or destroy bound objects. Never require active to equal false or to differ from true for a binding; prove an effect with an admitted mutable motion property or evaluator-authored target-interaction evidence. object_destroy applies only to mechanic-owned objects.
 - Use time_schedule plus a scheduled lifecycle callback for one-shot delayed transitions such as ending a temporary effect or releasing a cooldown. Do not use fixed_step to poll for dash expiry, cooldown expiry, or another one-shot deadline. Set lifecycle.fixedStep to false unless the accepted behavior genuinely requires continuous simulation updates; every advance_time scenario step accumulates the operations of all callbacks it dispatches under one fixed budget.
 - When an owned object's velocity is set once and the host advances its motion, use time_schedule with a scheduled callback for bounded recurring interaction and cleanup checks; reserve fixed_step for behavior that must recalculate or rewrite motion on each simulation step. A recurring scheduled check must remain within maximumScheduledCallbacks by scheduling at most one next check for each active owned object.
-- Target the current persisted top-down creator host profile exactly: declare exactly one single-entity binding for every intent-referenced entity and no additional bindings; declare no ports, no gameplay-event callback, and only the listed supported capabilities. Declare mechanic-owned archetypes only when the accepted intent requires owned objects, keep each maximumInstances within the selected budget, and grant only the exact generic object capabilities justified by that behavior. The accepted intent must have exactly one input connection whose port is an exact active logical action, and every scenario must dispatch that same action exactly once. Contracts whose accepted intent does not require the transient object_create, object_motion_write, and object_destroy lifecycle must causally change the motion of an exact intent-referenced entity. When the accepted intent requires that transient lifecycle, evaluator-authored observations must instead prove owned-object creation, nonzero travel over simulated time, an attributable routed-target interaction when targets are declared, and explicit cleanup. spatial_query is additional authority required only when target interaction or owned-object rediscovery needs it; it is not a prerequisite for selecting owned-object lifecycle evidence. Private state may support the mechanic, but it is never independent acceptance evidence. Logical actions must use action IDs from the trusted reference catalog.
+- Target the current persisted top-down creator host profile exactly: declare exactly one single-entity binding for every intent-referenced entity and no additional bindings; declare no ports, no gameplay-event callback, and only the listed supported capabilities. Declare mechanic-owned archetypes only when the accepted intent requires owned objects, keep each maximumInstances within the selected budget, and grant only the exact generic object capabilities justified by that behavior. A logical-action intent must have exactly one input connection whose port is an exact active action and every scenario must dispatch it exactly once. An autonomous install intent must have no connections and no scenario may dispatch an action. Contracts whose accepted intent does not require the transient object_create, object_motion_write, and object_destroy lifecycle must causally change the motion of an exact intent-referenced entity. When the accepted intent requires that transient lifecycle, evaluator-authored observations must instead prove owned-object creation, nonzero travel over simulated time, an attributable routed-target interaction when targets are declared, and explicit cleanup. spatial_query is additional authority required only when target interaction or owned-object rediscovery needs it; it is not a prerequisite for selecting owned-object lifecycle evidence. Private state may support the mechanic, but it is never independent acceptance evidence. Logical actions must use action IDs from the trusted reference catalog.
 - Do not use named-mechanic profiles, mechanic-specific algorithms, hidden helpers, implementation fragments, or external test code.
 - Do not return implementation code or any game specification.
 

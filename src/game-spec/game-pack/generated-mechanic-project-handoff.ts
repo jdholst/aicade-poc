@@ -3579,10 +3579,15 @@ function externalObservationEvidenceActualMatchesAssertion({
   expectedBindingIds: readonly StableId[];
   expectedActionId: StableId | undefined;
 }>): boolean {
+  const usesLogicalAction =
+    contract.lifecycle.callbacks.includes("logical_action");
   if (
-    expectedActionId === undefined ||
-    !("actionId" in assertion) ||
-    assertion.actionId !== expectedActionId ||
+    (usesLogicalAction &&
+      (expectedActionId === undefined ||
+        !("actionId" in assertion) ||
+        assertion.actionId !== expectedActionId)) ||
+    (!usesLogicalAction &&
+      (expectedActionId !== undefined || "actionId" in assertion)) ||
     actual === null ||
     typeof actual !== "object" ||
     Array.isArray(actual) ||
@@ -3596,6 +3601,7 @@ function externalObservationEvidenceActualMatchesAssertion({
 
   if (assertion.kind === "referenced_entity_motion_changed") {
     return (
+      usesLogicalAction &&
       !requiresOwnedObjectLifecycleForHandoff(contract) &&
       expectedBindingIds.length > 0 &&
       jsonEqual(assertion.bindingIds, expectedBindingIds) &&
@@ -3610,21 +3616,26 @@ function externalObservationEvidenceActualMatchesAssertion({
     assertion.kind !== "owned_object_lifecycle_after_action" &&
     assertion.kind !== "owned_object_creation_after_action" &&
     assertion.kind !== "owned_object_lifecycle_progress_after_action" &&
-    assertion.kind !== "owned_object_lifecycle_unchanged_after_action"
+    assertion.kind !== "owned_object_lifecycle_unchanged_after_action" &&
+    assertion.kind !== "owned_object_lifecycle_after_install" &&
+    assertion.kind !== "owned_object_creation_after_install" &&
+    assertion.kind !== "owned_object_lifecycle_progress_after_install" &&
+    assertion.kind !== "owned_object_lifecycle_unchanged_after_install"
   ) {
     return false;
   }
 
-  const expectedLifecycleKind = scenarioAdvancesAfterAction(
-    scenario,
-    expectedActionId
-  )
+  const advancesAfterTrigger = usesLogicalAction
+    ? scenarioAdvancesAfterAction(scenario, expectedActionId!)
+    : scenario.steps.some((step) => step.kind === "advance_time");
+  const lifecycleSuffix = usesLogicalAction ? "action" : "install";
+  const expectedLifecycleKind = advancesAfterTrigger
     ? scenarioRequiresImmediateOwnedObjectCreation(scenario, contract)
-      ? "owned_object_lifecycle_progress_after_action"
-      : "owned_object_lifecycle_after_action"
+      ? `owned_object_lifecycle_progress_after_${lifecycleSuffix}`
+      : `owned_object_lifecycle_after_${lifecycleSuffix}`
     : scenarioRequiresImmediateOwnedObjectCreation(scenario, contract)
-      ? "owned_object_creation_after_action"
-      : "owned_object_lifecycle_unchanged_after_action";
+      ? `owned_object_creation_after_${lifecycleSuffix}`
+      : `owned_object_lifecycle_unchanged_after_${lifecycleSuffix}`;
   const expectedArchetypeIds = contract.ownedObjects.map(({ id }) => id);
   const requiresTargetInteraction =
     scenarioRequiresTargetInteractionForHandoff(contract, scenario);
@@ -3641,12 +3652,14 @@ function externalObservationEvidenceActualMatchesAssertion({
     !requiresOwnedObjectLifecycleForHandoff(contract) ||
     assertion.kind !== expectedLifecycleKind ||
     !jsonEqual(assertion.archetypeIds, expectedArchetypeIds) ||
-    (assertion.kind !== "owned_object_lifecycle_unchanged_after_action" &&
-      (assertion.requireActorOrigin === true) !== requiresActorOrigin) ||
-    ((assertion.kind === "owned_object_lifecycle_after_action" ||
-      assertion.kind === "owned_object_lifecycle_progress_after_action") &&
-      (assertion.requireTargetInteraction === true) !==
-        requiresTargetInteraction) ||
+    (!assertion.kind.includes("lifecycle_unchanged") &&
+      (("requireActorOrigin" in assertion &&
+        assertion.requireActorOrigin === true) !== requiresActorOrigin)) ||
+    ((assertion.kind.includes("lifecycle_after_") ||
+      assertion.kind.includes("lifecycle_progress_after_")) &&
+      (("requireTargetInteraction" in assertion &&
+        assertion.requireTargetInteraction === true) !==
+        requiresTargetInteraction)) ||
     !beforeEntries ||
     !afterEntries
   ) {
@@ -3664,20 +3677,19 @@ function externalObservationEvidenceActualMatchesAssertion({
       entry.simulatedDistanceTraveled - baseline.simulatedDistanceTraveled;
     const targetInteractions =
       entry.targetInteractions - baseline.targetInteractions;
-    return assertion.kind ===
-      "owned_object_lifecycle_unchanged_after_action"
+    return assertion.kind.includes("lifecycle_unchanged")
       ? active === 0 &&
           actorOriginCreations === 0 &&
           created === 0 &&
           destroyed === 0 &&
           traveled === 0 &&
           targetInteractions === 0
-      : assertion.kind === "owned_object_creation_after_action"
+      : assertion.kind.includes("object_creation")
         ? active === created &&
           created > 0 &&
           destroyed === 0 &&
           (!requiresActorOrigin || actorOriginCreations === created)
-      : assertion.kind === "owned_object_lifecycle_progress_after_action"
+      : assertion.kind.includes("lifecycle_progress")
         ? active > 0 &&
           created > 0 &&
           active === created - destroyed &&

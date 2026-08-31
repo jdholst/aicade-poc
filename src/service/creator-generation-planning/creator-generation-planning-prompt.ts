@@ -30,8 +30,11 @@ export function createCreatorGenerationPlanningSystemPrompt({
     })
   );
   const generatedHostIntentProfile = {
-    supportedGeneratedTriggerIds: ["logical_action"],
-    optionalLifecycleTriggerIds: ["install"],
+    supportedGeneratedTriggerIds: ["install", "logical_action"],
+    triggerProfiles: {
+      creatorControlled: "exactly logical_action with one exact active action input",
+      autonomous: "exactly install with no connections",
+    },
     requiredIndependentEffectCapability: "object_motion_write",
     requiredReferenceKind: "entity",
     requiredActorReference:
@@ -39,10 +42,10 @@ export function createCreatorGenerationPlanningSystemPrompt({
     requiredTargetReference:
       "every target must equal the role of an exact referenced gameSpec entity",
     requiredInputConnection:
-      "exactly one input connection whose port is an exact active gameSpec control action ID",
+      "creator-controlled only: exactly one input connection whose port is an exact active gameSpec control action ID; autonomous install behavior has no connections",
     preferredDistinctActionControlKey: "Space",
     independentAcceptanceEvidence:
-      "causal motion change of the exact intent-referenced entity after the exact active logical action",
+      "causal visible change after the exact active logical action, or install-origin owned-object lifecycle evidence for autonomous behavior",
     privateStateIsIndependentAcceptanceEvidence: false,
     visibleDashPerceptibility:
       TOP_DOWN_CREATOR_MOTION_PERCEPTIBILITY_POLICY,
@@ -74,12 +77,12 @@ Creator-generation planning envelope:
 - This catalog supplies exact requirement vocabulary only; deterministic routing remains Sparkline-owned.
 - Use a built-in trigger ID only when the complete material behavior is fully covered by that built-in contract. An existing movement action that triggers a new dash is only partially covered: use logical_action for that generated lifecycle and bind the exact active movement action through the input connection.
 - For behavior that is not fully covered by a built-in, requiredCapabilities must name every primitive it needs. Do not hide an unavailable primitive to avoid a capability-gap result.
-- Use the canonical generated-host trigger vocabulary below only when it truthfully describes the requested behavior. A creator-controlled generated behavior uses exactly logical_action. Do not invent variants such as logical_custom_action, logical_dash_action, or logical_move_action. Preserve a materially different requested trigger unchanged so deterministic routing can return an honest capability gap.
+- Use the canonical generated-host trigger vocabulary below only when it truthfully describes the requested behavior. A creator-controlled generated behavior uses exactly logical_action. An autonomous behavior that starts with the game uses exactly install and no connections. Do not invent trigger variants. Preserve a materially different requested trigger unchanged so deterministic routing can return an honest capability gap.
 - A generated-host intent must name object_motion_write only when the requested outcome truly includes independently visible motion of an exact entity reference. Do not invent motion or an entity reference merely to pass admission.
 - Every generated-host actor must equal the role of an exact entity reference from gameSpec; do not invent actor labels or unrelated references.
 - Every generated-host target must equal the role of an exact entity reference from gameSpec; do not invent generic target labels such as visible_target when the referenced entity's role is enemy, pickup, hazard, or another exact gameSpec role.
-- A generated-host intent must use exactly one input connection whose port is the exact active gameSpec control action ID that triggers the requested behavior. Materialize a creator-requested action as a concrete control before referencing it; do not invent unrelated action IDs or add output connections merely to pass admission.
-- Before returning, run this generated-host alignment checklist for every material creator-controlled behavior that is not fully covered by a built-in:
+- A creator-controlled generated-host intent must use exactly one input connection whose port is the exact active gameSpec control action ID that triggers the requested behavior. An autonomous install intent must use no connections. Materialize a creator-requested action as a concrete control before referencing it; do not invent unrelated action IDs or add output connections merely to pass admission.
+- Before returning, run the matching generated-host alignment checklist for every material behavior that is not fully covered by a built-in. For autonomous behavior, set triggers to exactly ["install"], set connections to [], and do not add a player control. For creator-controlled behavior:
   1. If the creator requests a new player action such as shooting, add one active control to gameSpec first, using one admitted individual physical key. Prefer Space for a distinct button action and preserve the existing movement controls. This implements the creator request; it is not unrelated admission metadata.
   2. Set mechanicIntent.triggers to exactly ["logical_action"].
   3. Set mechanicIntent.connections to exactly one input connection using that same action ID from gameSpec.controls, with no output connection.

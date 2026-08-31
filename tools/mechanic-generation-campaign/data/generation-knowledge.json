@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 32,
-  "updatedAt": "2026-08-31T04:52:49Z",
+  "revision": 33,
+  "updatedAt": "2026-08-31T20:56:17Z",
   "entries": [
     {
       "status": "active",
@@ -7202,6 +7202,34 @@
       "createdAt": "2026-08-31T04:52:49Z",
       "priorManifestDigest": "788ee89f504da715bdc86e2bedf4ea828dc088a54418bb45bc64a0d2e903bc73",
       "resultingManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-1-20260831t205617z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c0-r1"
+      },
+      "consultedManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f",
+      "contextDigest": "3f9feb0a35aa617402b758f9a7de173bd1d797bfed783ff0ea5a1cc44a1024b4",
+      "consultedFindingIds": [
+        "KF-0025"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The actual attempt stopped at deterministic routing before contract or source generation because the retained host rejected an autonomous install trigger without an action connection. It therefore provides no new evidence about whether recurring scheduled callbacks satisfy autonomous owned-object interaction and cleanup. KF-0025 still constrains the resumed contract and source path, but this attempt neither confirms nor contradicts that finding."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "The routing failure exposes a host admission gap that is fixed in code, but it does not add, amend, confirm, or retire reusable guidance beyond the already-confirmed KF-0025 scheduling rule.",
+      "createdAt": "2026-08-31T20:56:17Z",
+      "priorManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f",
+      "resultingManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5"
     }
   ]
 }

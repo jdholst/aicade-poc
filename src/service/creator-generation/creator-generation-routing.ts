@@ -265,15 +265,18 @@ function getGeneratedHostIntentIssues(
     });
   }
   const supportedTriggers = new Set(["install", "logical_action"]);
+  const usesLogicalAction = intent.triggers.includes("logical_action");
+  const usesAutonomousInstall =
+    intent.triggers.length === 1 && intent.triggers[0] === "install";
   if (
-    !intent.triggers.includes("logical_action") ||
+    (!usesLogicalAction && !usesAutonomousInstall) ||
     intent.triggers.some((trigger) => !supportedTriggers.has(trigger))
   ) {
     issues.push({
       path: "intent.triggers",
       code: "unsupported_generated_host_trigger",
       message:
-        'The current top-down generated-mechanic host requires the canonical "logical_action" trigger and supports only optional "install" alongside it.',
+        'The current top-down generated-mechanic host requires either the canonical "logical_action" trigger with optional "install", or exactly "install" for an autonomous mechanic.',
     });
   }
   const activeActionIds = new Set(
@@ -282,16 +285,24 @@ function getGeneratedHostIntentIssues(
   const inputConnections = intent.connections.filter(
     ({ direction }) => direction === "input"
   );
-  if (
+  if (usesLogicalAction && (
     intent.connections.length !== 1 ||
     inputConnections.length !== 1 ||
     !activeActionIds.has(inputConnections[0]?.port ?? "")
-  ) {
+  )) {
     issues.push({
       path: "intent.connections",
       code: "trusted_action_connection_required",
       message:
         "The current top-down generated-mechanic host requires exactly one input connection whose port is an exact active Game Spec action ID, so browser evidence can bind the requested trigger to its observable effect.",
+    });
+  }
+  if (usesAutonomousInstall && intent.connections.length !== 0) {
+    issues.push({
+      path: "intent.connections",
+      code: "trusted_action_connection_required",
+      message:
+        "An autonomous install-triggered mechanic must not declare an action or output connection.",
     });
   }
   return freeze(issues);
