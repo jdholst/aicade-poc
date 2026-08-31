@@ -58,7 +58,22 @@ export type MechanicSourceGenerationContract = Readonly<
     | "capabilities"
     | "resourceExpectations"
   >
->;
+> &
+  Readonly<{
+    requiredPrivateStateTransitions?: readonly MechanicSourcePrivateStateTransition[];
+  }>;
+
+type MechanicSourcePrivateStateTransition = Readonly<{
+  setupState: readonly Extract<
+    GeneratedMechanicContract["scenarios"][number]["setup"][number],
+    { kind: "state_equals" }
+  >[];
+  lifecycleSteps: GeneratedMechanicContract["scenarios"][number]["steps"];
+  requiredFinalState: readonly Extract<
+    GeneratedMechanicContract["scenarios"][number]["observations"][number],
+    { kind: "state_equals" }
+  >[];
+}>;
 
 export type MechanicSourceGenerationResolution = Readonly<{
   intentId: GeneratedMechanicResolution["intentId"];
@@ -136,9 +151,11 @@ export function createMechanicSourceGenerationSystemPrompt({
     assumptions: resolution.assumptions,
     uncoveredRequirements: resolution.uncoveredRequirements,
   };
-  const acceptedSourceContract = createMechanicSourceGenerationContract(
-    contract
-  );
+  const sourceContract = createMechanicSourceGenerationContract(contract);
+  const {
+    requiredPrivateStateTransitions,
+    ...acceptedSourceContract
+  } = sourceContract;
   const capabilityDocumentation = grant.capabilities.map((capability) => {
     const reference = sourceFacingCapabilityReference(
       capability.authoring.member
@@ -254,6 +271,9 @@ ${JSON.stringify(SOURCE_CALLBACK_SCOPE_IDENTIFIERS, null, 2)}
 Contract-derived source context JSON:
 ${JSON.stringify(sourceContextDocumentation, null, 2)}
 
+Required private-state transition obligations JSON:
+${JSON.stringify(requiredPrivateStateTransitions, null, 2)}
+
 Exact required source callback kinds JSON:
 ${JSON.stringify(requiredCallbackKinds, null, 2)}
 
@@ -271,6 +291,7 @@ Source rules:
 - Callback bodies may reference only the five exact callback-scope identifiers rendered above. input is a readonly compatibility alias for lifecycleInput with the same exact callback-kind type; do not declare, assign, or shadow either identifier. There is no ambient state, event, context, ctx, api, world, scene, game, or runtime identifier.
 - capabilities exposes exactly and only the groups and members rendered in the granted capability documentation. Never infer a capability group from contract fields, intent requirements, or examples; if an expression is absent from the exact grant, do not call, alias, cast, or synthesize it.
 - Private-state initial values are installed by the trusted host before the install callback, so install must not rewrite them merely to initialize the contract. Private state is not an ambient object or variable; only when the exact grant includes a capabilities.state method may callbacks pass an exact declared private-state ID to that documented method. Do not shorten a documented expression such as capabilities.state.read or capabilities.state.write to a bare state alias.
+- Each transition obligation is independent and begins from its rendered setup state. Trace its lifecycleSteps in order and make every requiredFinalState value the result of a reachable awaited capabilities.state.write before observations run. A single advance_time step first moves the simulation clock to its endpoint and then dispatches callbacks already due there; a positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Do not invent missed recurrence calls inside one coarse step. When a coarse step reaches a cleanup boundary, choose the cleanup path before recurring creation if the required final state returns active lifecycle state to its setup value.
 - Do not invent event aliases; read the current action, event, schedule, or fixed-step input only from lifecycleInput or its readonly input alias, using the exact runtime shape documented for that callback kind.
 - MechanicObjectHandle is an opaque identity token with no readable fields. Never access handle.position, handle.velocity, handle.kind, handle.properties, or any other property. querySpatial returns opaque handles, not MechanicObjectObservation values. Only when the exact grant includes capabilities.objects.read may source await that method with a handle and then read fields from its returned observation. When object_read is absent, derive the finite mutation from accepted config, lifecycle input, or deterministic constants without inspecting the handle.
 - Object observations expose only the fields in MechanicObjectObservation. There is no movementDirection, direction, or facing field. When accepted behavior needs current movement direction, derive movement direction from velocity.x and velocity.y; if both are zero, use a bounded deterministic fallback vector consistent with the accepted assumptions.
@@ -386,8 +407,32 @@ Attempt rules:
 }
 
 export function createMechanicSourceGenerationContract(
-  contract: MechanicSourceGenerationContract
+  contract: MechanicSourceGenerationContract | GeneratedMechanicContract
 ): MechanicSourceGenerationContract {
+  const requiredPrivateStateTransitions =
+    "scenarios" in contract
+      ? contract.scenarios
+          .map((scenario) => ({
+            setupState: scenario.setup.filter(
+              (item): item is Extract<
+                typeof item,
+                { kind: "state_equals" }
+              > => item.kind === "state_equals"
+            ),
+            lifecycleSteps: scenario.steps,
+            requiredFinalState: scenario.observations.filter(
+              (observation): observation is Extract<
+                typeof observation,
+                { kind: "state_equals" }
+              > => observation.kind === "state_equals"
+            ),
+          }))
+          .filter(
+            ({ setupState, requiredFinalState }) =>
+              setupState.length > 0 || requiredFinalState.length > 0
+          )
+      : contract.requiredPrivateStateTransitions ?? [];
+
   return {
     schemaVersion: contract.schemaVersion,
     id: contract.id,
@@ -402,6 +447,7 @@ export function createMechanicSourceGenerationContract(
     ports: contract.ports,
     capabilities: contract.capabilities,
     resourceExpectations: contract.resourceExpectations,
+    requiredPrivateStateTransitions,
   };
 }
 

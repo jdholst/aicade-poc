@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 37,
-  "updatedAt": "2026-08-31T23:04:37Z",
+  "revision": 38,
+  "updatedAt": "2026-08-31T23:19:46Z",
   "entries": [
     {
       "status": "active",
@@ -3145,6 +3145,41 @@
       "amendments": [],
       "createdAt": "2026-08-31T23:04:37Z",
       "updatedAt": "2026-08-31T23:04:37Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Source generation needs private-state transition obligations",
+      "guidance": "Give source generation a compact contract-derived list of each independent private-state setup, ordered lifecycle steps, and required final state values. Require reachable awaited writes for each final value, preserve endpoint dispatch semantics for coarse advance_time steps, and choose cleanup before recurring creation when the accepted final state returns active lifecycle state to its setup value. Do not expose scenario IDs, unrelated observations, or evaluator-authored assertions.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0032",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted contract required spawn_order and active_hazard_instances to reach different values after one recurrence, three reachable recurrences, and a coarse cleanup boundary. Source attempts 1 through 3 missed different final counts because the source provider saw only private-state IDs and incremental failure messages, not the accepted transition steps. Source attempt 4 removed state_write and exhausted repair with the unused-capability failure.",
+          "observedAt": "2026-08-31T23:10:37.294Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:19:46Z",
+      "updatedAt": "2026-08-31T23:19:46Z"
     }
   ],
   "reconciliations": [
@@ -7909,6 +7944,99 @@
       "createdAt": "2026-08-31T23:04:37Z",
       "priorManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1",
       "resultingManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-6-20260831t231946z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-6",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7"
+      },
+      "consultedManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d",
+      "contextDigest": "c16df4aa593539353c8a592bf6f66944ba6a5469dc163ce6ce4f0693bc3fc8d4",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-5",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0031"
+          ],
+          "rationale": "The verified prior fix correctly kept contract-required state_write omissions at source repair. The resumed run preserved its accepted contract and spent all four source attempts there, confirming the responsibility boundary."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0032"
+          ],
+          "rationale": "The source provider received private-state IDs but not the accepted scenario state transitions or their lifecycle steps. Three candidates missed different final counter values across recurrence and cleanup paths; the fourth removed state_write entirely. Compact contract-derived transition obligations are required for source generation to trace reachable writes without exposing full scenario or evaluator scaffolding."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Source generation needs private-state transition obligations",
+            "guidance": "Give source generation a compact contract-derived list of each independent private-state setup, ordered lifecycle steps, and required final state values. Require reachable awaited writes for each final value, preserve endpoint dispatch semantics for coarse advance_time steps, and choose cleanup before recurring creation when the accepted final state returns active lifecycle state to its setup value. Do not expose scenario IDs, unrelated observations, or evaluator-authored assertions.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0032",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The accepted contract required spawn_order and active_hazard_instances to reach different values after one recurrence, three reachable recurrences, and a coarse cleanup boundary. Source attempts 1 through 3 missed different final counts because the source provider saw only private-state IDs and incremental failure messages, not the accepted transition steps. Source attempt 4 removed state_write and exhausted repair with the unused-capability failure.",
+                "observedAt": "2026-08-31T23:10:37.294Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:19:46Z",
+            "updatedAt": "2026-08-31T23:19:46Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:19:46Z",
+      "priorManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d",
+      "resultingManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475"
     }
   ]
 }

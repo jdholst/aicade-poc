@@ -1144,6 +1144,71 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
   });
 
+  it("exposes accepted private-state transitions without exposing full scenarios", () => {
+    const intent = createIntent();
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      lifecycle: {
+        callbacks: ["install", "scheduled"],
+        fixedStep: false,
+        dispose: true,
+      },
+      scenarios: [
+        {
+          id: "recurring_cleanup",
+          seed: 1729,
+          setup: [
+            { kind: "state_equals", stateId: "private_value", value: 0 },
+          ],
+          steps: [
+            { kind: "advance_time", milliseconds: 1000 },
+            { kind: "advance_time", milliseconds: 6000 },
+          ],
+          observations: [
+            { kind: "state_equals", stateId: "private_value", value: 0 },
+          ],
+        },
+      ],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract,
+      grant: createMechanicSourceGenerationGrant(
+        createGrant("state_write", "time_schedule")
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+    });
+
+    expect(prompt).toContain("Required private-state transition obligations JSON");
+    expect(prompt).toContain('"setupState"');
+    expect(prompt).toContain('"lifecycleSteps"');
+    expect(prompt).toContain('"requiredFinalState"');
+    expect(prompt).toContain('"milliseconds": 6000');
+    expect(prompt).toContain(
+      "Each transition obligation is independent and begins from its rendered setup state"
+    );
+    expect(prompt).toContain(
+      "a positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step"
+    );
+    expect(prompt).not.toContain("recurring_cleanup");
+  });
+
   it("turns a mismatched scheduled callback literal into exact callback-ID repair guidance", () => {
     const intent = createIntent();
     const repair = {
