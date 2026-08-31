@@ -123,6 +123,17 @@ export const providerBoundarySourceContract = {
     maximumCallbackMilliseconds: 8,
     maximumConsecutiveFailures: 2,
   },
+  requiredPrivateStateTransitions: [
+    {
+      setupState: [
+        { kind: "state_equals" as const, stateId: "private_value", value: 0 },
+      ],
+      lifecycleSteps: [{ kind: "advance_time" as const, milliseconds: 1 }],
+      requiredFinalState: [
+        { kind: "state_equals" as const, stateId: "private_value", value: 1 },
+      ],
+    },
+  ],
 };
 
 export function createContractProviderInput(

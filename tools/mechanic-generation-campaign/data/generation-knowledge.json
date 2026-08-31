@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 38,
-  "updatedAt": "2026-08-31T23:19:46Z",
+  "revision": 39,
+  "updatedAt": "2026-08-31T23:30:00Z",
   "entries": [
     {
       "status": "active",
@@ -3180,6 +3180,43 @@
       "amendments": [],
       "createdAt": "2026-08-31T23:19:46Z",
       "updatedAt": "2026-08-31T23:19:46Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Provider transport schemas must mirror source guidance",
+      "guidance": "Whenever the source-generation guidance contract adds or changes a field, update the strict HTTP transport schema in the same revision. Preserve the field through client serialization and route parsing with bounded exact sub-schemas, and add end-to-end tests at both boundaries. Keep intentionally excluded data such as full contract scenarios excluded.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "provider_failure"
+        ]
+      },
+      "id": "KF-0033",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Contract repair attempt 2 was accepted, but every source attempt failed before provider execution because the generated-mechanic HTTP request schema rejected stageInput.contract.requiredPrivateStateTransitions as an unrecognized key. The run consumed no source provider calls and exhausted source repair on the unchanged transport error.",
+          "observedAt": "2026-08-31T23:23:51.029Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:30:00Z",
+      "updatedAt": "2026-08-31T23:30:00Z"
     }
   ],
   "reconciliations": [
@@ -8037,6 +8074,98 @@
       "createdAt": "2026-08-31T23:19:46Z",
       "priorManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d",
       "resultingManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-7-20260831t233000z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-7",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8"
+      },
+      "consultedManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475",
+      "contextDigest": "317c11d6a9c86ce16bac146d47f8a49b70b08ac8d110c86c3fa1dd75be5fe0c4",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-6",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0029",
+            "KF-0031"
+          ],
+          "rationale": "The verified prior fix preserved the endpoint-dispatch and source-responsibility boundaries from KF-0029 and KF-0031. The current failure occurred after contract acceptance and before source-provider execution, so it does not contradict those findings."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0033"
+          ],
+          "rationale": "The source-guidance contract added requiredPrivateStateTransitions, but the strict HTTP request schema still described the prior source contract and rejected the field before any source provider call. The durable boundary requires schema parity and end-to-end client plus route coverage whenever source guidance changes."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Provider transport schemas must mirror source guidance",
+            "guidance": "Whenever the source-generation guidance contract adds or changes a field, update the strict HTTP transport schema in the same revision. Preserve the field through client serialization and route parsing with bounded exact sub-schemas, and add end-to-end tests at both boundaries. Keep intentionally excluded data such as full contract scenarios excluded.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "provider_failure"
+              ]
+            },
+            "id": "KF-0033",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8",
+                "attemptId": "a01-baseline",
+                "stage": "contract_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Contract repair attempt 2 was accepted, but every source attempt failed before provider execution because the generated-mechanic HTTP request schema rejected stageInput.contract.requiredPrivateStateTransitions as an unrecognized key. The run consumed no source provider calls and exhausted source repair on the unchanged transport error.",
+                "observedAt": "2026-08-31T23:23:51.029Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:30:00Z",
+            "updatedAt": "2026-08-31T23:30:00Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:30:00Z",
+      "priorManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475",
+      "resultingManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd"
     }
   ]
 }

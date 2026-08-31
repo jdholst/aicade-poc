@@ -214,6 +214,17 @@ describe("Generated Mechanic HTTP providers", () => {
     expect(body.stageInput).not.toHaveProperty("model");
     expect(body.stageInput).not.toHaveProperty("taskRoute");
     expect(body.stageInput.contract).not.toHaveProperty("scenarios");
+    expect(body.stageInput.contract.requiredPrivateStateTransitions).toEqual([
+      {
+        setupState: [
+          { kind: "state_equals", stateId: "private_value", value: 0 },
+        ],
+        lifecycleSteps: [{ kind: "advance_time", milliseconds: 1 }],
+        requiredFinalState: [
+          { kind: "state_equals", stateId: "private_value", value: 1 },
+        ],
+      },
+    ]);
   });
 
   it("rejects a valid JSON candidate with mismatched run, stage, or attempt correlation", async () => {

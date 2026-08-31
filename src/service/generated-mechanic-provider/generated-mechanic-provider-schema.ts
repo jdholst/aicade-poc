@@ -164,9 +164,57 @@ const resourceBudgetSchema = z
   })
   .strict();
 
-const sourceContractSchema = generatedMechanicContractSchema.omit({
-  scenarios: true,
-});
+const sourcePrivateStateEqualsSchema = z
+  .object({
+    kind: z.literal("state_equals"),
+    stateId: stableIdSchema,
+    value: jsonValueSchema,
+  })
+  .strict();
+
+const sourcePrivateStateLifecycleStepSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("receive_input"),
+      portId: stableIdSchema,
+      value: jsonValueSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("dispatch_action"),
+      actionId: stableIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("advance_time"),
+      milliseconds: positiveIntegerSchema,
+    })
+    .strict(),
+]);
+
+const sourcePrivateStateTransitionSchema = z
+  .object({
+    setupState: z.array(sourcePrivateStateEqualsSchema).max(256),
+    lifecycleSteps: z
+      .array(sourcePrivateStateLifecycleStepSchema)
+      .min(1)
+      .max(256),
+    requiredFinalState: z.array(sourcePrivateStateEqualsSchema).max(256),
+  })
+  .strict();
+
+const sourceContractSchema = generatedMechanicContractSchema
+  .omit({
+    scenarios: true,
+  })
+  .extend({
+    requiredPrivateStateTransitions: z
+      .array(sourcePrivateStateTransitionSchema)
+      .max(256)
+      .optional(),
+  });
 
 const sourceGrantSchema = z
   .object({
