@@ -1,6 +1,6 @@
 ---
 name: mechanic-generation-campaign
-description: Run and interpret AI-Cade mechanic-generation campaigns or bounded campaign loops for pipeline isolation, consistency measurement, prompt variation, and revision-specific mechanic proof.
+description: Create, run, and interpret AI-Cade mechanic-generation campaigns or bounded campaign loops for realistic game-development prompts, pipeline isolation, consistency measurement, prompt variation, and revision-specific mechanic proof.
 ---
 
 # Mechanic generation campaign
@@ -14,6 +14,12 @@ npm run campaign -- --help
 Read the [campaign documentation](../../../tools/mechanic-generation-campaign/docs/README.md) when selecting commands, onboarding an operator, or preparing a complete mechanic-proof sequence.
 
 Use [campaign loops](../../../tools/mechanic-generation-campaign/docs/campaign-loops.md) only when the user requests a bounded sequence that may include repeated campaigns and verified pipeline fixes.
+
+## Author a campaign manifest
+
+When creating a new manifest or replacing its frozen prompt set, read [prompt authoring](references/prompt-authoring.md) and apply its developer-language standard to all five prompts. Put technical acceptance criteria in requirement IDs, probes, thresholds, and other manifest fields instead of exposing campaign architecture in the prompt.
+
+This policy applies prospectively. Do not rewrite existing manifests, frozen campaign definitions, or historical evidence unless the user explicitly asks for a migration.
 
 ## Run a campaign
 

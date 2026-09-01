@@ -1,6 +1,6 @@
 interface:
   display_name: "Mechanic Campaign"
-  short_description: "Run mechanic campaigns and proof loops"
-  default_prompt: "Use $mechanic-generation-campaign to run a bounded mechanic campaign or campaign loop and report its evidence."
+  short_description: "Create and run mechanic campaigns and proof loops"
+  default_prompt: "Use $mechanic-generation-campaign to author or run a bounded mechanic campaign or campaign loop and report its evidence."
 policy:
   allow_implicit_invocation: true
