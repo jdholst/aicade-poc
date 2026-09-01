@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 41,
-  "updatedAt": "2026-08-31T23:54:39Z",
+  "revision": 42,
+  "updatedAt": "2026-09-01T00:03:49Z",
   "entries": [
     {
       "status": "active",
@@ -3287,6 +3287,41 @@
       "amendments": [],
       "createdAt": "2026-08-31T23:54:39Z",
       "updatedAt": "2026-08-31T23:54:39Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "External probes must follow lifecycle schema fields",
+      "guidance": "When an external mechanic probe verifies lifecycle coverage, read ordinary callback kinds from contract.lifecycle.callbacks and read cleanup from contract.lifecycle.dispose. Do not require the dispose callback kind to appear in the callbacks array because the generated-mechanic contract schema represents disposal as a separate boolean. Keep probe helpers aligned with the canonical contract field layout and test each special lifecycle field directly.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_health"
+        ],
+        "classifications": [
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0036",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_health",
+          "quality": "actual_submission",
+          "outcome": "semantic_runtime_failure",
+          "summary": "The accepted contract declared lifecycle.callbacks as install and scheduled and separately declared lifecycle.dispose true. The external repeated_and_cleanup_callbacks assertion called hasCallbacks with scheduled and dispose, but the helper searched only the callbacks array. Every other external assertion passed, including accepted artifact, owned hazards, authority, bounded instances, iframe mount, and outer runtime health.",
+          "observedAt": "2026-08-31T23:59:43.274Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-01T00:03:49Z",
+      "updatedAt": "2026-09-01T00:03:49Z"
     }
   ],
   "reconciliations": [
@@ -8421,6 +8456,102 @@
       "createdAt": "2026-08-31T23:54:39Z",
       "priorManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e",
       "resultingManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-10-20260901t000349z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-10",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11"
+      },
+      "consultedManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759",
+      "contextDigest": "4abc88edfa7bd7898c51a4771c5ad2947057675303c869e1ebaf947d30b36482",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-9",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0035"
+          ],
+          "rationale": "The current run accepted the source candidate on its initial source call after one contract repair, with no repeated private-state transition mismatch, confirming the closed source transition checklist from fix cycle 9."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0036"
+          ],
+          "rationale": "The generated artifact passed provider generation, deterministic evaluation, final assembly, iframe mounting, and outer runtime health. The external probe alone rejected its cleanup callback because the shared helper searched lifecycle.callbacks for dispose even though the accepted contract schema represents cleanup with lifecycle.dispose true."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "External probes must follow lifecycle schema fields",
+            "guidance": "When an external mechanic probe verifies lifecycle coverage, read ordinary callback kinds from contract.lifecycle.callbacks and read cleanup from contract.lifecycle.dispose. Do not require the dispose callback kind to appear in the callbacks array because the generated-mechanic contract schema represents disposal as a separate boolean. Keep probe helpers aligned with the canonical contract field layout and test each special lifecycle field directly.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health"
+              ],
+              "classifications": [
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0036",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_health",
+                "quality": "actual_submission",
+                "outcome": "semantic_runtime_failure",
+                "summary": "The accepted contract declared lifecycle.callbacks as install and scheduled and separately declared lifecycle.dispose true. The external repeated_and_cleanup_callbacks assertion called hasCallbacks with scheduled and dispose, but the helper searched only the callbacks array. Every other external assertion passed, including accepted artifact, owned hazards, authority, bounded instances, iframe mount, and outer runtime health.",
+                "observedAt": "2026-08-31T23:59:43.274Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-01T00:03:49Z",
+            "updatedAt": "2026-09-01T00:03:49Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-01T00:03:49Z",
+      "priorManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759",
+      "resultingManifestDigest": "1836413a8a474f16357efd3c27f185558206fc56e64fbbf81a6a89e147a10135"
     }
   ]
 }
