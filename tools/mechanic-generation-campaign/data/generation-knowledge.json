@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 42,
-  "updatedAt": "2026-09-01T00:03:49Z",
+  "revision": 43,
+  "updatedAt": "2026-09-02T02:58:59Z",
   "entries": [
     {
       "status": "active",
@@ -3322,6 +3322,43 @@
       "amendments": [],
       "createdAt": "2026-09-01T00:03:49Z",
       "updatedAt": "2026-09-01T00:03:49Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Visible recurrence requires runtime creation evidence",
+      "guidance": "Do not accept a recurring owned-object mechanic from a scheduled callback declaration, private-state counter transitions, or deterministic evaluator success alone. The external mechanic probe must observe at least two distinct mechanic-owned object creations across separate scheduled intervals in the mounted runtime, then observe expiration or cleanup without unbounded accumulation. Preserve manual gameplay denial when the runtime shows only the initial object even if contract and source artifacts describe recurrence.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_health",
+          "external_mechanic_probe"
+        ],
+        "classifications": [
+          "semantic_runtime_failure",
+          "manual_qa_rejected"
+        ]
+      },
+      "id": "KF-0037",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c10-r12/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c10-r12",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed one stationary red hazard and one inert white entity. No additional hazards visibly spawned despite the accepted contract declaring a 1200 millisecond scheduled cadence and deterministic scenarios reporting repeated creation.",
+          "observedAt": "2026-09-02T02:53:11.731Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T02:58:59Z",
+      "updatedAt": "2026-09-02T02:58:59Z"
     }
   ],
   "reconciliations": [
@@ -8552,6 +8589,85 @@
       "createdAt": "2026-09-01T00:03:49Z",
       "priorManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759",
       "resultingManifestDigest": "1836413a8a474f16357efd3c27f185558206fc56e64fbbf81a6a89e147a10135"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-conclusion-20260902t025859z",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z"
+      },
+      "consultedManifestDigest": "1836413a8a474f16357efd3c27f185558206fc56e64fbbf81a6a89e147a10135",
+      "contextDigest": "41798bae23c3ef41faa0ab7d9d0837b081236f3d724c56dd6a21ca601b213c81",
+      "consultedFindingIds": [
+        "KF-0027",
+        "KF-0028",
+        "KF-0029"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-10",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0036"
+          ],
+          "rationale": "The final revision reached manual QA after the probe helper began reading cleanup from lifecycle.dispose, confirming the campaign-tool schema fix. That automated pass does not contradict the later gameplay denial because the probe verified lifecycle declarations rather than observing repeated hazard creation."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c10-r12/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0029",
+            "KF-0037"
+          ],
+          "rationale": "The accepted contract and deterministic evaluator reported scheduled recurrence and exact spawn-sequence transitions, but manual gameplay showed only one stationary red hazard and no later hazards. KF-0029 remains necessary for reachable clock-step reasoning but is insufficient as visible runtime proof; future external acceptance must observe multiple distinct creations across separate intervals and later cleanup."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Visible recurrence requires runtime creation evidence",
+            "guidance": "Do not accept a recurring owned-object mechanic from a scheduled callback declaration, private-state counter transitions, or deterministic evaluator success alone. The external mechanic probe must observe at least two distinct mechanic-owned object creations across separate scheduled intervals in the mounted runtime, then observe expiration or cleanup without unbounded accumulation. Preserve manual gameplay denial when the runtime shows only the initial object even if contract and source artifacts describe recurrence.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            },
+            "id": "KF-0037",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "manual_qa",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c10-r12/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c10-r12",
+                "attemptId": "a01-baseline",
+                "stage": "external_mechanic_probe",
+                "quality": "actual_submission",
+                "outcome": "manual_qa_rejected",
+                "summary": "Manual gameplay showed one stationary red hazard and one inert white entity. No additional hazards visibly spawned despite the accepted contract declaring a 1200 millisecond scheduled cadence and deterministic scenarios reporting repeated creation.",
+                "observedAt": "2026-09-02T02:53:11.731Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T02:58:59Z",
+            "updatedAt": "2026-09-02T02:58:59Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T02:58:59Z",
+      "priorManifestDigest": "1836413a8a474f16357efd3c27f185558206fc56e64fbbf81a6a89e147a10135",
+      "resultingManifestDigest": "ec13bb5ca6525a546d8248ae409d0d679c06fe620648b05e29aa14020bef391c"
     }
   ]
 }
