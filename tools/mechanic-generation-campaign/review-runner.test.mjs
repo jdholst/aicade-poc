@@ -12,6 +12,7 @@ import {
   pauseReviewForCampaignRepair,
   restoreCandidateStorage,
   waitForRestoredCandidateRuntime,
+  waitForRestoredCandidateRuntimeWithRetry,
 } from "./lib/review-runner.mjs";
 import {
   createInitialLoopRun,
@@ -30,6 +31,44 @@ afterEach(async () => {
 });
 
 describe("manual QA candidate replay", () => {
+  it("reloads once when exact restored storage misses its first runtime hydration", async () => {
+    const generationRunRecord = { id: "generation-run-1" };
+    const gamePackRecord = { id: "game-pack-1" };
+    let reloads = 0;
+    let waits = 0;
+    const page = {
+      async reload(options) {
+        reloads += 1;
+        expect(options).toEqual({
+          waitUntil: "domcontentloaded",
+          timeout: 30_000,
+        });
+      },
+    };
+
+    await waitForRestoredCandidateRuntimeWithRetry(
+      page,
+      { generationRunRecord, gamePackRecord },
+      {
+        async readStorage() {
+          return {
+            generationRuns: [generationRunRecord],
+            gamePacks: [gamePackRecord],
+          };
+        },
+        async waitForRuntime() {
+          waits += 1;
+          if (waits === 1) {
+            throw new Error("first hydration missed");
+          }
+        },
+      }
+    );
+
+    expect(waits).toBe(2);
+    expect(reloads).toBe(1);
+  });
+
   it("selects one exact candidate from a parallel manual-QA queue", async () => {
     const queue = [
       { attemptId: "a01-baseline" },

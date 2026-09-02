@@ -119,6 +119,24 @@ export async function waitForRestoredCandidateRuntime(
   }
 }
 
+export async function waitForRestoredCandidateRuntimeWithRetry(
+  page,
+  records,
+  {
+    readStorage = readCampaignBrowserStorage,
+    waitForRuntime = waitForRestoredCandidateRuntime,
+  } = {}
+) {
+  try {
+    await waitForRuntime(page);
+  } catch {
+    const restoredStorage = await readStorage(page);
+    assertRestoredRecords(restoredStorage, records);
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+    await waitForRuntime(page);
+  }
+}
+
 export async function runCampaignReview({
   repoRoot,
   store,
@@ -198,7 +216,7 @@ export async function runCampaignReview({
     await restoreCandidateStorage(page, records);
     replayStarted = true;
     await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
-    await waitForRestoredCandidateRuntime(page);
+    await waitForRestoredCandidateRuntimeWithRetry(page, records);
     const restoredStorage = await readCampaignBrowserStorage(page);
     assertRestoredRecords(restoredStorage, records);
     if (browserIssues.some((issue) => /pageerror|runtime error/i.test(issue))) {
