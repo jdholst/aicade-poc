@@ -1048,7 +1048,13 @@ export async function waitForCampaignEditorTerminalState(
               iframeHasSource) ||
             lines.includes("An error has occurred.") ||
             lines.includes("GENERATION STOPPED") ||
-            document.body.innerText.includes("The runtime could not be prepared.")
+            lines.some((line) =>
+              line.startsWith("The generated mechanic runtime ")
+            ) ||
+            document.body.innerText.includes("The runtime could not be prepared.") ||
+            document.body.innerText.includes(
+              "The generated sandbox did not finish booting."
+            )
           );
         },
         GENERATED_MECHANIC_RUNTIME_PATH,
@@ -1129,7 +1135,13 @@ export async function waitForTerminalEditorState(
               iframeHasSource) ||
             lines.includes("An error has occurred.") ||
             lines.includes("GENERATION STOPPED") ||
-            document.body.innerText.includes("The runtime could not be prepared.")
+            lines.some((line) =>
+              line.startsWith("The generated mechanic runtime ")
+            ) ||
+            document.body.innerText.includes("The runtime could not be prepared.") ||
+            document.body.innerText.includes(
+              "The generated sandbox did not finish booting."
+            )
           );
         },
         GENERATED_MECHANIC_RUNTIME_PATH,
@@ -1366,7 +1378,7 @@ function compactTerminalText(text) {
     .map((line) => line.trim())
     .filter(Boolean);
   const errorIndex = lines.findIndex((line) =>
-    /GENERATION ERROR|GENERATION STOPPED|could not be prepared|An error has occurred/i.test(line)
+    /GENERATION ERROR|GENERATION STOPPED|could not be prepared|generated mechanic runtime|generated sandbox did not finish booting|An error has occurred/i.test(line)
   );
   return lines.slice(Math.max(0, errorIndex), errorIndex + 4).join(" ").slice(0, 1000);
 }

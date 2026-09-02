@@ -241,6 +241,92 @@ describe("campaign browser runner", () => {
     });
   });
 
+  it("recognizes a generated-sandbox boot failure as a terminal generation failure", async () => {
+    installEditorDocument({
+      bodyText: [
+        "Game generated with limited functionality",
+        "DRAFT BLOCKED",
+        "This draft is not playable yet.",
+        "The generated sandbox did not finish booting. Regenerate the game to request a fresh module.",
+      ].join("\n"),
+    });
+    const page = createPageDouble();
+
+    const terminal = await waitForCampaignEditorTerminalState(page, 1_000);
+
+    expect(terminal).toEqual({
+      kind: "generation_failure",
+      text: "The generated sandbox did not finish booting. Regenerate the game to request a fresh module.",
+    });
+  });
+
+  it("recognizes the same boot failure while provider activity tracking is active", async () => {
+    installEditorDocument({
+      bodyText:
+        "DRAFT BLOCKED\nThe generated sandbox did not finish booting. Regenerate the game to request a fresh module.",
+    });
+    const page = createPageDouble();
+    let elapsedChecks = 0;
+    const activity = {
+      elapsedMs() {
+        elapsedChecks += 1;
+        return elapsedChecks === 1 ? 0 : 1_001;
+      },
+    };
+
+    const terminal = await waitForCampaignEditorTerminalState(
+      page,
+      1_000,
+      activity
+    );
+
+    expect(terminal).toEqual({
+      kind: "generation_failure",
+      text: "The generated sandbox did not finish booting. Regenerate the game to request a fresh module.",
+    });
+  });
+
+  it("recognizes a generated-mechanic navigation deadline as terminal", async () => {
+    installEditorDocument({
+      bodyText:
+        "DRAFT BLOCKED\nThe generated mechanic runtime did not load its trusted route before its navigation deadline.",
+    });
+    const page = createPageDouble();
+
+    const terminal = await waitForCampaignEditorTerminalState(page, 1_000);
+
+    expect(terminal).toEqual({
+      kind: "generation_failure",
+      text: "The generated mechanic runtime did not load its trusted route before its navigation deadline.",
+    });
+  });
+
+  it("recognizes a generated-mechanic handshake deadline with activity tracking", async () => {
+    installEditorDocument({
+      bodyText:
+        "DRAFT BLOCKED\nThe generated mechanic runtime did not finish its project and Worker broker handshake.",
+    });
+    const page = createPageDouble();
+    let elapsedChecks = 0;
+    const activity = {
+      elapsedMs() {
+        elapsedChecks += 1;
+        return elapsedChecks === 1 ? 0 : 1_001;
+      },
+    };
+
+    const terminal = await waitForCampaignEditorTerminalState(
+      page,
+      1_000,
+      activity
+    );
+
+    expect(terminal).toEqual({
+      kind: "generation_failure",
+      text: "The generated mechanic runtime did not finish its project and Worker broker handshake.",
+    });
+  });
+
   it("returns the editor snapshot when terminal-state observation times out", async () => {
     installEditorDocument({
       bodyText: "AI is building the project\nGenerating your game",
