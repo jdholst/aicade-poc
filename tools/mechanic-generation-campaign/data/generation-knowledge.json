@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 53,
-  "updatedAt": "2026-09-02T18:08:13Z",
+  "revision": 54,
+  "updatedAt": "2026-09-02T19:45:52Z",
   "entries": [
     {
       "status": "active",
@@ -3847,6 +3847,43 @@
       "amendments": [],
       "createdAt": "2026-09-02T18:08:13Z",
       "updatedAt": "2026-09-02T18:08:13Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "One scheduled callback must coordinate recurrence and expiry",
+      "guidance": "When recurring creation and owned-object expiry share the one admitted scheduled callback, maintain one deterministic coordinator and at most one pending scheduled entry. Persist object creation times in immutable properties. On each invocation, read current simulation time once, rediscover and inspect owned objects in one bounded pass, remember the latest valid creation time before cleanup, destroy expired objects, perform at most one overdue recurrence, update accepted state, and schedule one positive relative delay to the earliest future recurrence or surviving-object expiry. Use an accepted absolute next-boundary state when present, otherwise derive the due recurrence from the latest persisted creation time observed before cleanup. Never schedule separate recurrence and per-object expiry entries to the same callback, infer invocation purpose from endpoint modulus or equality, or replay multiple missed recurrences after a coarse step.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0042",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual-provider source candidates used separate recurrence and expiry schedules that all entered the one required scheduled callback, then inferred purpose from endpoint-time modulus. Coarse-step dispatch collapsed overdue nominal times to one endpoint, and the final candidate created two hazards but destroyed both before the required progress observation.",
+          "observedAt": "2026-09-02T19:36:23.372Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T19:45:52Z",
+      "updatedAt": "2026-09-02T19:45:52Z"
     }
   ],
   "reconciliations": [
@@ -10066,6 +10103,107 @@
       "createdAt": "2026-09-02T18:08:13Z",
       "priorManifestDigest": "63f8c17e0642f4efacb030b93171a1856bab1b81db473c4c8083a2a259d2a021",
       "resultingManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-7-20260902t194552z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-7",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8"
+      },
+      "consultedManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929",
+      "contextDigest": "c4afcfed8d9e223cacb8cd49a377d234343dcd4cecf770659fa7dfa73349ba18",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-6",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0041"
+          ],
+          "rationale": "Fix cycle 6 rejected the prior impossible recurring population and the next actual-provider contract admitted a coherent 1800ms recurrence, 2400ms lifetime, one creation per recurrence, and one live object after each cleanup boundary. Source generation then reached deterministic evaluation, confirming the cadence-and-lifetime admission boundary. It does not explain the distinct source scheduling failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0042"
+          ],
+          "rationale": "The accepted contract was internally coherent, but every source candidate scheduled recurrence and per-object expiry independently to the same required scheduled callback. The callback tried to distinguish those identical invocations with current-time modulus. The host dispatches already-due callbacks at the coarse-step endpoint, so multiple nominal boundaries can share one observed time and the branch destroyed both created hazards before the progress observation. KF-0029 and KF-0035 describe endpoint reachability and recurrence drift, while KF-0032 describes source transition closure, but none states that one admitted scheduled callback must coordinate overlapping recurrence and expiry work through one pending earliest-boundary schedule. The remaining consulted findings concern unrelated provider, authority, binding, state, and contract-admission failures. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "One scheduled callback must coordinate recurrence and expiry",
+            "guidance": "When recurring creation and owned-object expiry share the one admitted scheduled callback, maintain one deterministic coordinator and at most one pending scheduled entry. Persist object creation times in immutable properties. On each invocation, read current simulation time once, rediscover and inspect owned objects in one bounded pass, remember the latest valid creation time before cleanup, destroy expired objects, perform at most one overdue recurrence, update accepted state, and schedule one positive relative delay to the earliest future recurrence or surviving-object expiry. Use an accepted absolute next-boundary state when present, otherwise derive the due recurrence from the latest persisted creation time observed before cleanup. Never schedule separate recurrence and per-object expiry entries to the same callback, infer invocation purpose from endpoint modulus or equality, or replay multiple missed recurrences after a coarse step.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0042",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual-provider source candidates used separate recurrence and expiry schedules that all entered the one required scheduled callback, then inferred purpose from endpoint-time modulus. Coarse-step dispatch collapsed overdue nominal times to one endpoint, and the final candidate created two hazards but destroyed both before the required progress observation.",
+                "observedAt": "2026-09-02T19:36:23.372Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T19:45:52Z",
+            "updatedAt": "2026-09-02T19:45:52Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T19:45:52Z",
+      "priorManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929",
+      "resultingManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882"
     }
   ]
 }

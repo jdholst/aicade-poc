@@ -178,6 +178,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "Do not pass the absolute boundary as the delay, write the completed boundary, or derive the next boundary from a spawn counter"
     );
     expect(prompt).toContain(
+      "When recurrence and owned-object expiry share the one scheduled callback"
+    );
+    expect(prompt).toContain(
+      "schedule exactly one next scheduled callback for the earliest future recurrence or expiry boundary"
+    );
+    expect(prompt).toContain(
       "Every value written to an integer private-state field must remain a finite integer"
     );
     expect(prompt).toContain(
@@ -1302,6 +1308,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       'never a behavior label such as "expire_projectiles"'
+    );
+    expect(prompt).toContain(
+      "consolidate recurrence and per-object expiry into one deterministic scheduled-callback pass"
+    );
+    expect(prompt).toContain(
+      "Never infer why the callback ran from current-time modulus or equality"
     );
   });
 
