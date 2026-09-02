@@ -719,10 +719,15 @@ export function createGeneratedMechanicExternalObservations(
     intent.requiredCapabilities.includes("object_read") &&
     contract.capabilities.includes("object_read");
   const evidenceRoles = new Set(
-    requiresTransientLifecycle && intent.targets.length > 0
-      ? intent.targets
+    requiresTransientLifecycle
+      ? [
+          ...(requiresActorOrigin ? intent.actors : []),
+          ...intent.targets,
+        ]
       : intent.actors
   );
+  const requiresReferencedEvidenceBindings =
+    !requiresTransientLifecycle || evidenceRoles.size > 0;
   const referencedEvidenceEntityIds = intent.references.flatMap((reference) => {
     if (reference.kind !== "entity") {
       return [];
@@ -745,12 +750,13 @@ export function createGeneratedMechanicExternalObservations(
     )
   );
   if (
-    evidenceRoles.size === 0 ||
-    representedEvidenceRoles.size !== evidenceRoles.size ||
-    referencedEvidenceEntityIds.length === 0 ||
-    new Set(referencedEvidenceEntityIds).size !==
-      referencedEvidenceEntityIds.length ||
-    bindingsByReferencedEntity.some((bindings) => bindings.length !== 1)
+    requiresReferencedEvidenceBindings &&
+    (evidenceRoles.size === 0 ||
+      representedEvidenceRoles.size !== evidenceRoles.size ||
+      referencedEvidenceEntityIds.length === 0 ||
+      new Set(referencedEvidenceEntityIds).size !==
+        referencedEvidenceEntityIds.length ||
+      bindingsByReferencedEntity.some((bindings) => bindings.length !== 1))
   ) {
     throw new TypeError(
       "Top-down generated mechanic evaluation requires exactly one single-entity binding for every trusted actor-role entity reference."

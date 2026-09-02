@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 50,
-  "updatedAt": "2026-09-02T17:30:50Z",
+  "revision": 51,
+  "updatedAt": "2026-09-02T17:40:18Z",
   "entries": [
     {
       "status": "active",
@@ -3735,6 +3735,43 @@
       "amendments": [],
       "createdAt": "2026-09-02T16:22:37Z",
       "updatedAt": "2026-09-02T16:22:37Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Evaluator binding requirements follow causal evidence",
+      "guidance": "Derive top-down evaluator reference-binding requirements from the causal observation being authored. Bound-entity motion requires exact actor-role entity bindings. Owned-object actor-origin proof requires exact actor-role bindings, and target-interaction proof requires exact target-role bindings. An independently positioned owned-object lifecycle with no actor-origin rule and no target interaction may have no actor or target role and must not be rejected for lacking an evidence binding. Preserve exact trusted intent lineage and keep every declared contract binding subject to normal contract admission; this rule removes only a binding requirement that the selected lifecycle observation cannot consume.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_failure",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0039",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_failure",
+          "summary": "Actual planning admitted an independently positioned autonomous spawner with no actor or target roles and one exact entity reference. Repaired contract and initial source generation succeeded. Before deterministic evaluation, external-observation authoring rejected the actorless intent with Top-down generated mechanic evaluation requires exactly one single-entity binding for every trusted actor-role entity reference, even though its owned-object lifecycle observation consumed no actor binding.",
+          "observedAt": "2026-09-02T17:35:46.657Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T17:40:18Z",
+      "updatedAt": "2026-09-02T17:40:18Z"
     }
   ],
   "reconciliations": [
@@ -9658,6 +9695,103 @@
       "createdAt": "2026-09-02T17:30:50Z",
       "priorManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc",
       "resultingManifestDigest": "b09f6e4dc928c5251ca0c98410bf0f7fb969167da0cb3c56d41418d6651e44db"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-4-20260902t174018z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-4",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5"
+      },
+      "consultedManifestDigest": "b09f6e4dc928c5251ca0c98410bf0f7fb969167da0cb3c56d41418d6651e44db",
+      "contextDigest": "0449bbdf5a3ff6f104c0cdba005264128daf9261796d050f8a71ac21a30220a9",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-3",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 3 correctly separated trusted realm-context construction from generated-admitted callbacks and allowed the next source candidate to execute. It does not explain the distinct downstream evaluator rejection for an intentionally actorless autonomous lifecycle."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0039"
+          ],
+          "rationale": "The admitted intent was an independently positioned autonomous owned-object lifecycle with no actor or target role and one exact entity reference. Contract and initial source generation succeeded, then external-observation authoring threw before deterministic evaluation because it unconditionally required a nonempty actor-role evidence binding. The lifecycle observation does not consume a referenced binding unless actor-origin or target-interaction proof is required. The new finding records that evidence dependency while preserving exact bindings for bound motion, actor origin, and targets. The consulted source-behavior findings cannot cause this pre-evaluation host exception. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Evaluator binding requirements follow causal evidence",
+            "guidance": "Derive top-down evaluator reference-binding requirements from the causal observation being authored. Bound-entity motion requires exact actor-role entity bindings. Owned-object actor-origin proof requires exact actor-role bindings, and target-interaction proof requires exact target-role bindings. An independently positioned owned-object lifecycle with no actor-origin rule and no target interaction may have no actor or target role and must not be rejected for lacking an evidence binding. Preserve exact trusted intent lineage and keep every declared contract binding subject to normal contract admission; this rule removes only a binding requirement that the selected lifecycle observation cannot consume.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_failure",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0039",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_failure",
+                "summary": "Actual planning admitted an independently positioned autonomous spawner with no actor or target roles and one exact entity reference. Repaired contract and initial source generation succeeded. Before deterministic evaluation, external-observation authoring rejected the actorless intent with Top-down generated mechanic evaluation requires exactly one single-entity binding for every trusted actor-role entity reference, even though its owned-object lifecycle observation consumed no actor binding.",
+                "observedAt": "2026-09-02T17:35:46.657Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T17:40:18Z",
+            "updatedAt": "2026-09-02T17:40:18Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T17:40:18Z",
+      "priorManifestDigest": "b09f6e4dc928c5251ca0c98410bf0f7fb969167da0cb3c56d41418d6651e44db",
+      "resultingManifestDigest": "adb58cc0e08508232f5d7c80c1e798eb7fee148bb9c081035a2f4d3aa1eb8eb7"
     }
   ]
 }
