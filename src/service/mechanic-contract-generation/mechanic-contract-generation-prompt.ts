@@ -85,6 +85,11 @@ export function createMechanicContractGenerationSystemPrompt({
       : []),
   ];
   const requiredCapabilityIds = [...new Set(intent.requiredCapabilities)];
+  const acceptedConfigurationDeclarationManifest =
+    createAcceptedConfigurationDeclarationManifest(
+      intent.configuration,
+      referenceCatalog
+    );
   const usesLogicalAction = intent.triggers.includes("logical_action");
   const attemptGuidance = createContractAttemptGuidance(
     generationAttempt,
@@ -128,6 +133,9 @@ ${JSON.stringify(resourceBudget, null, 2)}
 
 Trusted stable-reference catalog JSON:
 ${JSON.stringify(referenceCatalog, null, 2)}
+
+Exact accepted configuration declaration manifest JSON:
+${JSON.stringify(acceptedConfigurationDeclarationManifest, null, 2)}
 
 Admitted primitive capability documentation JSON:
 ${JSON.stringify(capabilityDocumentation, null, 2)}
@@ -185,7 +193,8 @@ Contract rules:
 - Copy every exact capability from the required capability manifest into contract.capabilities on every initial and repair attempt. Never remove one while correcting an unrelated issue. Additional capabilities remain permitted only when accepted behavior genuinely needs them and the admitted primitive capability documentation includes them.
 - Declare only capabilities needed to express the contract, chosen from the admitted primitive capability documentation.
 - Use only the restricted config declarations above for configuration and port payloads.
-- For every accepted intent configuration entry, declare an object field with the exact same key and set its DSL default to the exact accepted scalar value so Final Game Spec materialization cannot substitute it.
+- For every accepted intent configuration entry, copy the exact key, default, declaration kind, and optional referenceKind from the exact accepted configuration declaration manifest. You may choose compatible numeric bounds or string lengths, but must not substitute the default or reclassify its declaration kind.
+- A string default is stable_id only when the manifest names exactly one trusted referenceKind. When the manifest declares string, preserve it as an ordinary bounded string even when its key ends in _id; do not use stable_id or substitute a different trusted catalog value.
 - Every privateState initialValue and every scenario state setup or state_equals value must match the exact declared private-state value type above. For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker.
 - Scenario setup is evaluated before the install callback or any generated source runs. Every state_equals setup assertion must use the exact initialValue of its matching privateState declaration; setup cannot assume an install-time mutation.
 - When a final state_equals differs from setup or initial state, retain state_write and preserve the asserted final value. Do not repair another issue by dropping state_write, deleting that observation, or changing the final value back to its setup value.
@@ -196,8 +205,9 @@ Contract rules:
 - Use only trusted stable references from the supplied catalog.
 - Keep resource expectations within the selected budget and active constraints.
 - Declare deterministic Behavior Scenario DSL setup, actions, time or events, and observable outcomes; scenarios are evidence proposals, not executable self-tests.
-- If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0. A positive final count is valid only when the scenario intentionally ends before cleanup. Evaluator-authored lifecycle evidence proves that a transient object was created and destroyed, and proves travel when object_motion_write is declared; do not contradict that lifecycle by requiring the cleaned-up object to remain active.
-- Prove a positive transient owned_object_count in a separate dispatch-only scenario with no advance_time step. Scenario observations are evaluated only after every step completes, so any time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated. Use time-advancing scenarios to prove interaction and cleanup, plus travel when object_motion_write is declared, without also requiring a positive final count.
+- For a one-shot transient lifecycle, if a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0. A positive final count is valid only when the one-shot scenario intentionally ends before cleanup. Evaluator-authored lifecycle evidence proves that a transient object was created and destroyed, and proves travel when object_motion_write is declared; do not contradict that lifecycle by requiring the cleaned-up object to remain active.
+- For a one-shot transient lifecycle, prove a positive owned_object_count in a separate dispatch-only scenario with no advance_time step. Scenario observations are evaluated only after every step completes, so a time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated. Use one-shot time-advancing scenarios to prove interaction and cleanup, plus travel when object_motion_write is declared, without also requiring a positive final count.
+- For an autonomous recurring lifecycle that remains active while older owned objects expire, declare the positive bounded final owned_object_count in that exact time-advancing scenario whenever recurrence continues through final observation. Pair that count with the exact created or sequence state needed to prove that expired objects were replaced without exceeding the accepted active limit. Only require final count 0 when that exact recurring scenario stops creation and completes every owned-object lifetime; never apply the one-shot cleanup rule to an active recurrence.
 - Only the exact intent spatial rule "spawn_owned_object_at_actor_position" requires actor-origin lifecycle evidence. When that rule is present, retain object_read and preserve the exact rule in contract lineage so source observes the bound actor and creates the owned object at that live position. Arena, region, obstacle-avoidance, or seeded-position rules do not require actor origin merely because an actor or entity binding also exists.
 - Use only those exact binding property IDs in scenario binding_property observations. Do not invent derived aliases such as velocity_magnitude, speed, inside_region, or distance; express supported evidence with the listed scalar components or use the evaluator-authored referenced-entity motion observation.
 - Generated source cannot deactivate or destroy bound objects. Never require active to equal false or to differ from true for a binding; prove an effect with an admitted mutable motion property or evaluator-authored target-interaction evidence. object_destroy applies only to mechanic-owned objects.
@@ -232,9 +242,11 @@ ${
   generationAttempt.repair.trigger === "stage_failure"
     ? `- Correct every exact path, code, and message in the stage-failure feedback. Preserve unrelated accepted contract decisions.
 - Before returning any repair, recheck the required capability manifest, mandatory lifecycle callbacks, scenario trigger mode, and state-write obligations as one closed checklist. A repair that fixes the reported path but breaks another checklist item is still invalid.
+- Include every exact accepted configuration declaration kind and default in that same closed repair checklist.
 - When source-use validation reports unused_capability, remove that exact capability declaration only when it is absent from the required capability manifest and no accepted requirement genuinely needs it. If it is required, retain it and revise the contract so its lifecycle and scenarios make the required use unambiguous for source generation.
 - When contradiction reports a missing intent-required capability, restore that exact capability without changing scenario steps or lifecycle callbacks. Recheck every other capability in the required manifest before returning.
 - When a final state_equals differs from setup or initial state, retain state_write and preserve the asserted final value. Add the missing state_write declaration without changing unrelated scenario steps, lifecycle callbacks, required capabilities, or observations.
+- When unknown_reference affects an accepted configuration default, preserve its exact key and default and restore the declaration kind from the exact accepted configuration declaration manifest. Never substitute a different trusted catalog value for an accepted configuration default.
 ${scenarioTriggerRepairRule}
 - When host admission reports unsupported_runtime_ports, set contract.ports to [] exactly. Remove scenario observations, capability declarations, and lifecycle behavior that exist only to use those ports; do not replace them with another port or untrusted output path.
 - When invalid_value affects privateState or a scenario state value, replace every incompatible declaration, setup, and state_equals value for that state so all of them match its one exact declared value type. For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker.
@@ -266,4 +278,43 @@ Required top-level candidate artifact ID: ${generationAttempt.candidateArtifactI
 Attempt rules:
 - Return exactly the required candidate artifact ID as the contract's top-level id. It is unique to this generation run, stage, attempt kind, and attempt number; never reuse an earlier candidate ID.${repairGuidance}
 `.trim();
+}
+
+function createAcceptedConfigurationDeclarationManifest(
+  configuration: MechanicContractGenerationPromptInput["intent"]["configuration"],
+  referenceCatalog: MechanicContractGenerationPromptInput["referenceCatalog"]
+) {
+  return configuration.map(({ key, value }) => ({
+    key,
+    exactDefault: value,
+    declaration: createAcceptedConfigurationDeclaration(
+      value,
+      referenceCatalog
+    ),
+  }));
+}
+
+function createAcceptedConfigurationDeclaration(
+  value: MechanicContractGenerationPromptInput["intent"]["configuration"][number]["value"],
+  referenceCatalog: MechanicContractGenerationPromptInput["referenceCatalog"]
+) {
+  if (typeof value === "boolean") {
+    return { kind: "boolean" as const };
+  }
+  if (typeof value === "number") {
+    return {
+      kind: Number.isInteger(value) ? ("integer" as const) : ("number" as const),
+    };
+  }
+
+  const matchingReferenceKinds = Object.entries(referenceCatalog).flatMap(
+    ([referenceKind, referenceIds]) =>
+      referenceIds.includes(value) ? [referenceKind] : []
+  );
+  return matchingReferenceKinds.length === 1
+    ? {
+        kind: "stable_id" as const,
+        referenceKind: matchingReferenceKinds[0]!,
+      }
+    : { kind: "string" as const };
 }

@@ -191,13 +191,22 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "explicit cleanup, and nonzero travel only when object_motion_write is declared"
     );
     expect(prompt).toContain(
-      "If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
+      "For a one-shot transient lifecycle, if a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
     );
     expect(prompt).toContain(
-      "Prove a positive transient owned_object_count in a separate dispatch-only scenario with no advance_time step"
+      "For a one-shot transient lifecycle, prove a positive owned_object_count in a separate dispatch-only scenario with no advance_time step"
     );
     expect(prompt).toContain(
-      "any time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated"
+      "a time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated"
+    );
+    expect(prompt).toContain(
+      "For an autonomous recurring lifecycle that remains active while older owned objects expire"
+    );
+    expect(prompt).toContain(
+      "declare the positive bounded final owned_object_count in that exact time-advancing scenario"
+    );
+    expect(prompt).toContain(
+      "Only require final count 0 when that exact recurring scenario stops creation"
     );
     expect(prompt).toContain(
       "retain object_read and preserve the exact rule in contract lineage"
@@ -291,6 +300,118 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "Before returning any repair, recheck the required capability manifest, mandatory lifecycle callbacks, scenario trigger mode, and state-write obligations as one closed checklist"
+    );
+  });
+
+  it("keeps accepted string configuration defaults out of untrusted stable-ID declarations during repair", () => {
+    const configurationIntent: MechanicIntent = {
+      ...intent,
+      configuration: [
+        { key: "enabled", value: true },
+        { key: "spawn_count", value: 3 },
+        { key: "spawn_scale", value: 1.5 },
+        { key: "spawn_zone_id", value: "hazard_spawn_area" },
+        { key: "arena_id", value: "main_arena" },
+        { key: "region_id", value: "arena_playfield" },
+        { key: "ambiguous_id", value: "shared_reference" },
+      ],
+    };
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_contract_contract_1",
+      issues: [
+        {
+          path: "config.fields.3.value.default",
+          code: "unknown_reference",
+          message:
+            'Config DSL stable ID "hazard_spawn_area" is absent from the trusted "region" catalog.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const prompt = createMechanicContractGenerationSystemPrompt({
+      intent: configurationIntent,
+      resolution: { ...resolution, intentId: configurationIntent.id },
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      referenceCatalog: {
+        action: ["activate"],
+        entity: ["player_one"],
+        region: ["arena_playfield", "shared_reference"],
+        scene: ["survival_arena", "shared_reference"],
+      },
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 8,
+        maximumOperationsPerTick: 40,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 256,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_contract_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_contract",
+        stage: "contract",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_contract_contract_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      `Exact accepted configuration declaration manifest JSON:\n${JSON.stringify(
+        [
+          {
+            key: "enabled",
+            exactDefault: true,
+            declaration: { kind: "boolean" },
+          },
+          {
+            key: "spawn_count",
+            exactDefault: 3,
+            declaration: { kind: "integer" },
+          },
+          {
+            key: "spawn_scale",
+            exactDefault: 1.5,
+            declaration: { kind: "number" },
+          },
+          {
+            key: "spawn_zone_id",
+            exactDefault: "hazard_spawn_area",
+            declaration: { kind: "string" },
+          },
+          {
+            key: "arena_id",
+            exactDefault: "main_arena",
+            declaration: { kind: "string" },
+          },
+          {
+            key: "region_id",
+            exactDefault: "arena_playfield",
+            declaration: {
+              kind: "stable_id",
+              referenceKind: "region",
+            },
+          },
+          {
+            key: "ambiguous_id",
+            exactDefault: "shared_reference",
+            declaration: { kind: "string" },
+          },
+        ],
+        null,
+        2
+      )}`
+    );
+    expect(prompt).toContain(
+      "When unknown_reference affects an accepted configuration default, preserve its exact key and default and restore the declaration kind from the exact accepted configuration declaration manifest"
+    );
+    expect(prompt).toContain(
+      "Never substitute a different trusted catalog value for an accepted configuration default"
     );
   });
 

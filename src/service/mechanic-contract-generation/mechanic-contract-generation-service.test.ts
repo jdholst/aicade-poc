@@ -212,6 +212,55 @@ describe("generateMechanicContract", () => {
     });
   });
 
+  it("reports intrinsic reference and accepted-intent issues together", async () => {
+    const intentWithoutStateWrite = {
+      ...intent,
+      requiredCapabilities: [],
+    };
+    const result = await generateMechanicContract({
+      intent: intentWithoutStateWrite,
+      admittedRequest: {
+        resolution,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      referenceCatalog: {
+        ...validationContext.referenceCatalog,
+        region: ["known_region"],
+      },
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        config: {
+          kind: "stable_id",
+          referenceKind: "region",
+          default: "unknown_region",
+        },
+        capabilities: ["object_read"],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "unknown_reference",
+            message: expect.stringContaining("unknown_region"),
+          }),
+          expect.objectContaining({
+            path: "scenarios.0.observations.0",
+            code: "contradiction",
+            message: expect.stringContaining("state_write"),
+          }),
+        ]),
+      },
+    });
+  });
+
   it("returns exact contract-validation evidence for invalid provider output", async () => {
     const invalidCandidate = {
       ...candidate,
@@ -595,6 +644,149 @@ describe("generateMechanicContract", () => {
     });
     }
   );
+
+  it("requires an explicit lifecycle count in every time-advancing autonomous install scenario", async () => {
+    const autonomousIntent: MechanicIntent = {
+      ...intent,
+      triggers: ["install"],
+      ownedObjects: ["hazard"],
+      temporalRules: ["spawn_repeatedly", "expire_owned_hazards"],
+      configuration: [
+        { key: "spawn_interval_ms", value: 100 },
+        { key: "hazard_lifetime_ms", value: 300 },
+      ],
+      requiredCapabilities: [
+        "state_write",
+        "object_create",
+        "object_destroy",
+        "time_schedule",
+      ],
+    };
+    const autonomousCandidate = {
+      ...candidate,
+      behavior: {
+        ...candidate.behavior,
+        triggers: ["install"],
+      },
+      config: {
+        kind: "object",
+        fields: [
+          {
+            key: "spawn_interval_ms",
+            required: true,
+            value: {
+              kind: "integer",
+              minimum: 1,
+              maximum: 1000,
+              default: 100,
+            },
+          },
+          {
+            key: "hazard_lifetime_ms",
+            required: true,
+            value: {
+              kind: "integer",
+              minimum: 1,
+              maximum: 1000,
+              default: 300,
+            },
+          },
+        ],
+      },
+      ownedObjects: [
+        {
+          id: "hazard",
+          objectKind: "hazard",
+          maximumInstances: 3,
+        },
+      ],
+      lifecycle: {
+        ...candidate.lifecycle,
+        callbacks: ["install", "scheduled"],
+      },
+      capabilities: autonomousIntent.requiredCapabilities,
+      resourceExpectations: {
+        ...candidate.resourceExpectations,
+        maximumOwnedObjects: 3,
+        maximumOperationsPerTick: 8,
+        maximumScheduledCallbacks: 1,
+      },
+      scenarios: [
+        {
+          id: "recurring_hazards_continue",
+          seed: 7,
+          setup: [
+            {
+              kind: "state_equals",
+              stateId: "enabled",
+              value: false,
+            },
+          ],
+          steps: [
+            { kind: "advance_time", milliseconds: 1 },
+            { kind: "advance_time", milliseconds: 100 },
+            { kind: "advance_time", milliseconds: 100 },
+            { kind: "advance_time", milliseconds: 100 },
+          ],
+          observations: [
+            {
+              kind: "state_equals",
+              stateId: "enabled",
+              value: true,
+            },
+          ],
+        },
+      ],
+    } as const;
+    const generate = (withCount: boolean) =>
+      generateMechanicContract({
+        intent: autonomousIntent,
+        admittedRequest: {
+          resolution: { ...resolution, intentId: autonomousIntent.id },
+          constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+        },
+        ...validationContext,
+        model: "gpt-5.4-mini",
+        providerCredential: "sk-test",
+        provider: async () => ({
+          ...autonomousCandidate,
+          scenarios: autonomousCandidate.scenarios.map((scenario) => ({
+            ...scenario,
+            observations: withCount
+              ? [
+                  ...scenario.observations,
+                  {
+                    kind: "owned_object_count" as const,
+                    archetypeId: "hazard",
+                    operator: "equals" as const,
+                    value: 3,
+                  },
+                ]
+              : scenario.observations,
+          })),
+        }),
+      });
+
+    const missingCount = await generate(false);
+    expect(missingCount).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          expect.objectContaining({
+            path: "scenarios.0.observations",
+            code: "contradiction",
+            message: expect.stringContaining(
+              "explicit final owned_object_count"
+            ),
+          }),
+        ],
+      },
+    });
+
+    await expect(generate(true)).resolves.toMatchObject({ success: true });
+  });
 
   it("stamps exact trusted semantic lineage and ignores provider-authored substitutions", async () => {
     const semanticIntent: MechanicIntent = {

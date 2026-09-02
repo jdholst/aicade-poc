@@ -427,6 +427,7 @@ export async function buildAndExecuteGeneratedMechanicSource({
       id: execution.id,
       source: "",
       lifecycle: {
+        callbackExecutionMode: "generated_admitted",
         callbacks: compiledCallbacks.map((callback) => ({
           id: callback.id,
           source: createExecutionSource({
