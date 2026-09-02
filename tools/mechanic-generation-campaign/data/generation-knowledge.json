@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 54,
-  "updatedAt": "2026-09-02T19:45:52Z",
+  "revision": 55,
+  "updatedAt": "2026-09-02T20:09:07Z",
   "entries": [
     {
       "status": "active",
@@ -3884,6 +3884,43 @@
       "amendments": [],
       "createdAt": "2026-09-02T19:45:52Z",
       "updatedAt": "2026-09-02T19:45:52Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Retained runtime randomness must advance across callbacks",
+      "guidance": "Keep seeded random state at retained mechanic-session scope, not inside a per-execution or per-callback worker job. In runtime mode, route random_next through the retained lifecycle capability host so install, scheduled, action, and dispose callbacks consume one advancing deterministic sequence. Preserve independently seeded local randomness only for isolated conformance replay probes. Verify the production worker boundary in a browser by showing two executions in one realm receive different successive subsequences, while the conformance deterministic-replay corpus still matches for equal seeds. A contract, source, or evaluator creation count does not prove visible variation when repeated objects can stack at identical coordinates.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_health",
+          "external_mechanic_probe"
+        ],
+        "classifications": [
+          "semantic_runtime_failure",
+          "manual_qa_rejected"
+        ]
+      },
+      "id": "KF-0043",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed the trusted static red hazard and one inert-looking white generated entity. Accepted source invoked random_next twice during install and twice during every recurring callback, but the SES executor reinitialized its random state from the same realm seed for every execution, placing all generated hazards at identical coordinates.",
+          "observedAt": "2026-09-02T20:00:39.862Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T20:09:07Z",
+      "updatedAt": "2026-09-02T20:09:07Z"
     }
   ],
   "reconciliations": [
@@ -10204,6 +10241,98 @@
       "createdAt": "2026-09-02T19:45:52Z",
       "priorManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929",
       "resultingManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-8-20260902t200907z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-8",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9"
+      },
+      "consultedManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882",
+      "contextDigest": "3016cd902e5cc8dab743b5de84d97fdbdc75f62f99031caa79fc7e7de8c6c99b",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0037",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-7",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0042"
+          ],
+          "rationale": "Fix cycle 7's single-callback recurrence and expiry coordinator produced accepted source, passed deterministic evaluation, and reached manual gameplay QA. That confirms the source scheduling boundary in KF-0042. The remaining visual failure occurred after source acceptance and has a separate runtime cause."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0037",
+            "KF-0043"
+          ],
+          "rationale": "Manual QA again showed the trusted static red hazard and only one inert-looking white generated entity despite accepted recurring source, confirming KF-0037. Artifact tracing showed install and every scheduled callback consumed the same first two seeded random values because each SES executor job reinitialized random state from the realm seed. Every created hazard therefore occupied identical coordinates and visually stacked. Runtime mode now delegates random_next to the retained lifecycle capability host, whose state advances across callback executions; conformance mode keeps isolated seeded randomness for deterministic replay probes. The browser regression failed before the fix, then proved runtime sequence advancement while the unchanged 32-probe conformance corpus passed. The other consulted findings cover provider, authority, contract, evaluator, probe, or scheduling failures and do not explain per-execution RNG reset. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Retained runtime randomness must advance across callbacks",
+            "guidance": "Keep seeded random state at retained mechanic-session scope, not inside a per-execution or per-callback worker job. In runtime mode, route random_next through the retained lifecycle capability host so install, scheduled, action, and dispose callbacks consume one advancing deterministic sequence. Preserve independently seeded local randomness only for isolated conformance replay probes. Verify the production worker boundary in a browser by showing two executions in one realm receive different successive subsequences, while the conformance deterministic-replay corpus still matches for equal seeds. A contract, source, or evaluator creation count does not prove visible variation when repeated objects can stack at identical coordinates.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            },
+            "id": "KF-0043",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "manual_qa",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9",
+                "attemptId": "a01-baseline",
+                "stage": "external_mechanic_probe",
+                "quality": "actual_submission",
+                "outcome": "manual_qa_rejected",
+                "summary": "Manual gameplay showed the trusted static red hazard and one inert-looking white generated entity. Accepted source invoked random_next twice during install and twice during every recurring callback, but the SES executor reinitialized its random state from the same realm seed for every execution, placing all generated hazards at identical coordinates.",
+                "observedAt": "2026-09-02T20:00:39.862Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T20:09:07Z",
+            "updatedAt": "2026-09-02T20:09:07Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T20:09:07Z",
+      "priorManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882",
+      "resultingManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726"
     }
   ]
 }

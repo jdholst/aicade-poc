@@ -273,7 +273,7 @@ try {
       runawayAutoTerminated: true,
       mutableExecutionSnapshotEnforced: true,
       recoveryCompleted: true,
-      deterministicReplayMatched: true,
+      runtimeRandomSequenceAdvancedAcrossExecutions: true,
       operationsBudgetEnforced: true,
       fireAndForgetOperationsBudgetEnforced: true,
       stateBudgetTotalsDistinctEntries: true,
@@ -286,7 +286,7 @@ try {
       fireAndForgetCallbackCpuBudgetEnforced: true,
       exactPlayerDriftFixedStepCompleted: true,
       disposalRejectedLateExecute: true,
-      capabilityHostCalls: 19,
+      capabilityHostCalls: 55,
       productionSharedKernelExecutions: 13,
       controllerDisposalAcknowledged: true,
     };

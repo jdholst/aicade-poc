@@ -544,7 +544,7 @@ async function runMechanicExecutionKernel(
         );
         enforceTarget(input.resourceTarget, counters);
 
-        if (capabilityId === "random_next") {
+        if (input.mode === "conformance" && capabilityId === "random_next") {
           randomState = (randomState + 0x6d2b79f5) | 0;
           let value = randomState;
           value = Math.imul(value ^ (value >>> 15), value | 1);

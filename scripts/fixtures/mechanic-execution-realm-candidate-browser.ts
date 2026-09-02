@@ -40,7 +40,7 @@ type ProductionIntegrationEvidence = {
   runawayAutoTerminated: boolean;
   mutableExecutionSnapshotEnforced: boolean;
   recoveryCompleted: boolean;
-  deterministicReplayMatched: boolean;
+  runtimeRandomSequenceAdvancedAcrossExecutions: boolean;
   operationsBudgetEnforced: boolean;
   fireAndForgetOperationsBudgetEnforced: boolean;
   stateBudgetTotalsDistinctEntries: boolean;
@@ -740,6 +740,7 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
   let capabilityHostCalls = 0;
   let trustedHostWaitCapabilityHostCalls = 0;
   let actualHandleReachedHost = false;
+  let randomState = 42 >>> 0;
   const transportAudit = {
     initializationObserved: false,
     rawHandleCrossedWorker: false,
@@ -764,6 +765,16 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
     capabilityHost: {
       invoke: async ({ capabilityId, arguments: capabilityArguments }) => {
         capabilityHostCalls += 1;
+        if (capabilityId === "random_next") {
+          randomState = (randomState + 0x6d2b79f5) | 0;
+          let value = randomState;
+          value = Math.imul(value ^ (value >>> 15), value | 1);
+          value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+          return {
+            kind: "json",
+            value: ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296,
+          };
+        }
         if (capabilityId === "state_write") {
           if (
             capabilityArguments.length !== 2 ||
@@ -995,10 +1006,10 @@ async function runProductionAdapterIntegration(): Promise<ProductionIntegrationE
         recovery.outcome === "completed" &&
         isRecord(recovery.output) &&
         recovery.output.recovered === true,
-      deterministicReplayMatched:
+      runtimeRandomSequenceAdvancedAcrossExecutions:
         deterministicFirst.outcome === "completed" &&
         deterministicSecond.outcome === "completed" &&
-        JSON.stringify(deterministicFirst.output) ===
+        JSON.stringify(deterministicFirst.output) !==
           JSON.stringify(deterministicSecond.output),
       operationsBudgetEnforced: operationsLimit.outcome === "resource_limit",
       fireAndForgetOperationsBudgetEnforced:
