@@ -486,6 +486,33 @@ function appendTransientLifetimeFinalCountIssues(
   const acceptedLifetime =
     acceptedLifetimes.length > 0 ? Math.min(...acceptedLifetimes) : undefined;
   const ownedObjectIds = new Set(contract.ownedObjects.map(({ id }) => id));
+  const usesAutonomousInstall =
+    intent.triggers.length === 1 &&
+    intent.triggers[0] === "install" &&
+    intent.connections.length === 0;
+
+  if (usesAutonomousInstall) {
+    contract.scenarios.forEach((scenario, scenarioIndex) => {
+      if (!scenario.steps.some((step) => step.kind === "advance_time")) {
+        return;
+      }
+      for (const ownedObject of contract.ownedObjects) {
+        const declaresFinalCount = scenario.observations.some(
+          (observation) =>
+            observation.kind === "owned_object_count" &&
+            observation.archetypeId === ownedObject.id
+        );
+        if (declaresFinalCount) {
+          continue;
+        }
+        issues.push({
+          path: `scenarios.${scenarioIndex}.observations`,
+          code: "contradiction",
+          message: `Autonomous install scenario "${scenario.id}" advances time for transient owned object "${ownedObject.id}" and must declare an explicit final owned_object_count. Use a positive bounded count when recurrence remains active through final observation, or count 0 only when creation has stopped and every owned-object lifetime has completed.`,
+        });
+      }
+    });
+  }
 
   contract.scenarios.forEach((scenario, scenarioIndex) => {
     const actionIndex = scenario.steps.findIndex(

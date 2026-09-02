@@ -191,13 +191,22 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
       "explicit cleanup, and nonzero travel only when object_motion_write is declared"
     );
     expect(prompt).toContain(
-      "If a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
+      "For a one-shot transient lifecycle, if a scenario advances through explicit owned-object cleanup, its final owned_object_count must equal 0"
     );
     expect(prompt).toContain(
-      "Prove a positive transient owned_object_count in a separate dispatch-only scenario with no advance_time step"
+      "For a one-shot transient lifecycle, prove a positive owned_object_count in a separate dispatch-only scenario with no advance_time step"
     );
     expect(prompt).toContain(
-      "any time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated"
+      "a time advance can validly remove the transient object through interaction or cleanup before final observations are evaluated"
+    );
+    expect(prompt).toContain(
+      "For an autonomous recurring lifecycle that remains active while older owned objects expire"
+    );
+    expect(prompt).toContain(
+      "declare the positive bounded final owned_object_count in that exact time-advancing scenario"
+    );
+    expect(prompt).toContain(
+      "Only require final count 0 when that exact recurring scenario stops creation"
     );
     expect(prompt).toContain(
       "retain object_read and preserve the exact rule in contract lineage"

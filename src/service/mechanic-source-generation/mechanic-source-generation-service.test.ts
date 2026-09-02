@@ -117,6 +117,7 @@ describe("generated mechanic source stage", () => {
     expect(realmAdapter.executions[0]).toMatchObject({
       source: "",
       lifecycle: {
+        callbackExecutionMode: "generated_admitted",
         callbacks: [
           {
             id: "install_generic_source",

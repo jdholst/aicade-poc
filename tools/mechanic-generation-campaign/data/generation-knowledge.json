@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 45,
-  "updatedAt": "2026-09-02T03:47:18Z",
+  "revision": 46,
+  "updatedAt": "2026-09-02T04:07:16Z",
   "entries": [
     {
       "status": "active",
@@ -90,13 +90,14 @@
     {
       "status": "active",
       "confidence": "confirmed",
-      "title": "Post-action owned-object liveness is scenario-local",
-      "guidance": "Require an owned object to remain active through a post-action observation only when that exact scenario explicitly declares a positive final owned_object_count. When a time-advancing scenario has no positive count requirement, accept complete lifecycle evidence that proves actor-origin creation and bounded motion even if valid target interaction or cleanup destroys the transient before final observation.",
+      "title": "Owned-object liveness phase is scenario-local",
+      "guidance": "Make each accepted scenario's final owned-object lifecycle phase explicit. A positive final owned_object_count in that exact scenario selects active lifecycle progress; final count 0 selects complete cleanup. For an autonomous time-advancing create/destroy lifecycle, contract admission must reject an omitted final count for every owned archetype. A recurring lifecycle that remains active while older objects expire must declare its positive bounded population in the same scenario, and may declare 0 only after recurrence stops and every owned-object lifetime completes. Do not infer liveness or cleanup from another scenario.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
+          "contract_generation",
           "source_generation",
           "deterministic_evaluation",
           "assembly"
@@ -107,7 +108,7 @@
         ]
       },
       "id": "KF-0003",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -197,6 +198,17 @@
           "outcome": "provider_output_rejected",
           "summary": "Evaluator-authored observation 0 \"owned_object_lifecycle_progress_after_action\" failed. Assertion: {\"kind\":\"owned_object_lifecycle_progress_after_action\",\"archetypeIds\":[\"player_projectile\"],\"actionId\":\"fire_action\",\"requireActorOrigin\":true}. Actual: {\"deltas\":[{\"activeDelta\":0,\"actorOriginCreationsDelta\":1,\"createdDelta\":1,\"destroyedDelta\":1,\"simulatedDistanceTraveledDelta\":120,\"targetInteractionsDelta\":1}]}",
           "observedAt": "2026-08-30T22:08:48.328Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted autonomous cleanup scenario required spawn_order 4 and next_spawn_time 8000 but omitted final owned_object_count. Evaluator-authored complete-lifecycle evidence therefore rejected the truthful rolling population created 4, destroyed 1, active 3.",
+          "observedAt": "2026-09-02T03:54:16.955Z"
         }
       ],
       "amendments": [
@@ -327,10 +339,48 @@
               "observedAt": "2026-08-30T22:08:48.328Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-09-02T04:07:16Z",
+          "reason": "Actual autonomous recurrence exposed the inverse of the earlier post-action defect: omitting a count made complete cleanup authoritative even though the same scenario required continued spawning. Requiring an explicit phase at contract admission preserves scenario-local evaluator semantics without weakening cleanup.",
+          "previous": {
+            "status": "active",
+            "confidence": "confirmed",
+            "title": "Post-action owned-object liveness is scenario-local",
+            "guidance": "Require an owned object to remain active through a post-action observation only when that exact scenario explicitly declares a positive final owned_object_count. When a time-advancing scenario has no positive count requirement, accept complete lifecycle evidence that proves actor-origin creation and bounded motion even if valid target interaction or cleanup destroys the transient before final observation.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted autonomous cleanup scenario required spawn_order 4 and next_spawn_time 8000 but omitted final owned_object_count. Evaluator-authored complete-lifecycle evidence therefore rejected the truthful rolling population created 4, destroyed 1, active 3.",
+              "observedAt": "2026-09-02T03:54:16.955Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-24T02:43:38.000Z",
-      "updatedAt": "2026-08-30T22:13:28Z"
+      "updatedAt": "2026-09-02T04:07:16Z"
     },
     {
       "status": "active",
@@ -1862,23 +1912,25 @@
       "status": "active",
       "confidence": "supported",
       "title": "Separate callback active-work and Worker-delivery budgets",
-      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
+      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
         "manifestIds": [],
         "stages": [
+          "source_generation",
           "runtime_foundation",
           "runtime_activation",
           "first_playable"
         ],
         "classifications": [
+          "provider_output_rejected",
           "pipeline_failure",
           "runtime_pipeline_failure"
         ]
       },
       "id": "KF-0019",
-      "revision": 5,
+      "revision": 6,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -1959,6 +2011,17 @@
           "outcome": "pipeline_failure",
           "summary": "The foundation fixture now constructs an authenticated generated lifecycle program, compiling trusted admitted callback source outside the unchanged 8 millisecond invocation meter while retaining the bounded outer deadline and containment checks.",
           "observedAt": "2026-08-27T20:03:05Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Source attempt 4 reached realm validation after parsing, typechecking, compilation, and static admission, but the source stage used the generic compile-inside-meter lifecycle path and reported callback_milliseconds 9 against the unchanged limit 8. A larger prior candidate callback passed, showing work-shape did not deterministically explain the terminal rejection.",
+          "observedAt": "2026-09-02T03:54:16.955Z"
         }
       ],
       "amendments": [
@@ -2133,10 +2196,48 @@
               "observedAt": "2026-08-27T21:03:31.301Z"
             }
           ]
+        },
+        {
+          "revision": 5,
+          "changedAt": "2026-09-02T04:07:16Z",
+          "reason": "The source-stage validation path had already established the same trust boundary as the retained runtime but omitted the generated_admitted execution mode, making parsing and compilation vulnerable to nondeterministic attribution to the exact 8 millisecond generated-work budget.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Foundation and diagnostic fixtures that claim generated-mechanic readiness must use the same authenticated generated lifecycle path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_foundation",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "pipeline_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Source attempt 4 reached realm validation after parsing, typechecking, compilation, and static admission, but the source stage used the generic compile-inside-meter lifecycle path and reported callback_milliseconds 9 against the unchanged limit 8. A larger prior candidate callback passed, showing work-shape did not deterministically explain the terminal rejection.",
+              "observedAt": "2026-09-02T03:54:16.955Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T06:12:49Z",
-      "updatedAt": "2026-08-27T21:36:40Z"
+      "updatedAt": "2026-09-02T04:07:16Z"
     },
     {
       "status": "active",
@@ -3350,7 +3451,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Source repairs need one closed transition checklist",
-      "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior.",
+      "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior. For a recurring next_*_time state on an integer interval grid, compute the next strict boundary after the scheduled lifecycle input, write that absolute boundary to state, and pass only boundary minus current simulation time as the relative time.schedule delay. Never pass the absolute boundary itself as the delay, write the completed boundary, or derive the deadline from a one-based occurrence counter.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3363,7 +3464,7 @@
         ]
       },
       "id": "KF-0035",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3375,11 +3476,58 @@
           "outcome": "provider_output_rejected",
           "summary": "The source provider received exact setup states, ordered time advances, and required final state values. Initial source passed the exact state assertions but failed lifecycle evidence. Repairs then regressed the sequence calculation; the final repair repeated a formula yielding spawn_sequence 3 after feedback required 5, exhausting source repair despite the other terminal lifecycle issue being resolved.",
           "observedAt": "2026-08-31T23:47:58.351Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Source attempt 3 wrote next_spawn_time 8000 where 6000 was required and 10000 where 8000 was required by deriving the deadline from spawn order. Attempt 4 overcorrected to the completed interval boundary, which would be one interval low after a delayed due callback.",
+          "observedAt": "2026-09-02T03:54:16.955Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-09-02T04:07:16Z",
+          "reason": "Two consecutive actual repairs oscillated around the required recurrence deadline: one derived it one interval high from spawn order, and the next wrote the completed boundary one interval low. Final review also confirmed that time.schedule accepts a relative delay, so the durable rule distinguishes the persisted absolute boundary from boundary minus current simulation time.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Source repairs need one closed transition checklist",
+            "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Source attempt 3 wrote next_spawn_time 8000 where 6000 was required and 10000 where 8000 was required by deriving the deadline from spawn order. Attempt 4 overcorrected to the completed interval boundary, which would be one interval low after a delayed due callback.",
+              "observedAt": "2026-09-02T03:54:16.955Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-31T23:54:39Z",
-      "updatedAt": "2026-08-31T23:54:39Z"
+      "updatedAt": "2026-09-02T04:07:16Z"
     },
     {
       "status": "active",
@@ -8909,6 +9057,171 @@
       "createdAt": "2026-09-02T03:47:18Z",
       "priorManifestDigest": "6499e39b7333e2bf5740b1c679eca08d4bd65860faebdbbccf85441405c59bcd",
       "resultingManifestDigest": "50d0beed1432ac1efa46c0b98707fcf8f26b77cd1aa605f374d29753585513af"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-3-20260902t040716z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3"
+      },
+      "consultedManifestDigest": "50d0beed1432ac1efa46c0b98707fcf8f26b77cd1aa605f374d29753585513af",
+      "contextDigest": "9a056d3226726a752553ecc4346f34ff299f3509ad048e0ef7cba29dcb0dd87b",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0034",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z/fix-cycle-2",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0018",
+            "KF-0031",
+            "KF-0034"
+          ],
+          "rationale": "The next actual contract attempt confirms the prior configuration-declaration fix did not regress numeric configuration: all five numeric accepted values retained integer declarations and exact defaults. Its first contract candidate still omitted state_write, while repair restored state_write without changing those declarations and was accepted. KF-0034, KF-0018, and KF-0031 therefore remain applicable and satisfied. The specific ordinary-string versus stable-ID branch from fix cycle 2 was not exercised by this numeric-only intent, so this is confirmation of non-regression rather than new guidance."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0003",
+            "KF-0019",
+            "KF-0020",
+            "KF-0029",
+            "KF-0032",
+            "KF-0035"
+          ],
+          "rationale": "KF-0003 directly exposes the contract admission gap: the autonomous recurring scenario required spawn order 4 and next spawn time 8000 while omitting final owned_object_count, so evaluator-authored evidence correctly selected complete lifecycle and rejected created 4, destroyed 1, active 3 even though recurrence remained active. KF-0020 governs source attempt 1 inventing state.read outside the exact write-only grant. KF-0029, KF-0032, and KF-0035 govern the reachable recurrence and the two failed next_spawn_time repairs, first one interval high and then one interval low. KF-0019 governs the terminal callback_milliseconds rejection because the already parsed, typechecked, compiled, and statically admitted source-stage artifact was sent through the generic compile-inside-meter path; the exact 8 millisecond budget remains unchanged. KF-0018 and KF-0031 were satisfied by the accepted contract's state_write. KF-0017 and KF-0033 were satisfied because callback coverage and provider transport were exact. KF-0027 and KF-0028 were satisfied because the stationary arena lifecycle required neither motion nor actor origin. KF-0002, KF-0004, KF-0005, KF-0008, KF-0009, KF-0011, KF-0014, KF-0023, KF-0025, and KF-0026 were non-causal because the mechanic has no moving target-interaction path. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0003",
+          "expectedRevision": 3,
+          "reason": "Actual autonomous recurrence exposed the inverse of the earlier post-action defect: omitting a count made complete cleanup authoritative even though the same scenario required continued spawning. Requiring an explicit phase at contract admission preserves scenario-local evaluator semantics without weakening cleanup.",
+          "changes": {
+            "title": "Owned-object liveness phase is scenario-local",
+            "guidance": "Make each accepted scenario's final owned-object lifecycle phase explicit. A positive final owned_object_count in that exact scenario selects active lifecycle progress; final count 0 selects complete cleanup. For an autonomous time-advancing create/destroy lifecycle, contract admission must reject an omitted final count for every owned archetype. A recurring lifecycle that remains active while older objects expire must declare its positive bounded population in the same scenario, and may declare 0 only after recurrence stops and every owned-object lifetime completes. Do not infer liveness or cleanup from another scenario.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted autonomous cleanup scenario required spawn_order 4 and next_spawn_time 8000 but omitted final owned_object_count. Evaluator-authored complete-lifecycle evidence therefore rejected the truthful rolling population created 4, destroyed 1, active 3.",
+              "observedAt": "2026-09-02T03:54:16.955Z"
+            }
+          ]
+        },
+        {
+          "type": "amend",
+          "findingId": "KF-0019",
+          "expectedRevision": 5,
+          "reason": "The source-stage validation path had already established the same trust boundary as the retained runtime but omitted the generated_admitted execution mode, making parsing and compilation vulnerable to nondeterministic attribution to the exact 8 millisecond generated-work budget.",
+          "changes": {
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "runtime_foundation",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Source attempt 4 reached realm validation after parsing, typechecking, compilation, and static admission, but the source stage used the generic compile-inside-meter lifecycle path and reported callback_milliseconds 9 against the unchanged limit 8. A larger prior candidate callback passed, showing work-shape did not deterministically explain the terminal rejection.",
+              "observedAt": "2026-09-02T03:54:16.955Z"
+            }
+          ]
+        },
+        {
+          "type": "amend",
+          "findingId": "KF-0035",
+          "expectedRevision": 1,
+          "reason": "Two consecutive actual repairs oscillated around the required recurrence deadline: one derived it one interval high from spawn order, and the next wrote the completed boundary one interval low. Final review also confirmed that time.schedule accepts a relative delay, so the durable rule distinguishes the persisted absolute boundary from boundary minus current simulation time.",
+          "changes": {
+            "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior. For a recurring next_*_time state on an integer interval grid, compute the next strict boundary after the scheduled lifecycle input, write that absolute boundary to state, and pass only boundary minus current simulation time as the relative time.schedule delay. Never pass the absolute boundary itself as the delay, write the completed boundary, or derive the deadline from a one-based occurrence counter."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c2-r3",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Source attempt 3 wrote next_spawn_time 8000 where 6000 was required and 10000 where 8000 was required by deriving the deadline from spawn order. Attempt 4 overcorrected to the completed interval boundary, which would be one interval low after a delayed due callback.",
+              "observedAt": "2026-09-02T03:54:16.955Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T04:07:16Z",
+      "priorManifestDigest": "50d0beed1432ac1efa46c0b98707fcf8f26b77cd1aa605f374d29753585513af",
+      "resultingManifestDigest": "ed0af497223900b87e25489539db6ad06b23be5361436c5763d62c8fec6e594f"
     }
   ]
 }

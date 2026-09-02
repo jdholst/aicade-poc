@@ -166,6 +166,18 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "The retained top-down host advances generated simulation time in whole deterministic milliseconds"
     );
     expect(prompt).toContain(
+      "For a recurring schedule state named next_*_time"
+    );
+    expect(prompt).toContain(
+      "compute nextBoundary = (Math.floor(lifecycleInput.simulationTimeMilliseconds / interval) + 1) * interval"
+    );
+    expect(prompt).toContain(
+      "schedule the relative delay nextBoundary - lifecycleInput.simulationTimeMilliseconds"
+    );
+    expect(prompt).toContain(
+      "Do not pass the absolute boundary as the delay, write the completed boundary, or derive the next boundary from a spawn counter"
+    );
+    expect(prompt).toContain(
       "Every value written to an integer private-state field must remain a finite integer"
     );
     expect(prompt).toContain(
