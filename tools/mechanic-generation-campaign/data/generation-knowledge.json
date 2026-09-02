@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 55,
-  "updatedAt": "2026-09-02T20:09:07Z",
+  "revision": 56,
+  "updatedAt": "2026-09-02T20:26:19Z",
   "entries": [
     {
       "status": "active",
@@ -3921,6 +3921,43 @@
       "amendments": [],
       "createdAt": "2026-09-02T20:09:07Z",
       "updatedAt": "2026-09-02T20:09:07Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Generated owned objects need explicit trusted interaction adoption",
+      "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to reference the object kind as an exact hazard-role asset and to share an exact hazard-role entity with the trusted hazard-contact mechanic before registering player overlap. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary by invoking the generated object's overlap handler and observing the trusted player and objective reset.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_health",
+          "external_mechanic_probe"
+        ],
+        "classifications": [
+          "semantic_runtime_failure",
+          "manual_qa_rejected"
+        ]
+      },
+      "id": "KF-0044",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed generated white hazards appearing over time, but player contact did not trigger death or round reset. The accepted contract claimed contact-and-reset behavior, while runtime tracing showed the trusted hazard_contact installer registered overlap only for its original static entity and never observed generated owned hazards.",
+          "observedAt": "2026-09-02T20:18:26.186Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T20:26:19Z",
+      "updatedAt": "2026-09-02T20:26:19Z"
     }
   ],
   "reconciliations": [
@@ -10333,6 +10370,85 @@
       "createdAt": "2026-09-02T20:09:07Z",
       "priorManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882",
       "resultingManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-9-20260902t202619z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-9",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10"
+      },
+      "consultedManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726",
+      "contextDigest": "c3902c4a682d5257348a7ff8104052f36402dc2b728fe1b7a9cbb3a71709b2da",
+      "consultedFindingIds": [
+        "KF-0037",
+        "KF-0043"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-8",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0043"
+          ],
+          "rationale": "After fix cycle 8, manual gameplay showed generated white hazards appearing at varying positions over time. That directly confirms KF-0043's retained-session RNG boundary. The remaining failure concerns trusted collision behavior, not recurrence or randomness."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "Manual QA proved that generated hazard objects rendered, varied, and could be contacted, but contact did not reset the player. The accepted contract claimed that hazards could contact the player and reset the round, while its generated objects were never adopted by the trusted hazard_contact installer. The Phaser host now exposes generated owned-object observation only to trusted built-in installers. The trusted hazard installer attaches its reset behavior only when the generated mechanic references a hazard-role asset as the exact object kind and shares an exact hazard entity with that installer. A focused regression failed before the fix, then proved both player and objective reset through the trusted path. KF-0037 concerns visible recurrence and KF-0043 concerns RNG continuity; neither establishes trusted interaction behavior. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated owned objects need explicit trusted interaction adoption",
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to reference the object kind as an exact hazard-role asset and to share an exact hazard-role entity with the trusted hazard-contact mechanic before registering player overlap. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary by invoking the generated object's overlap handler and observing the trusted player and objective reset.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            },
+            "id": "KF-0044",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "manual_qa",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10",
+                "attemptId": "a01-baseline",
+                "stage": "external_mechanic_probe",
+                "quality": "actual_submission",
+                "outcome": "manual_qa_rejected",
+                "summary": "Manual gameplay showed generated white hazards appearing over time, but player contact did not trigger death or round reset. The accepted contract claimed contact-and-reset behavior, while runtime tracing showed the trusted hazard_contact installer registered overlap only for its original static entity and never observed generated owned hazards.",
+                "observedAt": "2026-09-02T20:18:26.186Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T20:26:19Z",
+            "updatedAt": "2026-09-02T20:26:19Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T20:26:19Z",
+      "priorManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726",
+      "resultingManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f"
     }
   ]
 }

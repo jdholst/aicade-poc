@@ -21,18 +21,32 @@
       allowGravity: false,
     });
     const player = context.entities.getHandle(playerEntityId);
+    const resetAfterHazardContact = function resetAfterHazardContact() {
+      context.objective.reset(objectiveId);
+      context.runtime.resetEntity(playerEntityId);
+    };
 
     context.layout.staticBodies.forEach(function (body) {
       context.physics.addCollider(hazard, body);
     });
 
     if (player && hazard) {
-      context.physics.addOverlap(player, hazard, function resetAfterHazardContact() {
-        context.objective.reset(objectiveId);
-        context.runtime.resetEntity(playerEntityId);
-      });
+      context.physics.addOverlap(player, hazard, resetAfterHazardContact);
     }
 
-    return {};
+    const stopObservingGeneratedHazards = player
+      ? context.runtime.observeGeneratedOwnedObjects(
+          { assetRole: "hazard", entityRole: "hazard" },
+          function addGeneratedHazardContact(generatedHazard) {
+            context.physics.addOverlap(
+              player,
+              generatedHazard,
+              resetAfterHazardContact
+            );
+          }
+        )
+      : function () {};
+
+    return { dispose: stopObservingGeneratedHazards };
   };
 })();

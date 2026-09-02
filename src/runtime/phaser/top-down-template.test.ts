@@ -1250,6 +1250,98 @@ describe("top-down Phaser template", () => {
     expect(advanceSimulation).not.toHaveBeenCalled();
   });
 
+  it("routes explicitly referenced generated hazard objects through trusted hazard contact", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_hazard_spawner",
+      type: "generated_mechanic",
+      entityIds: ["entity_hazard"],
+      objectiveIds: ["objective_collect_crystals"],
+      sceneIds: ["scene_arena"],
+      regionIds: [],
+      assetIds: ["asset_generated_hazard"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        assets: [
+          ...topDownPhaserTemplate.gameSpec.assets,
+          {
+            id: "asset_generated_hazard",
+            role: "hazard" as const,
+            name: "Generated hazard",
+            source: "template" as const,
+          },
+        ],
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics,
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, overlapCalls, textLabels } =
+      createRuntimeHarness(generatedTemplate);
+    let generatedHazard:
+      | {
+          object: {
+            body?: { velocity?: { x: number; y: number } };
+            destroy?: () => void;
+            setPosition?: (x: number, y: number) => void;
+            x: number;
+            y: number;
+          };
+        }
+      | undefined;
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        install: vi.fn(async (input: {
+          createOwnedObject(created: {
+            objectId: string;
+            objectKind: string;
+            initial: Record<string, unknown>;
+          }): typeof generatedHazard;
+        }) => {
+          generatedHazard = input.createOwnedObject({
+            objectId: "owned_generated_hazard_1",
+            objectKind: "asset_generated_hazard",
+            initial: {
+              position: { x: 220, y: 240 },
+              shape: "circle",
+              radius: 12,
+            },
+          });
+          return {
+            identity: { artifactId: "extension_generated_hazard_v1" },
+            advanceSimulation: vi.fn(async () => undefined),
+            dispatchLogicalAction: vi.fn(async () => undefined),
+            dispose: vi.fn(async () => undefined),
+          };
+        }),
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    await vi.waitFor(() => expect(generatedHazard).toBeDefined());
+
+    const generatedOverlap = overlapCalls.find(
+      ({ second }) => second === generatedHazard?.object
+    );
+    expect(generatedOverlap?.handler).toEqual(expect.any(Function));
+    const objectiveResetLabelsBefore = textLabels.filter(
+      (label) => label === "Collect crystals: 0"
+    ).length;
+    generatedOverlap?.first.setPosition?.(700, 500);
+    generatedOverlap?.handler?.();
+
+    expect(generatedOverlap?.first).not.toMatchObject({ x: 700, y: 500 });
+    expect(
+      textLabels.filter((label) => label === "Collect crystals: 0")
+    ).toHaveLength(objectiveResetLabelsBefore + 1);
+  });
+
   it("serializes generated updates and accumulates elapsed time behind a fixed catch-up cap", async () => {
     const runtimeSource = loadTopDownRuntimeSource();
     const generatedMechanic = {

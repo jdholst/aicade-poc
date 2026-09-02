@@ -595,6 +595,7 @@
     let installedMechanics = [];
     let generatedMechanicSession = null;
     let generatedMechanicDisposed = false;
+    let generatedOwnedObjectObservers = [];
 
     function getGeneratedMechanicHost() {
       const host = globalThis.__AICADE_GENERATED_MECHANIC_HOST__;
@@ -717,6 +718,32 @@
           getViewport() {
             return config.viewport;
           },
+          observeGeneratedOwnedObjects(filter, observer) {
+            if (
+              !filter ||
+              typeof filter !== "object" ||
+              typeof filter.assetRole !== "string" ||
+              typeof filter.entityRole !== "string" ||
+              typeof observer !== "function"
+            ) {
+              throw new TypeError(
+                "Generated owned-object observation requires exact roles and an observer."
+              );
+            }
+            const registration = {
+              assetRole: filter.assetRole,
+              entityRole: filter.entityRole,
+              mechanic,
+              observer,
+            };
+            generatedOwnedObjectObservers.push(registration);
+            return function stopObservingGeneratedOwnedObjects() {
+              generatedOwnedObjectObservers =
+                generatedOwnedObjectObservers.filter(function (candidate) {
+                  return candidate !== registration;
+                });
+            };
+          },
           resetEntity: entityModule.resetEntityHandle,
         },
       };
@@ -797,7 +824,7 @@
       return installedMechanics;
     }
 
-    function createGeneratedOwnedObject(scene, input) {
+    function createGeneratedOwnedObject(scene, mechanic, input) {
       if (
         !input ||
         typeof input !== "object" ||
@@ -880,12 +907,69 @@
           'Generated owned object "' + input.objectId + '" cannot be destroyed.'
         );
       }
+      try {
+        notifyGeneratedOwnedObjectObservers(
+          mechanic,
+          input.objectKind,
+          object
+        );
+      } catch (error) {
+        object.destroy();
+        throw error;
+      }
       return {
         object,
         observeProperties() {
           return Object.assign({}, properties);
         },
       };
+    }
+
+    function notifyGeneratedOwnedObjectObservers(
+      generatedMechanic,
+      objectKind,
+      object
+    ) {
+      const generatedAssetIds =
+        generatedMechanic && Array.isArray(generatedMechanic.assetIds)
+          ? generatedMechanic.assetIds
+          : [];
+      if (!generatedAssetIds.includes(objectKind)) {
+        return;
+      }
+      const asset = Array.isArray(config.gameSpec.assets)
+        ? config.gameSpec.assets.find(function (candidate) {
+            return candidate && candidate.id === objectKind;
+          })
+        : null;
+      if (!asset) {
+        return;
+      }
+      const generatedEntityIds =
+        generatedMechanic && Array.isArray(generatedMechanic.entityIds)
+          ? generatedMechanic.entityIds
+          : [];
+
+      generatedOwnedObjectObservers.slice().forEach(function (registration) {
+        if (asset.role !== registration.assetRole) {
+          return;
+        }
+        const observerEntityIds =
+          registration.mechanic &&
+          Array.isArray(registration.mechanic.entityIds)
+            ? registration.mechanic.entityIds
+            : [];
+        const sharesEntityRole = generatedEntityIds.some(function (entityId) {
+          if (!observerEntityIds.includes(entityId)) {
+            return false;
+          }
+          const entity = entityModule.findById(entityId);
+          return entity && entity.role === registration.entityRole;
+        });
+        if (sharesEntityRole) {
+          registration.observer(object);
+        }
+      });
     }
 
     function boundedNumber(value, fallback, minimum, maximum) {
@@ -918,7 +1002,7 @@
           mechanic,
           template: config.template,
           createOwnedObject(input) {
-            return createGeneratedOwnedObject(scene, input);
+            return createGeneratedOwnedObject(scene, mechanic, input);
           },
           getEntityDefinition: entityModule.findById,
           getEntityHandle: entityModule.getEntityHandle,
