@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 56,
-  "updatedAt": "2026-09-02T20:26:19Z",
+  "revision": 57,
+  "updatedAt": "2026-09-02T20:41:33Z",
   "entries": [
     {
       "status": "active",
@@ -3109,7 +3109,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Owned-object lifecycle evidence does not require motion",
-      "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+      "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation. When travel is required, create or observe the owned object's position and make a reachable awaited objects.writeMotion call that writes a finite position different from its creation or current observed position before the lifecycle observation. Velocity-only writes and same-position rewrites do not increase simulatedDistanceTraveledDelta. Apply the same rule to action- and install-triggered lifecycle-progress evidence.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3128,7 +3128,7 @@
         ]
       },
       "id": "KF-0027",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3140,11 +3140,64 @@
           "outcome": "semantic_runtime_failure",
           "summary": "Actual planning produced a truthful autonomous seeded hazard spawner with bounded owned objects and object_create, object_destroy, random_next, and time_schedule authority but no motion. Routing returned independent_visible_effect_unavailable before contract or source calls, so the external probe observed no accepted artifact or lifecycle.",
           "observedAt": "2026-08-31T21:34:04.541Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted install-triggered hazard lifecycle created four objects, destroyed one, and retained three as required. Source candidates wrote velocity or rewrote each object's creation position through object_motion_write, leaving simulatedDistanceTraveledDelta at zero and failing lifecycle-progress evidence in all three scenarios.",
+          "observedAt": "2026-09-02T20:32:43.385Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-09-02T20:41:33Z",
+          "reason": "An actual install-triggered lifecycle granted object_motion_write but repeatedly produced zero observed travel because source generation treated velocity metadata or a same-position write as sufficient motion. The evaluator measures owned-object position displacement.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Owned-object lifecycle evidence does not require motion",
+            "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "routing",
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation",
+                "handoff",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted install-triggered hazard lifecycle created four objects, destroyed one, and retained three as required. Source candidates wrote velocity or rewrote each object's creation position through object_motion_write, leaving simulatedDistanceTraveledDelta at zero and failing lifecycle-progress evidence in all three scenarios.",
+              "observedAt": "2026-09-02T20:32:43.385Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-31T22:05:44Z",
-      "updatedAt": "2026-08-31T22:05:44Z"
+      "updatedAt": "2026-09-02T20:41:33Z"
     },
     {
       "status": "active",
@@ -10449,6 +10502,88 @@
       "createdAt": "2026-09-02T20:26:19Z",
       "priorManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726",
       "resultingManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-10-20260902t204133z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-10",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11"
+      },
+      "consultedManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f",
+      "contextDigest": "bf55fcd9f0511dfd9e9b4ddd6f55990ea8d178dccde8f1b0067ecca4a967ec27",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-9",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 9 verified the separate trusted collision-adoption boundary for generated hazards and allowed this attempt to reach source evaluation. It does not explain the new deterministic travel failure, which occurred before runtime handoff."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The accepted contract granted object_motion_write, so lifecycle-progress evaluation correctly required positive travel. Across source candidates, creation, destruction, and final active population were correct, but velocity-only writes and a writeMotion call that rewrote the creation position left simulatedDistanceTraveledDelta at zero. KF-0027 already defines when travel is required but did not state that the evaluator observes position displacement rather than velocity metadata or no-op position rewrites. The source prompt now makes that requirement explicit for initial generation and both action- and install-triggered progress repairs. The other consulted findings govern lifecycle phase, recurrence, timing, authority, state, and interaction behavior but do not define observed travel. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0027",
+          "expectedRevision": 1,
+          "reason": "An actual install-triggered lifecycle granted object_motion_write but repeatedly produced zero observed travel because source generation treated velocity metadata or a same-position write as sufficient motion. The evaluator measures owned-object position displacement.",
+          "changes": {
+            "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation. When travel is required, create or observe the owned object's position and make a reachable awaited objects.writeMotion call that writes a finite position different from its creation or current observed position before the lifecycle observation. Velocity-only writes and same-position rewrites do not increase simulatedDistanceTraveledDelta. Apply the same rule to action- and install-triggered lifecycle-progress evidence."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted install-triggered hazard lifecycle created four objects, destroyed one, and retained three as required. Source candidates wrote velocity or rewrote each object's creation position through object_motion_write, leaving simulatedDistanceTraveledDelta at zero and failing lifecycle-progress evidence in all three scenarios.",
+              "observedAt": "2026-09-02T20:32:43.385Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T20:41:33Z",
+      "priorManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f",
+      "resultingManifestDigest": "7d0716c3ceda6391f658bfa24ebb932372c0d559db5160b36e857067f90b2853"
     }
   ]
 }

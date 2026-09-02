@@ -896,14 +896,20 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     });
 
     expect(prompt).toContain(
-      "For an owned_object_lifecycle_progress_after_action failure, preserve the created owned object as active through the post-action observation"
+      "For an owned_object_lifecycle_progress_after_action or owned_object_lifecycle_progress_after_install failure, preserve the created owned object as active through the progress observation"
     );
     expect(prompt).toContain(
-      "Do not destroy the created owned object before the post-action observation"
+      "Do not destroy the created owned object before the progress observation"
     );
     expect(prompt).toContain("actorOriginCreationsDelta");
     expect(prompt).toContain("simulatedDistanceTraveledDelta");
     expect(prompt).toContain("targetInteractionsDelta");
+    expect(prompt).toContain(
+      "Velocity-only writes and same-position rewrites do not increase simulatedDistanceTraveledDelta"
+    );
+    expect(prompt).toContain(
+      "write a position different from the owned object's creation or current observed position"
+    );
   });
 
   it("turns missed target interactions into bounded scheduling guidance", () => {
