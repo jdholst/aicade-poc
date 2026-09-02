@@ -1276,7 +1276,14 @@ describe("top-down Phaser template", () => {
           },
         ],
         mechanics: [
-          ...topDownPhaserTemplate.gameSpec.mechanics,
+          ...topDownPhaserTemplate.gameSpec.mechanics.map((mechanic) =>
+            mechanic.type === "hazard_contact"
+              ? {
+                  ...mechanic,
+                  assetIds: ["asset_generated_hazard"],
+                }
+              : mechanic
+          ),
           generatedMechanic,
         ],
       },
@@ -1294,6 +1301,7 @@ describe("top-down Phaser template", () => {
           };
         }
       | undefined;
+    let entityKindGeneratedHazard: typeof generatedHazard;
     let unreferencedGeneratedHazard: typeof generatedHazard;
     Object.assign(context.globalThis, {
       __AICADE_GENERATED_MECHANIC_HOST__: {
@@ -1314,6 +1322,18 @@ describe("top-down Phaser template", () => {
               radius: 12,
               properties: {
                 asset: "asset_generated_hazard",
+              },
+            },
+          });
+          entityKindGeneratedHazard = input.createOwnedObject({
+            objectId: "owned_entity_kind_generated_hazard_1",
+            objectKind: "entity_hazard",
+            initial: {
+              position: { x: 240, y: 240 },
+              shape: "circle",
+              radius: 12,
+              properties: {
+                visual_asset: "asset_generated_hazard",
               },
             },
           });
@@ -1345,7 +1365,11 @@ describe("top-down Phaser template", () => {
     const generatedOverlap = overlapCalls.find(
       ({ second }) => second === generatedHazard?.object
     );
+    const entityKindGeneratedOverlap = overlapCalls.find(
+      ({ second }) => second === entityKindGeneratedHazard?.object
+    );
     expect(generatedOverlap?.handler).toEqual(expect.any(Function));
+    expect(entityKindGeneratedOverlap?.handler).toEqual(expect.any(Function));
     expect(
       overlapCalls.some(
         ({ second }) => second === unreferencedGeneratedHazard?.object
@@ -1361,6 +1385,20 @@ describe("top-down Phaser template", () => {
     expect(
       textLabels.filter((label) => label === "Collect crystals: 0")
     ).toHaveLength(objectiveResetLabelsBefore + 1);
+
+    const entityKindResetLabelsBefore = textLabels.filter(
+      (label) => label === "Collect crystals: 0"
+    ).length;
+    entityKindGeneratedOverlap?.first.setPosition?.(700, 500);
+    entityKindGeneratedOverlap?.handler?.();
+
+    expect(entityKindGeneratedOverlap?.first).not.toMatchObject({
+      x: 700,
+      y: 500,
+    });
+    expect(
+      textLabels.filter((label) => label === "Collect crystals: 0")
+    ).toHaveLength(entityKindResetLabelsBefore + 1);
   });
 
   it("serializes generated updates and accumulates elapsed time behind a fixed catch-up cap", async () => {

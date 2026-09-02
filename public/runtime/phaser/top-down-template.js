@@ -940,46 +940,61 @@
         properties && typeof properties.asset === "string"
           ? properties.asset
           : null;
-      const assetId = generatedAssetIds.includes(objectKind)
-        ? objectKind
-        : propertyAssetId && generatedAssetIds.includes(propertyAssetId)
-          ? propertyAssetId
-          : null;
-      if (!assetId) {
-        return;
-      }
-      const asset = Array.isArray(config.gameSpec.assets)
-        ? config.gameSpec.assets.find(function (candidate) {
-            return candidate && candidate.id === assetId;
-          })
-        : null;
-      if (!asset) {
-        return;
-      }
       const generatedEntityIds =
         generatedMechanic && Array.isArray(generatedMechanic.entityIds)
           ? generatedMechanic.entityIds
           : [];
+      const assets = Array.isArray(config.gameSpec.assets)
+        ? config.gameSpec.assets
+        : [];
 
       generatedOwnedObjectObservers.slice().forEach(function (registration) {
-        if (asset.role !== registration.assetRole) {
-          return;
-        }
         const observerEntityIds =
           registration.mechanic &&
           Array.isArray(registration.mechanic.entityIds)
             ? registration.mechanic.entityIds
             : [];
-        const sharesEntityRole = generatedEntityIds.some(function (entityId) {
+        const sharedEntityIds = generatedEntityIds.filter(function (entityId) {
           if (!observerEntityIds.includes(entityId)) {
             return false;
           }
           const entity = entityModule.findById(entityId);
           return entity && entity.role === registration.entityRole;
         });
-        if (sharesEntityRole) {
-          registration.observer(object);
+        if (sharedEntityIds.length === 0) {
+          return;
         }
+        const observerAssetIds =
+          registration.mechanic &&
+          Array.isArray(registration.mechanic.assetIds)
+            ? registration.mechanic.assetIds
+            : [];
+        const assetId = generatedAssetIds.includes(objectKind)
+          ? objectKind
+          : propertyAssetId && generatedAssetIds.includes(propertyAssetId)
+            ? propertyAssetId
+            : sharedEntityIds.includes(objectKind)
+              ? generatedAssetIds.find(function (generatedAssetId) {
+                  if (!observerAssetIds.includes(generatedAssetId)) {
+                    return false;
+                  }
+                  const sharedAsset = assets.find(function (candidate) {
+                    return candidate && candidate.id === generatedAssetId;
+                  });
+                  return (
+                    sharedAsset && sharedAsset.role === registration.assetRole
+                  );
+                })
+              : null;
+        const asset = assetId
+          ? assets.find(function (candidate) {
+              return candidate && candidate.id === assetId;
+            })
+          : null;
+        if (!asset || asset.role !== registration.assetRole) {
+          return;
+        }
+        registration.observer(object);
       });
     }
 
