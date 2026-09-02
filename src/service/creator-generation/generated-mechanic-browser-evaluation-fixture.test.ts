@@ -1101,6 +1101,79 @@ describe("generated mechanic browser evaluation fixture", () => {
     ]);
   });
 
+  it("does not require target interaction without authority to observe and mutate the target", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const actorEntity = gameSpec.entities.find(({ role }) => role === "player");
+    const targetEntity = gameSpec.entities.find(({ role }) => role !== "player");
+    if (!actorEntity || !targetEntity) {
+      throw new Error("Expected distinct actor and target entities.");
+    }
+    const baseIntent = createIntent(actorEntity.id);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      targets: [targetEntity.role],
+      ownedObjects: ["transient_effect"],
+      references: [
+        { kind: "entity", id: actorEntity.id },
+        { kind: "entity", id: targetEntity.id },
+      ],
+      requiredCapabilities: [
+        "object_create",
+        "spatial_query",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(actorEntity.id);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        targets: intent.targets,
+        references: intent.references,
+      },
+      bindings: [
+        ...baseContract.bindings,
+        {
+          id: "target",
+          referenceKind: "entity",
+          cardinality: "one",
+          objectIds: [targetEntity.id],
+        },
+      ],
+      ownedObjects: [
+        { id: "transient_effect", objectKind: "effect", maximumInstances: 2 },
+      ],
+      capabilities: ["object_create", "spatial_query", "object_destroy"],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [
+            { kind: "dispatch_action", actionId: "move" },
+            { kind: "advance_time", milliseconds: 16 },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_after_action",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_after_action",
+          archetypeIds: ["transient_effect"],
+          actionId: "move",
+        },
+      },
+    ]);
+  });
+
   it("assigns target interaction proof only to explicit cleanup when progress, travel, and cleanup scenarios coexist", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const actorEntity = gameSpec.entities.find(({ role }) => role === "player");
