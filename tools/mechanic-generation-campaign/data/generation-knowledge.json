@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 44,
-  "updatedAt": "2026-09-02T03:30:04Z",
+  "revision": 45,
+  "updatedAt": "2026-09-02T03:47:18Z",
   "entries": [
     {
       "status": "active",
@@ -3222,7 +3222,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Contract repairs need one closed invariant checklist",
-      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
+      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3235,7 +3235,7 @@
         ]
       },
       "id": "KF-0034",
-      "revision": 2,
+      "revision": 3,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3258,6 +3258,17 @@
           "outcome": "provider_output_rejected",
           "summary": "Four actual contract candidates required private-state transitions without state_write. Reference errors introduced by the middle repairs masked the continuing state-write contradictions until the final contract attempt, and no source call occurred.",
           "observedAt": "2026-09-02T03:16:28.103Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Four actual contract candidates oscillated between exact accepted string defaults and trusted stable-ID values. The terminal candidate preserved state_write and exact defaults but incorrectly declared hazard_spawn_area and main_arena as stable IDs absent from the trusted region and scene catalogs, and no source call occurred.",
+          "observedAt": "2026-09-02T03:36:45.799Z"
         }
       ],
       "amendments": [
@@ -3295,10 +3306,45 @@
               "observedAt": "2026-09-02T03:16:28.103Z"
             }
           ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-09-02T03:47:18Z",
+          "reason": "Actual contract repairs alternated between preserving accepted configuration defaults and satisfying trusted stable-reference validation because the closed checklist froze the default but not its declaration kind. Rendering the exact kind and default together removes that contradiction without weakening validation or widening the trusted catalog.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract repairs need one closed invariant checklist",
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Four actual contract candidates oscillated between exact accepted string defaults and trusted stable-ID values. The terminal candidate preserved state_write and exact defaults but incorrectly declared hazard_spawn_area and main_arena as stable IDs absent from the trusted region and scene catalogs, and no source call occurred.",
+              "observedAt": "2026-09-02T03:36:45.799Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-31T23:41:21Z",
-      "updatedAt": "2026-09-02T03:30:04Z"
+      "updatedAt": "2026-09-02T03:47:18Z"
     },
     {
       "status": "active",
@@ -8778,6 +8824,91 @@
       "createdAt": "2026-09-02T03:30:04Z",
       "priorManifestDigest": "ec13bb5ca6525a546d8248ae409d0d679c06fe620648b05e29aa14020bef391c",
       "resultingManifestDigest": "6499e39b7333e2bf5740b1c679eca08d4bd65860faebdbbccf85441405c59bcd"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-2-20260902t034718z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2"
+      },
+      "consultedManifestDigest": "6499e39b7333e2bf5740b1c679eca08d4bd65860faebdbbccf85441405c59bcd",
+      "contextDigest": "6aeaea840f86f181479550d371358312427345983f8de6717ed4586f83569f34",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0034",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z/fix-cycle-1",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0018",
+            "KF-0031",
+            "KF-0034"
+          ],
+          "rationale": "The verified first fix directly confirms KF-0034's combined contract invariant feedback and retains the KF-0018 and KF-0031 state-write obligation. In the next actual campaign, contract attempt 3 simultaneously reported the exact accepted-default contradictions and the still-current state-write contradictions, proving the earlier validation layer no longer masked the later invariant. KF-0002, KF-0003, KF-0004, KF-0005, KF-0008, KF-0017, KF-0020, KF-0023, KF-0026, KF-0032, and KF-0035 govern source or downstream evidence that was not reached. KF-0009, KF-0011, KF-0014, KF-0025, KF-0027, KF-0028, and KF-0029 constrain lifecycle, spatial, motion, binding, or clock semantics but did not cause this contract declaration failure. KF-0033 is satisfied and non-causal because no provider transport field changed. There are no related findings."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0018",
+            "KF-0031",
+            "KF-0034"
+          ],
+          "rationale": "KF-0034 directly governs the four-attempt repair oscillation. Attempt 1 used valid ordinary string declarations for accepted defaults hazard_spawn_area and main_arena but omitted state_write. Attempt 2 restored state_write while retyping those strings as stable_id, which made both defaults unknown trusted references. Attempt 3 used trusted catalog values but violated the exact accepted defaults and again omitted state_write; attempt 4 restored the accepted defaults and state_write but kept the invalid stable_id kinds. KF-0018 and KF-0031 are supporting and satisfied because attempts 2 and 4 retained state_write; they are not the terminal cause. KF-0002, KF-0003, KF-0004, KF-0005, KF-0008, KF-0017, KF-0020, KF-0023, KF-0026, KF-0032, and KF-0035 are non-causal because no source call or downstream evaluation occurred. KF-0009, KF-0011, KF-0014, KF-0025, KF-0027, KF-0028, and KF-0029 were not violated by the terminal declaration mismatch. KF-0033 is satisfied and non-causal because the existing intent, catalog, and repair feedback all crossed the provider transport unchanged. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0034",
+          "expectedRevision": 2,
+          "reason": "Actual contract repairs alternated between preserving accepted configuration defaults and satisfying trusted stable-reference validation because the closed checklist froze the default but not its declaration kind. Rendering the exact kind and default together removes that contradiction without weakening validation or widening the trusted catalog.",
+          "changes": {
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c1-r2",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Four actual contract candidates oscillated between exact accepted string defaults and trusted stable-ID values. The terminal candidate preserved state_write and exact defaults but incorrectly declared hazard_spawn_area and main_arena as stable IDs absent from the trusted region and scene catalogs, and no source call occurred.",
+              "observedAt": "2026-09-02T03:36:45.799Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T03:47:18Z",
+      "priorManifestDigest": "6499e39b7333e2bf5740b1c679eca08d4bd65860faebdbbccf85441405c59bcd",
+      "resultingManifestDigest": "50d0beed1432ac1efa46c0b98707fcf8f26b77cd1aa605f374d29753585513af"
     }
   ]
 }

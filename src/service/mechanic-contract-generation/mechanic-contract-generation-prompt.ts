@@ -85,6 +85,11 @@ export function createMechanicContractGenerationSystemPrompt({
       : []),
   ];
   const requiredCapabilityIds = [...new Set(intent.requiredCapabilities)];
+  const acceptedConfigurationDeclarationManifest =
+    createAcceptedConfigurationDeclarationManifest(
+      intent.configuration,
+      referenceCatalog
+    );
   const usesLogicalAction = intent.triggers.includes("logical_action");
   const attemptGuidance = createContractAttemptGuidance(
     generationAttempt,
@@ -128,6 +133,9 @@ ${JSON.stringify(resourceBudget, null, 2)}
 
 Trusted stable-reference catalog JSON:
 ${JSON.stringify(referenceCatalog, null, 2)}
+
+Exact accepted configuration declaration manifest JSON:
+${JSON.stringify(acceptedConfigurationDeclarationManifest, null, 2)}
 
 Admitted primitive capability documentation JSON:
 ${JSON.stringify(capabilityDocumentation, null, 2)}
@@ -185,7 +193,8 @@ Contract rules:
 - Copy every exact capability from the required capability manifest into contract.capabilities on every initial and repair attempt. Never remove one while correcting an unrelated issue. Additional capabilities remain permitted only when accepted behavior genuinely needs them and the admitted primitive capability documentation includes them.
 - Declare only capabilities needed to express the contract, chosen from the admitted primitive capability documentation.
 - Use only the restricted config declarations above for configuration and port payloads.
-- For every accepted intent configuration entry, declare an object field with the exact same key and set its DSL default to the exact accepted scalar value so Final Game Spec materialization cannot substitute it.
+- For every accepted intent configuration entry, copy the exact key, default, declaration kind, and optional referenceKind from the exact accepted configuration declaration manifest. You may choose compatible numeric bounds or string lengths, but must not substitute the default or reclassify its declaration kind.
+- A string default is stable_id only when the manifest names exactly one trusted referenceKind. When the manifest declares string, preserve it as an ordinary bounded string even when its key ends in _id; do not use stable_id or substitute a different trusted catalog value.
 - Every privateState initialValue and every scenario state setup or state_equals value must match the exact declared private-state value type above. For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker.
 - Scenario setup is evaluated before the install callback or any generated source runs. Every state_equals setup assertion must use the exact initialValue of its matching privateState declaration; setup cannot assume an install-time mutation.
 - When a final state_equals differs from setup or initial state, retain state_write and preserve the asserted final value. Do not repair another issue by dropping state_write, deleting that observation, or changing the final value back to its setup value.
@@ -232,9 +241,11 @@ ${
   generationAttempt.repair.trigger === "stage_failure"
     ? `- Correct every exact path, code, and message in the stage-failure feedback. Preserve unrelated accepted contract decisions.
 - Before returning any repair, recheck the required capability manifest, mandatory lifecycle callbacks, scenario trigger mode, and state-write obligations as one closed checklist. A repair that fixes the reported path but breaks another checklist item is still invalid.
+- Include every exact accepted configuration declaration kind and default in that same closed repair checklist.
 - When source-use validation reports unused_capability, remove that exact capability declaration only when it is absent from the required capability manifest and no accepted requirement genuinely needs it. If it is required, retain it and revise the contract so its lifecycle and scenarios make the required use unambiguous for source generation.
 - When contradiction reports a missing intent-required capability, restore that exact capability without changing scenario steps or lifecycle callbacks. Recheck every other capability in the required manifest before returning.
 - When a final state_equals differs from setup or initial state, retain state_write and preserve the asserted final value. Add the missing state_write declaration without changing unrelated scenario steps, lifecycle callbacks, required capabilities, or observations.
+- When unknown_reference affects an accepted configuration default, preserve its exact key and default and restore the declaration kind from the exact accepted configuration declaration manifest. Never substitute a different trusted catalog value for an accepted configuration default.
 ${scenarioTriggerRepairRule}
 - When host admission reports unsupported_runtime_ports, set contract.ports to [] exactly. Remove scenario observations, capability declarations, and lifecycle behavior that exist only to use those ports; do not replace them with another port or untrusted output path.
 - When invalid_value affects privateState or a scenario state value, replace every incompatible declaration, setup, and state_equals value for that state so all of them match its one exact declared value type. For an integer timestamp, deadline, or cooldown sentinel, use a finite integer such as -1 or 0; never use null, false, a numeric string, or a non-finite marker.
@@ -266,4 +277,43 @@ Required top-level candidate artifact ID: ${generationAttempt.candidateArtifactI
 Attempt rules:
 - Return exactly the required candidate artifact ID as the contract's top-level id. It is unique to this generation run, stage, attempt kind, and attempt number; never reuse an earlier candidate ID.${repairGuidance}
 `.trim();
+}
+
+function createAcceptedConfigurationDeclarationManifest(
+  configuration: MechanicContractGenerationPromptInput["intent"]["configuration"],
+  referenceCatalog: MechanicContractGenerationPromptInput["referenceCatalog"]
+) {
+  return configuration.map(({ key, value }) => ({
+    key,
+    exactDefault: value,
+    declaration: createAcceptedConfigurationDeclaration(
+      value,
+      referenceCatalog
+    ),
+  }));
+}
+
+function createAcceptedConfigurationDeclaration(
+  value: MechanicContractGenerationPromptInput["intent"]["configuration"][number]["value"],
+  referenceCatalog: MechanicContractGenerationPromptInput["referenceCatalog"]
+) {
+  if (typeof value === "boolean") {
+    return { kind: "boolean" as const };
+  }
+  if (typeof value === "number") {
+    return {
+      kind: Number.isInteger(value) ? ("integer" as const) : ("number" as const),
+    };
+  }
+
+  const matchingReferenceKinds = Object.entries(referenceCatalog).flatMap(
+    ([referenceKind, referenceIds]) =>
+      referenceIds.includes(value) ? [referenceKind] : []
+  );
+  return matchingReferenceKinds.length === 1
+    ? {
+        kind: "stable_id" as const,
+        referenceKind: matchingReferenceKinds[0]!,
+      }
+    : { kind: "string" as const };
 }
