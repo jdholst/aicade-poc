@@ -1294,6 +1294,7 @@ describe("top-down Phaser template", () => {
           };
         }
       | undefined;
+    let unreferencedGeneratedHazard: typeof generatedHazard;
     Object.assign(context.globalThis, {
       __AICADE_GENERATED_MECHANIC_HOST__: {
         mechanicId: generatedMechanic.id,
@@ -1306,11 +1307,26 @@ describe("top-down Phaser template", () => {
         }) => {
           generatedHazard = input.createOwnedObject({
             objectId: "owned_generated_hazard_1",
-            objectKind: "asset_generated_hazard",
+            objectKind: "spawned_hazard",
             initial: {
               position: { x: 220, y: 240 },
               shape: "circle",
               radius: 12,
+              properties: {
+                asset: "asset_generated_hazard",
+              },
+            },
+          });
+          unreferencedGeneratedHazard = input.createOwnedObject({
+            objectId: "owned_unreferenced_hazard_1",
+            objectKind: "spawned_hazard",
+            initial: {
+              position: { x: 260, y: 240 },
+              shape: "circle",
+              radius: 12,
+              properties: {
+                asset: "asset_not_referenced",
+              },
             },
           });
           return {
@@ -1330,6 +1346,11 @@ describe("top-down Phaser template", () => {
       ({ second }) => second === generatedHazard?.object
     );
     expect(generatedOverlap?.handler).toEqual(expect.any(Function));
+    expect(
+      overlapCalls.some(
+        ({ second }) => second === unreferencedGeneratedHazard?.object
+      )
+    ).toBe(false);
     const objectiveResetLabelsBefore = textLabels.filter(
       (label) => label === "Collect crystals: 0"
     ).length;

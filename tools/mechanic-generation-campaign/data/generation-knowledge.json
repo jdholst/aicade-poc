@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 57,
-  "updatedAt": "2026-09-02T20:41:33Z",
+  "revision": 58,
+  "updatedAt": "2026-09-02T21:08:54Z",
   "entries": [
     {
       "status": "active",
@@ -3979,7 +3979,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Generated owned objects need explicit trusted interaction adoption",
-      "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to reference the object kind as an exact hazard-role asset and to share an exact hazard-role entity with the trusted hazard-contact mechanic before registering player overlap. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary by invoking the generated object's overlap handler and observing the trusted player and objective reset.",
+      "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by that generated mechanic. Accept the association when either the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset; ordinary owned-archetype IDs may differ from rendering asset IDs. Reject missing, unknown, unreferenced, or wrong-role asset values. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary with a distinct archetype ID and referenced asset property by invoking the generated object's overlap handler and observing the trusted player and objective reset, and verify an unreferenced property asset receives no trusted overlap.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3994,8 +3994,19 @@
         ]
       },
       "id": "KF-0044",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed recurring spawned white hazards, but collision did not reset the player. The accepted generated mechanic and hazard_contact shared the exact hazard entity and hazard_placeholder asset. Runtime tracing showed the created object's admitted archetype was spawned_hazard and its immutable asset property was hazard_placeholder, while trusted adoption checked only whether the archetype string itself was the referenced asset ID.",
+          "observedAt": "2026-09-02T20:56:50.600Z"
+        },
         {
           "kind": "manual_qa",
           "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10/a01-baseline",
@@ -4008,9 +4019,47 @@
           "observedAt": "2026-09-02T20:18:26.186Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-09-02T21:08:54Z",
+          "reason": "An actual manually rejected candidate used a contract-owned archetype ID distinct from its exact referenced rendering asset, which was supplied in immutable creation properties. Requiring the archetype ID itself to be an asset ID made the trusted adopter silently skip valid generated hazards.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated owned objects need explicit trusted interaction adoption",
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to reference the object kind as an exact hazard-role asset and to share an exact hazard-role entity with the trusted hazard-contact mechanic before registering player overlap. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary by invoking the generated object's overlap handler and observing the trusted player and objective reset.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "Manual gameplay showed recurring spawned white hazards, but collision did not reset the player. The accepted generated mechanic and hazard_contact shared the exact hazard entity and hazard_placeholder asset. Runtime tracing showed the created object's admitted archetype was spawned_hazard and its immutable asset property was hazard_placeholder, while trusted adoption checked only whether the archetype string itself was the referenced asset ID.",
+              "observedAt": "2026-09-02T20:56:50.600Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-09-02T20:26:19Z",
-      "updatedAt": "2026-09-02T20:26:19Z"
+      "updatedAt": "2026-09-02T21:08:54Z"
     }
   ],
   "reconciliations": [
@@ -10584,6 +10633,81 @@
       "createdAt": "2026-09-02T20:41:33Z",
       "priorManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f",
       "resultingManifestDigest": "7d0716c3ceda6391f658bfa24ebb932372c0d559db5160b36e857067f90b2853"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-11-20260902t210854z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-11",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12"
+      },
+      "consultedManifestDigest": "7d0716c3ceda6391f658bfa24ebb932372c0d559db5160b36e857067f90b2853",
+      "contextDigest": "5cd5abb6bab8f9dd9af005ad296f5dc9176512e2ad60c3a0199d5cbfa88bf6df",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0037",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042",
+        "KF-0043",
+        "KF-0044"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-10",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "Fix cycle 10 clarified observed travel only when object_motion_write is granted. The next accepted contract correctly omitted motion authority for stationary spawned hazards and passed deterministic evaluation, confirming KF-0027. It does not explain the later trusted collision-adoption failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "Manual QA showed recurring white generated hazards but no player reset on collision. The accepted Final Game Spec gave both the generated mechanic and hazard_contact the exact hazard entity and hazard_placeholder asset. The accepted contract used the ordinary owned archetype ID spawned_hazard, while generated creation properties carried asset hazard_placeholder. The trusted observer incorrectly required objectKind itself to equal the asset ID and skipped every created object. The fix accepts either an archetype that is itself an exact referenced asset or an exact creation-property asset that the generated mechanic references and the Final Game Spec declares with the required role; shared exact entity-role lineage remains mandatory. An unreferenced property asset remains rejected. KF-0003, KF-0008, KF-0009, KF-0011, KF-0020, KF-0023, KF-0026, KF-0027, KF-0028, KF-0029, KF-0037, KF-0040, KF-0041, KF-0042, and KF-0043 govern lifecycle, evaluation, recurrence, randomness, and generated interaction evidence but do not define trusted runtime asset association. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0044",
+          "expectedRevision": 1,
+          "reason": "An actual manually rejected candidate used a contract-owned archetype ID distinct from its exact referenced rendering asset, which was supplied in immutable creation properties. Requiring the archetype ID itself to be an asset ID made the trusted adopter silently skip valid generated hazards.",
+          "changes": {
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by that generated mechanic. Accept the association when either the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset; ordinary owned-archetype IDs may differ from rendering asset IDs. Reject missing, unknown, unreferenced, or wrong-role asset values. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary with a distinct archetype ID and referenced asset property by invoking the generated object's overlap handler and observing the trusted player and objective reset, and verify an unreferenced property asset receives no trusted overlap."
+          },
+          "evidence": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "Manual gameplay showed recurring spawned white hazards, but collision did not reset the player. The accepted generated mechanic and hazard_contact shared the exact hazard entity and hazard_placeholder asset. Runtime tracing showed the created object's admitted archetype was spawned_hazard and its immutable asset property was hazard_placeholder, while trusted adoption checked only whether the archetype string itself was the referenced asset ID.",
+              "observedAt": "2026-09-02T20:56:50.600Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T21:08:54Z",
+      "priorManifestDigest": "7d0716c3ceda6391f658bfa24ebb932372c0d559db5160b36e857067f90b2853",
+      "resultingManifestDigest": "8f53f2570ddcdbd9394ac26bbc94aa7ac231d4147f0e350bd7592f4cecff67bb"
     }
   ]
 }

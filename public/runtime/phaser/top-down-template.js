@@ -911,6 +911,7 @@
         notifyGeneratedOwnedObjectObservers(
           mechanic,
           input.objectKind,
+          properties,
           object
         );
       } catch (error) {
@@ -928,18 +929,28 @@
     function notifyGeneratedOwnedObjectObservers(
       generatedMechanic,
       objectKind,
+      properties,
       object
     ) {
       const generatedAssetIds =
         generatedMechanic && Array.isArray(generatedMechanic.assetIds)
           ? generatedMechanic.assetIds
           : [];
-      if (!generatedAssetIds.includes(objectKind)) {
+      const propertyAssetId =
+        properties && typeof properties.asset === "string"
+          ? properties.asset
+          : null;
+      const assetId = generatedAssetIds.includes(objectKind)
+        ? objectKind
+        : propertyAssetId && generatedAssetIds.includes(propertyAssetId)
+          ? propertyAssetId
+          : null;
+      if (!assetId) {
         return;
       }
       const asset = Array.isArray(config.gameSpec.assets)
         ? config.gameSpec.assets.find(function (candidate) {
-            return candidate && candidate.id === objectKind;
+            return candidate && candidate.id === assetId;
           })
         : null;
       if (!asset) {
