@@ -44,6 +44,7 @@ export type ArtifactScopedRepairStageInput = Readonly<{
     trigger: "stage_failure" | "upstream_invalidation";
     failureAttemptId: ArtifactScopedRepairAttemptId;
     issues: ArtifactScopedRepairIssue[];
+    retainedIssues?: ArtifactScopedRepairIssue[];
     invalidatedArtifactIds: ArtifactScopedRepairArtifactId[];
   }>;
 }>;
@@ -298,10 +299,24 @@ export async function runArtifactScopedMechanicRepair({
       }
       delete acceptedArtifacts[dependentStage];
     }
+    const priorRepair = pendingRepairs[result.evidence.responsibleStage];
+    const retainedIssues = subtractRepairIssues(
+      mergeRepairIssues(
+        priorRepair?.trigger === "stage_failure"
+          ? [
+              ...(priorRepair.retainedIssues ?? []),
+              ...priorRepair.issues,
+            ]
+          : [],
+        []
+      ),
+      result.evidence.issues
+    );
     pendingRepairs[result.evidence.responsibleStage] = {
       trigger: "stage_failure",
       failureAttemptId: attemptId,
       issues: [...result.evidence.issues],
+      ...(retainedIssues.length > 0 ? { retainedIssues } : {}),
       invalidatedArtifactIds,
     };
     for (
@@ -345,6 +360,35 @@ export async function runArtifactScopedMechanicRepair({
     }),
     receipt,
   });
+}
+
+function mergeRepairIssues(
+  priorIssues: readonly ArtifactScopedRepairIssue[],
+  currentIssues: readonly ArtifactScopedRepairIssue[]
+): ArtifactScopedRepairIssue[] {
+  const seen = new Set<string>();
+  return [...priorIssues, ...currentIssues].filter((issue) => {
+    const identity = `${issue.path}\u0000${issue.code}\u0000${issue.message}`;
+    if (seen.has(identity)) {
+      return false;
+    }
+    seen.add(identity);
+    return true;
+  });
+}
+
+function subtractRepairIssues(
+  issues: readonly ArtifactScopedRepairIssue[],
+  excludedIssues: readonly ArtifactScopedRepairIssue[]
+): ArtifactScopedRepairIssue[] {
+  const excludedIdentities = new Set(excludedIssues.map(repairIssueIdentity));
+  return issues.filter(
+    (issue) => !excludedIdentities.has(repairIssueIdentity(issue))
+  );
+}
+
+function repairIssueIdentity(issue: ArtifactScopedRepairIssue): string {
+  return `${issue.path}\u0000${issue.code}\u0000${issue.message}`;
 }
 
 function parseRunningGenerationRun(generationRun: GenerationRun): GenerationRun {

@@ -432,6 +432,13 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
             'Scenario action dispatch requires lifecycle callback "logical_action".',
         },
       ],
+      retainedIssues: [
+        {
+          path: "capabilities",
+          code: "contradiction",
+          message: "The contract must retain state_write.",
+        },
+      ],
       invalidatedArtifactIds: [],
     };
     const prompt = createMechanicContractGenerationSystemPrompt({
@@ -475,6 +482,12 @@ describe("createMechanicContractGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       "When contradiction reports a missing intent-required capability, restore that exact capability without changing scenario steps or lifecycle callbacks"
+    );
+    expect(prompt).toContain(
+      'Exact earlier same-stage issues that must not regress JSON:\n[\n  {\n    "path": "capabilities",\n    "code": "contradiction",\n    "message": "The contract must retain state_write."\n  }\n]'
+    );
+    expect(prompt).toContain(
+      "Preserve every earlier same-stage issue invariant in retainedIssues while correcting the current issues"
     );
   });
 

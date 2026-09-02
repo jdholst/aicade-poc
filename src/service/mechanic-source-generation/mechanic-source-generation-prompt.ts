@@ -359,10 +359,14 @@ function createSourceAttemptGuidance(
 Exact Ticket 15 repair feedback JSON:
 ${JSON.stringify(generationAttempt.repair, null, 2)}
 
+Exact earlier same-stage issues that must not regress JSON:
+${JSON.stringify(generationAttempt.repair.retainedIssues ?? [], null, 2)}
+
 Repair rules:
 ${
   generationAttempt.repair.trigger === "stage_failure"
     ? `- Correct every exact path, code, and message in the stage-failure feedback. Preserve unrelated accepted source decisions.
+- Preserve every earlier same-stage issue invariant in retainedIssues while correcting the current issues. Recheck those exact paths, codes, and messages before returning, but do not treat them as new failure evidence.
 - For forbidden_source_authority "constructor", remove every constructor or prototype-chain access and every runtime-computed object property name. Rewrite the behavior with direct granted capability expressions, accepted config, bindings, lifecycleInput, named observation fields, ordinary local values, and provably numeric array indices. Do not hide the access behind a computed property, destructuring, an alias, a cast, or Object reflection; never widen authority or suppress the static rejection.
 - For a runtime-computed property access rejection, replace every dynamic lookup or computed destructuring key. Use the direct named property from the accepted source context or a provably numeric array index; replace array[indexVariable] loops with for (const item of array), and use array[0] only after an explicit nonempty check. Do not derive, parse, alias, cast, or reconstruct the key, and do not suppress the static rejection.
 - For a callback_milliseconds resource failure, reduce active synchronous work in the named callback while preserving accepted behavior. Use one bounded for...of pass with an early exit where accepted behavior permits; remove sorting, serialization, nested or unbounded iteration, repeated calculations, temporary collection construction, and redundant scans. Do not raise or reinterpret maximumCallbackMilliseconds, add authority, or suppress the resource failure.

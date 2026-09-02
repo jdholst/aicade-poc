@@ -321,6 +321,13 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
             "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
         },
       ],
+      retainedIssues: [
+        {
+          path: "callbacks.0.source",
+          code: "type_failure",
+          message: "The install callback must compile.",
+        },
+      ],
       invalidatedArtifactIds: [],
     };
     const repairPrompt = createMechanicSourceGenerationSystemPrompt({
@@ -353,6 +360,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
     expect(repairPrompt).toContain(
       "use array[0] only after an explicit nonempty check"
+    );
+    expect(repairPrompt).toContain(
+      'Exact earlier same-stage issues that must not regress JSON:\n[\n  {\n    "path": "callbacks.0.source",\n    "code": "type_failure",\n    "message": "The install callback must compile."\n  }\n]'
+    );
+    expect(repairPrompt).toContain(
+      "Preserve every earlier same-stage issue invariant in retainedIssues while correcting the current issues"
     );
   });
 

@@ -47,6 +47,7 @@ const artifactScopedRepairTriggerSchema = z
     trigger: z.enum(["stage_failure", "upstream_invalidation"]),
     failureAttemptId: artifactScopedRepairAttemptIdSchema,
     issues: z.array(artifactScopedRepairIssueSchema),
+    retainedIssues: z.array(artifactScopedRepairIssueSchema).optional(),
     invalidatedArtifactIds: z.array(artifactScopedRepairArtifactIdSchema),
   })
   .strict()
@@ -61,13 +62,13 @@ const artifactScopedRepairTriggerSchema = z
 
     if (
       repair.trigger === "upstream_invalidation" &&
-      repair.issues.length > 0
+      (repair.issues.length > 0 || (repair.retainedIssues?.length ?? 0) > 0)
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["issues"],
+        path: ["retainedIssues"],
         message:
-          "Upstream-invalidation receipts must not misroute upstream issues to a downstream stage.",
+          "Upstream-invalidation receipts must not misroute upstream issues or same-stage issue history to a downstream stage.",
       });
     }
   });
@@ -305,6 +306,45 @@ export const artifactScopedMechanicRepairReceiptSchema = z
             "Stage-failure repair evidence must exactly retain the referenced failure issues.",
         });
       }
+      if (repair.trigger === "stage_failure" && repair.retainedIssues) {
+        const currentIssueIdentities = new Set(
+          repair.issues.map(repairIssueIdentity)
+        );
+        const retainedIssueIdentities = new Set<string>();
+        const earlierSameStageIssues = new Set(
+          receipt.attempts
+            .slice(0, attemptIndex)
+            .filter(
+              (candidate) =>
+                candidate.status === "rejected" &&
+                candidate.responsibleStage === attempt.stage
+            )
+            .flatMap((candidate) => candidate.issues ?? [])
+            .map(repairIssueIdentity)
+        );
+        repair.retainedIssues.forEach((issue, retainedIssueIndex) => {
+          const identity = repairIssueIdentity(issue);
+          if (
+            currentIssueIdentities.has(identity) ||
+            retainedIssueIdentities.has(identity) ||
+            !earlierSameStageIssues.has(identity)
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [
+                "attempts",
+                attemptIndex,
+                "repair",
+                "retainedIssues",
+                retainedIssueIndex,
+              ],
+              message:
+                "Retained repair issues must be unique, absent from current issues, and traceable to an earlier rejected attempt assigned to the same stage.",
+            });
+          }
+          retainedIssueIdentities.add(identity);
+        });
+      }
     });
 
     const artifactsById = new Map<
@@ -513,6 +553,10 @@ export type ArtifactScopedRepairArtifactReceipt = z.infer<
 export type ArtifactScopedMechanicRepairReceipt = z.infer<
   typeof artifactScopedMechanicRepairReceiptSchema
 >;
+
+function repairIssueIdentity(issue: ArtifactScopedRepairIssue): string {
+  return `${issue.path}\u0000${issue.code}\u0000${issue.message}`;
+}
 
 export function hasExactAcceptedArtifactScopedRepairLineage({
   contractArtifactId,

@@ -188,6 +188,65 @@ describe("runArtifactScopedMechanicRepair", () => {
     });
   });
 
+  it("retains distinct same-stage issues across repair attempts", async () => {
+    const contractInputs: ArtifactScopedRepairStageInput[] = [];
+    const missingCapabilityIssue: ArtifactScopedRepairIssue = {
+      path: "capabilities",
+      code: "contradiction",
+      message: "The contract must retain state_write.",
+    };
+    const bindingIssue: ArtifactScopedRepairIssue = {
+      path: "bindings",
+      code: "contradiction",
+      message: "The contract must retain its routed entity binding.",
+    };
+    const contract = vi.fn(async (input: ArtifactScopedRepairStageInput) => {
+      contractInputs.push(input);
+      if (input.attemptNumber === 1) {
+        return {
+          success: false as const,
+          evidence: {
+            responsibleStage: "contract" as const,
+            issues: [missingCapabilityIssue],
+          },
+        };
+      }
+      if (input.attemptNumber === 2) {
+        return {
+          success: false as const,
+          evidence: {
+            responsibleStage: "contract" as const,
+            issues: [bindingIssue],
+          },
+        };
+      }
+      return acceptedArtifact("contract_v3");
+    });
+
+    const result = await runArtifactScopedMechanicRepair({
+      generationRun: createRunningGenerationRun(
+        "generation_run_cumulative_contract_repair"
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      stageRunners: {
+        contract,
+        source: async () => acceptedArtifact("source_v1"),
+        finalGameSpec: async () => acceptedArtifact("final_game_spec_v1"),
+      },
+    });
+
+    expect(result.status).toBe("succeeded");
+    expect(contractInputs[1]?.repair?.issues).toEqual([
+      missingCapabilityIssue,
+    ]);
+    expect(contractInputs[2]?.repair?.issues).toEqual([
+      bindingIssue,
+    ]);
+    expect(contractInputs[2]?.repair?.retainedIssues).toEqual([
+      missingCapabilityIssue,
+    ]);
+  });
+
   it("invalidates every downstream artifact when later evidence repairs the contract", async () => {
     const contractInputs: ArtifactScopedRepairStageInput[] = [];
     const sourceInputs: ArtifactScopedRepairStageInput[] = [];

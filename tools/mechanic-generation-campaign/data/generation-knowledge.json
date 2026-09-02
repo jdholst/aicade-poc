@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 47,
-  "updatedAt": "2026-09-02T05:14:21Z",
+  "revision": 48,
+  "updatedAt": "2026-09-02T16:00:52Z",
   "entries": [
     {
       "status": "active",
@@ -3323,7 +3323,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Contract repairs need one closed invariant checklist",
-      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
+      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Preserve the latest rejected candidate's issues as exact failure evidence and separately retain a bounded, deduplicated, provenance-checked history of distinct earlier same-stage issues. Render both sets to repair generation and require every earlier invariant to remain satisfied while correcting current issues. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3336,7 +3336,7 @@
         ]
       },
       "id": "KF-0034",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3370,6 +3370,17 @@
           "outcome": "provider_output_rejected",
           "summary": "Four actual contract candidates oscillated between exact accepted string defaults and trusted stable-ID values. The terminal candidate preserved state_write and exact defaults but incorrectly declared hazard_spawn_area and main_arena as stable IDs absent from the trusted region and scene catalogs, and no source call occurred.",
           "observedAt": "2026-09-02T03:36:45.799Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual contract attempts alternated between missing state_write and an invalid entity binding. The third candidate restored state_write but used the wrong binding reference; the fourth fixed that binding while dropping state_write again and adding an autonomous dispatch_action, exhausting repair before source generation.",
+          "observedAt": "2026-09-02T15:42:57.170Z"
         }
       ],
       "amendments": [
@@ -3442,10 +3453,45 @@
               "observedAt": "2026-09-02T03:36:45.799Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-09-02T16:00:52Z",
+          "reason": "Collecting all issues from each rejected candidate still allowed successive candidates to alternate between distinct invariant failures. Repairs need provenance-checked earlier same-stage issue history in addition to exact current failure evidence so a newly corrected path cannot regress on the next attempt.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract repairs need one closed invariant checklist",
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Actual contract attempts alternated between missing state_write and an invalid entity binding. The third candidate restored state_write but used the wrong binding reference; the fourth fixed that binding while dropping state_write again and adding an autonomous dispatch_action, exhausting repair before source generation.",
+              "observedAt": "2026-09-02T15:42:57.170Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-31T23:41:21Z",
-      "updatedAt": "2026-09-02T03:47:18Z"
+      "updatedAt": "2026-09-02T16:00:52Z"
     },
     {
       "status": "active",
@@ -9289,6 +9335,71 @@
       "createdAt": "2026-09-02T05:14:21Z",
       "priorManifestDigest": "ed0af497223900b87e25489539db6ad06b23be5361436c5763d62c8fec6e594f",
       "resultingManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-1-20260902t160052z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2"
+      },
+      "consultedManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305",
+      "contextDigest": "d156849a20e6b76d37e5ada3e20dc8562bdeb5453af6e69e49e5352aad7e5e96",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0009",
+        "KF-0014",
+        "KF-0018",
+        "KF-0025",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0033",
+        "KF-0034"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0018",
+            "KF-0031",
+            "KF-0033",
+            "KF-0034"
+          ],
+          "rationale": "The actual contract repair sequence oscillated between state-write and binding invariants because each retry received only the latest rejected candidate's issues. KF-0018 and KF-0031 establish the state-write obligation, KF-0034 requires a closed invariant checklist, and KF-0033 requires the new bounded repair-history field to survive strict provider transport. KF-0003, KF-0009, KF-0014, KF-0025, KF-0027, KF-0028, and KF-0029 constrain later lifecycle, authority, placement, and timing behavior but do not explain this contract-stage oscillation. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0034",
+          "expectedRevision": 3,
+          "reason": "Collecting all issues from each rejected candidate still allowed successive candidates to alternate between distinct invariant failures. Repairs need provenance-checked earlier same-stage issue history in addition to exact current failure evidence so a newly corrected path cannot regress on the next attempt.",
+          "changes": {
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Preserve the latest rejected candidate's issues as exact failure evidence and separately retain a bounded, deduplicated, provenance-checked history of distinct earlier same-stage issues. Render both sets to repair generation and require every earlier invariant to remain satisfied while correcting current issues. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Actual contract attempts alternated between missing state_write and an invalid entity binding. The third candidate restored state_write but used the wrong binding reference; the fourth fixed that binding while dropping state_write again and adding an autonomous dispatch_action, exhausting repair before source generation.",
+              "observedAt": "2026-09-02T15:42:57.170Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T16:00:52Z",
+      "priorManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305",
+      "resultingManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf"
     }
   ]
 }

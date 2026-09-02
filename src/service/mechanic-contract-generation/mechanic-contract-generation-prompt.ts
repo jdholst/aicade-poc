@@ -237,10 +237,14 @@ function createContractAttemptGuidance(
 Exact Ticket 15 repair feedback JSON:
 ${JSON.stringify(generationAttempt.repair, null, 2)}
 
+Exact earlier same-stage issues that must not regress JSON:
+${JSON.stringify(generationAttempt.repair.retainedIssues ?? [], null, 2)}
+
 Repair rules:
 ${
   generationAttempt.repair.trigger === "stage_failure"
     ? `- Correct every exact path, code, and message in the stage-failure feedback. Preserve unrelated accepted contract decisions.
+- Preserve every earlier same-stage issue invariant in retainedIssues while correcting the current issues. Recheck those exact paths, codes, and messages before returning, but do not treat them as new failure evidence.
 - Before returning any repair, recheck the required capability manifest, mandatory lifecycle callbacks, scenario trigger mode, and state-write obligations as one closed checklist. A repair that fixes the reported path but breaks another checklist item is still invalid.
 - Include every exact accepted configuration declaration kind and default in that same closed repair checklist.
 - When source-use validation reports unused_capability, remove that exact capability declaration only when it is absent from the required capability manifest and no accepted requirement genuinely needs it. If it is required, retain it and revise the contract so its lifecycle and scenarios make the required use unambiguous for source generation.

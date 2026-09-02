@@ -43,6 +43,7 @@ const repairPayloadSchema = z
     trigger: z.enum(["stage_failure", "upstream_invalidation"]),
     failureAttemptId: artifactScopedRepairAttemptIdSchema,
     issues: z.array(repairIssueSchema).max(256),
+    retainedIssues: z.array(repairIssueSchema).max(256).optional(),
     invalidatedArtifactIds: z
       .array(artifactScopedRepairArtifactIdSchema)
       .max(64),
@@ -59,13 +60,13 @@ const repairPayloadSchema = z
 
     if (
       repair.trigger === "upstream_invalidation" &&
-      repair.issues.length > 0
+      (repair.issues.length > 0 || (repair.retainedIssues?.length ?? 0) > 0)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["issues"],
+        path: ["retainedIssues"],
         message:
-          "Upstream invalidation must not copy upstream issues into the downstream attempt.",
+          "Upstream invalidation must not copy upstream issues or same-stage issue history into the downstream attempt.",
       });
     }
   });
