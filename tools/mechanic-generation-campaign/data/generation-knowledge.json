@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 52,
-  "updatedAt": "2026-09-02T17:53:42Z",
+  "revision": 53,
+  "updatedAt": "2026-09-02T18:08:13Z",
   "entries": [
     {
       "status": "active",
@@ -3809,6 +3809,44 @@
       "amendments": [],
       "createdAt": "2026-09-02T17:53:42Z",
       "updatedAt": "2026-09-02T17:53:42Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Recurring population must fit cadence and lifetime",
+      "guidance": "For an autonomous recurring owned-object lifecycle without an explicit positive batch-size configuration, admit at most one creation per recurrence. With accepted recurrence interval I and lifetime L, final simultaneous live population cannot exceed ceil(L / I), further bounded by the accepted active limit and owned-object maximum. Simulate every scenario advance_time step in order, clean up expired objects before recurring creation, and keep final owned_object_count, active-count state, and creation-sequence state consistent with that one simulation. Reject an impossible contract before source generation and give contract repair the computed bound.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0041",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "An actual-provider contract declared a 1800ms recurrence, 5000ms lifetime, nine interval steps, and a final live hazard count of four. At most three interval-spaced hazards can remain live under required cleanup. Source candidates produced three live hazards while repairs oscillated on creation-order state and ultimately exhausted on the impossible count.",
+          "observedAt": "2026-09-02T18:01:02.905Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T18:08:13Z",
+      "updatedAt": "2026-09-02T18:08:13Z"
     }
   ],
   "reconciliations": [
@@ -9927,6 +9965,107 @@
       "createdAt": "2026-09-02T17:53:42Z",
       "priorManifestDigest": "adb58cc0e08508232f5d7c80c1e798eb7fee148bb9c081035a2f4d3aa1eb8eb7",
       "resultingManifestDigest": "63f8c17e0642f4efacb030b93171a1856bab1b81db473c4c8083a2a259d2a021"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-6-20260902t180813z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-6",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7"
+      },
+      "consultedManifestDigest": "63f8c17e0642f4efacb030b93171a1856bab1b81db473c4c8083a2a259d2a021",
+      "contextDigest": "84c92a3fc1487fae6cad6a630ddbaa6229c91c7b620772b61a36e54b132eb131",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-5",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0040"
+          ],
+          "rationale": "Fix cycle 5 removed the impossible evaluator-authored target-interaction requirement. The next actual-provider run reached model-declared state and owned-object observations without any target-interaction failure, confirming the corrected authority boundary. It does not explain the distinct accepted-contract population contradiction."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0041"
+          ],
+          "rationale": "The accepted intent fixed a 1800ms recurrence, 5000ms lifetime, one hazard per recurrence, cleanup of expired hazards, and a maximum of four active hazards. Its repaired contract used nine interval-sized time steps but required four live hazards and creation order five. Cleanup at or before each recurrence leaves at most ceil(5000 / 1800), or three, simultaneously live objects; continued replacement yields one creation per reachable recurrence. The initial and repaired sources consistently exposed the contradiction, including the terminal actual owned-object count of three. Existing findings cover scenario-local liveness, reachable recurrence steps, and source transition guidance, but none rejects a contract population above its accepted cadence-and-lifetime ceiling. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Recurring population must fit cadence and lifetime",
+            "guidance": "For an autonomous recurring owned-object lifecycle without an explicit positive batch-size configuration, admit at most one creation per recurrence. With accepted recurrence interval I and lifetime L, final simultaneous live population cannot exceed ceil(L / I), further bounded by the accepted active limit and owned-object maximum. Simulate every scenario advance_time step in order, clean up expired objects before recurring creation, and keep final owned_object_count, active-count state, and creation-sequence state consistent with that one simulation. Reject an impossible contract before source generation and give contract repair the computed bound.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0041",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "An actual-provider contract declared a 1800ms recurrence, 5000ms lifetime, nine interval steps, and a final live hazard count of four. At most three interval-spaced hazards can remain live under required cleanup. Source candidates produced three live hazards while repairs oscillated on creation-order state and ultimately exhausted on the impossible count.",
+                "observedAt": "2026-09-02T18:01:02.905Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T18:08:13Z",
+            "updatedAt": "2026-09-02T18:08:13Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T18:08:13Z",
+      "priorManifestDigest": "63f8c17e0642f4efacb030b93171a1856bab1b81db473c4c8083a2a259d2a021",
+      "resultingManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929"
     }
   ]
 }

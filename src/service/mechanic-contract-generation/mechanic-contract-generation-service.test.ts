@@ -738,7 +738,7 @@ describe("generateMechanicContract", () => {
         },
       ],
     } as const;
-    const generate = (withCount: boolean) =>
+    const generate = (finalCount?: number) =>
       generateMechanicContract({
         intent: autonomousIntent,
         admittedRequest: {
@@ -752,14 +752,14 @@ describe("generateMechanicContract", () => {
           ...autonomousCandidate,
           scenarios: autonomousCandidate.scenarios.map((scenario) => ({
             ...scenario,
-            observations: withCount
+            observations: finalCount !== undefined
               ? [
                   ...scenario.observations,
                   {
                     kind: "owned_object_count" as const,
                     archetypeId: "hazard",
                     operator: "equals" as const,
-                    value: 3,
+                    value: finalCount,
                   },
                 ]
               : scenario.observations,
@@ -767,7 +767,7 @@ describe("generateMechanicContract", () => {
         }),
       });
 
-    const missingCount = await generate(false);
+    const missingCount = await generate();
     expect(missingCount).toMatchObject({
       success: false,
       evidence: {
@@ -785,7 +785,23 @@ describe("generateMechanicContract", () => {
       },
     });
 
-    await expect(generate(true)).resolves.toMatchObject({ success: true });
+    await expect(generate(3)).resolves.toMatchObject({ success: true });
+
+    const impossibleCount = await generate(4);
+    expect(impossibleCount).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          expect.objectContaining({
+            path: "scenarios.0.observations.1",
+            code: "contradiction",
+            message: expect.stringContaining("maximum live population is 3"),
+          }),
+        ],
+      },
+    });
   });
 
   it("stamps exact trusted semantic lineage and ignores provider-authored substitutions", async () => {

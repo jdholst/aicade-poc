@@ -485,6 +485,17 @@ function appendTransientLifetimeFinalCountIssues(
   );
   const acceptedLifetime =
     acceptedLifetimes.length > 0 ? Math.min(...acceptedLifetimes) : undefined;
+  const acceptedIntervals = intent.configuration.flatMap(
+    ({ key, value }) =>
+      key.endsWith("_interval_ms") &&
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      value > 0
+        ? [value]
+        : []
+  );
+  const acceptedInterval =
+    acceptedIntervals.length === 1 ? acceptedIntervals[0] : undefined;
   const ownedObjectIds = new Set(contract.ownedObjects.map(({ id }) => id));
   const usesAutonomousInstall =
     intent.triggers.length === 1 &&
@@ -511,6 +522,28 @@ function appendTransientLifetimeFinalCountIssues(
           message: `Autonomous install scenario "${scenario.id}" advances time for transient owned object "${ownedObject.id}" and must declare an explicit final owned_object_count. Use a positive bounded count when recurrence remains active through final observation, or count 0 only when creation has stopped and every owned-object lifetime has completed.`,
         });
       }
+
+      if (acceptedLifetime === undefined || acceptedInterval === undefined) {
+        return;
+      }
+      const maximumLivePopulation = Math.ceil(
+        acceptedLifetime / acceptedInterval
+      );
+      scenario.observations.forEach((observation, observationIndex) => {
+        if (
+          observation.kind !== "owned_object_count" ||
+          !ownedObjectIds.has(observation.archetypeId) ||
+          observation.operator === "at_most" ||
+          observation.value <= maximumLivePopulation
+        ) {
+          return;
+        }
+        issues.push({
+          path: `scenarios.${scenarioIndex}.observations.${observationIndex}`,
+          code: "contradiction",
+          message: `Autonomous recurring scenario "${scenario.id}" declares final owned-object count ${observation.value}, but accepted lifetime ${acceptedLifetime}ms and recurrence interval ${acceptedInterval}ms mean its maximum live population is ${maximumLivePopulation} when at most one owned object is created per recurrence and expired objects are cleaned up. Lower the final count to ${maximumLivePopulation} or less and align active-count and creation-sequence state observations with the same step-by-step lifecycle.`,
+        });
+      });
     });
   }
 
