@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 46,
-  "updatedAt": "2026-09-02T04:07:16Z",
+  "revision": 47,
+  "updatedAt": "2026-09-02T05:14:21Z",
   "entries": [
     {
       "status": "active",
@@ -9222,6 +9222,73 @@
       "createdAt": "2026-09-02T04:07:16Z",
       "priorManifestDigest": "50d0beed1432ac1efa46c0b98707fcf8f26b77cd1aa605f374d29753585513af",
       "resultingManifestDigest": "ed0af497223900b87e25489539db6ad06b23be5361436c5763d62c8fec6e594f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-conclusion-20260902t051421z",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z"
+      },
+      "consultedManifestDigest": "ed0af497223900b87e25489539db6ad06b23be5361436c5763d62c8fec6e594f",
+      "contextDigest": "6a3951d90f2a8fb7d9912d2f68ec24b1ef9a51ca5e067f411b97d5f339449b16",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z/fix-cycle-3",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0003",
+            "KF-0019",
+            "KF-0035"
+          ],
+          "rationale": "The verified final fix is the committed source of the current scenario-local owned-object phase, authenticated generated callback execution, and absolute-boundary versus relative-delay guidance. The resumed replacement stopped during contract repair before it could exercise those paths, so it neither contradicts those findings nor establishes another compiled rule."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c3-r4/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This credited attempt exposed a campaign-runner terminal-marker defect: the editor had already rendered a fail-closed generated-sandbox boot error, but the harness waited until its no-progress timeout. No contract or source call ran, the campaign was replaced on the same revision, and this invalidated infrastructure evidence cannot support reusable Sparkline generation guidance."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c3-r5/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0018",
+            "KF-0031"
+          ],
+          "rationale": "Contract attempts 1 and 2 omitted state_write despite changed final private state and were correctly rejected. Attempt 3 restored state_write and was accepted; its unused time_read grant was correctly routed back to contract because that grant was not semantically required. The fourth contract candidate then regressed state_write and was rejected. This repeats the existing KF-0018 write obligation and KF-0031 responsibility boundary without exposing a new validator, transport, source, evaluator, or runtime rule."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "The accepted final fix already records the durable scenario-liveness, recurrence-deadline, and authenticated-callback guidance. The credited infrastructure attempt belongs to the campaign harness, while the replacement's terminal contract repair repeated state-write and responsibility rules already covered by KF-0018 and KF-0031. No new reusable generation guidance is established.",
+      "createdAt": "2026-09-02T05:14:21Z",
+      "priorManifestDigest": "ed0af497223900b87e25489539db6ad06b23be5361436c5763d62c8fec6e594f",
+      "resultingManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305"
     }
   ]
 }
