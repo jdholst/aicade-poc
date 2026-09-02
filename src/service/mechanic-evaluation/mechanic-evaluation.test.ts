@@ -450,7 +450,6 @@ describe("evaluateGeneratedMechanicArtifact", () => {
             activity.active += 1;
           },
           advanceTime: async () => {
-            activity.simulatedDistanceTraveled += 12;
             activity.targetInteractions += 1;
             activity.destroyed += 1;
             activity.active -= 1;
@@ -484,7 +483,7 @@ describe("evaluateGeneratedMechanicArtifact", () => {
                       archetypeId: "transient_effect",
                       created: 1,
                       destroyed: 1,
-                      simulatedDistanceTraveled: 12,
+                      simulatedDistanceTraveled: 0,
                       targetInteractions: 1,
                     },
                   ],

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 32,
-  "updatedAt": "2026-08-31T04:52:49Z",
+  "revision": 42,
+  "updatedAt": "2026-09-01T00:03:49Z",
   "entries": [
     {
       "status": "active",
@@ -2329,7 +2329,7 @@
         ]
       },
       "id": "KF-0022",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -2374,6 +2374,17 @@
           "outcome": "pipeline_failure",
           "summary": "The attempt summary retained a repaired literal-type error, but terminal structured outcome evaluation_scenario_evidence_mismatch identified the later deterministic handoff failure.",
           "observedAt": "2026-08-29T05:11:05.568Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The attempt classification and furthest stage correctly identified first_playable runtime failure, but its failure summary retained an earlier contract validation issue that had been repaired. The terminal generatedMechanicOutcome instead recorded that the runtime project rejected the autonomous mechanic for lacking a logical action.",
+          "observedAt": "2026-08-31T22:41:48.232Z"
         }
       ],
       "amendments": [
@@ -2456,10 +2467,45 @@
               "observedAt": "2026-08-29T05:11:05.568Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-08-31T22:51:38Z",
+          "reason": "A new actual-provider run independently reproduced stale repaired-issue summarization while terminal structured first-playable evidence identified the later runtime failure.",
+          "previous": {
+            "status": "active",
+            "confidence": "confirmed",
+            "title": "Campaign summaries prefer terminal structured evidence",
+            "guidance": "After an earlier provider candidate is repaired successfully, summarize and classify the run from the terminal structured outcome or final failed provider attempt before consulting earlier validation issues. Derive the furthest stage from the most specific nested outcome before using a coarse GenerationRun stage. When a repaired provider-stage issue and a later first-playable runtime failure coexist, preserve the repaired issue as history but report the terminal runtime receipt as the campaign failure.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [],
+              "classifications": [
+                "pipeline_failure",
+                "infrastructure_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The attempt classification and furthest stage correctly identified first_playable runtime failure, but its failure summary retained an earlier contract validation issue that had been repaired. The terminal generatedMechanicOutcome instead recorded that the runtime project rejected the autonomous mechanic for lacking a logical action.",
+              "observedAt": "2026-08-31T22:41:48.232Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T20:00:02Z",
-      "updatedAt": "2026-08-29T05:25:30Z"
+      "updatedAt": "2026-08-31T22:51:38Z"
     },
     {
       "status": "active",
@@ -2906,6 +2952,376 @@
       "amendments": [],
       "createdAt": "2026-08-29T06:30:02Z",
       "updatedAt": "2026-08-29T06:30:02Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Owned-object lifecycle evidence does not require motion",
+      "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "routing",
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation",
+          "handoff",
+          "runtime_health"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0027",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_health",
+          "quality": "actual_submission",
+          "outcome": "semantic_runtime_failure",
+          "summary": "Actual planning produced a truthful autonomous seeded hazard spawner with bounded owned objects and object_create, object_destroy, random_next, and time_schedule authority but no motion. Routing returned independent_visible_effect_unavailable before contract or source calls, so the external probe observed no accepted artifact or lifecycle.",
+          "observedAt": "2026-08-31T21:34:04.541Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:05:44Z",
+      "updatedAt": "2026-08-31T22:05:44Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Actor-origin evidence requires explicit spatial lineage",
+      "guidance": "Require owned-object actor-origin evidence only when accepted intent uses the exact spatial rule spawn_owned_object_at_actor_position. Arena, region, obstacle-avoidance, and seeded-position rules do not imply actor-origin creation merely because the intent also has an actor or entity binding; do not inject object_read for those independent placement rules.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "planning",
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation",
+          "handoff",
+          "runtime_health"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0028",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The actual-provider intent used seeded arena placement rules and an entity binding but did not request actor-relative placement. Evaluator-authored lifecycle assertions nevertheless required actor origin. Generated hazards were created at seeded arena positions, yielding actorOriginCreationsDelta 0 despite successful creation and nonzero travel, and all source candidates were rejected.",
+          "observedAt": "2026-08-31T22:16:34.337Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:36:43Z",
+      "updatedAt": "2026-08-31T22:36:43Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Recurring schedule proofs require reachable clock steps",
+      "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0029",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual-provider contract scenarios expected spawn_order 1 after one interval even though install plus the due scheduled callback produced 2, and expected 6 after one coarse six-interval advance even though a positive-delay callback rescheduled at the endpoint was not reachable in that same step, producing 2. The repeated exact counter mismatches contributed to rejection across source repair attempts.",
+          "observedAt": "2026-08-31T22:16:34.337Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:36:43Z",
+      "updatedAt": "2026-08-31T22:36:43Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Autonomous first-playable checks do not require a generated action",
+      "guidance": "When an accepted generated mechanic has the exact autonomous install contract shape, with install as its sole behavior trigger, no logical_action lifecycle callback, and no dispatch_action scenario steps, run first-playable checks without a generated action ID and accept ordinary trusted input-response evidence. Continue to require and authenticate one exact action for action-driven mechanics, and fail closed when an action-driven project loses or conflicts on that action.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_activation",
+          "first_playable",
+          "runtime_health"
+        ],
+        "classifications": [
+          "runtime_pipeline_failure"
+        ]
+      },
+      "id": "KF-0030",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+          "attemptId": "a01-baseline",
+          "stage": "first_playable",
+          "quality": "actual_submission",
+          "outcome": "runtime_pipeline_failure",
+          "summary": "The accepted actual-provider contract was autonomous: behavior trigger install, lifecycle callbacks install and scheduled, no connections, and no dispatch_action scenario steps. Contract repair, source generation, deterministic evaluation, and final Game Spec assembly succeeded, but first-playable boot failed because the controller required one logical action before sending a command the protocol already supports without actionId.",
+          "observedAt": "2026-08-31T22:41:48.232Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T22:51:38Z",
+      "updatedAt": "2026-08-31T22:51:38Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Contract-required capability use remains source-owned",
+      "guidance": "When source capability-use validation reports an unused grant, keep the failure at source repair if the accepted contract semantically requires that capability to be used. In particular, state_write is source-required when any scenario's final state_equals value differs from its setup value or the private state's initial value. Preserve the accepted contract and ask source repair to restore the required reachable call; route the failure to contract repair only when the unused authority is not required by accepted contract behavior.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0031",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted contract granted state_read and state_write and required spawn_sequence and active_spawned_hazards to change from setup values. Source repair attempt 2 removed all state calls, so both grants were reported unused. The pipeline assigned the failure to contract, invalidated the accepted contract, and spent contract attempts 2 through 4 on unrelated maximum, lifecycle, and string-length errors before repair exhaustion.",
+          "observedAt": "2026-08-31T22:57:16.134Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:04:37Z",
+      "updatedAt": "2026-08-31T23:04:37Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Source generation needs private-state transition obligations",
+      "guidance": "Give source generation a compact contract-derived list of each independent private-state setup, ordered lifecycle steps, and required final state values. Require reachable awaited writes for each final value, preserve endpoint dispatch semantics for coarse advance_time steps, and choose cleanup before recurring creation when the accepted final state returns active lifecycle state to its setup value. Do not expose scenario IDs, unrelated observations, or evaluator-authored assertions.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0032",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted contract required spawn_order and active_hazard_instances to reach different values after one recurrence, three reachable recurrences, and a coarse cleanup boundary. Source attempts 1 through 3 missed different final counts because the source provider saw only private-state IDs and incremental failure messages, not the accepted transition steps. Source attempt 4 removed state_write and exhausted repair with the unused-capability failure.",
+          "observedAt": "2026-08-31T23:10:37.294Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:19:46Z",
+      "updatedAt": "2026-08-31T23:19:46Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Provider transport schemas must mirror source guidance",
+      "guidance": "Whenever the source-generation guidance contract adds or changes a field, update the strict HTTP transport schema in the same revision. Preserve the field through client serialization and route parsing with bounded exact sub-schemas, and add end-to-end tests at both boundaries. Keep intentionally excluded data such as full contract scenarios excluded.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "provider_failure"
+        ]
+      },
+      "id": "KF-0033",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Contract repair attempt 2 was accepted, but every source attempt failed before provider execution because the generated-mechanic HTTP request schema rejected stageInput.contract.requiredPrivateStateTransitions as an unrecognized key. The run consumed no source provider calls and exhausted source repair on the unchanged transport error.",
+          "observedAt": "2026-08-31T23:23:51.029Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:30:00Z",
+      "updatedAt": "2026-08-31T23:30:00Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Contract repairs need one closed invariant checklist",
+      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported path without changing unrelated checklist items.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0034",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Initial contract generation omitted state_write despite changed final private state. Repair attempt 2 restored state_write but inserted dispatch_action into an autonomous install scenario. Repair attempt 3 removed that action but dropped required object_read. Repair attempt 4 restored object_read but reintroduced dispatch_action, exhausting contract repair.",
+          "observedAt": "2026-08-31T23:34:57.123Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:41:21Z",
+      "updatedAt": "2026-08-31T23:41:21Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Source repairs need one closed transition checklist",
+      "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation"
+        ],
+        "classifications": [
+          "provider_output_rejected"
+        ]
+      },
+      "id": "KF-0035",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The source provider received exact setup states, ordered time advances, and required final state values. Initial source passed the exact state assertions but failed lifecycle evidence. Repairs then regressed the sequence calculation; the final repair repeated a formula yielding spawn_sequence 3 after feedback required 5, exhausting source repair despite the other terminal lifecycle issue being resolved.",
+          "observedAt": "2026-08-31T23:47:58.351Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-08-31T23:54:39Z",
+      "updatedAt": "2026-08-31T23:54:39Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "External probes must follow lifecycle schema fields",
+      "guidance": "When an external mechanic probe verifies lifecycle coverage, read ordinary callback kinds from contract.lifecycle.callbacks and read cleanup from contract.lifecycle.dispose. Do not require the dispose callback kind to appear in the callbacks array because the generated-mechanic contract schema represents disposal as a separate boolean. Keep probe helpers aligned with the canonical contract field layout and test each special lifecycle field directly.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_health"
+        ],
+        "classifications": [
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0036",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_health",
+          "quality": "actual_submission",
+          "outcome": "semantic_runtime_failure",
+          "summary": "The accepted contract declared lifecycle.callbacks as install and scheduled and separately declared lifecycle.dispose true. The external repeated_and_cleanup_callbacks assertion called hasCallbacks with scheduled and dispose, but the helper searched only the callbacks array. Every other external assertion passed, including accepted artifact, owned hazards, authority, bounded instances, iframe mount, and outer runtime health.",
+          "observedAt": "2026-08-31T23:59:43.274Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-01T00:03:49Z",
+      "updatedAt": "2026-09-01T00:03:49Z"
     }
   ],
   "reconciliations": [
@@ -7202,6 +7618,940 @@
       "createdAt": "2026-08-31T04:52:49Z",
       "priorManifestDigest": "788ee89f504da715bdc86e2bedf4ea828dc088a54418bb45bc64a0d2e903bc73",
       "resultingManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-1-20260831t205617z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c0-r1"
+      },
+      "consultedManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f",
+      "contextDigest": "3f9feb0a35aa617402b758f9a7de173bd1d797bfed783ff0ea5a1cc44a1024b4",
+      "consultedFindingIds": [
+        "KF-0025"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c0-r1/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The actual attempt stopped at deterministic routing before contract or source generation because the retained host rejected an autonomous install trigger without an action connection. It therefore provides no new evidence about whether recurring scheduled callbacks satisfy autonomous owned-object interaction and cleanup. KF-0025 still constrains the resumed contract and source path, but this attempt neither confirms nor contradicts that finding."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "The routing failure exposes a host admission gap that is fixed in code, but it does not add, amend, confirm, or retire reusable guidance beyond the already-confirmed KF-0025 scheduling rule.",
+      "createdAt": "2026-08-31T20:56:17Z",
+      "priorManifestDigest": "48f4a1089f92b111f5f3a582b03bf46c92b1693ef2608bfffbbe0fbecad1251f",
+      "resultingManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-2-20260831t220544z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3"
+      },
+      "consultedManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5",
+      "contextDigest": "48db95132aa6c1a2d86966961ad00b228bf4a58fc3212639345558150ac31945",
+      "consultedFindingIds": [
+        "KF-0001",
+        "KF-0025"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-1",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0025"
+          ],
+          "rationale": "The verified autonomous-install fix preserved the existing KF-0025 contract and prompt guidance for moving owned objects. The next actual attempt failed before contract and source generation, so this evidence does not broaden that moving-object scheduling rule."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r2/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This provider failure came from the operator sourcing .env.local before .env, which overwrote the configured keyword. The environment files and campaign propagation were valid, the invalid campaign and attributed planning usage were repaired, and the corrected retry reached planning, so this attempt does not add reusable evidence to KF-0001."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The corrected actual planning call truthfully produced an autonomous bounded hazard lifecycle with object_create, object_destroy, random_next, and time_schedule but no motion. Routing rejected only the absent object_motion_write capability, proving that the retained independent-effect gate incorrectly required invented travel before contract and source generation."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Owned-object lifecycle evidence does not require motion",
+            "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "routing",
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation",
+                "handoff",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0027",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c1-r3",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_health",
+                "quality": "actual_submission",
+                "outcome": "semantic_runtime_failure",
+                "summary": "Actual planning produced a truthful autonomous seeded hazard spawner with bounded owned objects and object_create, object_destroy, random_next, and time_schedule authority but no motion. Routing returned independent_visible_effect_unavailable before contract or source calls, so the external probe observed no accepted artifact or lifecycle.",
+                "observedAt": "2026-08-31T21:34:04.541Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:05:44Z",
+            "updatedAt": "2026-08-31T22:05:44Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T22:05:44Z",
+      "priorManifestDigest": "f9fcb35b7609d1f43a040ef1dcca12ed3a92548b6a6c4db80843059e2a3b39d5",
+      "resultingManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-3-20260831t223643z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4"
+      },
+      "consultedManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c",
+      "contextDigest": "ccedcbca4030fee021ce8986aa916581709c72ed5904233003aa7a8e1e81bee9",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-2",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The verified prior fix remains the controlling boundary: owned-object lifecycle evidence is valid without invented motion, while motion evidence remains conditional on explicit object_motion_write authority. The current repair preserves that rule and narrows only the unrelated actor-origin inference."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0028",
+            "KF-0029"
+          ],
+          "rationale": "The actual-provider attempt exposed two reusable contract boundaries. Seeded arena placement was incorrectly treated as actor-origin creation even though the accepted spatial rules never required the bound actor position. The same attempt also declared exact spawn counters that contradicted install-time writes and the runtime clock's one-step scheduled-callback reachability."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Actor-origin evidence requires explicit spatial lineage",
+            "guidance": "Require owned-object actor-origin evidence only when accepted intent uses the exact spatial rule spawn_owned_object_at_actor_position. Arena, region, obstacle-avoidance, and seeded-position rules do not imply actor-origin creation merely because the intent also has an actor or entity binding; do not inject object_read for those independent placement rules.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation",
+                "handoff",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0028",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The actual-provider intent used seeded arena placement rules and an entity binding but did not request actor-relative placement. Evaluator-authored lifecycle assertions nevertheless required actor origin. Generated hazards were created at seeded arena positions, yielding actorOriginCreationsDelta 0 despite successful creation and nonzero travel, and all source candidates were rejected.",
+                "observedAt": "2026-08-31T22:16:34.337Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:36:43Z",
+            "updatedAt": "2026-08-31T22:36:43Z"
+          }
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Recurring schedule proofs require reachable clock steps",
+            "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0029",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c2-r4",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual-provider contract scenarios expected spawn_order 1 after one interval even though install plus the due scheduled callback produced 2, and expected 6 after one coarse six-interval advance even though a positive-delay callback rescheduled at the endpoint was not reachable in that same step, producing 2. The repeated exact counter mismatches contributed to rejection across source repair attempts.",
+                "observedAt": "2026-08-31T22:16:34.337Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:36:43Z",
+            "updatedAt": "2026-08-31T22:36:43Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T22:36:43Z",
+      "priorManifestDigest": "1b9fab07caecc0bfee0bc96aa0733e40bbbd1fb0836805f8c283a484ba09d47c",
+      "resultingManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-4-20260831t225138z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-4",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5"
+      },
+      "consultedManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6",
+      "contextDigest": "38528f07feba069dada2f0ef1f83e70666cfce293e4bb09fb3cf7ff0e83a99f9",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-3",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0028",
+            "KF-0029"
+          ],
+          "rationale": "The verified prior fix correctly separated seeded arena placement from actor-origin lineage and taught reachable recurring clock steps. The resumed actual-provider attempt passed contract repair, source generation, deterministic evaluation, and final Game Spec assembly, so those boundaries remain intact."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0022",
+            "KF-0030"
+          ],
+          "rationale": "The actual-provider autonomous install mechanic reached first-playable, where the generated Phaser controller rejected the absence of a logical action even though the protocol and contract admitted actionless first-playable checks. The campaign summary retained a repaired contract issue, while the terminal structured outcome recorded the later action requirement failure."
+        }
+      ],
+      "operations": [
+        {
+          "type": "confirm",
+          "findingId": "KF-0022",
+          "expectedRevision": 3,
+          "confidence": "confirmed",
+          "reason": "A new actual-provider run independently reproduced stale repaired-issue summarization while terminal structured first-playable evidence identified the later runtime failure.",
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+              "attemptId": "a01-baseline",
+              "stage": "first_playable",
+              "quality": "actual_submission",
+              "outcome": "runtime_pipeline_failure",
+              "summary": "The attempt classification and furthest stage correctly identified first_playable runtime failure, but its failure summary retained an earlier contract validation issue that had been repaired. The terminal generatedMechanicOutcome instead recorded that the runtime project rejected the autonomous mechanic for lacking a logical action.",
+              "observedAt": "2026-08-31T22:41:48.232Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Autonomous first-playable checks do not require a generated action",
+            "guidance": "When an accepted generated mechanic has the exact autonomous install contract shape, with install as its sole behavior trigger, no logical_action lifecycle callback, and no dispatch_action scenario steps, run first-playable checks without a generated action ID and accept ordinary trusted input-response evidence. Continue to require and authenticate one exact action for action-driven mechanics, and fail closed when an action-driven project loses or conflicts on that action.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_activation",
+                "first_playable",
+                "runtime_health"
+              ],
+              "classifications": [
+                "runtime_pipeline_failure"
+              ]
+            },
+            "id": "KF-0030",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c3-r5",
+                "attemptId": "a01-baseline",
+                "stage": "first_playable",
+                "quality": "actual_submission",
+                "outcome": "runtime_pipeline_failure",
+                "summary": "The accepted actual-provider contract was autonomous: behavior trigger install, lifecycle callbacks install and scheduled, no connections, and no dispatch_action scenario steps. Contract repair, source generation, deterministic evaluation, and final Game Spec assembly succeeded, but first-playable boot failed because the controller required one logical action before sending a command the protocol already supports without actionId.",
+                "observedAt": "2026-08-31T22:41:48.232Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T22:51:38Z",
+            "updatedAt": "2026-08-31T22:51:38Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T22:51:38Z",
+      "priorManifestDigest": "be01c2b4f1f83328fe3d54e155faa6de46410d474eac0e91e1d101b851f555c6",
+      "resultingManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-5-20260831t230437z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-5",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6"
+      },
+      "consultedManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1",
+      "contextDigest": "9b16aab9684bfede4e5a223cb12c7fcf26905d72bcfdb1785a8aa97fca083e81",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0006",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0012",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0030"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-4",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0022",
+            "KF-0030"
+          ],
+          "rationale": "The verified prior fix remains the governing first-playable boundary and corrected campaign summary precedence. The resumed attempt stopped earlier in source repair and its recorded failure correctly matched the final rejected contract repair rather than stale earlier evidence."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0031"
+          ],
+          "rationale": "The initial accepted contract required observable private-state changes and granted state_read and state_write. A source repair removed both calls, capability-use validation reported them unused, and the continuation pipeline classified the whole failure as contract-owned. That invalidated the accepted contract and exhausted three later contract repairs on unrelated drift instead of letting source repair restore the required calls."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract-required capability use remains source-owned",
+            "guidance": "When source capability-use validation reports an unused grant, keep the failure at source repair if the accepted contract semantically requires that capability to be used. In particular, state_write is source-required when any scenario's final state_equals value differs from its setup value or the private state's initial value. Preserve the accepted contract and ask source repair to restore the required reachable call; route the failure to contract repair only when the unused authority is not required by accepted contract behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0031",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c4-r6",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The accepted contract granted state_read and state_write and required spawn_sequence and active_spawned_hazards to change from setup values. Source repair attempt 2 removed all state calls, so both grants were reported unused. The pipeline assigned the failure to contract, invalidated the accepted contract, and spent contract attempts 2 through 4 on unrelated maximum, lifecycle, and string-length errors before repair exhaustion.",
+                "observedAt": "2026-08-31T22:57:16.134Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:04:37Z",
+            "updatedAt": "2026-08-31T23:04:37Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:04:37Z",
+      "priorManifestDigest": "fac1aa2504c2571850f11527a1fba3f84ad1b70016c4b03d04f5a5cdc16783e1",
+      "resultingManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-6-20260831t231946z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-6",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7"
+      },
+      "consultedManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d",
+      "contextDigest": "c16df4aa593539353c8a592bf6f66944ba6a5469dc163ce6ce4f0693bc3fc8d4",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-5",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0031"
+          ],
+          "rationale": "The verified prior fix correctly kept contract-required state_write omissions at source repair. The resumed run preserved its accepted contract and spent all four source attempts there, confirming the responsibility boundary."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0032"
+          ],
+          "rationale": "The source provider received private-state IDs but not the accepted scenario state transitions or their lifecycle steps. Three candidates missed different final counter values across recurrence and cleanup paths; the fourth removed state_write entirely. Compact contract-derived transition obligations are required for source generation to trace reachable writes without exposing full scenario or evaluator scaffolding."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Source generation needs private-state transition obligations",
+            "guidance": "Give source generation a compact contract-derived list of each independent private-state setup, ordered lifecycle steps, and required final state values. Require reachable awaited writes for each final value, preserve endpoint dispatch semantics for coarse advance_time steps, and choose cleanup before recurring creation when the accepted final state returns active lifecycle state to its setup value. Do not expose scenario IDs, unrelated observations, or evaluator-authored assertions.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0032",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c5-r7",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The accepted contract required spawn_order and active_hazard_instances to reach different values after one recurrence, three reachable recurrences, and a coarse cleanup boundary. Source attempts 1 through 3 missed different final counts because the source provider saw only private-state IDs and incremental failure messages, not the accepted transition steps. Source attempt 4 removed state_write and exhausted repair with the unused-capability failure.",
+                "observedAt": "2026-08-31T23:10:37.294Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:19:46Z",
+            "updatedAt": "2026-08-31T23:19:46Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:19:46Z",
+      "priorManifestDigest": "55e1e9f2fa522101530754aaac4ad47e3fbf1d52615e8bb8e72ea8434ebf2e0d",
+      "resultingManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-7-20260831t233000z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-7",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8"
+      },
+      "consultedManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475",
+      "contextDigest": "317c11d6a9c86ce16bac146d47f8a49b70b08ac8d110c86c3fa1dd75be5fe0c4",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-6",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0029",
+            "KF-0031"
+          ],
+          "rationale": "The verified prior fix preserved the endpoint-dispatch and source-responsibility boundaries from KF-0029 and KF-0031. The current failure occurred after contract acceptance and before source-provider execution, so it does not contradict those findings."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0033"
+          ],
+          "rationale": "The source-guidance contract added requiredPrivateStateTransitions, but the strict HTTP request schema still described the prior source contract and rejected the field before any source provider call. The durable boundary requires schema parity and end-to-end client plus route coverage whenever source guidance changes."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Provider transport schemas must mirror source guidance",
+            "guidance": "Whenever the source-generation guidance contract adds or changes a field, update the strict HTTP transport schema in the same revision. Preserve the field through client serialization and route parsing with bounded exact sub-schemas, and add end-to-end tests at both boundaries. Keep intentionally excluded data such as full contract scenarios excluded.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "provider_failure"
+              ]
+            },
+            "id": "KF-0033",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c6-r8",
+                "attemptId": "a01-baseline",
+                "stage": "contract_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Contract repair attempt 2 was accepted, but every source attempt failed before provider execution because the generated-mechanic HTTP request schema rejected stageInput.contract.requiredPrivateStateTransitions as an unrecognized key. The run consumed no source provider calls and exhausted source repair on the unchanged transport error.",
+                "observedAt": "2026-08-31T23:23:51.029Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:30:00Z",
+            "updatedAt": "2026-08-31T23:30:00Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:30:00Z",
+      "priorManifestDigest": "c9d843c83f481b244722fd617343f8e5a7ec394d500b5649e0341b5c3e233475",
+      "resultingManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-8-20260831t234121z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-8",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9"
+      },
+      "consultedManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd",
+      "contextDigest": "d69cde39418650eb221d94212d01556208f9cac8e85a54a1a0ab1dda40229678",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0033"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-7",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0033"
+          ],
+          "rationale": "The current run reached four actual contract-provider calls without repeating the prior HTTP schema rejection, confirming that the source-guidance transport field now crosses both strict boundaries."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0034"
+          ],
+          "rationale": "Successive contract repairs alternated among required state_write, autonomous scenario trigger mode, and required object_read. Each repair corrected its current issue but broke a different invariant, showing that repair guidance must present those independent manifests as one closed pre-return checklist."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract repairs need one closed invariant checklist",
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported path without changing unrelated checklist items.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0034",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c7-r9",
+                "attemptId": "a01-baseline",
+                "stage": "contract_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Initial contract generation omitted state_write despite changed final private state. Repair attempt 2 restored state_write but inserted dispatch_action into an autonomous install scenario. Repair attempt 3 removed that action but dropped required object_read. Repair attempt 4 restored object_read but reintroduced dispatch_action, exhausting contract repair.",
+                "observedAt": "2026-08-31T23:34:57.123Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:41:21Z",
+            "updatedAt": "2026-08-31T23:41:21Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:41:21Z",
+      "priorManifestDigest": "4048fbf9381be886134ecbe3a017ff46e2d91dd30c59d5ee11a11eacafe8a9bd",
+      "resultingManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-9-20260831t235439z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-9",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10"
+      },
+      "consultedManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e",
+      "contextDigest": "b0a7386ec7382d744d1f67614b1ea4b58d654187443230335053fa5971f9bd81",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-8",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0034"
+          ],
+          "rationale": "The current run repaired the initially incomplete contract on attempt 2 without oscillating among the required state-write, capability, callback, or autonomous-trigger invariants, confirming the closed contract checklist from fix cycle 8."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0035"
+          ],
+          "rationale": "All four source calls received the exact independent private-state transition obligations. Attempt 4 nevertheless repeated a scheduled-callback formula that produced spawn_sequence 3 after the repair feedback required 5, while other lifecycle evidence passed. Source repair therefore needs a closed pre-return check across every rendered transition and must replace a formula already proven to produce the reported actual value."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Source repairs need one closed transition checklist",
+            "guidance": "Before returning any initial or repaired source candidate, recheck every contract-derived private-state transition together. For each independent setup state, trace the ordered lifecycle steps through reachable callback branches and verify that every required final state receives its exact declared value from an awaited state write. When repair evidence reports expected X and actual Y, replace the branch or formula that produced Y rather than repeating it, while preserving other final-state obligations and already-passing lifecycle behavior.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            },
+            "id": "KF-0035",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c8-r10",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "The source provider received exact setup states, ordered time advances, and required final state values. Initial source passed the exact state assertions but failed lifecycle evidence. Repairs then regressed the sequence calculation; the final repair repeated a formula yielding spawn_sequence 3 after feedback required 5, exhausting source repair despite the other terminal lifecycle issue being resolved.",
+                "observedAt": "2026-08-31T23:47:58.351Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-08-31T23:54:39Z",
+            "updatedAt": "2026-08-31T23:54:39Z"
+          }
+        }
+      ],
+      "createdAt": "2026-08-31T23:54:39Z",
+      "priorManifestDigest": "367f58cc4803f5871bc28d8b453b09850d7d113f3df5e03e2e4725016a1e4e2e",
+      "resultingManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-seeded-hazard-spawner-fix-10-20260901t000349z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z",
+        "fixId": "fix-cycle-10",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11"
+      },
+      "consultedManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759",
+      "contextDigest": "4abc88edfa7bd7898c51a4771c5ad2947057675303c869e1ebaf947d30b36482",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z/fix-cycle-9",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0035"
+          ],
+          "rationale": "The current run accepted the source candidate on its initial source call after one contract repair, with no repeated private-state transition mismatch, confirming the closed source transition checklist from fix cycle 9."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0036"
+          ],
+          "rationale": "The generated artifact passed provider generation, deterministic evaluation, final assembly, iframe mounting, and outer runtime health. The external probe alone rejected its cleanup callback because the shared helper searched lifecycle.callbacks for dispose even though the accepted contract schema represents cleanup with lifecycle.dispose true."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "External probes must follow lifecycle schema fields",
+            "guidance": "When an external mechanic probe verifies lifecycle coverage, read ordinary callback kinds from contract.lifecycle.callbacks and read cleanup from contract.lifecycle.dispose. Do not require the dispose callback kind to appear in the callbacks array because the generated-mechanic contract schema represents disposal as a separate boolean. Keep probe helpers aligned with the canonical contract field layout and test each special lifecycle field directly.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health"
+              ],
+              "classifications": [
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0036",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-20260831t202357212z-discovery-c9-r11",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_health",
+                "quality": "actual_submission",
+                "outcome": "semantic_runtime_failure",
+                "summary": "The accepted contract declared lifecycle.callbacks as install and scheduled and separately declared lifecycle.dispose true. The external repeated_and_cleanup_callbacks assertion called hasCallbacks with scheduled and dispose, but the helper searched only the callbacks array. Every other external assertion passed, including accepted artifact, owned hazards, authority, bounded instances, iframe mount, and outer runtime health.",
+                "observedAt": "2026-08-31T23:59:43.274Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-01T00:03:49Z",
+            "updatedAt": "2026-09-01T00:03:49Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-01T00:03:49Z",
+      "priorManifestDigest": "692c75c0961c61ec314b08142b39098680d5961d7cd8c1560fe58df54ec66759",
+      "resultingManifestDigest": "1836413a8a474f16357efd3c27f185558206fc56e64fbbf81a6a89e147a10135"
     }
   ]
 }

@@ -510,6 +510,123 @@ describe("generated mechanic browser evaluation fixture", () => {
     ]);
   });
 
+  it("authors install-causal lifecycle proof for an autonomous transient mechanic", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      triggers: ["install"],
+      connections: [],
+      ownedObjects: ["hazard"],
+      requiredCapabilities: [
+        "object_create",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        connections: [],
+      },
+      behavior: { ...baseContract.behavior, triggers: ["install"] },
+      ownedObjects: [{ id: "hazard", objectKind: "hazard", maximumInstances: 2 }],
+      lifecycle: { ...baseContract.lifecycle, callbacks: ["install"] },
+      capabilities: [
+        "object_create",
+        "object_destroy",
+      ],
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [{ kind: "advance_time", milliseconds: 16 }],
+        },
+      ],
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_after_install",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_after_install",
+          archetypeIds: ["hazard"],
+        },
+      },
+    ]);
+  });
+
+  it("does not require actor-origin proof for seeded arena placement", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const entityId = gameSpec.entities[0].id;
+    const baseIntent = createIntent(entityId);
+    const intent: MechanicIntent = {
+      ...baseIntent,
+      triggers: ["install"],
+      connections: [],
+      ownedObjects: ["hazard"],
+      spatialRules: ["spawn_inside_hazard_spawn_area", "remain_inside_arena"],
+      requiredCapabilities: [
+        "object_read",
+        "object_create",
+        "object_motion_write",
+        "object_destroy",
+      ],
+    };
+    const baseContract = createContract(entityId);
+    const contract: GeneratedMechanicContract = {
+      ...baseContract,
+      intentLineage: {
+        ...baseContract.intentLineage!,
+        connections: [],
+        spatialRules: intent.spatialRules,
+      },
+      behavior: { ...baseContract.behavior, triggers: ["install"] },
+      ownedObjects: [{ id: "hazard", objectKind: "hazard", maximumInstances: 2 }],
+      lifecycle: { ...baseContract.lifecycle, callbacks: ["install", "scheduled"] },
+      capabilities: intent.requiredCapabilities,
+      resourceExpectations: {
+        ...baseContract.resourceExpectations,
+        maximumOwnedObjects: 2,
+      },
+      scenarios: [
+        {
+          ...baseContract.scenarios[0]!,
+          steps: [{ kind: "advance_time", milliseconds: 16 }],
+          observations: [
+            {
+              kind: "owned_object_count",
+              archetypeId: "hazard",
+              operator: "at_least",
+              value: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      createGeneratedMechanicExternalObservations(intent, contract, gameSpec)
+    ).toEqual([
+      {
+        id: "external_scenario_dash_owned_object_lifecycle_progress_after_install",
+        scenarioId: "scenario_dash",
+        observation: {
+          kind: "owned_object_lifecycle_progress_after_install",
+          archetypeIds: ["hazard"],
+        },
+      },
+    ]);
+  });
+
   it("authors active lifecycle progress proof when a timed scenario positively requires an owned object", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const entityId = gameSpec.entities[0].id;
@@ -752,7 +869,7 @@ describe("generated mechanic browser evaluation fixture", () => {
           contract,
           gameSpec
         )
-    ).toThrow(/object_motion_write/);
+    ).toThrow(/bound-entity motion or a mechanic-owned create\/destroy lifecycle/);
   });
 
   it("observes only bindings that resolve exact routed-intent entities", () => {

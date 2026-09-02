@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PHASE_9_GENERATION_CONSTRAINT_SET,
+  generatedMechanicContractSchema,
   generationRunSchema,
   topDownGameSpecSchema,
   writeGeneratedMechanicHandoffPendingReceipt,
@@ -471,6 +472,122 @@ describe("createContinueGeneratedMechanicGeneration", () => {
         success: false,
         evidence: {
           responsibleStage: "contract",
+          issues: [issue],
+        },
+      });
+      return {
+        outcome: "rejected" as const,
+        evidence: {
+          stage: "repair_exhausted" as const,
+          issues: [issue],
+        },
+      };
+    });
+    const completeHandoff = vi.fn();
+    const continueGeneration = createContinueGeneratedMechanicGeneration({
+      services: {
+        generationRunRepository,
+        gamePackRepository: {
+          compareAndSwap: vi.fn(),
+          load: vi.fn(),
+        },
+        createFoundation: async () => createPassedFoundation(),
+        createContractProvider: vi.fn(() => vi.fn()),
+        createSourceProvider: vi.fn(() => vi.fn()),
+        generateContract,
+        generateSource,
+        completeHandoff,
+        runPipeline,
+      },
+    });
+
+    await expect(continueGeneration(fixture.input)).resolves.toEqual({
+      outcome: "rejected",
+      evidence: {
+        stage: "repair_exhausted",
+        issues: [issue],
+      },
+    });
+    expect(completeHandoff).not.toHaveBeenCalled();
+  });
+
+  it("keeps contract-required state writes in source repair", async () => {
+    const fixture = createInputFixture();
+    const contract = generatedMechanicContractSchema.parse({
+      ...fixture.project.dependency.contract,
+      scenarios: fixture.project.dependency.contract.scenarios.map(
+        (scenario) => ({
+          ...scenario,
+          observations: scenario.observations.map((observation) =>
+            observation.kind === "state_equals" &&
+            observation.stateId === "drift_step_count"
+              ? { ...observation, value: 1 }
+              : observation
+          ),
+        })
+      ),
+    });
+    const { repository: generationRunRepository } =
+      createGenerationRunTestRepository();
+    await generationRunRepository.create(
+      generationRunSchema.parse({
+        id: GENERATION_RUN_ID,
+        operationType: "generate",
+        status: "running",
+        createdAt: CREATED_AT,
+        startedAt: CREATED_AT,
+        request: { summary: fixture.input.context.requestSummary },
+        runtimeKind: "phaser",
+        attempts: [],
+      })
+    );
+    const issue = {
+      path: `grant.capabilities.${contract.capabilities.indexOf("state_write")}`,
+      code: "unused_capability" as const,
+      message:
+        'Granted capability "state_write" has no verified source use and would provide unjustified authority.',
+    };
+    const generateContract: typeof generateMechanicContract = vi.fn(
+      async () => ({
+        success: true,
+        data: {
+          contract,
+          grant: fixture.project.dependency.sourceArtifact.grant,
+        },
+      })
+    );
+    const generateSource: typeof generateBuildAndExecuteMechanicSource = vi.fn(
+      async () => ({
+        success: false,
+        evidence: {
+          stage: "capability_usage_validation",
+          code: "invalid_mechanic_capability_usage",
+          issues: [issue],
+        },
+      })
+    );
+    const runPipeline = vi.fn(async ({ dependencies }) => {
+      const foundation = await dependencies.runFoundation();
+      if (!foundation.success) {
+        throw new Error("Expected the passing foundation fixture.");
+      }
+      const generatedContract = await dependencies.runContract({
+        attemptNumber: 1,
+        kind: "initial",
+      });
+      if (!generatedContract.success) {
+        throw new Error("Expected the accepted contract fixture.");
+      }
+      const source = await dependencies.runSourceAndEvaluation({
+        attemptNumber: 1,
+        foundation: foundation.data,
+        contract: generatedContract.data.value,
+        kind: "initial",
+      });
+      expect(source).toEqual({
+        success: false,
+        evidence: {
+          responsibleStage: "source",
           issues: [issue],
         },
       });

@@ -1,6 +1,7 @@
 import {
   GENERATED_MECHANIC_FIXED_STEP_INTERVAL_MILLISECONDS,
   TOP_DOWN_GENERATED_MECHANIC_EVALUATION_PROPERTY_IDS,
+  requiresOwnedObjectActorOrigin,
   type GeneratedMechanicContract,
   type MechanicCapabilityGrant,
   type MechanicIntent,
@@ -698,20 +699,23 @@ export function createGeneratedMechanicExternalObservations(
       "Top-down generated mechanic evaluation requires the exact trusted intent lineage stamped by contract generation."
     );
   }
-  if (!contract.capabilities.includes("object_motion_write")) {
+  const requiresTransientLifecycle =
+    requiresTransientOwnedObjectLifecycle(intent, contract);
+  if (
+    !contract.capabilities.includes("object_motion_write") &&
+    !requiresTransientLifecycle
+  ) {
     throw new TypeError(
-      "Top-down generated mechanic evaluation requires object_motion_write for independently visible evidence."
+      "Top-down generated mechanic evaluation requires bound-entity motion or a mechanic-owned create/destroy lifecycle for independently visible evidence."
     );
   }
   const activeEntitiesById = new Map(
     gameSpec.entities.map((entity) => [entity.id, entity] as const)
   );
-  const requiresTransientLifecycle =
-    requiresTransientOwnedObjectLifecycle(intent, contract);
   const requiresActorOrigin =
     requiresTransientLifecycle &&
     intent.actors.length > 0 &&
-    intent.spatialRules.length > 0 &&
+    requiresOwnedObjectActorOrigin(intent) &&
     intent.requiredCapabilities.includes("object_read") &&
     contract.capabilities.includes("object_read");
   const evidenceRoles = new Set(
@@ -759,14 +763,27 @@ export function createGeneratedMechanicExternalObservations(
     connection.direction === "input" ? [connection.port] : []
   );
   const activeActionIds = new Set(gameSpec.controls.map(({ action }) => action));
+  const usesLogicalAction = intent.triggers.includes("logical_action");
+  const usesAutonomousInstall =
+    intent.triggers.length === 1 && intent.triggers[0] === "install";
   const actionId = routedInputActionIds[0];
-  if (
+  if (usesLogicalAction && (
     routedInputActionIds.length !== 1 ||
     actionId === undefined ||
     !activeActionIds.has(actionId)
-  ) {
+  )) {
     throw new TypeError(
       "Top-down generated mechanic evaluation requires exactly one trusted routed input action backed by an active Game Spec control."
+    );
+  }
+  if (!usesLogicalAction && (!usesAutonomousInstall || intent.connections.length !== 0)) {
+    throw new TypeError(
+      "Top-down generated mechanic evaluation requires either one trusted routed action or an autonomous install trigger with no connections."
+    );
+  }
+  if (usesAutonomousInstall && !requiresTransientLifecycle) {
+    throw new TypeError(
+      "Autonomous install-triggered evaluation requires an observable owned-object lifecycle."
     );
   }
   const timeAdvancingScenarios = requiresTransientLifecycle
@@ -798,16 +815,21 @@ export function createGeneratedMechanicExternalObservations(
       const scenarioActions = scenario.steps.flatMap((step) =>
         step.kind === "dispatch_action" ? [step.actionId] : []
       );
-      if (scenarioActions.length !== 1 || scenarioActions[0] !== actionId) {
+      if (usesLogicalAction && (scenarioActions.length !== 1 || scenarioActions[0] !== actionId)) {
         throw new TypeError(
           `Top-down generated mechanic scenario "${scenario.id}" must dispatch trusted routed action "${actionId}" exactly once.`
         );
       }
-      if (requiresTransientLifecycle) {
-        const actionStepIndex = scenario.steps.findIndex(
-          (step) => step.kind === "dispatch_action"
+      if (usesAutonomousInstall && scenarioActions.length !== 0) {
+        throw new TypeError(
+          `Autonomous install-triggered scenario "${scenario.id}" must not dispatch an action.`
         );
-        const observesLifecycleAfterAction = scenario.steps
+      }
+      if (requiresTransientLifecycle) {
+        const actionStepIndex = usesLogicalAction
+          ? scenario.steps.findIndex((step) => step.kind === "dispatch_action")
+          : -1;
+        const observesLifecycleAfterTrigger = scenario.steps
           .slice(actionStepIndex + 1)
           .some((step) => step.kind === "advance_time");
         const requiresPositiveOwnedObjectCount = scenario.observations.some(
@@ -819,31 +841,62 @@ export function createGeneratedMechanicExternalObservations(
             observation.operator !== "at_most" &&
             observation.value > 0
         );
-        const lifecycleKind = observesLifecycleAfterAction
+        const lifecyclePhase = observesLifecycleAfterTrigger
           ? requiresPositiveOwnedObjectCount
-            ? ("owned_object_lifecycle_progress_after_action" as const)
-            : ("owned_object_lifecycle_after_action" as const)
+            ? "progress"
+            : "complete"
           : requiresPositiveOwnedObjectCount
-            ? ("owned_object_creation_after_action" as const)
-            : ("owned_object_lifecycle_unchanged_after_action" as const);
+            ? "creation"
+            : "unchanged";
+        const lifecycleKind = usesLogicalAction
+          ? lifecyclePhase === "progress"
+            ? "owned_object_lifecycle_progress_after_action"
+            : lifecyclePhase === "complete"
+              ? "owned_object_lifecycle_after_action"
+              : lifecyclePhase === "creation"
+                ? "owned_object_creation_after_action"
+                : "owned_object_lifecycle_unchanged_after_action"
+          : lifecyclePhase === "progress"
+            ? "owned_object_lifecycle_progress_after_install"
+            : lifecyclePhase === "complete"
+              ? "owned_object_lifecycle_after_install"
+              : lifecyclePhase === "creation"
+                ? "owned_object_creation_after_install"
+                : "owned_object_lifecycle_unchanged_after_install";
         const requiresCreationProof =
-          lifecycleKind !== "owned_object_lifecycle_unchanged_after_action";
+          !lifecycleKind.includes("lifecycle_unchanged");
+        const commonObservation = {
+          archetypeIds: Object.freeze(
+            contract.ownedObjects.map(({ id }) => id)
+          ),
+          ...(requiresCreationProof && requiresActorOrigin
+            ? { requireActorOrigin: true as const }
+            : {}),
+          ...(targetInteractionScenarioIds.has(scenario.id)
+            ? { requireTargetInteraction: true as const }
+            : {}),
+        };
         return Object.freeze({
             id: `external_${scenario.id}_${lifecycleKind}`,
             scenarioId: scenario.id,
-            observation: Object.freeze({
-              kind: lifecycleKind,
-              archetypeIds: Object.freeze(
-                contract.ownedObjects.map(({ id }) => id)
-              ),
-              actionId,
-              ...(requiresCreationProof && requiresActorOrigin
-                ? { requireActorOrigin: true as const }
-                : {}),
-              ...(targetInteractionScenarioIds.has(scenario.id)
-                ? { requireTargetInteraction: true as const }
-                : {}),
-            }),
+            observation: usesLogicalAction
+              ? Object.freeze({
+                  ...commonObservation,
+                  kind: lifecycleKind as
+                    | "owned_object_lifecycle_after_action"
+                    | "owned_object_creation_after_action"
+                    | "owned_object_lifecycle_progress_after_action"
+                    | "owned_object_lifecycle_unchanged_after_action",
+                  actionId: actionId!,
+                })
+              : Object.freeze({
+                  ...commonObservation,
+                  kind: lifecycleKind as
+                    | "owned_object_lifecycle_after_install"
+                    | "owned_object_creation_after_install"
+                    | "owned_object_lifecycle_progress_after_install"
+                    | "owned_object_lifecycle_unchanged_after_install",
+                }),
           });
       }
       return Object.freeze({
@@ -868,11 +921,7 @@ function requiresTransientOwnedObjectLifecycle(
   return (
     intent.ownedObjects.length > 0 &&
     contract.ownedObjects.length > 0 &&
-    [
-      "object_create",
-      "object_motion_write",
-      "object_destroy",
-    ].every(
+    ["object_create", "object_destroy"].every(
       (capabilityId) =>
         requiredCapabilities.has(capabilityId) &&
         declaredCapabilities.has(capabilityId)

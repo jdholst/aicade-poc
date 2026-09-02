@@ -20,10 +20,9 @@ export function createEvaluationObservationFailureMessage(input: {
   actual: unknown;
 }): string {
   const actual =
-    input.kind === "owned_object_lifecycle_after_action" ||
-    input.kind === "owned_object_creation_after_action" ||
-    input.kind === "owned_object_lifecycle_progress_after_action" ||
-    input.kind === "owned_object_lifecycle_unchanged_after_action"
+    input.kind.startsWith("owned_object_") &&
+    (input.kind.endsWith("_after_action") ||
+      input.kind.endsWith("_after_install"))
       ? summarizeOwnedObjectLifecycleActual(input.actual) ?? input.actual
       : input.actual;
   const message = `${input.label} ${input.index} "${input.kind}" failed. Assertion: ${boundedJson(input.assertion)}. Actual: ${boundedJson(actual)}.`;

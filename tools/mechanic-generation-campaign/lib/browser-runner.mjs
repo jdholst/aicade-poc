@@ -1316,6 +1316,12 @@ function createCampaignRunId(manifestId, cohort, createdAt) {
 }
 
 export function summarizeAttemptFailure(generationRun, terminalText, probeResult) {
+  const generatedMechanicOutcome =
+    generationRun?.metadata?.generatedMechanicOutcome;
+  const terminalMechanicIssues =
+    generatedMechanicOutcome?.status === "rejected"
+      ? (generatedMechanicOutcome.issues ?? [])
+      : [];
   const repairIssues =
     generationRun?.artifactScopedRepair?.attempts?.flatMap((attempt) => attempt.issues ?? []) ?? [];
   const planningIssues =
@@ -1329,6 +1335,7 @@ export function summarizeAttemptFailure(generationRun, terminalText, probeResult
     );
   }
   return (
+    terminalMechanicIssues[0]?.message ??
     repairIssues.at(-1)?.message ??
     planningIssues.at(-1)?.message ??
     probeFailure ??

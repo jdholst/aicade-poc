@@ -371,6 +371,62 @@ describe("generateTopDownCreatorPlan", () => {
     expect(providerIntent.requiredCapabilities).not.toContain("spatial_query");
     expect(providerIntent.requiredCapabilities).not.toContain("object_read");
   });
+
+  it("does not infer actor observation from unrelated arena placement rules", async () => {
+    const spec = getFirstValidTopDownGameSpecFixture();
+    const providerIntent = {
+      ...createTransientOwnedObjectIntent(),
+      spatialRules: ["spawn_inside_hazard_spawn_area", "remain_inside_arena"],
+    };
+    const provider = vi.fn().mockResolvedValue({
+      gameSpec: spec,
+      mechanicIntent: providerIntent,
+    });
+
+    const result = await generateTopDownCreatorPlan({
+      prompt: "Spawn moving hazards at seeded valid arena positions.",
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      generationRunId: "generation_run_seeded_arena_hazards",
+      availableCapabilities: [
+        "object_read",
+        "object_create",
+        "object_motion_write",
+        "object_destroy",
+        "spatial_query",
+      ],
+      provider,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      routing: {
+        kind: "generated_mechanic",
+        intent: {
+          spatialRules: [
+            "spawn_inside_hazard_spawn_area",
+            "remain_inside_arena",
+          ],
+          requiredCapabilities: [
+            "object_create",
+            "object_motion_write",
+            "object_destroy",
+            "spatial_query",
+          ],
+        },
+      },
+    });
+    if (!result.ok || result.routing.kind !== "generated_mechanic") {
+      throw new Error("Expected generated mechanic routing.");
+    }
+    expect(result.routing.intent.ambiguities).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "assumption_transient_owned_object_actor_observation",
+        }),
+      ])
+    );
+  });
 });
 
 function createMovementIntent() {
@@ -471,7 +527,7 @@ function createTransientOwnedObjectIntent() {
     ownedObjects: ["transient_object"],
     stateChanges: [],
     temporalRules: ["object_exists_across_simulated_time"],
-    spatialRules: ["object_moves_before_cleanup"],
+    spatialRules: ["spawn_owned_object_at_actor_position"],
     constraints: ["destroy_transient_object_after_lifetime"],
     configuration: [{ key: "lifetime_milliseconds", value: 500 }],
     connections: [{ direction: "input", port: "move" }],

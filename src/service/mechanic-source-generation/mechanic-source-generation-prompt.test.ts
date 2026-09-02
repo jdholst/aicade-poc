@@ -747,6 +747,69 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
   });
 
+  it("does not invent travel while repairing a stationary owned-object lifecycle", () => {
+    const intent = createIntent();
+    const repair = {
+      trigger: "stage_failure" as const,
+      failureAttemptId: "generation_run_source_source_1",
+      issues: [
+        {
+          path: "evaluation.scenarios.transient.externalObservations.0",
+          code: "external_observation_failed",
+          message:
+            'Evaluator-authored observation 0 "owned_object_lifecycle_after_install" failed. Actual: {"deltas":[{"activeDelta":0,"actorOriginCreationsDelta":0,"createdDelta":1,"destroyedDelta":1,"simulatedDistanceTraveledDelta":0,"targetInteractionsDelta":0}]}.',
+        },
+      ],
+      invalidatedArtifactIds: [],
+    };
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      capabilities: ["object_create", "object_destroy", "time_schedule"],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract,
+      grant: createMechanicSourceGenerationGrant(
+        createGrant("object_create", "object_destroy", "time_schedule")
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+      generationAttempt: {
+        generationRunId: "generation_run_source",
+        stage: "source",
+        attemptNumber: 2,
+        kind: "repair",
+        candidateArtifactId: "generation_run_source_source_repair_2",
+        repair,
+      },
+    });
+
+    expect(prompt).toContain(
+      "Because object_motion_write is absent, travel is not acceptance evidence"
+    );
+    expect(prompt).not.toContain(
+      "simulatedDistanceTraveledDelta must be positive through finite nonzero owned-object motion"
+    );
+    expect(prompt).not.toContain(
+      "preserve bounded travel and target interaction while the object remains active"
+    );
+  });
+
   it("turns active owned-object progress failures into post-action lifecycle guidance", () => {
     const intent = createIntent();
     const repair = {
@@ -1079,6 +1142,77 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     expect(prompt).toContain(
       "A zero vector such as { x: 0, y: 0 } is not a target interaction"
     );
+  });
+
+  it("exposes accepted private-state transitions without exposing full scenarios", () => {
+    const intent = createIntent();
+    const contract: GeneratedMechanicContract = {
+      ...createContract(),
+      lifecycle: {
+        callbacks: ["install", "scheduled"],
+        fixedStep: false,
+        dispose: true,
+      },
+      scenarios: [
+        {
+          id: "recurring_cleanup",
+          seed: 1729,
+          setup: [
+            { kind: "state_equals", stateId: "private_value", value: 0 },
+          ],
+          steps: [
+            { kind: "advance_time", milliseconds: 1000 },
+            { kind: "advance_time", milliseconds: 6000 },
+          ],
+          observations: [
+            { kind: "state_equals", stateId: "private_value", value: 0 },
+          ],
+        },
+      ],
+    };
+    const prompt = createMechanicSourceGenerationSystemPrompt({
+      intent,
+      resolution: createMechanicSourceGenerationResolution(
+        createResolution(intent)
+      ),
+      constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      contract,
+      grant: createMechanicSourceGenerationGrant(
+        createGrant("state_write", "time_schedule")
+      ),
+      referenceCatalog: {},
+      resourceBudget: {
+        profileId: "phase_9_fixed_budget",
+        maximumOwnedObjects: 4,
+        maximumOperationsPerTick: 16,
+        maximumScheduledCallbacks: 4,
+        maximumSubscriptions: 4,
+        maximumSignalsPerTick: 4,
+        maximumStateBytes: 1024,
+        maximumCallbackMilliseconds: 8,
+        maximumConsecutiveFailures: 2,
+      },
+      taskRoute: "mechanic_source_generation.primary",
+    });
+
+    expect(prompt).toContain("Required private-state transition obligations JSON");
+    expect(prompt).toContain('"setupState"');
+    expect(prompt).toContain('"lifecycleSteps"');
+    expect(prompt).toContain('"requiredFinalState"');
+    expect(prompt).toContain('"milliseconds": 6000');
+    expect(prompt).toContain(
+      "Each transition obligation is independent and begins from its rendered setup state"
+    );
+    expect(prompt).toContain(
+      "a positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step"
+    );
+    expect(prompt).toContain(
+      "Before returning any initial or repaired candidate, close every rendered transition obligation"
+    );
+    expect(prompt).toContain(
+      "never preserve or repeat a formula that is already proven to produce the reported actual value"
+    );
+    expect(prompt).not.toContain("recurring_cleanup");
   });
 
   it("turns a mismatched scheduled callback literal into exact callback-ID repair guidance", () => {

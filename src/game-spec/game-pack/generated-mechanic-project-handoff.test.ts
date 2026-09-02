@@ -274,20 +274,22 @@ describe("generated mechanic project handoff", () => {
     });
   });
 
-  it("accepts target interaction proof on cleanup without requiring it from active progress", async () => {
+  it("accepts lifecycle proof without unrelated actor-origin or progress requirements", async () => {
     const context = await createHandoffTestContext();
     const contract: GeneratedMechanicContract = {
       ...context.contract,
       intentLineage: {
         ...context.contract.intentLineage!,
         targets: ["enemy"],
-        spatialRules: ["spawn_owned_object_at_actor_position"],
+        spatialRules: ["spawn_inside_hazard_spawn_area", "remain_inside_arena"],
       },
       ownedObjects: [
         { id: "projectile", objectKind: "projectile", maximumInstances: 1 },
       ],
       capabilities: [
-        ...context.contract.capabilities,
+        ...context.contract.capabilities.filter(
+          (capabilityId) => capabilityId !== "object_motion_write"
+        ),
         "object_read",
         "object_create",
         "object_destroy",
@@ -404,7 +406,6 @@ describe("generated mechanic project handoff", () => {
             kind: "owned_object_lifecycle_after_action",
             archetypeIds: ["projectile"],
             actionId: "move",
-            requireActorOrigin: true,
             requireTargetInteraction: true,
           },
         },
@@ -415,7 +416,6 @@ describe("generated mechanic project handoff", () => {
             kind: "owned_object_lifecycle_progress_after_action",
             archetypeIds: ["projectile"],
             actionId: "move",
-            requireActorOrigin: true,
           },
         },
         {
@@ -425,7 +425,6 @@ describe("generated mechanic project handoff", () => {
             kind: "owned_object_lifecycle_after_action",
             archetypeIds: ["projectile"],
             actionId: "move",
-            requireActorOrigin: true,
           },
         },
         {
@@ -435,7 +434,6 @@ describe("generated mechanic project handoff", () => {
             kind: "owned_object_creation_after_action",
             archetypeIds: ["projectile"],
             actionId: "move",
-            requireActorOrigin: true,
           },
         },
         {
@@ -475,7 +473,6 @@ describe("generated mechanic project handoff", () => {
               scenarioId === "projectile_created"
             ) {
               activity.active = 1;
-              activity.actorOriginCreations = 1;
               activity.created = 1;
             }
           },
@@ -483,14 +480,10 @@ describe("generated mechanic project handoff", () => {
             if (scenarioId === "projectile_lifecycle") {
               activity.active = 0;
               activity.destroyed = 1;
-              activity.simulatedDistanceTraveled = 12;
               activity.targetInteractions = 1;
-            } else if (scenarioId === "projectile_progress") {
-              activity.simulatedDistanceTraveled = 12;
             } else if (scenarioId === "projectile_unasserted_cleanup") {
               activity.active = 0;
               activity.destroyed = 1;
-              activity.simulatedDistanceTraveled = 12;
             }
           },
           dispose: async () => undefined,

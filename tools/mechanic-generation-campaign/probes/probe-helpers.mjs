@@ -19,8 +19,13 @@ export function hasCapabilities(artifact, capabilityIds) {
 }
 
 export function hasCallbacks(artifact, callbackKinds) {
-  const callbacks = new Set(artifact?.contract?.lifecycle?.callbacks ?? []);
-  return callbackKinds.every((callbackKind) => callbacks.has(callbackKind));
+  const lifecycle = artifact?.contract?.lifecycle;
+  const callbacks = new Set(lifecycle?.callbacks ?? []);
+  return callbackKinds.every((callbackKind) =>
+    callbackKind === "dispose"
+      ? lifecycle?.dispose === true
+      : callbacks.has(callbackKind)
+  );
 }
 
 export async function runtimeAssertions(page, actionKey = null) {
@@ -53,4 +58,3 @@ export async function runtimeAssertions(page, actionKey = null) {
       : []),
   ];
 }
-

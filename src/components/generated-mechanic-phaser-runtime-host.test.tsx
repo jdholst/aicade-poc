@@ -366,6 +366,123 @@ describe("GeneratedMechanicPhaserRuntimeHost", () => {
     expect(session.dispose).toHaveBeenCalledOnce();
   });
 
+  it("runs first-playable checks without a generated action for an autonomous mechanic", async () => {
+    const mount = document.createElement("div");
+    document.body.append(mount);
+    const autonomousProject = {
+      ...project,
+      dependency: {
+        ...project.dependency,
+        contract: {
+          ...project.dependency.contract,
+          behavior: {
+            ...project.dependency.contract.behavior,
+            triggers: ["install"],
+          },
+          lifecycle: {
+            ...project.dependency.contract.lifecycle,
+            callbacks: ["install"],
+          },
+          scenarios: project.dependency.contract.scenarios.map((scenario) => ({
+            ...scenario,
+            steps: [],
+          })),
+        },
+      },
+    };
+    const controller = createGeneratedMechanicPhaserRuntimeController({
+      mount,
+      template,
+      generatedMechanicProject: autonomousProject,
+    });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+    const firstPlayable = controller.runFirstPlayableChecks();
+    fireEvent.load(iframe);
+    await act(async () => {
+      await broker.ready;
+    });
+    dispatchHostMessage(iframe, { kind: "ack" });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: { type: "game-ready" },
+    });
+
+    expect(session.postRuntimeCommand).toHaveBeenCalledWith({
+      type: "game-run-first-playable-checks",
+    });
+    const evidence = [
+      {
+        checkId: "nonblank_render",
+        status: "passed",
+        evidence: { renderedObjectCount: 3 },
+      },
+      {
+        checkId: "player_visible",
+        status: "passed",
+        evidence: { playerVisible: true },
+      },
+      {
+        checkId: "input_response",
+        status: "passed",
+        evidence: { inputObserved: true },
+      },
+    ] as const;
+    for (const item of evidence) {
+      dispatchHostMessage(iframe, {
+        kind: "runtime",
+        event: { type: "game-validation-evidence", data: item },
+      });
+    }
+
+    await expect(firstPlayable).resolves.toEqual({
+      status: "passed",
+      evidence,
+    });
+    controller.dispose();
+  });
+
+  it("fails closed when an action-driven mechanic loses its exact action", async () => {
+    const mount = document.createElement("div");
+    document.body.append(mount);
+    const invalidProject = {
+      ...project,
+      dependency: {
+        ...project.dependency,
+        contract: {
+          ...project.dependency.contract,
+          scenarios: project.dependency.contract.scenarios.map((scenario) => ({
+            ...scenario,
+            steps: [],
+          })),
+        },
+      },
+    };
+    const controller = createGeneratedMechanicPhaserRuntimeController({
+      mount,
+      template,
+      generatedMechanicProject: invalidProject,
+    });
+    const iframe = screen.getByTitle<HTMLIFrameElement>(template.title);
+    const firstPlayable = controller.runFirstPlayableChecks();
+    const rejected = expect(firstPlayable).rejects.toThrow(
+      /did not retain one exact logical action/i
+    );
+    fireEvent.load(iframe);
+    await act(async () => {
+      await broker.ready;
+    });
+    dispatchHostMessage(iframe, { kind: "ack" });
+    dispatchHostMessage(iframe, {
+      kind: "runtime",
+      event: { type: "game-ready" },
+    });
+
+    await rejected;
+    expect(session.postRuntimeCommand).not.toHaveBeenCalledWith({
+      type: "game-run-first-playable-checks",
+    });
+  });
+
   it("rejects legacy input evidence that did not execute the generated action", async () => {
     const observedEvidence: unknown[] = [];
     const mount = document.createElement("div");
