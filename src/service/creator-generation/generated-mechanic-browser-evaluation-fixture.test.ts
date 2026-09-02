@@ -214,7 +214,7 @@ describe("generated mechanic browser evaluation fixture", () => {
       actorOriginCreations: 0,
       created: 1,
       destroyed: 1,
-      simulatedDistanceTraveled: 8,
+      simulatedDistanceTraveled: 16,
       targetInteractions: 0,
     });
     const bounded = fixture.capabilityHost.invoke({

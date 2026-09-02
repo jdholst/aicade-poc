@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 60,
-  "updatedAt": "2026-09-02T22:19:33Z",
+  "revision": 61,
+  "updatedAt": "2026-09-02T22:35:46Z",
   "entries": [
     {
       "status": "active",
@@ -10975,6 +10975,66 @@
       "createdAt": "2026-09-02T22:19:33Z",
       "priorManifestDigest": "dae0bef130a837723b7c8a239fb61fc99e03391de5b472f1dbe4e45e5caebf37",
       "resultingManifestDigest": "d730cee5ef4ca8c83eb354f48189457389b5819b7a601c4a135a21e44d50fcd2"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-14-20260902t223546z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-14",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c13-r16"
+      },
+      "consultedManifestDigest": "d730cee5ef4ca8c83eb354f48189457389b5819b7a601c4a135a21e44d50fcd2",
+      "contextDigest": "cc35bff504f40477a809b0b4deddca22e41699b7791e1e2bcc46d4e91e2778f6",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-13",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 13 repaired trusted runtime collision adoption after successful deterministic evaluation. It is verified and retained, but it does not diagnose the current source-stage mismatch between direct position writes and evaluator travel accounting."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c13-r16/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The accepted contract granted object_motion_write, so KF-0027 required finite nonzero owned-object position displacement before lifecycle-progress observation. Multiple actual source candidates made a reachable awaited writeMotion call with a position one pixel away from creation, yet simulatedDistanceTraveledDelta remained zero because the browser evaluation tracker accumulated only velocity-integrated time advancement and ignored direct position displacement. The published source guidance was correct; its production evaluator did not implement that rule. The durable fix measures the Euclidean position delta across every successful owned-object motion write while leaving velocity-only and same-position writes at zero. KF-0002, KF-0003, KF-0004, KF-0005, KF-0008, KF-0009, KF-0011, KF-0014, KF-0017, KF-0018, KF-0019, KF-0020, KF-0023, KF-0025, KF-0026, KF-0028, KF-0029, KF-0031, KF-0032, KF-0033, KF-0035, KF-0040, KF-0041, and KF-0042 govern adjacent lifecycle, timing, state, target interaction, authority, and transport behavior but do not define direct position-write travel accounting. There are no related findings."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "KF-0027 revision 2 already states the exact reusable rule: a reachable finite nonzero owned-object position write must establish travel, while velocity-only and same-position writes must not. This fix makes the production evaluator conform to that guidance, so no compiled finding change is needed.",
+      "createdAt": "2026-09-02T22:35:46Z",
+      "priorManifestDigest": "d730cee5ef4ca8c83eb354f48189457389b5819b7a601c4a135a21e44d50fcd2",
+      "resultingManifestDigest": "8620faed5948d9c01ec02d858ce292df7dad267d744768e86859f9b7a1326d3f"
     }
   ]
 }

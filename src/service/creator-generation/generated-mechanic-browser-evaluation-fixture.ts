@@ -350,6 +350,14 @@ function createOwnedObjectActivityTracker({
             const afterMotion = snapshotVirtualMotion(
               virtualEntities.get(objectId)
             );
+            if (ownedArchetypeId && beforeMotion && afterMotion) {
+              activityByArchetype.get(
+                ownedArchetypeId
+              )!.simulatedDistanceTraveled += pointDistance(
+                beforeMotion.position,
+                afterMotion.position
+              );
+            }
             if (
               targetObjectIds.has(objectId) &&
               beforeMotion &&
