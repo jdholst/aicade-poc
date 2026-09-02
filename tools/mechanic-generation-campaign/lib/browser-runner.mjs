@@ -664,6 +664,7 @@ async function runBrowserAttempt({
   }
 
   const runtimeMounted = (await page.locator("iframe").count()) > 0;
+  terminal = classifyPostProbeTerminal({ terminal, runtimeMounted });
   const runtimeHealthy = terminal.kind === "ready" && !browserIssues.some((issue) => /pageerror|runtime error/i.test(issue));
   const pipelinePassed = generationRun?.status === "succeeded" && Boolean(gamePack) && runtimeHealthy;
   const cleanupPassed =
@@ -1011,6 +1012,16 @@ async function captureActualResponse(response, capture, providerCallBudget) {
   } catch (error) {
     capture.responseCaptureError = error instanceof Error ? error.message : String(error);
   }
+}
+
+export function classifyPostProbeTerminal({ terminal, runtimeMounted }) {
+  if (terminal.kind === "ready" && !runtimeMounted) {
+    return {
+      kind: "infrastructure_failure",
+      text: "The generated runtime iframe disappeared before external probing completed.",
+    };
+  }
+  return terminal;
 }
 
 export async function configureProviderInput(

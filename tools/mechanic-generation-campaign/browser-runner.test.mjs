@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   authorizeProviderDispatchBatch,
   CampaignInfrastructureFailureError,
+  classifyPostProbeTerminal,
   configureProviderInput,
   createCampaignBrowserPool,
   createCampaignActivityTracker,
@@ -13,6 +14,45 @@ import {
 } from "./lib/browser-runner.mjs";
 
 describe("campaign browser runner", () => {
+  it("classifies a ready runtime that disappears before probe completion as infrastructure failure", () => {
+    expect(
+      classifyPostProbeTerminal({
+        terminal: {
+          kind: "ready",
+          text: "Runtime is running in the sandbox.",
+        },
+        runtimeMounted: false,
+      })
+    ).toEqual({
+      kind: "infrastructure_failure",
+      text: "The generated runtime iframe disappeared before external probing completed.",
+    });
+    expect(
+      classifyPostProbeTerminal({
+        terminal: {
+          kind: "ready",
+          text: "Runtime is running in the sandbox.",
+        },
+        runtimeMounted: true,
+      })
+    ).toEqual({
+      kind: "ready",
+      text: "Runtime is running in the sandbox.",
+    });
+    expect(
+      classifyPostProbeTerminal({
+        terminal: {
+          kind: "generation_failure",
+          text: "The generated mechanic runtime failed.",
+        },
+        runtimeMounted: false,
+      })
+    ).toEqual({
+      kind: "generation_failure",
+      text: "The generated mechanic runtime failed.",
+    });
+  });
+
   it("uses the frozen campaign environment for browser credentials", async () => {
     const entered = [];
     const locator = {
