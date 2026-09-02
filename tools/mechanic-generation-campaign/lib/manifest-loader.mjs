@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { parseCampaignManifest } from "./contracts.mjs";
+import { keywordCredentialEnvironmentName } from "./campaign-environment.mjs";
 import {
   parseOpenAiPricingSnapshot,
   resolvePricingModel,
@@ -77,7 +78,11 @@ export async function loadCampaignManifest(manifestPathInput) {
   };
 }
 
-export function validateManifestEnvironment(manifest, env = process.env) {
+export function validateManifestEnvironment(
+  manifest,
+  env = process.env,
+  { requireKeywordServerCredential = true } = {}
+) {
   if (
     manifest.credential.source !== "server_env" &&
     !env[manifest.credential.envName]
@@ -86,7 +91,25 @@ export function validateManifestEnvironment(manifest, env = process.env) {
       `Campaign credential environment variable ${manifest.credential.envName} is not configured.`
     );
   }
+  if (
+    manifest.credential.source === "keyword_env" &&
+    requireKeywordServerCredential &&
+    !present(env.OPENAI_API_KEY)
+  ) {
+    const credentialVariable = keywordCredentialEnvironmentName(
+      env[manifest.credential.envName]
+    );
+    if (!credentialVariable || !present(env[credentialVariable])) {
+      throw new Error(
+        `Campaign credential environment variable ${manifest.credential.envName} has no matching server credential. Use the production .env.local/.env keyword mapping and do not source .env.test.`
+      );
+    }
+  }
   return true;
+}
+
+function present(value) {
+  return typeof value === "string" && Boolean(value.trim());
 }
 
 function resolveHarnessPath(harnessRoot, manifestDir, relativePath) {

@@ -16,7 +16,7 @@ Use one cohort per campaign:
 Before a provider-backed run:
 
 1. Choose the manifest and cohort.
-2. Validate the manifest with credentials enabled.
+2. Validate the manifest with credentials enabled. The CLI loads `.env.local` and `.env` with production precedence and rejects unmapped keyword credentials before a submission.
 3. Resolve planning, contract, and source to `actual` or `fixture`.
 4. Record the model and repository revision identity.
 5. State the submission ceiling and actual-provider stages.
@@ -36,6 +36,8 @@ npm run campaign -- run \
 ```
 
 By default, the runner creates a dedicated production build/server on port `3117`. It uses a clean browser context per submission, drives the editor, records provider and fixture calls, reads GenerationRun and GamePack evidence from IndexedDB, runs the external mechanic probe, and writes sanitized attempt artifacts under `.qa`.
+
+The runner freezes one production environment snapshot from `.env.local` and `.env` and passes it to validation, browser credential entry, the build, and the server. Do not source `.env.test`; test-only values are never part of a provider-backed campaign environment.
 
 Use `--base-url` to attach to a server you already control. Use `--headed` when visible browser inspection is useful.
 

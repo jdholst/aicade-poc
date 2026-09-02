@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   authorizeProviderDispatchBatch,
   CampaignInfrastructureFailureError,
+  configureProviderInput,
   createCampaignBrowserPool,
   createCampaignActivityTracker,
   reconcileResumableRun,
@@ -12,6 +13,40 @@ import {
 } from "./lib/browser-runner.mjs";
 
 describe("campaign browser runner", () => {
+  it("uses the frozen campaign environment for browser credentials", async () => {
+    const entered = [];
+    const locator = {
+      async click() {},
+      async press() {},
+      async pressSequentially(value) {
+        entered.push(value);
+      },
+    };
+    const page = {
+      getByPlaceholder() {
+        return locator;
+      },
+      getByLabel() {
+        return { async count() { return 0; } };
+      },
+    };
+
+    await configureProviderInput(
+      page,
+      {
+        credential: {
+          source: "keyword_env",
+          envName: "AICADE_CAMPAIGN_KEYWORD",
+        },
+        model: "gpt-5.6-luna",
+      },
+      { planning: "actual", contract: "actual", source: "actual" },
+      { AICADE_CAMPAIGN_KEYWORD: "file-backed keyword" }
+    );
+
+    expect(entered).toEqual(["file-backed keyword"]);
+  });
+
   it("assigns a separate browser process to each parallel attempt slot", async () => {
     const closed = [];
     let launched = 0;

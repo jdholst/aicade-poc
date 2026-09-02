@@ -8,9 +8,11 @@ The campaign harness runs outside `src/`. It drives the browser-visible editor, 
 - Install the repository dependencies.
 - Choose one manifest from `tools/mechanic-generation-campaign/manifests/`.
 - Use a clean worktree for repeatability, variation, and any complete mechanic-proof sequence.
-- Configure the credential environment variable named by the manifest. The seeded manifests use `AICADE_CAMPAIGN_KEYWORD`.
+- Configure the credential environment variable named by the manifest in `.env.local` or `.env`. The seeded manifests use `AICADE_CAMPAIGN_KEYWORD`.
 
 Keep credential values in the environment. They must not appear in commands, URLs, manifests, reports, or messages.
+
+The campaign CLI loads `.env.local` and `.env` itself using Next.js production precedence. Do not source `.env.test` before a provider-backed command. Test-only values are intentionally excluded from the campaign environment.
 
 ## Inspect the live interface
 
@@ -26,7 +28,7 @@ Use the live help output as the final authority for command syntax.
 npm run campaign -- validate --manifest p09-t17-projectile
 ```
 
-Validation checks the manifest contract, five frozen prompts, fixture references and hashes, external probe, and configured credential environment. Use `--structure-only` only when no provider-backed run will start.
+Validation checks the manifest contract, five frozen prompts, fixture references and hashes, external probe, and configured credential environment. Keyword credentials must resolve to their matching server-side `KEYWORD_*` entry before validation succeeds. This preflight makes no provider call. Use `--structure-only` only when no provider-backed run will start.
 
 When the manifest includes pricing, validation also checks the immutable snapshot hash and model coverage. Use `npm run campaign -- pricing refresh --check` to compare the latest snapshot with the official OpenAI documentation before authorizing a new loop.
 
@@ -112,4 +114,4 @@ npm run campaign -- loop validate --definition .qa/ticket-17-loop.json
 
 Validation prints the exact definition hash and all campaign, submission, fix, isolation, and provider-call ceilings. Use that hash only after the complete envelope has been authorized.
 
-When the loop starts, the CLI creates the linked worktree, copies every repository-root `.env` and `.env.*` file from the control checkout without logging its contents, removes its `node_modules` and `.next`, runs `npm install` inside it, and then runs the production build before submitting the first prompt. Do not copy dependencies or build output from the control checkout into the loop worktree.
+When the loop starts, the CLI creates the linked worktree, copies every repository-root `.env` and `.env.*` file from the control checkout without logging its contents, loads the copied `.env.local` and `.env` into one production environment snapshot, removes its `node_modules` and `.next`, runs `npm install` inside it, and then runs the production build before submitting the first prompt. The same snapshot supplies validation, browser credential input, the build, and the server. `.env.test` is copied for repository parity but is not loaded. Do not copy dependencies or build output from the control checkout into the loop worktree.

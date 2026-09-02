@@ -12,6 +12,7 @@ import {
   readCampaignBrowserStorage,
 } from "./browser-storage.mjs";
 import { createCampaignStore } from "./campaign-store.mjs";
+import { loadCampaignWorktreeEnvironment } from "./campaign-environment.mjs";
 import {
   loadCampaignCarryoverAttempts,
   mergeCampaignProgressAttempts,
@@ -72,7 +73,10 @@ export async function runCampaign({
   actualProviderAuthorized = false,
   executionPolicy: executionPolicyInput,
   carryoverAttemptRefs: carryoverAttemptRefsInput,
+  environment,
 }) {
+  const campaignEnvironment =
+    environment ?? loadCampaignWorktreeEnvironment(repoRoot);
   const loaded = await loadCampaignManifest(manifestPath);
   const store = providedStore ?? createCampaignStore(repoRoot);
   await store.initialize();
@@ -92,7 +96,9 @@ export async function runCampaign({
     throw new Error("Actual-provider campaign execution requires bounded authorization.");
   }
   if (Object.values(providerModes).includes("actual")) {
-    validateManifestEnvironment(loaded.manifest);
+    validateManifestEnvironment(loaded.manifest, campaignEnvironment, {
+      requireKeywordServerCredential: !attachedBaseUrl,
+    });
   }
   const revision = await inspectRevision(repoRoot);
   if (["repeatability", "variation"].includes(cohort) && revision.dirty) {
@@ -202,13 +208,15 @@ export async function runCampaign({
         "npm",
         productionBuildArguments(),
         repoRoot,
-        path.join(campaignDirectory, "build.log")
+        path.join(campaignDirectory, "build.log"),
+        campaignEnvironment
       );
       server = startLoggedProcess(
         "npm",
         ["run", "start", "--", "--hostname", "127.0.0.1", "--port", String(port)],
         repoRoot,
-        path.join(campaignDirectory, "server.log")
+        path.join(campaignDirectory, "server.log"),
+        campaignEnvironment
       );
       await waitForUrl(baseUrl, server);
     } else {
@@ -241,6 +249,7 @@ export async function runCampaign({
       onSubmission,
       pricing: loaded.pricing,
       carryoverAttempts,
+      environment: campaignEnvironment,
     });
   } catch (error) {
     run = await updateCampaignRun(store, run, (current) => ({
@@ -318,6 +327,7 @@ async function executeCampaignAttempts({
   onSubmission,
   pricing,
   carryoverAttempts = [],
+  environment,
 }) {
   let run = initialRun;
   const active = new Map();
@@ -428,6 +438,7 @@ async function executeCampaignAttempts({
           onSubmission,
           pricing,
           stageConcurrency,
+          environment,
         }).then(
           (result) => ({ slot, browser, result }),
           (error) => ({ slot, browser, error })
@@ -550,6 +561,7 @@ async function runBrowserAttempt({
   onSubmission,
   pricing,
   stageConcurrency,
+  environment,
 }) {
   const id = `a${String(scheduled.sequence).padStart(2, "0")}-${scheduled.promptId}`;
   const attemptDirectory = store.attemptDirectory(run.id, id);
@@ -604,7 +616,12 @@ async function runBrowserAttempt({
       timeout: 30_000,
     });
     await submitCampaignPrompt(page, scheduled.prompt);
-    await configureProviderInput(page, manifest, run.providerModes);
+    await configureProviderInput(
+      page,
+      manifest,
+      run.providerModes,
+      environment
+    );
     await onSubmission?.({
       campaignRunId: run.id,
       attemptId: id,
@@ -996,8 +1013,17 @@ async function captureActualResponse(response, capture, providerCallBudget) {
   }
 }
 
-async function configureProviderInput(page, manifest, providerModes) {
-  const input = resolveProviderCredentialInput(manifest, providerModes);
+export async function configureProviderInput(
+  page,
+  manifest,
+  providerModes,
+  environment = process.env
+) {
+  const input = resolveProviderCredentialInput(
+    manifest,
+    providerModes,
+    environment
+  );
   if (input.kind === "keyword") {
     await enterControlledText(page.getByPlaceholder("Secret Word"), input.value);
   } else {
@@ -1510,9 +1536,15 @@ async function waitForUrl(baseUrl, processHandle) {
   throw new Error(`Campaign server did not become ready at ${baseUrl}.`);
 }
 
-function runLoggedProcess(command, args, cwd, logPath) {
+function runLoggedProcess(command, args, cwd, logPath, environment) {
   return new Promise((resolve, reject) => {
-    const child = startLoggedProcess(command, args, cwd, logPath);
+    const child = startLoggedProcess(
+      command,
+      args,
+      cwd,
+      logPath,
+      environment
+    );
     child.on("error", reject);
     child.on("exit", (code) =>
       code === 0 ? resolve() : reject(new Error(`${command} ${args.join(" ")} exited with ${code}.`))
@@ -1520,10 +1552,10 @@ function runLoggedProcess(command, args, cwd, logPath) {
   });
 }
 
-function startLoggedProcess(command, args, cwd, logPath) {
+function startLoggedProcess(command, args, cwd, logPath, environment) {
   const child = spawn(command, args, {
     cwd,
-    env: process.env,
+    env: environment ?? loadCampaignWorktreeEnvironment(cwd),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const chunks = [];

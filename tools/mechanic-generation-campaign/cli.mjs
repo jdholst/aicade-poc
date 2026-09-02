@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { runCampaign } from "./lib/browser-runner.mjs";
 import { createCampaignStore } from "./lib/campaign-store.mjs";
+import { loadCampaignWorktreeEnvironment } from "./lib/campaign-environment.mjs";
 import { createCampaignLoopStore } from "./lib/loop-store.mjs";
 import { startDashboardServer } from "./lib/dashboard-server.mjs";
 import {
@@ -51,7 +52,10 @@ async function main(args) {
     const manifestPath = resolveManifestPath(requiredOption(args, "--manifest"));
     const loaded = await loadCampaignManifest(manifestPath);
     if (!takeFlag(args, "--structure-only")) {
-      validateManifestEnvironment(loaded.manifest);
+      validateManifestEnvironment(
+        loaded.manifest,
+        loadCampaignWorktreeEnvironment(repoRoot)
+      );
     }
     assertNoArguments(args);
     console.log(`VALID ${loaded.manifest.id}`);

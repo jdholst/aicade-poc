@@ -10,7 +10,10 @@ import {
   scoreCampaign,
 } from "./lib/contracts.mjs";
 import { redactSensitive } from "./lib/redaction.mjs";
-import { loadCampaignManifest } from "./lib/manifest-loader.mjs";
+import {
+  loadCampaignManifest,
+  validateManifestEnvironment,
+} from "./lib/manifest-loader.mjs";
 import { resolveExecutionPolicy } from "./lib/parallel-execution.mjs";
 
 const manifest = {
@@ -144,6 +147,34 @@ describe("campaign contracts", () => {
       "outcomes_first",
       "compact",
     ]);
+  });
+
+  it("rejects a campaign keyword that has no matching server credential", () => {
+    expect(() =>
+      validateManifestEnvironment(manifest, {
+        AICADE_CAMPAIGN_KEYWORD: "test-only keyword",
+        KEYWORD_REAL_CAMPAIGN: "configured-key",
+      })
+    ).toThrow(/matching server credential/i);
+  });
+
+  it("accepts a campaign keyword backed by the corresponding server credential", () => {
+    expect(
+      validateManifestEnvironment(manifest, {
+        AICADE_CAMPAIGN_KEYWORD: "Green Panda",
+        KEYWORD_GREEN_PANDA: "configured-key",
+      })
+    ).toBe(true);
+  });
+
+  it("allows an attached server to own the keyword mapping", () => {
+    expect(
+      validateManifestEnvironment(
+        manifest,
+        { AICADE_CAMPAIGN_KEYWORD: "Remote Server Keyword" },
+        { requireKeywordServerCredential: false }
+      )
+    ).toBe(true);
   });
 
   it("rejects a variation prompt that drops a mechanic requirement", () => {

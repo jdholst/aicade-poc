@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { runCampaign } from "./browser-runner.mjs";
 import { createCampaignStore } from "./campaign-store.mjs";
+import { loadCampaignWorktreeEnvironment } from "./campaign-environment.mjs";
 import { collectCampaignCarryoverAttemptRefs } from "./campaign-progress.mjs";
 import {
   createCampaignKnowledgeStore,
@@ -54,15 +55,20 @@ const ACTUAL_PROVIDER_STAGES = ["planning", "contract", "source"];
 export async function validateCampaignLoop({
   repoRoot,
   definitionPath,
-  environment = process.env,
+  environment,
   inspectRevisionFn = inspectRevision,
 }) {
   const loaded = await loadCampaignLoopDefinition({
     definitionPath,
     repoRoot,
   });
+  const campaignEnvironment =
+    environment ?? loadCampaignWorktreeEnvironment(repoRoot);
   if (loopUsesActualProvider(loaded.definition)) {
-    validateManifestEnvironment(loaded.campaign.manifest, environment);
+    validateManifestEnvironment(
+      loaded.campaign.manifest,
+      campaignEnvironment
+    );
   }
   const revision = await inspectRevisionFn(repoRoot);
   if (revision.dirty) {
@@ -82,7 +88,7 @@ export async function startCampaignLoop({
   prepareWorktreeFn = prepareLoopWorktree,
   inspectWorktreeFn = inspectLoopWorktree,
   inspectRevisionFn = inspectRevision,
-  environment = process.env,
+  environment,
   now = () => new Date(),
   headed = false,
   port = 3117,
@@ -153,7 +159,7 @@ export async function resumeCampaignLoop({
   inspectWorktreeFn = inspectLoopWorktree,
   changedFilesFn = changedFilesBetween,
   validateKnowledgeCheckpointFn = validateFixKnowledgeCheckpoint,
-  environment = process.env,
+  environment,
   headed = false,
   port = 3117,
   attemptTimeoutMs,
@@ -498,7 +504,7 @@ export async function recoverCampaignLoop({
   repoRoot,
   loopId,
   loopStore = createCampaignLoopStore(repoRoot),
-  environment = process.env,
+  environment,
 }) {
   await loopStore.initialize();
   const run = await loopStore.readRun(loopId);
@@ -571,7 +577,7 @@ export async function extendCampaignLoop({
   runCampaignFn = runCampaign,
   inspectWorktreeFn = inspectLoopWorktree,
   changedFilesFn = changedFilesBetween,
-  environment = process.env,
+  environment,
   now = () => new Date(),
   headed = false,
   port = 3117,
@@ -684,7 +690,7 @@ export async function runCampaignLoopIsolation({
   campaignStore = createCampaignStore(repoRoot),
   runCampaignFn = runCampaign,
   inspectWorktreeFn = inspectLoopWorktree,
-  environment = process.env,
+  environment,
   headed = false,
   port = 3117,
   attemptTimeoutMs,
@@ -1551,8 +1557,13 @@ async function reloadFrozenLoop({ repoRoot, run, environment }) {
       "Loop definition or campaign criteria changed after authorization."
     );
   }
+  const campaignEnvironment =
+    environment ?? loadCampaignWorktreeEnvironment(repoRoot);
   if (loopUsesActualProvider(loaded.definition)) {
-    validateManifestEnvironment(loaded.campaign.manifest, environment);
+    validateManifestEnvironment(
+      loaded.campaign.manifest,
+      campaignEnvironment
+    );
   }
   return loaded;
 }

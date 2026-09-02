@@ -267,7 +267,7 @@ Campaign loops coordinate several immutable campaigns for one mechanic. They use
 npm run campaign -- loop validate --definition <path>
 ```
 
-Validates `campaign-loop-manifest/v1`, the exact campaign manifest and external-probe hashes, credentials, current clean revision, sequence, retry classifications, isolation profiles, and every explicit ceiling. It prints the definition hash used for authorization and makes no provider calls.
+Validates `campaign-loop-manifest/v1`, the exact campaign manifest and external-probe hashes, credentials, current clean revision, sequence, retry classifications, isolation profiles, and every explicit ceiling. The CLI loads `.env.local` and `.env` with production precedence and requires keyword credentials to map to a server-side `KEYWORD_*` entry. It prints the definition hash used for authorization and makes no provider calls.
 
 ### Start a loop
 
@@ -278,7 +278,7 @@ npm run campaign -- loop run \
   [--headed] [--port <number>] [--attempt-timeout-ms <number>]
 ```
 
-The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, copies every repository-root `.env` and `.env.*` file from the control checkout without logging its contents, removes the worktree's `node_modules` and `.next`, runs `npm install` there, and then runs the production build before the first editor submission. It then runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_manual_qa`, `waiting_for_fix`, `waiting_for_campaign_repair`, or a terminal loop status. Browser infrastructure failures preserve their observed editor state and stop before another scheduled submission. Preparation, installation, or build failure stops before submission and does not consume provider-call budget.
+The authorization value must exactly match the validated definition hash. One successful authorization covers the frozen sequence and remaining ceilings across later resumes. The command creates a linked worktree, copies every repository-root `.env` and `.env.*` file from the control checkout without logging its contents, and loads the copied `.env.local` and `.env` into one production environment snapshot. `.env.test` is copied but excluded. The same snapshot is used for credential validation, browser input, the build, and server startup. The command then removes the worktree's `node_modules` and `.next`, runs `npm install` there, and runs the production build before the first editor submission. It runs campaigns sequentially, records every submission and actual provider request before forwarding, and stops at `waiting_for_manual_qa`, `waiting_for_fix`, `waiting_for_campaign_repair`, or a terminal loop status. Browser infrastructure failures preserve their observed editor state and stop before another scheduled submission. Environment, preparation, installation, or build failure stops before submission and does not consume provider-call budget.
 
 ### Resume a loop
 
