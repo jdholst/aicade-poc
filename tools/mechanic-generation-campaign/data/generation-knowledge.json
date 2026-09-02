@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 49,
-  "updatedAt": "2026-09-02T16:22:37Z",
+  "revision": 50,
+  "updatedAt": "2026-09-02T17:30:50Z",
   "entries": [
     {
       "status": "active",
@@ -1912,7 +1912,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Separate callback active-work and Worker-delivery budgets",
-      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
+      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Construct and freeze the capability, binding, and config lifecycle context once in the realm-bearing outer execution. Generated-admitted callback source must consume only __sparklineLifecycleContext and must never call realm.callCapability, realm.binding, or any other realm member. Cover both an exact nonempty binding and a capability call when asserting this split. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -1930,7 +1930,7 @@
         ]
       },
       "id": "KF-0019",
-      "revision": 6,
+      "revision": 7,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -2022,6 +2022,17 @@
           "outcome": "provider_output_rejected",
           "summary": "Source attempt 4 reached realm validation after parsing, typechecking, compilation, and static admission, but the source stage used the generic compile-inside-meter lifecycle path and reported callback_milliseconds 9 against the unchanged limit 8. A larger prior candidate callback passed, showing work-shape did not deterministically explain the terminal rejection.",
           "observedAt": "2026-09-02T03:54:16.955Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Planning and repaired contract generation succeeded. Four source candidates then failed identically with realm.binding is not a function even though none referenced realm. The source validator had enabled authenticated generated callback execution but kept trusted context construction inside each restricted callback, so every candidate with a nonempty contract binding failed before its own capability behavior could run.",
+          "observedAt": "2026-09-02T17:21:11.219Z"
         }
       ],
       "amendments": [
@@ -2234,10 +2245,50 @@
               "observedAt": "2026-09-02T03:54:16.955Z"
             }
           ]
+        },
+        {
+          "revision": 6,
+          "changedAt": "2026-09-02T17:30:50Z",
+          "reason": "Source-stage adoption of generated_admitted exposed a second trust-boundary requirement: callbacks compiled in the reusable restricted compartment cannot construct their own context through realm, because that compartment intentionally has no realm authority.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "runtime_foundation",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Planning and repaired contract generation succeeded. Four source candidates then failed identically with realm.binding is not a function even though none referenced realm. The source validator had enabled authenticated generated callback execution but kept trusted context construction inside each restricted callback, so every candidate with a nonempty contract binding failed before its own capability behavior could run.",
+              "observedAt": "2026-09-02T17:21:11.219Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T06:12:49Z",
-      "updatedAt": "2026-09-02T04:07:16Z"
+      "updatedAt": "2026-09-02T17:30:50Z"
     },
     {
       "status": "active",
@@ -9528,6 +9579,85 @@
       "createdAt": "2026-09-02T16:22:37Z",
       "priorManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf",
       "resultingManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-3-20260902t173050z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4"
+      },
+      "consultedManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc",
+      "contextDigest": "3ee9ec04fd2d144eb0ee146d621ad92a421bcf1d673781574f0ff29c1a021869",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-2",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 2 safely normalized generated-host actor references and allowed this attempt to reach contract and source generation. It does not explain the distinct realm-context failure after source compilation."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "All four structurally different source candidates failed with realm.binding is not a function. The candidates did not reference realm. Source validation had enabled generated_admitted execution while still placing trusted realm.callCapability and realm.binding context construction inside the separately compiled callback. KF-0019 requires this authenticated path but did not yet state the required authority split. The fix builds and freezes the capability, binding, and config context in the realm-bearing outer execution, then gives admitted callbacks only __sparklineLifecycleContext. The other consulted findings govern candidate behavior and contract obligations but cannot cause this stable host exception before candidate capability execution. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0019",
+          "expectedRevision": 6,
+          "reason": "Source-stage adoption of generated_admitted exposed a second trust-boundary requirement: callbacks compiled in the reusable restricted compartment cannot construct their own context through realm, because that compartment intentionally has no realm authority.",
+          "changes": {
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Construct and freeze the capability, binding, and config lifecycle context once in the realm-bearing outer execution. Generated-admitted callback source must consume only __sparklineLifecycleContext and must never call realm.callCapability, realm.binding, or any other realm member. Cover both an exact nonempty binding and a capability call when asserting this split. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Planning and repaired contract generation succeeded. Four source candidates then failed identically with realm.binding is not a function even though none referenced realm. The source validator had enabled authenticated generated callback execution but kept trusted context construction inside each restricted callback, so every candidate with a nonempty contract binding failed before its own capability behavior could run.",
+              "observedAt": "2026-09-02T17:21:11.219Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T17:30:50Z",
+      "priorManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc",
+      "resultingManifestDigest": "b09f6e4dc928c5251ca0c98410bf0f7fb969167da0cb3c56d41418d6651e44db"
     }
   ]
 }
