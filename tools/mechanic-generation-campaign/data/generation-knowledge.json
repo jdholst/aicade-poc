@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 48,
-  "updatedAt": "2026-09-02T16:00:52Z",
+  "revision": 49,
+  "updatedAt": "2026-09-02T16:22:37Z",
   "entries": [
     {
       "status": "active",
@@ -3646,6 +3646,44 @@
       "amendments": [],
       "createdAt": "2026-09-02T02:58:59Z",
       "updatedAt": "2026-09-02T02:58:59Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Generated-host role references may be normalized only from exact entities",
+      "guidance": "Before generated-host routing, make provider-declared actor and target role lineage explicit only when the returned Game Spec contains exactly one entity with that role. Add that exact entity reference and record a reversible assumption; never choose among duplicate-role entities or infer an unmatched role. An independently positioned autonomous owned-object lifecycle may leave actors empty when it already carries an exact entity reference and has no actor-origin spatial rule. Continue requiring an actor role for bound-entity behavior or explicit actor-origin creation, and reject every nonempty actor or target role not represented by an exact referenced entity.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "planning",
+          "routing",
+          "runtime_health"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0038",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_health",
+          "quality": "actual_submission",
+          "outcome": "semantic_runtime_failure",
+          "summary": "Actual planning returned a validated survival-arena Game Spec with one hazard-role entity, then generated-host routing stopped before contract or source calls with observable_actor_reference_required. The retained public evidence did not include the raw intent, so the durable fix covers both safe causes of that generic issue: an omitted role for an independent autonomous lifecycle, and a named role with one exact matching entity but no entity reference.",
+          "observedAt": "2026-09-02T16:08:50.303Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T16:22:37Z",
+      "updatedAt": "2026-09-02T16:22:37Z"
     }
   ],
   "reconciliations": [
@@ -9400,6 +9438,96 @@
       "createdAt": "2026-09-02T16:00:52Z",
       "priorManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305",
       "resultingManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-2-20260902t162237z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3"
+      },
+      "consultedManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf",
+      "contextDigest": "6e14cff3ae83b6fc082eda2fc45fc820d9230db31c9076b52a979ebd3d1951ae",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0036",
+        "KF-0037"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-1",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The verified cumulative contract-repair fix is already represented by reconciliation KR-p09-t18-v2-fix-cycle-1-20260902t160052z and does not explain this distinct pre-contract actor-reference admission failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0028",
+            "KF-0038"
+          ],
+          "rationale": "The actual planning response returned a valid base Game Spec containing one hazard-role entity, but routing omitted generated work with observable_actor_reference_required before contract or source calls. KF-0028 prevents treating seeded arena placement as actor-origin behavior. The new KF-0038 records the safe role/reference normalization boundary while leaving ambiguous and unmatched roles rejected. KF-0003, KF-0008, KF-0009, KF-0011, KF-0020, KF-0023, KF-0025, KF-0026, KF-0027, KF-0029, KF-0036, and KF-0037 govern later lifecycle, state, replay, interaction, scheduling, and external proof and do not cause this routing rejection. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated-host role references may be normalized only from exact entities",
+            "guidance": "Before generated-host routing, make provider-declared actor and target role lineage explicit only when the returned Game Spec contains exactly one entity with that role. Add that exact entity reference and record a reversible assumption; never choose among duplicate-role entities or infer an unmatched role. An independently positioned autonomous owned-object lifecycle may leave actors empty when it already carries an exact entity reference and has no actor-origin spatial rule. Continue requiring an actor role for bound-entity behavior or explicit actor-origin creation, and reject every nonempty actor or target role not represented by an exact referenced entity.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "routing",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0038",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_health",
+                "quality": "actual_submission",
+                "outcome": "semantic_runtime_failure",
+                "summary": "Actual planning returned a validated survival-arena Game Spec with one hazard-role entity, then generated-host routing stopped before contract or source calls with observable_actor_reference_required. The retained public evidence did not include the raw intent, so the durable fix covers both safe causes of that generic issue: an omitted role for an independent autonomous lifecycle, and a named role with one exact matching entity but no entity reference.",
+                "observedAt": "2026-09-02T16:08:50.303Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T16:22:37Z",
+            "updatedAt": "2026-09-02T16:22:37Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T16:22:37Z",
+      "priorManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf",
+      "resultingManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc"
     }
   ]
 }

@@ -344,6 +344,45 @@ describe("createCreatorGenerationRouting", () => {
     });
   });
 
+  it("allows an independently positioned autonomous owned-object lifecycle without an actor role", () => {
+    const gameSpec = getFirstValidTopDownGameSpecFixture();
+    const hazardEntity = gameSpec.entities.find(
+      ({ role }) => role === "hazard"
+    );
+    if (!hazardEntity) {
+      throw new Error("Expected a hazard entity.");
+    }
+    const intent = createIntent({
+      triggers: ["install"],
+      actors: [],
+      behaviors: ["spawn_seeded_hazards"],
+      ownedObjects: ["spawned_hazard"],
+      temporalRules: ["spawn_on_schedule", "destroy_after_lifetime"],
+      spatialRules: ["spawn_at_seeded_arena_position"],
+      connections: [],
+      references: [{ kind: "entity", id: hazardEntity.id }],
+      requiredCapabilities: [
+        "object_create",
+        "object_destroy",
+        "time_schedule",
+        "random_next",
+      ],
+    });
+
+    const result = createCreatorGenerationRouting({
+      availableCapabilities: TOP_DOWN_CREATOR_GENERATION_HOST_CAPABILITY_IDS,
+      baseGameSpec: gameSpec,
+      generationRunId: "generation_run_autonomous_owned_object",
+      intent,
+    });
+
+    expect(result).toMatchObject({
+      kind: "generated_mechanic",
+      generationRunId: "generation_run_autonomous_owned_object",
+      intent,
+    });
+  });
+
   it("reports an unrepresented target before transient-object generation", () => {
     const gameSpec = getFirstValidTopDownGameSpecFixture();
     const targetEntity = gameSpec.entities.find(({ role }) => role !== "player");

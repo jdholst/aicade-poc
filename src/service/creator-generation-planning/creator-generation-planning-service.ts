@@ -19,6 +19,7 @@ import type { CreatorGenerationPlanProvider } from "./creator-generation-plannin
 import type { OpenAiProviderUsageReporter } from "@/service/openai-provider-usage-receipt";
 import { applyTopDownCreatorOwnedObjectRediscoveryPolicy } from "./creator-generation-owned-object-policy";
 import { applyTopDownCreatorPerceptibilityFloor } from "./creator-generation-perceptibility-policy";
+import { applyTopDownCreatorRoleReferencePolicy } from "./creator-generation-role-reference-policy";
 import {
   parseCreatorGenerationPlanEnvelopeParts,
   type CreatorGenerationPlanEnvelopeParts,
@@ -105,8 +106,11 @@ export async function generateTopDownCreatorPlan({
   }
 
   const intent = applyTopDownCreatorOwnedObjectRediscoveryPolicy(
-    applyTopDownCreatorPerceptibilityFloor(
-      latestEnvelope.mechanicIntent.value,
+    applyTopDownCreatorRoleReferencePolicy(
+      applyTopDownCreatorPerceptibilityFloor(
+        latestEnvelope.mechanicIntent.value,
+        result.spec
+      ),
       result.spec
     )
   );

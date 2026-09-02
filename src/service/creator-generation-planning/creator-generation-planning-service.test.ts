@@ -427,6 +427,70 @@ describe("generateTopDownCreatorPlan", () => {
       ])
     );
   });
+
+  it("adds an exact unambiguous entity reference for a provider-declared generated-host actor role", async () => {
+    const spec = structuredClone(getFirstValidTopDownGameSpecFixture());
+    const providerIntent = {
+      ...createTransientOwnedObjectIntent(),
+      id: "intent_seeded_hazard_spawner",
+      summary: "Create seeded hazards on a recurring autonomous schedule.",
+      triggers: ["install"],
+      actors: ["hazard"],
+      ownedObjects: ["spawned_hazard"],
+      temporalRules: ["spawn_on_schedule", "destroy_after_lifetime"],
+      spatialRules: ["spawn_at_seeded_arena_position"],
+      connections: [],
+      references: [],
+      requiredCapabilities: [
+        "object_create",
+        "object_destroy",
+        "time_schedule",
+        "random_next",
+      ],
+    };
+    const provider = vi.fn().mockResolvedValue({
+      gameSpec: spec,
+      mechanicIntent: providerIntent,
+    });
+
+    const result = await generateTopDownCreatorPlan({
+      prompt: "Spawn recurring hazards at seeded arena positions.",
+      model: "gpt-5.6-luna",
+      providerCredential: "sk-test",
+      generationRunId: "generation_run_seeded_hazard_actor_reference",
+      availableCapabilities: [
+        "object_create",
+        "object_destroy",
+        "time_schedule",
+        "random_next",
+        "spatial_query",
+      ],
+      provider,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      routing: {
+        kind: "generated_mechanic",
+        intent: {
+          actors: ["hazard"],
+          references: [{ kind: "entity", id: "entity_hazard" }],
+          ambiguities: expect.arrayContaining([
+            {
+              id: "assumption_generated_host_role_entity_references",
+              description:
+                "The provider named generated-host actor or target roles without their exact unambiguous Game Spec entity references.",
+              inferredValue: "entity_hazard",
+              rationale:
+                "The returned Game Spec contains exactly one entity with each named role, so retaining those exact entity IDs makes the provider's role lineage explicit without selecting among alternatives.",
+              reversible: true,
+            },
+          ]),
+        },
+      },
+    });
+    expect(providerIntent.references).toEqual([]);
+  });
 });
 
 function createMovementIntent() {
