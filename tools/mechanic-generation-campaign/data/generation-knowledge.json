@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 43,
-  "updatedAt": "2026-09-02T02:58:59Z",
+  "revision": 44,
+  "updatedAt": "2026-09-02T03:30:04Z",
   "entries": [
     {
       "status": "active",
@@ -3222,7 +3222,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Contract repairs need one closed invariant checklist",
-      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported path without changing unrelated checklist items.",
+      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3235,7 +3235,7 @@
         ]
       },
       "id": "KF-0034",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3247,11 +3247,58 @@
           "outcome": "provider_output_rejected",
           "summary": "Initial contract generation omitted state_write despite changed final private state. Repair attempt 2 restored state_write but inserted dispatch_action into an autonomous install scenario. Repair attempt 3 removed that action but dropped required object_read. Repair attempt 4 restored object_read but reintroduced dispatch_action, exhausting contract repair.",
           "observedAt": "2026-08-31T23:34:57.123Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Four actual contract candidates required private-state transitions without state_write. Reference errors introduced by the middle repairs masked the continuing state-write contradictions until the final contract attempt, and no source call occurred.",
+          "observedAt": "2026-09-02T03:16:28.103Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-09-02T03:30:04Z",
+          "reason": "The prior prompt-only checklist could not preserve a state-write obligation when a later candidate introduced an earlier-layer reference error. Aggregating both issue sets for each structurally valid rejected candidate keeps repair feedback exact to that candidate while retaining every currently violated invariant.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract repairs need one closed invariant checklist",
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported path without changing unrelated checklist items.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Four actual contract candidates required private-state transitions without state_write. Reference errors introduced by the middle repairs masked the continuing state-write contradictions until the final contract attempt, and no source call occurred.",
+              "observedAt": "2026-09-02T03:16:28.103Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-31T23:41:21Z",
-      "updatedAt": "2026-08-31T23:41:21Z"
+      "updatedAt": "2026-09-02T03:30:04Z"
     },
     {
       "status": "active",
@@ -8668,6 +8715,69 @@
       "createdAt": "2026-09-02T02:58:59Z",
       "priorManifestDigest": "1836413a8a474f16357efd3c27f185558206fc56e64fbbf81a6a89e147a10135",
       "resultingManifestDigest": "ec13bb5ca6525a546d8248ae409d0d679c06fe620648b05e29aa14020bef391c"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-1-20260902t033004z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1"
+      },
+      "consultedManifestDigest": "ec13bb5ca6525a546d8248ae409d0d679c06fe620648b05e29aa14020bef391c",
+      "contextDigest": "f0b6312f9a2a2b70fa2121fe985a1ba49e4fbec72fe8d51d079e786f40647039",
+      "consultedFindingIds": [
+        "KF-0009",
+        "KF-0014",
+        "KF-0018",
+        "KF-0025",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0033",
+        "KF-0034"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0018",
+            "KF-0031",
+            "KF-0034"
+          ],
+          "rationale": "All four actual contract candidates omitted state_write while requiring final private-state values that differed from setup. KF-0018 and KF-0031 establish that semantic obligation, and KF-0034 governs the closed repair checklist. Attempts 2 and 3 introduced reference failures that caused intrinsic validation to return before the same state-write contradictions were collected, so attempt 4 received no reminder of the masked invariant and exhausted with it again. KF-0009, KF-0014, KF-0025, KF-0027, KF-0028, and KF-0029 constrain transient lifecycle evidence, bound-object authority, scheduled motion checks, motion-independent lifecycle proof, spatial lineage, and reachable clock steps; none caused this contract-validation early return. KF-0033 is satisfied because repair feedback crossed the existing provider transport unchanged, and this fix adds no transport field. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0034",
+          "expectedRevision": 1,
+          "reason": "The prior prompt-only checklist could not preserve a state-write obligation when a later candidate introduced an earlier-layer reference error. Aggregating both issue sets for each structurally valid rejected candidate keeps repair feedback exact to that candidate while retaining every currently violated invariant.",
+          "changes": {
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, and private-state write obligations together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t031308068z-discovery-c0-r1",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Four actual contract candidates required private-state transitions without state_write. Reference errors introduced by the middle repairs masked the continuing state-write contradictions until the final contract attempt, and no source call occurred.",
+              "observedAt": "2026-09-02T03:16:28.103Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T03:30:04Z",
+      "priorManifestDigest": "ec13bb5ca6525a546d8248ae409d0d679c06fe620648b05e29aa14020bef391c",
+      "resultingManifestDigest": "6499e39b7333e2bf5740b1c679eca08d4bd65860faebdbbccf85441405c59bcd"
     }
   ]
 }

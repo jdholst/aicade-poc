@@ -212,6 +212,55 @@ describe("generateMechanicContract", () => {
     });
   });
 
+  it("reports intrinsic reference and accepted-intent issues together", async () => {
+    const intentWithoutStateWrite = {
+      ...intent,
+      requiredCapabilities: [],
+    };
+    const result = await generateMechanicContract({
+      intent: intentWithoutStateWrite,
+      admittedRequest: {
+        resolution,
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      referenceCatalog: {
+        ...validationContext.referenceCatalog,
+        region: ["known_region"],
+      },
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...candidate,
+        config: {
+          kind: "stable_id",
+          referenceKind: "region",
+          default: "unknown_region",
+        },
+        capabilities: ["object_read"],
+      }),
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: expect.arrayContaining([
+          expect.objectContaining({
+            code: "unknown_reference",
+            message: expect.stringContaining("unknown_region"),
+          }),
+          expect.objectContaining({
+            path: "scenarios.0.observations.0",
+            code: "contradiction",
+            message: expect.stringContaining("state_write"),
+          }),
+        ]),
+      },
+    });
+  });
+
   it("returns exact contract-validation evidence for invalid provider output", async () => {
     const invalidCandidate = {
       ...candidate,

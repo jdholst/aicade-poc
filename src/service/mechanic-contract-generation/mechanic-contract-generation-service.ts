@@ -1,5 +1,6 @@
 import {
   createMechanicCapabilityGrant,
+  generatedMechanicContractSchema,
   validateGeneratedMechanicContract,
   type AdmittedGeneratedMechanicRequest,
   type ArtifactScopedRepairAttemptReceipt,
@@ -206,6 +207,25 @@ export async function generateMechanicContract({
   });
 
   if (!contractValidation.success) {
+    const parsedCandidate = generatedMechanicContractSchema.safeParse(candidate);
+    if (parsedCandidate.success) {
+      const intentLineageIssues = generatedContractIntentLineageIssues(
+        intent,
+        withTrustedIntentLineage(parsedCandidate.data, intent)
+      );
+      if (intentLineageIssues.length > 0) {
+        return {
+          success: false,
+          evidence: {
+            ...contractValidation.evidence,
+            issues: [
+              ...contractValidation.evidence.issues,
+              ...intentLineageIssues,
+            ],
+          },
+        };
+      }
+    }
     return contractValidation;
   }
 
