@@ -3,14 +3,23 @@ import nextEnv from "@next/env";
 const { loadEnvConfig } = nextEnv;
 
 export function loadCampaignWorktreeEnvironment(repoRoot) {
-  process.env.NODE_ENV = "production";
-  const { combinedEnv } = loadEnvConfig(
-    repoRoot,
-    false,
-    undefined,
-    true
-  );
-  return { ...combinedEnv, NODE_ENV: "production" };
+  const previousNodeEnvironment = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = "production";
+    const { combinedEnv } = loadEnvConfig(
+      repoRoot,
+      false,
+      undefined,
+      true
+    );
+    return { ...combinedEnv, NODE_ENV: "production" };
+  } finally {
+    if (previousNodeEnvironment === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnvironment;
+    }
+  }
 }
 
 export function keywordCredentialEnvironmentName(keyword) {

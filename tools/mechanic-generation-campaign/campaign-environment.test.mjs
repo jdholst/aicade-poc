@@ -57,6 +57,7 @@ describe("campaign worktree environment", () => {
         [explicitVariable]: "from-process",
       });
       expect(environment.KEYWORD_TEST_ONLY).toBeUndefined();
+      expect(process.env.NODE_ENV).toBe(previousValues.NODE_ENV);
     } finally {
       for (const [name, value] of Object.entries(previousValues)) {
         if (value === undefined) {
