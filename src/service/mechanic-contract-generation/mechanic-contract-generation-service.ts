@@ -507,6 +507,21 @@ function appendTransientLifetimeFinalCountIssues(
       if (!scenario.steps.some((step) => step.kind === "advance_time")) {
         return;
       }
+      if (acceptedInterval !== undefined) {
+        scenario.steps.forEach((step, stepIndex) => {
+          if (
+            step.kind !== "advance_time" ||
+            step.milliseconds <= acceptedInterval
+          ) {
+            return;
+          }
+          issues.push({
+            path: `scenarios.${scenarioIndex}.steps.${stepIndex}`,
+            code: "contradiction",
+            message: `Autonomous recurring scenario "${scenario.id}" advances ${step.milliseconds}ms in one step, which exceeds the accepted recurrence interval ${acceptedInterval}ms. The evaluator dispatches callbacks after moving to each step endpoint and does not replay callbacks scheduled during that dispatch. Split this into separate steps of at most ${acceptedInterval}ms so every intended recurrence is reachable.`,
+          });
+        });
+      }
       for (const ownedObject of contract.ownedObjects) {
         const declaresFinalCount = scenario.observations.some(
           (observation) =>

@@ -802,6 +802,51 @@ describe("generateMechanicContract", () => {
         ],
       },
     });
+
+    const coarseRecurringStep = await generateMechanicContract({
+      intent: autonomousIntent,
+      admittedRequest: {
+        resolution: { ...resolution, intentId: autonomousIntent.id },
+        constraintSet: PHASE_9_GENERATION_CONSTRAINT_SET,
+      },
+      ...validationContext,
+      model: "gpt-5.4-mini",
+      providerCredential: "sk-test",
+      provider: async () => ({
+        ...autonomousCandidate,
+        scenarios: [
+          {
+            ...autonomousCandidate.scenarios[0],
+            steps: [{ kind: "advance_time", milliseconds: 300 }],
+            observations: [
+              ...autonomousCandidate.scenarios[0].observations,
+              {
+                kind: "owned_object_count",
+                archetypeId: "hazard",
+                operator: "equals",
+                value: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(coarseRecurringStep).toMatchObject({
+      success: false,
+      evidence: {
+        stage: "contract_validation",
+        code: "invalid_generated_mechanic_contract",
+        issues: [
+          expect.objectContaining({
+            path: "scenarios.0.steps.0",
+            code: "contradiction",
+            message: expect.stringContaining(
+              "exceeds the accepted recurrence interval 100ms"
+            ),
+          }),
+        ],
+      },
+    });
   });
 
   it("stamps exact trusted semantic lineage and ignores provider-authored substitutions", async () => {
