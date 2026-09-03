@@ -341,7 +341,7 @@ describe("campaign loop state", () => {
     );
   });
 
-  it("finishes an authorized batch after settled spend crosses the ceiling", () => {
+  it("exhausts immediately when an authorized call settles across the ceiling", () => {
     let run = {
       ...initialRun(),
       status: "running",
@@ -376,7 +376,7 @@ describe("campaign loop state", () => {
       quality: "exact",
       totalNanoUsd: 20_000_000,
     });
-    expect(run.status).toBe("running");
+    expect(run.status).toBe("exhausted");
 
     const sameBatch = beginActualProviderCall(run, {
       callId: "attempt-2:contract:1",
@@ -384,12 +384,46 @@ describe("campaign loop state", () => {
       requestedAt: "2026-08-30T20:00:03.000Z",
       costAuthorized: true,
     });
-    expect(sameBatch.allowed).toBe(true);
+    expect(sameBatch.allowed).toBe(false);
 
     const nextBatch = authorizeActualProviderBatch(sameBatch.run);
     expect(nextBatch.allowed).toBe(false);
     expect(nextBatch.run.status).toBe("exhausted");
     expect(nextBatch.run.exhaustionReason).toMatch(/cost/i);
+  });
+
+  it("exhausts a non-terminal loop when cost reconciliation finds the ceiling reached", () => {
+    const run = {
+      ...initialRun(),
+      status: "waiting_for_fix",
+      pricing: {
+        path: "tools/mechanic-generation-campaign/pricing/openai-2026-08-29.json",
+        sha256: "7".repeat(64),
+        snapshotId: "openai-2026-08-29",
+      },
+      limits: {
+        ...initialRun().limits,
+        maxActualProviderCostNanoUsd: 500_000_000,
+      },
+      providerCost: {
+        grossExactNanoUsd: 510_000_000,
+        grossEstimatedNanoUsd: 0,
+        attributedExactNanoUsd: 510_000_000,
+        attributedEstimatedNanoUsd: 0,
+        pendingReservations: [],
+        settledCalls: [],
+      },
+    };
+
+    const reconciled = reconcileLegacyProviderCostEstimates(run, {
+      id: "provider-cost-reconciliation-1",
+      reason: "Apply the settled cost ceiling.",
+    });
+
+    expect(reconciled.status).toBe("exhausted");
+    expect(reconciled.exhaustionReason).toBe(
+      "Actual-provider cost budget reached."
+    );
   });
 
   it("reclassifies legacy maximum-context estimates as unresolved exposure", () => {

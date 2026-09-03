@@ -1369,7 +1369,7 @@ export function createProviderCallBudget(state, loopStore, pricing) {
           callId,
           stage,
           requestedAt,
-          costAuthorized: authorizedAttemptIds.has(attemptId),
+          costAuthorized: authorizedAttemptIds.delete(attemptId),
         });
         allowed = result.allowed;
         return result.run;

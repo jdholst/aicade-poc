@@ -713,6 +713,9 @@ export function beginActualProviderCall(
   run,
   { callId, stage, requestedAt, costAuthorized = false }
 ) {
+  if (run.status === "exhausted") {
+    return { allowed: false, run };
+  }
   if (!run.pricing) {
     return recordActualProviderCall(run, stage);
   }
@@ -840,7 +843,7 @@ export function settleActualProviderCallCost(
       "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
     );
   }
-  return next;
+  return enforceProviderCostBudget(next);
 }
 
 export function reconcileLegacyProviderCostEstimates(
@@ -932,7 +935,7 @@ export function reconcileLegacyProviderCostEstimates(
       },
     ],
   };
-  return run.status === "exhausted" && /provider cost budget/i.test(
+  const reconciledStatus = run.status === "exhausted" && /provider cost budget/i.test(
     run.exhaustionReason ?? ""
   )
     ? {
@@ -941,6 +944,7 @@ export function reconcileLegacyProviderCostEstimates(
           "Actual-provider cost budget is unresolved because one or more API calls have no token usage or call-derived estimate.",
       }
     : reconciled;
+  return enforceProviderCostBudget(reconciledStatus);
 }
 
 export function blockLoop(run, reason, completedAt = new Date().toISOString()) {
@@ -1255,6 +1259,18 @@ function emptyProviderCost() {
 function providerCostSettled(providerCost) {
   if (!providerCost) return 0;
   return providerCost.grossExactNanoUsd + providerCost.grossEstimatedNanoUsd;
+}
+
+function enforceProviderCostBudget(run) {
+  const limit = run.limits.maxActualProviderCostNanoUsd;
+  if (
+    limit === undefined ||
+    providerCostSettled(run.providerCost) < limit ||
+    run.status === "exhausted"
+  ) {
+    return run;
+  }
+  return exhaustLoop(run, "Actual-provider cost budget reached.");
 }
 
 function hasUnresolvedProviderCost(providerCost) {

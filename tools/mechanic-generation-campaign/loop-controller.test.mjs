@@ -209,7 +209,7 @@ describe("campaign loop controller", () => {
       completedAt: "2026-08-30T20:00:03.000Z",
       cost: { quality: "exact", totalNanoUsd: 510_000_000 },
     });
-    expect(state.run.status).toBe("running");
+    expect(state.run.status).toBe("exhausted");
     await expect(
       budget.begin({
         attemptId: "attempt-2",
@@ -217,7 +217,7 @@ describe("campaign loop controller", () => {
         stage: "contract",
         requestedAt: "2026-08-30T20:00:04.000Z",
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     await expect(
       budget.authorizeBatch({ attemptIds: ["attempt-3"] })
     ).resolves.toBe(false);
