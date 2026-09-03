@@ -12,6 +12,7 @@ import {
   summarizeAttemptFailure,
   waitForTerminalEditorState,
 } from "./lib/browser-runner.mjs";
+import { createPostPlanningFoundationController } from "./lib/parallel-execution.mjs";
 
 const request = {
   schemaVersion: "generated_mechanic_provider_request/v1",
@@ -310,6 +311,111 @@ describe("provider request resolution", () => {
         "sec-fetch-site": "same-origin",
       },
     });
+  });
+
+  it("fetches planning concurrently but releases successful responses through one foundation lease", async () => {
+    const foundationConcurrency = createPostPlanningFoundationController();
+    const events = [];
+    const createRoute = (attemptId) => {
+      const requestObject = {
+        headers: () => ({}),
+        postDataJSON: () => ({ enteredPrompt: attemptId }),
+        url: () => "http://127.0.0.1:3121/api/creator-generation-planning",
+      };
+      const response = {
+        status: () => 200,
+        text: async () => JSON.stringify({ ok: true }),
+      };
+      return {
+        request: () => requestObject,
+        continue: vi.fn(),
+        fetch: vi.fn(async () => {
+          events.push(`fetch:${attemptId}`);
+          return response;
+        }),
+        fulfill: vi.fn(async () => {
+          events.push(`fulfill:${attemptId}`);
+        }),
+      };
+    };
+    const firstRoute = createRoute("attempt-1");
+    const secondRoute = createRoute("attempt-2");
+    const common = {
+      stage: "planning",
+      mode: "actual",
+      providerCalls: { planning: 0, contract: 0, source: 0 },
+      fixtureCalls: { planning: 0, contract: 0, source: 0 },
+      networkCaptures: [],
+      actualResponseCaptures: new Map(),
+      foundationConcurrency,
+    };
+
+    const first = resolveInterceptedRoute({
+      ...common,
+      route: firstRoute,
+      attemptId: "attempt-1",
+    });
+    const second = resolveInterceptedRoute({
+      ...common,
+      route: secondRoute,
+      attemptId: "attempt-2",
+    });
+    await vi.waitFor(() =>
+      expect(events.filter((event) => event.startsWith("fetch:"))).toHaveLength(2)
+    );
+    await vi.waitFor(() =>
+      expect(events.filter((event) => event.startsWith("fulfill:"))).toEqual([
+        "fulfill:attempt-1",
+      ])
+    );
+
+    expect(foundationConcurrency.release("attempt-1")).toBe(true);
+    await Promise.all([first, second]);
+    expect(events.filter((event) => event.startsWith("fulfill:"))).toEqual([
+      "fulfill:attempt-1",
+      "fulfill:attempt-2",
+    ]);
+    expect(foundationConcurrency.release("attempt-2")).toBe(true);
+    expect(firstRoute.continue).not.toHaveBeenCalled();
+    expect(secondRoute.continue).not.toHaveBeenCalled();
+  });
+
+  it("releases a foundation lease when planning response fulfillment fails", async () => {
+    const foundationConcurrency = createPostPlanningFoundationController();
+    const response = {
+      status: () => 200,
+      text: async () => JSON.stringify({ ok: true }),
+    };
+    const route = {
+      request: () => ({
+        headers: () => ({}),
+        postDataJSON: () => ({ enteredPrompt: "attempt-1" }),
+        url: () => "http://127.0.0.1:3121/api/creator-generation-planning",
+      }),
+      continue: vi.fn(),
+      fetch: vi.fn(async () => response),
+      fulfill: vi.fn(async () => {
+        throw new Error("browser closed before planning response delivery");
+      }),
+    };
+
+    await expect(
+      resolveInterceptedRoute({
+        route,
+        stage: "planning",
+        mode: "actual",
+        providerCalls: { planning: 0, contract: 0, source: 0 },
+        fixtureCalls: { planning: 0, contract: 0, source: 0 },
+        networkCaptures: [],
+        actualResponseCaptures: new Map(),
+        foundationConcurrency,
+        attemptId: "attempt-1",
+      })
+    ).rejects.toThrow("browser closed before planning response delivery");
+
+    expect(foundationConcurrency.release("attempt-1")).toBe(false);
+    const release = await foundationConcurrency.acquire("attempt-2");
+    expect(release()).toBe(true);
   });
 
   it("blocks an actual request before upstream forwarding when the loop stage ceiling is reached", async () => {

@@ -48,6 +48,7 @@ import {
 import {
   calculateDispatchCapacity,
   createDispatchBatch,
+  createPostPlanningFoundationController,
   createStageConcurrencyController,
   resolveExecutionPolicy,
 } from "./parallel-execution.mjs";
@@ -333,6 +334,7 @@ async function executeCampaignAttempts({
   const active = new Map();
   const leaseOwner = `campaign-pool-${process.pid}-${randomUUID()}`;
   const stageConcurrency = createStageConcurrencyController(run.executionPolicy);
+  const foundationConcurrency = createPostPlanningFoundationController();
   let stoppingError = null;
   let providerBudgetExhausted = false;
   let invalidReason = null;
@@ -438,6 +440,7 @@ async function executeCampaignAttempts({
           onSubmission,
           pricing,
           stageConcurrency,
+          foundationConcurrency,
           environment,
         }).then(
           (result) => ({ slot, browser, result }),
@@ -561,6 +564,7 @@ async function runBrowserAttempt({
   onSubmission,
   pricing,
   stageConcurrency,
+  foundationConcurrency,
   environment,
 }) {
   const id = `a${String(scheduled.sequence).padStart(2, "0")}-${scheduled.promptId}`;
@@ -595,6 +599,7 @@ async function runBrowserAttempt({
     responseCaptureTasks,
     providerCallBudget,
     stageConcurrency,
+    foundationConcurrency,
     onActivity: () => terminalActivity.record(),
     onProviderBudgetExhausted: (stage) => {
       providerBudgetExhaustedStage = stage;
@@ -652,6 +657,8 @@ async function runBrowserAttempt({
   } catch (error) {
     thrownFailure = error instanceof Error ? error.message : String(error);
     terminal = { kind: "infrastructure_failure", text: thrownFailure };
+  } finally {
+    foundationConcurrency.release(id);
   }
   await Promise.all(responseCaptureTasks);
   const providerCallReceipts = createProviderCallReceipts({
@@ -795,6 +802,7 @@ async function installProviderInterception({
   responseCaptureTasks,
   providerCallBudget,
   stageConcurrency,
+  foundationConcurrency,
   onActivity,
   onProviderBudgetExhausted,
   attemptId,
@@ -843,6 +851,8 @@ async function installProviderInterception({
       actualResponseCaptures,
       providerCallBudget,
       stageConcurrency,
+      foundationConcurrency,
+      onActivity,
       attemptId,
       model,
     });
@@ -854,6 +864,9 @@ async function installProviderInterception({
     const stage = requestBody.stage;
     if (!['contract', 'source'].includes(stage)) {
       throw new Error(`Unknown generated-mechanic provider stage "${stage}".`);
+    }
+    if (stage === "contract") {
+      foundationConcurrency.release(attemptId);
     }
     const result = await resolveInterceptedRoute({
       route,
@@ -867,6 +880,8 @@ async function installProviderInterception({
       requestBody,
       providerCallBudget,
       stageConcurrency,
+      foundationConcurrency,
+      onActivity,
       attemptId,
       model,
     });
@@ -885,6 +900,8 @@ export async function resolveInterceptedRoute({
   actualResponseCaptures,
   providerCallBudget,
   stageConcurrency,
+  foundationConcurrency,
+  onActivity,
   attemptId = "attempt",
   model,
   requestBody = route.request().postDataJSON(),
@@ -895,7 +912,15 @@ export async function resolveInterceptedRoute({
       ? adaptPlanningFixture(requestBody, fixture)
       : adaptGeneratedMechanicFixture(requestBody, fixture);
     networkCaptures.push(redactSensitive({ stage, source: "fixture", request: requestBody, response: body }));
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (stage === "planning" && foundationConcurrency) {
+      await foundationConcurrency.acquire(attemptId);
+    }
+    try {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    } catch (error) {
+      foundationConcurrency?.release(attemptId);
+      throw error;
+    }
     return;
   }
 
@@ -963,6 +988,38 @@ export async function resolveInterceptedRoute({
     },
   });
   networkCaptures.push(capture);
+  if (stage === "planning" && foundationConcurrency) {
+    try {
+      const response = await route.fetch({ headers: forwardedHeaders });
+      await captureActualResponse(response, capture, providerCallBudget);
+      releaseStagePermit();
+      onActivity?.();
+      if (response.status() >= 200 && response.status() < 300) {
+        await foundationConcurrency.acquire(attemptId);
+      }
+      try {
+        await route.fulfill({ response });
+      } catch (error) {
+        foundationConcurrency.release(attemptId);
+        throw error;
+      }
+    } catch (error) {
+      releaseStagePermit();
+      foundationConcurrency.release(attemptId);
+      if (!capture.completedAt) {
+        capture.completedAt = new Date().toISOString();
+        capture.responseCaptureError =
+          error instanceof Error ? error.message : String(error);
+        await providerCallBudget?.settle?.({
+          callId,
+          stage,
+          completedAt: capture.completedAt,
+        });
+      }
+      throw error;
+    }
+    return { blocked: false, stage };
+  }
   Object.defineProperty(capture, "releaseStagePermit", {
     configurable: true,
     enumerable: false,

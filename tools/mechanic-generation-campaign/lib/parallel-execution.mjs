@@ -145,6 +145,43 @@ export function createStageConcurrencyController(policy) {
   };
 }
 
+export function createPostPlanningFoundationController() {
+  const semaphore = createSemaphore(1);
+  const pending = new Set();
+  const releases = new Map();
+  return {
+    async acquire(attemptId) {
+      if (pending.has(attemptId) || releases.has(attemptId)) {
+        throw new Error(
+          `Attempt "${attemptId}" already owns or awaits a foundation lease.`
+        );
+      }
+      pending.add(attemptId);
+      let releasePermit;
+      try {
+        releasePermit = await semaphore.acquire();
+      } finally {
+        pending.delete(attemptId);
+      }
+      let active = true;
+      const release = () => {
+        if (!active) return false;
+        active = false;
+        if (releases.get(attemptId) === release) {
+          releases.delete(attemptId);
+        }
+        releasePermit();
+        return true;
+      };
+      releases.set(attemptId, release);
+      return release;
+    },
+    release(attemptId) {
+      return releases.get(attemptId)?.() ?? false;
+    },
+  };
+}
+
 function withPolicyHash(policy) {
   return { ...policy, hash: executionPolicyHash(policy) };
 }

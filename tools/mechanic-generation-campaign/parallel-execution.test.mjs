@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateDispatchCapacity,
   createDispatchBatch,
+  createPostPlanningFoundationController,
   createStageConcurrencyController,
   executionPolicyHash,
   resolveExecutionPolicy,
@@ -192,5 +193,25 @@ describe("parallel campaign execution policy", () => {
 
     await Promise.all(tasks);
     expect(maxPlanning).toBe(1);
+  });
+
+  it("serializes post-planning foundation leases independently of provider stages", async () => {
+    const controller = createPostPlanningFoundationController();
+    const first = await controller.acquire("attempt-1");
+    let secondAcquired = false;
+    const secondPromise = controller.acquire("attempt-2").then((release) => {
+      secondAcquired = true;
+      return release;
+    });
+
+    await Promise.resolve();
+    expect(secondAcquired).toBe(false);
+    expect(controller.release("attempt-1")).toBe(true);
+    expect(first()).toBe(false);
+
+    const second = await secondPromise;
+    expect(secondAcquired).toBe(true);
+    expect(second()).toBe(true);
+    expect(controller.release("attempt-2")).toBe(false);
   });
 });
