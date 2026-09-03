@@ -406,7 +406,6 @@ describe("generated mechanic project handoff", () => {
             kind: "owned_object_lifecycle_after_action",
             archetypeIds: ["projectile"],
             actionId: "move",
-            requireTargetInteraction: true,
           },
         },
         {

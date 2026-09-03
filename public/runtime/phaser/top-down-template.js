@@ -824,7 +824,12 @@
       return installedMechanics;
     }
 
-    function createGeneratedOwnedObject(scene, mechanic, input) {
+    function createGeneratedOwnedObject(
+      scene,
+      mechanic,
+      ownedObjectKinds,
+      input
+    ) {
       if (
         !input ||
         typeof input !== "object" ||
@@ -910,6 +915,7 @@
       try {
         notifyGeneratedOwnedObjectObservers(
           mechanic,
+          ownedObjectKinds,
           input.objectKind,
           properties,
           object
@@ -928,6 +934,7 @@
 
     function notifyGeneratedOwnedObjectObservers(
       generatedMechanic,
+      ownedObjectKinds,
       objectKind,
       properties,
       object
@@ -947,6 +954,10 @@
       const assets = Array.isArray(config.gameSpec.assets)
         ? config.gameSpec.assets
         : [];
+      const isSoleOwnedObjectKind =
+        Array.isArray(ownedObjectKinds) &&
+        ownedObjectKinds.length === 1 &&
+        ownedObjectKinds[0] === objectKind;
 
       generatedOwnedObjectObservers.slice().forEach(function (registration) {
         const observerEntityIds =
@@ -969,23 +980,29 @@
           Array.isArray(registration.mechanic.assetIds)
             ? registration.mechanic.assetIds
             : [];
+        const sharedAssetIds = generatedAssetIds.filter(function (
+          generatedAssetId
+        ) {
+          if (!observerAssetIds.includes(generatedAssetId)) {
+            return false;
+          }
+          const sharedAsset = assets.find(function (candidate) {
+            return candidate && candidate.id === generatedAssetId;
+          });
+          return sharedAsset && sharedAsset.role === registration.assetRole;
+        });
         const assetId = generatedAssetIds.includes(objectKind)
           ? objectKind
           : propertyAssetId && generatedAssetIds.includes(propertyAssetId)
             ? propertyAssetId
             : sharedEntityIds.includes(objectKind)
-              ? generatedAssetIds.find(function (generatedAssetId) {
-                  if (!observerAssetIds.includes(generatedAssetId)) {
-                    return false;
-                  }
-                  const sharedAsset = assets.find(function (candidate) {
-                    return candidate && candidate.id === generatedAssetId;
-                  });
-                  return (
-                    sharedAsset && sharedAsset.role === registration.assetRole
-                  );
-                })
-              : null;
+              ? sharedAssetIds[0]
+              : propertyAssetId === null &&
+                  isSoleOwnedObjectKind &&
+                  sharedEntityIds.length === 1 &&
+                  sharedAssetIds.length === 1
+                ? sharedAssetIds[0]
+                : null;
         const asset = assetId
           ? assets.find(function (candidate) {
               return candidate && candidate.id === assetId;
@@ -1028,7 +1045,12 @@
           mechanic,
           template: config.template,
           createOwnedObject(input) {
-            return createGeneratedOwnedObject(scene, mechanic, input);
+            return createGeneratedOwnedObject(
+              scene,
+              mechanic,
+              generatedHost.ownedObjectKinds,
+              input
+            );
           },
           getEntityDefinition: entityModule.findById,
           getEntityHandle: entityModule.getEntityHandle,

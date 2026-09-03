@@ -354,6 +354,11 @@ export function createTrustedGeneratedMechanicPhaserRoute({
 
       const host = Object.freeze({
         mechanicId: artifact.mechanicId,
+        ownedObjectKinds: Object.freeze([
+          ...new Set(
+            artifact.contract.ownedObjects.map(({ objectKind }) => objectKind)
+          ),
+        ]),
         async install(
           input: GeneratedMechanicInstallInput
         ): Promise<TopDownRetainedGeneratedMechanicSession> {

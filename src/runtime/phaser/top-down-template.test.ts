@@ -1302,10 +1302,12 @@ describe("top-down Phaser template", () => {
         }
       | undefined;
     let entityKindGeneratedHazard: typeof generatedHazard;
+    let soleKindGeneratedHazard: typeof generatedHazard;
     let unreferencedGeneratedHazard: typeof generatedHazard;
     Object.assign(context.globalThis, {
       __AICADE_GENERATED_MECHANIC_HOST__: {
         mechanicId: generatedMechanic.id,
+        ownedObjectKinds: ["spawned_hazard"],
         install: vi.fn(async (input: {
           createOwnedObject(created: {
             objectId: string;
@@ -1334,6 +1336,18 @@ describe("top-down Phaser template", () => {
               radius: 12,
               properties: {
                 visual_asset: "asset_generated_hazard",
+              },
+            },
+          });
+          soleKindGeneratedHazard = input.createOwnedObject({
+            objectId: "owned_sole_kind_generated_hazard_1",
+            objectKind: "spawned_hazard",
+            initial: {
+              position: { x: 250, y: 240 },
+              shape: "circle",
+              radius: 12,
+              properties: {
+                creation_time_ms: 0,
               },
             },
           });
@@ -1368,8 +1382,12 @@ describe("top-down Phaser template", () => {
     const entityKindGeneratedOverlap = overlapCalls.find(
       ({ second }) => second === entityKindGeneratedHazard?.object
     );
+    const soleKindGeneratedOverlap = overlapCalls.find(
+      ({ second }) => second === soleKindGeneratedHazard?.object
+    );
     expect(generatedOverlap?.handler).toEqual(expect.any(Function));
     expect(entityKindGeneratedOverlap?.handler).toEqual(expect.any(Function));
+    expect(soleKindGeneratedOverlap?.handler).toEqual(expect.any(Function));
     expect(
       overlapCalls.some(
         ({ second }) => second === unreferencedGeneratedHazard?.object
