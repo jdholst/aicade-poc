@@ -119,6 +119,11 @@ describe("createTrustedGeneratedMechanicPhaserRoute", () => {
     const route = createTrustedGeneratedMechanicPhaserRoute(harness.input);
     await route.ready;
 
+    expect(
+      requireRecord(harness.runtimeGlobal.__AICADE_GENERATED_MECHANIC_HOST__)
+        .ownedObjectKinds
+    ).toEqual(["effect"]);
+
     const sessionInput = harness.createSession.mock.calls[0]?.[0];
     if (!sessionInput) {
       throw new Error("Expected one retained session input.");

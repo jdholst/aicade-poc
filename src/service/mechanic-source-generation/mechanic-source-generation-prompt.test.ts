@@ -178,6 +178,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
       "Do not pass the absolute boundary as the delay, write the completed boundary, or derive the next boundary from a spawn counter"
     );
     expect(prompt).toContain(
+      "When recurrence and owned-object expiry share the one scheduled callback"
+    );
+    expect(prompt).toContain(
+      "schedule exactly one next scheduled callback for the earliest future recurrence or expiry boundary"
+    );
+    expect(prompt).toContain(
       "Every value written to an integer private-state field must remain a finite integer"
     );
     expect(prompt).toContain(
@@ -321,6 +327,13 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
             "Generated mechanic source cannot use runtime-computed property access. Use a named property or a provably numeric array index instead.",
         },
       ],
+      retainedIssues: [
+        {
+          path: "callbacks.0.source",
+          code: "type_failure",
+          message: "The install callback must compile.",
+        },
+      ],
       invalidatedArtifactIds: [],
     };
     const repairPrompt = createMechanicSourceGenerationSystemPrompt({
@@ -353,6 +366,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
     expect(repairPrompt).toContain(
       "use array[0] only after an explicit nonempty check"
+    );
+    expect(repairPrompt).toContain(
+      'Exact earlier same-stage issues that must not regress JSON:\n[\n  {\n    "path": "callbacks.0.source",\n    "code": "type_failure",\n    "message": "The install callback must compile."\n  }\n]'
+    );
+    expect(repairPrompt).toContain(
+      "Preserve every earlier same-stage issue invariant in retainedIssues while correcting the current issues"
     );
   });
 
@@ -877,14 +896,20 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     });
 
     expect(prompt).toContain(
-      "For an owned_object_lifecycle_progress_after_action failure, preserve the created owned object as active through the post-action observation"
+      "For an owned_object_lifecycle_progress_after_action or owned_object_lifecycle_progress_after_install failure, preserve the created owned object as active through the progress observation"
     );
     expect(prompt).toContain(
-      "Do not destroy the created owned object before the post-action observation"
+      "Do not destroy the created owned object before the progress observation"
     );
     expect(prompt).toContain("actorOriginCreationsDelta");
     expect(prompt).toContain("simulatedDistanceTraveledDelta");
     expect(prompt).toContain("targetInteractionsDelta");
+    expect(prompt).toContain(
+      "Velocity-only writes and same-position rewrites do not increase simulatedDistanceTraveledDelta"
+    );
+    expect(prompt).toContain(
+      "write a position different from the owned object's creation or current observed position"
+    );
   });
 
   it("turns missed target interactions into bounded scheduling guidance", () => {
@@ -1289,6 +1314,12 @@ describe("createMechanicSourceGenerationSystemPrompt", () => {
     );
     expect(prompt).toContain(
       'never a behavior label such as "expire_projectiles"'
+    );
+    expect(prompt).toContain(
+      "consolidate recurrence and per-object expiry into one deterministic scheduled-callback pass"
+    );
+    expect(prompt).toContain(
+      "Never infer why the callback ran from current-time modulus or equality"
     );
   });
 

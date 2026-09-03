@@ -595,6 +595,7 @@
     let installedMechanics = [];
     let generatedMechanicSession = null;
     let generatedMechanicDisposed = false;
+    let generatedOwnedObjectObservers = [];
 
     function getGeneratedMechanicHost() {
       const host = globalThis.__AICADE_GENERATED_MECHANIC_HOST__;
@@ -717,6 +718,32 @@
           getViewport() {
             return config.viewport;
           },
+          observeGeneratedOwnedObjects(filter, observer) {
+            if (
+              !filter ||
+              typeof filter !== "object" ||
+              typeof filter.assetRole !== "string" ||
+              typeof filter.entityRole !== "string" ||
+              typeof observer !== "function"
+            ) {
+              throw new TypeError(
+                "Generated owned-object observation requires exact roles and an observer."
+              );
+            }
+            const registration = {
+              assetRole: filter.assetRole,
+              entityRole: filter.entityRole,
+              mechanic,
+              observer,
+            };
+            generatedOwnedObjectObservers.push(registration);
+            return function stopObservingGeneratedOwnedObjects() {
+              generatedOwnedObjectObservers =
+                generatedOwnedObjectObservers.filter(function (candidate) {
+                  return candidate !== registration;
+                });
+            };
+          },
           resetEntity: entityModule.resetEntityHandle,
         },
       };
@@ -797,7 +824,12 @@
       return installedMechanics;
     }
 
-    function createGeneratedOwnedObject(scene, input) {
+    function createGeneratedOwnedObject(
+      scene,
+      mechanic,
+      ownedObjectKinds,
+      input
+    ) {
       if (
         !input ||
         typeof input !== "object" ||
@@ -880,12 +912,107 @@
           'Generated owned object "' + input.objectId + '" cannot be destroyed.'
         );
       }
+      try {
+        notifyGeneratedOwnedObjectObservers(
+          mechanic,
+          ownedObjectKinds,
+          input.objectKind,
+          properties,
+          object
+        );
+      } catch (error) {
+        object.destroy();
+        throw error;
+      }
       return {
         object,
         observeProperties() {
           return Object.assign({}, properties);
         },
       };
+    }
+
+    function notifyGeneratedOwnedObjectObservers(
+      generatedMechanic,
+      ownedObjectKinds,
+      objectKind,
+      properties,
+      object
+    ) {
+      const generatedAssetIds =
+        generatedMechanic && Array.isArray(generatedMechanic.assetIds)
+          ? generatedMechanic.assetIds
+          : [];
+      const propertyAssetId =
+        properties && typeof properties.asset === "string"
+          ? properties.asset
+          : null;
+      const generatedEntityIds =
+        generatedMechanic && Array.isArray(generatedMechanic.entityIds)
+          ? generatedMechanic.entityIds
+          : [];
+      const assets = Array.isArray(config.gameSpec.assets)
+        ? config.gameSpec.assets
+        : [];
+      const isSoleOwnedObjectKind =
+        Array.isArray(ownedObjectKinds) &&
+        ownedObjectKinds.length === 1 &&
+        ownedObjectKinds[0] === objectKind;
+
+      generatedOwnedObjectObservers.slice().forEach(function (registration) {
+        const observerEntityIds =
+          registration.mechanic &&
+          Array.isArray(registration.mechanic.entityIds)
+            ? registration.mechanic.entityIds
+            : [];
+        const sharedEntityIds = generatedEntityIds.filter(function (entityId) {
+          if (!observerEntityIds.includes(entityId)) {
+            return false;
+          }
+          const entity = entityModule.findById(entityId);
+          return entity && entity.role === registration.entityRole;
+        });
+        if (sharedEntityIds.length === 0) {
+          return;
+        }
+        const observerAssetIds =
+          registration.mechanic &&
+          Array.isArray(registration.mechanic.assetIds)
+            ? registration.mechanic.assetIds
+            : [];
+        const sharedAssetIds = generatedAssetIds.filter(function (
+          generatedAssetId
+        ) {
+          if (!observerAssetIds.includes(generatedAssetId)) {
+            return false;
+          }
+          const sharedAsset = assets.find(function (candidate) {
+            return candidate && candidate.id === generatedAssetId;
+          });
+          return sharedAsset && sharedAsset.role === registration.assetRole;
+        });
+        const assetId = generatedAssetIds.includes(objectKind)
+          ? objectKind
+          : propertyAssetId && generatedAssetIds.includes(propertyAssetId)
+            ? propertyAssetId
+            : sharedEntityIds.includes(objectKind)
+              ? sharedAssetIds[0]
+              : propertyAssetId === null &&
+                  isSoleOwnedObjectKind &&
+                  sharedEntityIds.length === 1 &&
+                  sharedAssetIds.length === 1
+                ? sharedAssetIds[0]
+                : null;
+        const asset = assetId
+          ? assets.find(function (candidate) {
+              return candidate && candidate.id === assetId;
+            })
+          : null;
+        if (!asset || asset.role !== registration.assetRole) {
+          return;
+        }
+        registration.observer(object);
+      });
     }
 
     function boundedNumber(value, fallback, minimum, maximum) {
@@ -918,7 +1045,12 @@
           mechanic,
           template: config.template,
           createOwnedObject(input) {
-            return createGeneratedOwnedObject(scene, input);
+            return createGeneratedOwnedObject(
+              scene,
+              mechanic,
+              generatedHost.ownedObjectKinds,
+              input
+            );
           },
           getEntityDefinition: entityModule.findById,
           getEntityHandle: entityModule.getEntityHandle,

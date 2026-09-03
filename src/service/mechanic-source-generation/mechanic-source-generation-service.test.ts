@@ -115,14 +115,16 @@ describe("generated mechanic source stage", () => {
     expect(realmAdapter.createdGrant).toEqual(grant);
     expect(realmAdapter.executions).toHaveLength(1);
     expect(realmAdapter.executions[0]).toMatchObject({
-      source: "",
+      source: expect.stringContaining(
+        '"write": (...args) => realm.callCapability("state_write", ...args)'
+      ),
       lifecycle: {
         callbackExecutionMode: "generated_admitted",
         callbacks: [
           {
             id: "install_generic_source",
             source: expect.stringContaining(
-              'realm.callCapability("state_write"'
+              "const { capabilities, bindings, config } = __sparklineLifecycleContext;"
             ),
           },
           { id: "dispose_generic_source" },
@@ -130,6 +132,12 @@ describe("generated mechanic source stage", () => {
         invocations: [{ callbackId: "install_generic_source", count: 1 }],
       },
     });
+    expect(
+      realmAdapter.executions[0]?.lifecycle?.callbacks[0]?.source
+    ).toContain('capabilities.state.write("counter", config.initialCount)');
+    expect(
+      realmAdapter.executions[0]?.lifecycle?.callbacks[0]?.source
+    ).not.toContain("realm.");
     expect(realmAdapter.disposed).toBe(true);
   });
 
@@ -729,6 +737,17 @@ describe("generated mechanic source stage", () => {
 
     expect(result).toMatchObject({ success: true });
     expect(realmAdapter.executions).toHaveLength(1);
+    expect(realmAdapter.executions[0]?.source).toContain(
+      '"actor": realm.binding("actor")'
+    );
+    expect(
+      realmAdapter.executions[0]?.lifecycle?.callbacks[0]?.source
+    ).toContain(
+      "const { capabilities, bindings, config } = __sparklineLifecycleContext;"
+    );
+    expect(
+      realmAdapter.executions[0]?.lifecycle?.callbacks[0]?.source
+    ).not.toContain("realm.");
   });
 
   it("rejects caller-forged binding identity attestation", async () => {

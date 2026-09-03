@@ -3726,7 +3726,11 @@ function scenarioRequiresTargetInteractionForHandoff(
   contract: GeneratedMechanicContract,
   scenario: GeneratedMechanicContract["scenarios"][number]
 ): boolean {
-  if ((contract.intentLineage?.targets.length ?? 0) === 0) {
+  if (
+    (contract.intentLineage?.targets.length ?? 0) === 0 ||
+    !contract.capabilities.includes("spatial_query") ||
+    !contract.capabilities.includes("object_motion_write")
+  ) {
     return false;
   }
   const timeAdvancingScenarios = contract.scenarios.filter((candidate) =>

@@ -96,6 +96,34 @@ describe("artifactScopedMechanicRepairReceiptSchema", () => {
       }).success
     ).toBe(false);
   });
+
+  it("rejects retained repair issues without earlier same-stage provenance", () => {
+    const receipt = createValidRepairReceipt();
+    const attempts = receipt.attempts.map((attempt) =>
+      attempt.id === "attempt_source_2"
+        ? {
+            ...attempt,
+            repair: {
+              ...attempt.repair,
+              retainedIssues: [
+                {
+                  path: "callbacks.scheduled",
+                  code: "type_failure",
+                  message: "An unrelated issue from no retained attempt.",
+                },
+              ],
+            },
+          }
+        : attempt
+    );
+
+    expect(
+      artifactScopedMechanicRepairReceiptSchema.safeParse({
+        ...receipt,
+        attempts,
+      }).success
+    ).toBe(false);
+  });
 });
 
 function createValidRepairReceipt() {

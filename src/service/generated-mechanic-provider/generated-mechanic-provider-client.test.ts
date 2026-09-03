@@ -41,6 +41,13 @@ describe("Generated Mechanic HTTP providers", () => {
             message: "Declare at least one entity binding.",
           },
         ],
+        retainedIssues: [
+          {
+            path: "capabilities",
+            code: "contradiction",
+            message: "The contract must retain state_write.",
+          },
+        ],
         invalidatedArtifactIds: ["contract_candidate_attempt_1"],
       },
       fetchImpl,
@@ -77,6 +84,13 @@ describe("Generated Mechanic HTTP providers", () => {
             path: "bindings",
             code: "missing_entity_binding",
             message: "Declare at least one entity binding.",
+          },
+        ],
+        retainedIssues: [
+          {
+            path: "capabilities",
+            code: "contradiction",
+            message: "The contract must retain state_write.",
           },
         ],
         invalidatedArtifactIds: ["contract_candidate_attempt_1"],

@@ -350,6 +350,14 @@ function createOwnedObjectActivityTracker({
             const afterMotion = snapshotVirtualMotion(
               virtualEntities.get(objectId)
             );
+            if (ownedArchetypeId && beforeMotion && afterMotion) {
+              activityByArchetype.get(
+                ownedArchetypeId
+              )!.simulatedDistanceTraveled += pointDistance(
+                beforeMotion.position,
+                afterMotion.position
+              );
+            }
             if (
               targetObjectIds.has(objectId) &&
               beforeMotion &&
@@ -718,11 +726,23 @@ export function createGeneratedMechanicExternalObservations(
     requiresOwnedObjectActorOrigin(intent) &&
     intent.requiredCapabilities.includes("object_read") &&
     contract.capabilities.includes("object_read");
+  const canVerifyTargetInteraction =
+    requiresTransientLifecycle &&
+    intent.targets.length > 0 &&
+    intent.requiredCapabilities.includes("spatial_query") &&
+    intent.requiredCapabilities.includes("object_motion_write") &&
+    contract.capabilities.includes("spatial_query") &&
+    contract.capabilities.includes("object_motion_write");
   const evidenceRoles = new Set(
-    requiresTransientLifecycle && intent.targets.length > 0
-      ? intent.targets
+    requiresTransientLifecycle
+      ? [
+          ...(requiresActorOrigin ? intent.actors : []),
+          ...intent.targets,
+        ]
       : intent.actors
   );
+  const requiresReferencedEvidenceBindings =
+    !requiresTransientLifecycle || evidenceRoles.size > 0;
   const referencedEvidenceEntityIds = intent.references.flatMap((reference) => {
     if (reference.kind !== "entity") {
       return [];
@@ -745,12 +765,13 @@ export function createGeneratedMechanicExternalObservations(
     )
   );
   if (
-    evidenceRoles.size === 0 ||
-    representedEvidenceRoles.size !== evidenceRoles.size ||
-    referencedEvidenceEntityIds.length === 0 ||
-    new Set(referencedEvidenceEntityIds).size !==
-      referencedEvidenceEntityIds.length ||
-    bindingsByReferencedEntity.some((bindings) => bindings.length !== 1)
+    requiresReferencedEvidenceBindings &&
+    (evidenceRoles.size === 0 ||
+      representedEvidenceRoles.size !== evidenceRoles.size ||
+      referencedEvidenceEntityIds.length === 0 ||
+      new Set(referencedEvidenceEntityIds).size !==
+        referencedEvidenceEntityIds.length ||
+      bindingsByReferencedEntity.some((bindings) => bindings.length !== 1))
   ) {
     throw new TypeError(
       "Top-down generated mechanic evaluation requires exactly one single-entity binding for every trusted actor-role entity reference."
@@ -802,7 +823,7 @@ export function createGeneratedMechanicExternalObservations(
     )
   );
   const targetInteractionScenarioIds = new Set<StableId>();
-  if (requiresTransientLifecycle && intent.targets.length > 0) {
+  if (canVerifyTargetInteraction) {
     for (const scenario of
       cleanupScenarios.length > 0
         ? cleanupScenarios

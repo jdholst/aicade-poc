@@ -1,5 +1,6 @@
 import {
   coordinateMechanicGeneration,
+  requiresOwnedObjectActorOrigin,
   resolveTopDownMechanicIntent,
   type AdmittedGeneratedMechanicRequest,
   type MechanicCapabilityGapResolution,
@@ -245,8 +246,10 @@ function getGeneratedHostIntentIssues(
         : []
     )
   );
+  const requiresActorRole =
+    intent.ownedObjects.length === 0 || requiresOwnedObjectActorOrigin(intent);
   if (
-    intent.actors.length === 0 ||
+    (requiresActorRole && intent.actors.length === 0) ||
     intent.actors.some((actor) => !referencedEntityRoles.has(actor))
   ) {
     issues.push({

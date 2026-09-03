@@ -425,7 +425,11 @@ export async function buildAndExecuteGeneratedMechanicSource({
   try {
     const run = realm.execute({
       id: execution.id,
-      source: "",
+      source: createRuntimeContextSource({
+        contract,
+        grant,
+        config: admittedConfig,
+      }),
       lifecycle: {
         callbackExecutionMode: "generated_admitted",
         callbacks: compiledCallbacks.map((callback) => ({
@@ -2164,6 +2168,27 @@ function createRuntimeCallbackSource(
   },
   lifecycleInputDeclaration: string
 ): string {
+  return `
+const { capabilities, bindings, config } = __sparklineLifecycleContext;
+const __sparklineFreezeJson = (value) => {
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) __sparklineFreezeJson(child);
+    Object.freeze(value);
+  }
+  return value;
+};
+${lifecycleInputDeclaration}
+const input = lifecycleInput;
+${input.callback.normalizedJavaScript}
+return await __sparklineGeneratedMechanicCallback();
+`.trim();
+}
+
+function createRuntimeContextSource(input: {
+  contract: GeneratedMechanicContract;
+  grant: MechanicCapabilityGrant;
+  config: JsonValue;
+}): string {
   const capabilityGroups = new Map<string, string[]>();
   for (const capability of input.grant.capabilities) {
     const { group, member } = sourceFacingCapabilityReference(
@@ -2198,10 +2223,7 @@ const __sparklineFreezeJson = (value) => {
 const capabilities = Object.freeze({ ${capabilities} });
 const bindings = Object.freeze({ ${bindings} });
 const config = __sparklineFreezeJson(${JSON.stringify(input.config)});
-${lifecycleInputDeclaration}
-const input = lifecycleInput;
-${input.callback.normalizedJavaScript}
-return await __sparklineGeneratedMechanicCallback();
+return Object.freeze({ capabilities, bindings, config });
 `.trim();
 }
 

@@ -23,6 +23,13 @@ describe("Generated Mechanic Provider API route", () => {
           message: "Declare at least one entity binding.",
         },
       ],
+      retainedIssues: [
+        {
+          path: "capabilities",
+          code: "contradiction",
+          message: "The contract must retain state_write.",
+        },
+      ],
       invalidatedArtifactIds: ["contract_candidate_attempt_1"],
     };
     const contractProvider = vi.fn().mockResolvedValue(candidate);

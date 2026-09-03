@@ -1250,6 +1250,175 @@ describe("top-down Phaser template", () => {
     expect(advanceSimulation).not.toHaveBeenCalled();
   });
 
+  it("routes explicitly referenced generated hazard objects through trusted hazard contact", async () => {
+    const runtimeSource = loadTopDownRuntimeSource();
+    const generatedMechanic = {
+      id: "mechanic_generated_hazard_spawner",
+      type: "generated_mechanic",
+      entityIds: ["entity_hazard"],
+      objectiveIds: ["objective_collect_crystals"],
+      sceneIds: ["scene_arena"],
+      regionIds: [],
+      assetIds: ["asset_generated_hazard"],
+      config: {},
+    };
+    const generatedTemplate = {
+      ...topDownPhaserTemplate,
+      gameSpec: {
+        ...topDownPhaserTemplate.gameSpec,
+        assets: [
+          ...topDownPhaserTemplate.gameSpec.assets,
+          {
+            id: "asset_generated_hazard",
+            role: "hazard" as const,
+            name: "Generated hazard",
+            source: "template" as const,
+          },
+        ],
+        mechanics: [
+          ...topDownPhaserTemplate.gameSpec.mechanics.map((mechanic) =>
+            mechanic.type === "hazard_contact"
+              ? {
+                  ...mechanic,
+                  assetIds: ["asset_generated_hazard"],
+                }
+              : mechanic
+          ),
+          generatedMechanic,
+        ],
+      },
+    };
+    const { context, overlapCalls, textLabels } =
+      createRuntimeHarness(generatedTemplate);
+    let generatedHazard:
+      | {
+          object: {
+            body?: { velocity?: { x: number; y: number } };
+            destroy?: () => void;
+            setPosition?: (x: number, y: number) => void;
+            x: number;
+            y: number;
+          };
+        }
+      | undefined;
+    let entityKindGeneratedHazard: typeof generatedHazard;
+    let soleKindGeneratedHazard: typeof generatedHazard;
+    let unreferencedGeneratedHazard: typeof generatedHazard;
+    Object.assign(context.globalThis, {
+      __AICADE_GENERATED_MECHANIC_HOST__: {
+        mechanicId: generatedMechanic.id,
+        ownedObjectKinds: ["spawned_hazard"],
+        install: vi.fn(async (input: {
+          createOwnedObject(created: {
+            objectId: string;
+            objectKind: string;
+            initial: Record<string, unknown>;
+          }): typeof generatedHazard;
+        }) => {
+          generatedHazard = input.createOwnedObject({
+            objectId: "owned_generated_hazard_1",
+            objectKind: "spawned_hazard",
+            initial: {
+              position: { x: 220, y: 240 },
+              shape: "circle",
+              radius: 12,
+              properties: {
+                asset: "asset_generated_hazard",
+              },
+            },
+          });
+          entityKindGeneratedHazard = input.createOwnedObject({
+            objectId: "owned_entity_kind_generated_hazard_1",
+            objectKind: "entity_hazard",
+            initial: {
+              position: { x: 240, y: 240 },
+              shape: "circle",
+              radius: 12,
+              properties: {
+                visual_asset: "asset_generated_hazard",
+              },
+            },
+          });
+          soleKindGeneratedHazard = input.createOwnedObject({
+            objectId: "owned_sole_kind_generated_hazard_1",
+            objectKind: "spawned_hazard",
+            initial: {
+              position: { x: 250, y: 240 },
+              shape: "circle",
+              radius: 12,
+              properties: {
+                creation_time_ms: 0,
+              },
+            },
+          });
+          unreferencedGeneratedHazard = input.createOwnedObject({
+            objectId: "owned_unreferenced_hazard_1",
+            objectKind: "spawned_hazard",
+            initial: {
+              position: { x: 260, y: 240 },
+              shape: "circle",
+              radius: 12,
+              properties: {
+                asset: "asset_not_referenced",
+              },
+            },
+          });
+          return {
+            identity: { artifactId: "extension_generated_hazard_v1" },
+            advanceSimulation: vi.fn(async () => undefined),
+            dispatchLogicalAction: vi.fn(async () => undefined),
+            dispose: vi.fn(async () => undefined),
+          };
+        }),
+      },
+    });
+
+    runTopDownRuntime(runtimeSource, context, generatedTemplate);
+    await vi.waitFor(() => expect(generatedHazard).toBeDefined());
+
+    const generatedOverlap = overlapCalls.find(
+      ({ second }) => second === generatedHazard?.object
+    );
+    const entityKindGeneratedOverlap = overlapCalls.find(
+      ({ second }) => second === entityKindGeneratedHazard?.object
+    );
+    const soleKindGeneratedOverlap = overlapCalls.find(
+      ({ second }) => second === soleKindGeneratedHazard?.object
+    );
+    expect(generatedOverlap?.handler).toEqual(expect.any(Function));
+    expect(entityKindGeneratedOverlap?.handler).toEqual(expect.any(Function));
+    expect(soleKindGeneratedOverlap?.handler).toEqual(expect.any(Function));
+    expect(
+      overlapCalls.some(
+        ({ second }) => second === unreferencedGeneratedHazard?.object
+      )
+    ).toBe(false);
+    const objectiveResetLabelsBefore = textLabels.filter(
+      (label) => label === "Collect crystals: 0"
+    ).length;
+    generatedOverlap?.first.setPosition?.(700, 500);
+    generatedOverlap?.handler?.();
+
+    expect(generatedOverlap?.first).not.toMatchObject({ x: 700, y: 500 });
+    expect(
+      textLabels.filter((label) => label === "Collect crystals: 0")
+    ).toHaveLength(objectiveResetLabelsBefore + 1);
+
+    const entityKindResetLabelsBefore = textLabels.filter(
+      (label) => label === "Collect crystals: 0"
+    ).length;
+    entityKindGeneratedOverlap?.first.setPosition?.(700, 500);
+    entityKindGeneratedOverlap?.handler?.();
+
+    expect(entityKindGeneratedOverlap?.first).not.toMatchObject({
+      x: 700,
+      y: 500,
+    });
+    expect(
+      textLabels.filter((label) => label === "Collect crystals: 0")
+    ).toHaveLength(entityKindResetLabelsBefore + 1);
+  });
+
   it("serializes generated updates and accumulates elapsed time behind a fixed catch-up cap", async () => {
     const runtimeSource = loadTopDownRuntimeSource();
     const generatedMechanic = {

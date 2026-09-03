@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 47,
-  "updatedAt": "2026-09-02T05:14:21Z",
+  "revision": 62,
+  "updatedAt": "2026-09-03T00:31:09Z",
   "entries": [
     {
       "status": "active",
@@ -1912,7 +1912,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Separate callback active-work and Worker-delivery budgets",
-      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
+      "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Construct and freeze the capability, binding, and config lifecycle context once in the realm-bearing outer execution. Generated-admitted callback source must consume only __sparklineLifecycleContext and must never call realm.callCapability, realm.binding, or any other realm member. Cover both an exact nonempty binding and a capability call when asserting this split. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -1930,7 +1930,7 @@
         ]
       },
       "id": "KF-0019",
-      "revision": 6,
+      "revision": 7,
       "evidence": [
         {
           "kind": "loop_fix",
@@ -2022,6 +2022,17 @@
           "outcome": "provider_output_rejected",
           "summary": "Source attempt 4 reached realm validation after parsing, typechecking, compilation, and static admission, but the source stage used the generic compile-inside-meter lifecycle path and reported callback_milliseconds 9 against the unchanged limit 8. A larger prior candidate callback passed, showing work-shape did not deterministically explain the terminal rejection.",
           "observedAt": "2026-09-02T03:54:16.955Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Planning and repaired contract generation succeeded. Four source candidates then failed identically with realm.binding is not a function even though none referenced realm. The source validator had enabled authenticated generated callback execution but kept trusted context construction inside each restricted callback, so every candidate with a nonempty contract binding failed before its own capability behavior could run.",
+          "observedAt": "2026-09-02T17:21:11.219Z"
         }
       ],
       "amendments": [
@@ -2234,10 +2245,50 @@
               "observedAt": "2026-09-02T03:54:16.955Z"
             }
           ]
+        },
+        {
+          "revision": 6,
+          "changedAt": "2026-09-02T17:30:50Z",
+          "reason": "Source-stage adoption of generated_admitted exposed a second trust-boundary requirement: callbacks compiled in the reusable restricted compartment cannot construct their own context through realm, because that compartment intentionally has no realm authority.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Separate callback active-work and Worker-delivery budgets",
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "runtime_foundation",
+                "runtime_activation",
+                "first_playable"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "pipeline_failure",
+                "runtime_pipeline_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Planning and repaired contract generation succeeded. Four source candidates then failed identically with realm.binding is not a function even though none referenced realm. The source validator had enabled authenticated generated callback execution but kept trusted context construction inside each restricted callback, so every candidate with a nonempty contract binding failed before its own capability behavior could run.",
+              "observedAt": "2026-09-02T17:21:11.219Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-27T06:12:49Z",
-      "updatedAt": "2026-09-02T04:07:16Z"
+      "updatedAt": "2026-09-02T17:30:50Z"
     },
     {
       "status": "active",
@@ -3058,7 +3109,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Owned-object lifecycle evidence does not require motion",
-      "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+      "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation. When travel is required, create or observe the owned object's position and make a reachable awaited objects.writeMotion call that writes a finite position different from its creation or current observed position before the lifecycle observation. Velocity-only writes and same-position rewrites do not increase simulatedDistanceTraveledDelta. Apply the same rule to action- and install-triggered lifecycle-progress evidence.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3077,7 +3128,7 @@
         ]
       },
       "id": "KF-0027",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3089,11 +3140,64 @@
           "outcome": "semantic_runtime_failure",
           "summary": "Actual planning produced a truthful autonomous seeded hazard spawner with bounded owned objects and object_create, object_destroy, random_next, and time_schedule authority but no motion. Routing returned independent_visible_effect_unavailable before contract or source calls, so the external probe observed no accepted artifact or lifecycle.",
           "observedAt": "2026-08-31T21:34:04.541Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "The accepted install-triggered hazard lifecycle created four objects, destroyed one, and retained three as required. Source candidates wrote velocity or rewrote each object's creation position through object_motion_write, leaving simulatedDistanceTraveledDelta at zero and failing lifecycle-progress evidence in all three scenarios.",
+          "observedAt": "2026-09-02T20:32:43.385Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-09-02T20:41:33Z",
+          "reason": "An actual install-triggered lifecycle granted object_motion_write but repeatedly produced zero observed travel because source generation treated velocity metadata or a same-position write as sufficient motion. The evaluator measures owned-object position displacement.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Owned-object lifecycle evidence does not require motion",
+            "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "routing",
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation",
+                "handoff",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted install-triggered hazard lifecycle created four objects, destroyed one, and retained three as required. Source candidates wrote velocity or rewrote each object's creation position through object_motion_write, leaving simulatedDistanceTraveledDelta at zero and failing lifecycle-progress evidence in all three scenarios.",
+              "observedAt": "2026-09-02T20:32:43.385Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-31T22:05:44Z",
-      "updatedAt": "2026-08-31T22:05:44Z"
+      "updatedAt": "2026-09-02T20:41:33Z"
     },
     {
       "status": "active",
@@ -3138,9 +3242,9 @@
     },
     {
       "status": "active",
-      "confidence": "supported",
+      "confidence": "confirmed",
       "title": "Recurring schedule proofs require reachable clock steps",
-      "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps.",
+      "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps. For an autonomous recurring intent with one accepted positive recurrence interval, contract admission must reject each advance_time step longer than that interval and return the exact scenario-step path with repair guidance to split it into reachable steps. Do not rely on prompt guidance or source repair to reconcile an impossible coarse-step contract.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3156,7 +3260,7 @@
         ]
       },
       "id": "KF-0029",
-      "revision": 1,
+      "revision": 2,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3168,11 +3272,61 @@
           "outcome": "provider_output_rejected",
           "summary": "Actual-provider contract scenarios expected spawn_order 1 after one interval even though install plus the due scheduled callback produced 2, and expected 6 after one coarse six-interval advance even though a positive-delay callback rescheduled at the endpoint was not reachable in that same step, producing 2. The repeated exact counter mismatches contributed to rejection across source repair attempts.",
           "observedAt": "2026-08-31T22:16:34.337Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "An actual-provider contract used one 6000ms step for a 2500ms recurrence while requiring three total creations and last_spawn_time 5000. Endpoint dispatch reached only the callback due before the step; the terminal source wrote the truthful endpoint time 6000, so the impossible declared observation exhausted source repair.",
+          "observedAt": "2026-09-02T21:15:53.436Z"
         }
       ],
-      "amendments": [],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-09-02T21:22:54Z",
+          "reason": "A second actual-provider campaign reproduced the same coarse-step recurrence contradiction after the scheduling rule had already been added to provider guidance, proving that contract admission must enforce it.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Recurring schedule proofs require reachable clock steps",
+            "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "An actual-provider contract used one 6000ms step for a 2500ms recurrence while requiring three total creations and last_spawn_time 5000. Endpoint dispatch reached only the callback due before the step; the terminal source wrote the truthful endpoint time 6000, so the impossible declared observation exhausted source repair.",
+              "observedAt": "2026-09-02T21:15:53.436Z"
+            }
+          ]
+        }
+      ],
       "createdAt": "2026-08-31T22:36:43Z",
-      "updatedAt": "2026-08-31T22:36:43Z"
+      "updatedAt": "2026-09-02T21:22:54Z"
     },
     {
       "status": "active",
@@ -3323,7 +3477,7 @@
       "status": "active",
       "confidence": "supported",
       "title": "Contract repairs need one closed invariant checklist",
-      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
+      "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Preserve the latest rejected candidate's issues as exact failure evidence and separately retain a bounded, deduplicated, provenance-checked history of distinct earlier same-stage issues. Render both sets to repair generation and require every earlier invariant to remain satisfied while correcting current issues. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
       "scope": {
         "applicability": "pipeline_general",
         "mechanicIds": [],
@@ -3336,7 +3490,7 @@
         ]
       },
       "id": "KF-0034",
-      "revision": 3,
+      "revision": 4,
       "evidence": [
         {
           "kind": "campaign_attempt",
@@ -3370,6 +3524,17 @@
           "outcome": "provider_output_rejected",
           "summary": "Four actual contract candidates oscillated between exact accepted string defaults and trusted stable-ID values. The terminal candidate preserved state_write and exact defaults but incorrectly declared hazard_spawn_area and main_arena as stable IDs absent from the trusted region and scene catalogs, and no source call occurred.",
           "observedAt": "2026-09-02T03:36:45.799Z"
+        },
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2",
+          "attemptId": "a01-baseline",
+          "stage": "contract_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual contract attempts alternated between missing state_write and an invalid entity binding. The third candidate restored state_write but used the wrong binding reference; the fourth fixed that binding while dropping state_write again and adding an autonomous dispatch_action, exhausting repair before source generation.",
+          "observedAt": "2026-09-02T15:42:57.170Z"
         }
       ],
       "amendments": [
@@ -3442,10 +3607,45 @@
               "observedAt": "2026-09-02T03:36:45.799Z"
             }
           ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-09-02T16:00:52Z",
+          "reason": "Collecting all issues from each rejected candidate still allowed successive candidates to alternate between distinct invariant failures. Repairs need provenance-checked earlier same-stage issue history in addition to exact current failure evidence so a newly corrected path cannot regress on the next attempt.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Contract repairs need one closed invariant checklist",
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation"
+              ],
+              "classifications": [
+                "provider_output_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Actual contract attempts alternated between missing state_write and an invalid entity binding. The third candidate restored state_write but used the wrong binding reference; the fourth fixed that binding while dropping state_write again and adding an autonomous dispatch_action, exhausting repair before source generation.",
+              "observedAt": "2026-09-02T15:42:57.170Z"
+            }
+          ]
         }
       ],
       "createdAt": "2026-08-31T23:41:21Z",
-      "updatedAt": "2026-09-02T03:47:18Z"
+      "updatedAt": "2026-09-02T16:00:52Z"
     },
     {
       "status": "active",
@@ -3600,6 +3800,448 @@
       "amendments": [],
       "createdAt": "2026-09-02T02:58:59Z",
       "updatedAt": "2026-09-02T02:58:59Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Generated-host role references may be normalized only from exact entities",
+      "guidance": "Before generated-host routing, make provider-declared actor and target role lineage explicit only when the returned Game Spec contains exactly one entity with that role. Add that exact entity reference and record a reversible assumption; never choose among duplicate-role entities or infer an unmatched role. An independently positioned autonomous owned-object lifecycle may leave actors empty when it already carries an exact entity reference and has no actor-origin spatial rule. Continue requiring an actor role for bound-entity behavior or explicit actor-origin creation, and reject every nonempty actor or target role not represented by an exact referenced entity.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "planning",
+          "routing",
+          "runtime_health"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0038",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3",
+          "attemptId": "a01-baseline",
+          "stage": "runtime_health",
+          "quality": "actual_submission",
+          "outcome": "semantic_runtime_failure",
+          "summary": "Actual planning returned a validated survival-arena Game Spec with one hazard-role entity, then generated-host routing stopped before contract or source calls with observable_actor_reference_required. The retained public evidence did not include the raw intent, so the durable fix covers both safe causes of that generic issue: an omitted role for an independent autonomous lifecycle, and a named role with one exact matching entity but no entity reference.",
+          "observedAt": "2026-09-02T16:08:50.303Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T16:22:37Z",
+      "updatedAt": "2026-09-02T16:22:37Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Evaluator binding requirements follow causal evidence",
+      "guidance": "Derive top-down evaluator reference-binding requirements from the causal observation being authored. Bound-entity motion requires exact actor-role entity bindings. Owned-object actor-origin proof requires exact actor-role bindings, and target-interaction proof requires exact target-role bindings. An independently positioned owned-object lifecycle with no actor-origin rule and no target interaction may have no actor or target role and must not be rejected for lacking an evidence binding. Preserve exact trusted intent lineage and keep every declared contract binding subject to normal contract admission; this rule removes only a binding requirement that the selected lifecycle observation cannot consume.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_failure",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0039",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_failure",
+          "summary": "Actual planning admitted an independently positioned autonomous spawner with no actor or target roles and one exact entity reference. Repaired contract and initial source generation succeeded. Before deterministic evaluation, external-observation authoring rejected the actorless intent with Top-down generated mechanic evaluation requires exactly one single-entity binding for every trusted actor-role entity reference, even though its owned-object lifecycle observation consumed no actor binding.",
+          "observedAt": "2026-09-02T17:35:46.657Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T17:40:18Z",
+      "updatedAt": "2026-09-02T17:40:18Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Target interaction proof requires an observable authority path",
+      "guidance": "Require evaluator-authored owned-object target interaction only when the trusted intent declares a target and requires both spatial_query and object_motion_write, and the accepted contract grants both capabilities. A target role or target reference alone does not prove that the generated mechanic owns target interaction, especially when trusted built-in contact handling remains unchanged. Preserve exact target bindings and ordinary contract admission. This rule only prevents an external assertion that the evaluator cannot observe through the accepted authority surface.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0040",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c4-r6/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c4-r6",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual planning and contract generation admitted an autonomous seeded hazard spawner with a player target reference, spatial_query, and no object_motion_write authority. The initial source created four hazards, destroyed one, retained three, and wrote the required state, but evaluator-authored target interaction failed. Repairs pursued that impossible assertion until the final repair removed state_write and was rejected for unused required authority.",
+          "observedAt": "2026-09-02T17:46:23.258Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T17:53:42Z",
+      "updatedAt": "2026-09-02T17:53:42Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Recurring population must fit cadence and lifetime",
+      "guidance": "For an autonomous recurring owned-object lifecycle without an explicit positive batch-size configuration, admit at most one creation per recurrence. With accepted recurrence interval I and lifetime L, final simultaneous live population cannot exceed ceil(L / I), further bounded by the accepted active limit and owned-object maximum. Simulate every scenario advance_time step in order, clean up expired objects before recurring creation, and keep final owned_object_count, active-count state, and creation-sequence state consistent with that one simulation. Reject an impossible contract before source generation and give contract repair the computed bound.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "contract_generation",
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0041",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "An actual-provider contract declared a 1800ms recurrence, 5000ms lifetime, nine interval steps, and a final live hazard count of four. At most three interval-spaced hazards can remain live under required cleanup. Source candidates produced three live hazards while repairs oscillated on creation-order state and ultimately exhausted on the impossible count.",
+          "observedAt": "2026-09-02T18:01:02.905Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T18:08:13Z",
+      "updatedAt": "2026-09-02T18:08:13Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "One scheduled callback must coordinate recurrence and expiry",
+      "guidance": "When recurring creation and owned-object expiry share the one admitted scheduled callback, maintain one deterministic coordinator and at most one pending scheduled entry. Persist object creation times in immutable properties. On each invocation, read current simulation time once, rediscover and inspect owned objects in one bounded pass, remember the latest valid creation time before cleanup, destroy expired objects, perform at most one overdue recurrence, update accepted state, and schedule one positive relative delay to the earliest future recurrence or surviving-object expiry. Use an accepted absolute next-boundary state when present, otherwise derive the due recurrence from the latest persisted creation time observed before cleanup. Never schedule separate recurrence and per-object expiry entries to the same callback, infer invocation purpose from endpoint modulus or equality, or replay multiple missed recurrences after a coarse step.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "source_generation",
+          "deterministic_evaluation"
+        ],
+        "classifications": [
+          "provider_output_rejected",
+          "semantic_runtime_failure"
+        ]
+      },
+      "id": "KF-0042",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8",
+          "attemptId": "a01-baseline",
+          "stage": "source_generation",
+          "quality": "actual_submission",
+          "outcome": "provider_output_rejected",
+          "summary": "Actual-provider source candidates used separate recurrence and expiry schedules that all entered the one required scheduled callback, then inferred purpose from endpoint-time modulus. Coarse-step dispatch collapsed overdue nominal times to one endpoint, and the final candidate created two hazards but destroyed both before the required progress observation.",
+          "observedAt": "2026-09-02T19:36:23.372Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T19:45:52Z",
+      "updatedAt": "2026-09-02T19:45:52Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Retained runtime randomness must advance across callbacks",
+      "guidance": "Keep seeded random state at retained mechanic-session scope, not inside a per-execution or per-callback worker job. In runtime mode, route random_next through the retained lifecycle capability host so install, scheduled, action, and dispose callbacks consume one advancing deterministic sequence. Preserve independently seeded local randomness only for isolated conformance replay probes. Verify the production worker boundary in a browser by showing two executions in one realm receive different successive subsequences, while the conformance deterministic-replay corpus still matches for equal seeds. A contract, source, or evaluator creation count does not prove visible variation when repeated objects can stack at identical coordinates.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_health",
+          "external_mechanic_probe"
+        ],
+        "classifications": [
+          "semantic_runtime_failure",
+          "manual_qa_rejected"
+        ]
+      },
+      "id": "KF-0043",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed the trusted static red hazard and one inert-looking white generated entity. Accepted source invoked random_next twice during install and twice during every recurring callback, but the SES executor reinitialized its random state from the same realm seed for every execution, placing all generated hazards at identical coordinates.",
+          "observedAt": "2026-09-02T20:00:39.862Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-02T20:09:07Z",
+      "updatedAt": "2026-09-02T20:09:07Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Generated owned objects need explicit trusted interaction adoption",
+      "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by the generated mechanic. Accept the association when the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset. Also accept an object kind that is the exact shared hazard entity ID only when the generated and trusted mechanics reference the same exact hazard-role asset in the Final Game Spec; do not trust arbitrary property aliases such as visual_asset. When no canonical asset claim is present, also accept the generated mechanic's sole contract-owned object kind only when the exact Final Game Spec yields exactly one shared hazard-role entity and exactly one shared hazard-role asset between the generated and trusted mechanics. Treat this as trusted contract identity, not a provider string heuristic. An explicit unknown or unreferenced properties.asset claim remains a rejection and must not fall back. Ordinary owned-archetype IDs may differ from rendering asset IDs. Reject ambiguous, wrong-role, merely name-derived, or otherwise unreferenced identities. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary for every admitted shape by invoking each generated object's overlap handler and observing the trusted player and objective reset, and verify unreferenced objects receive no trusted overlap.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "runtime_health",
+          "external_mechanic_probe"
+        ],
+        "classifications": [
+          "semantic_runtime_failure",
+          "manual_qa_rejected"
+        ]
+      },
+      "id": "KF-0044",
+      "revision": 4,
+      "evidence": [
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed recurring spawned white hazards, but collision did not reset the player. The accepted generated mechanic and hazard_contact shared the exact hazard entity and hazard_placeholder asset. Runtime tracing showed the created object's admitted archetype was spawned_hazard and its immutable asset property was hazard_placeholder, while trusted adoption checked only whether the archetype string itself was the referenced asset ID.",
+          "observedAt": "2026-09-02T20:56:50.600Z"
+        },
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed recurring white generated hazards, but touching them did not kill or reset the player. The accepted Final Game Spec gave the generated mechanic and trusted hazard_contact the same exact hazard entity and hazard asset. Generated source used that entity ID as objectKind and placed the asset ID under visual_asset, so the trusted observer did not recognize either previously admitted asset-association shape and attached no overlap handler.",
+          "observedAt": "2026-09-02T22:07:39.376Z"
+        },
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "Manual gameplay showed generated white hazards appearing over time, but player contact did not trigger death or round reset. The accepted contract claimed contact-and-reset behavior, while runtime tracing showed the trusted hazard_contact installer registered overlap only for its original static entity and never observed generated owned hazards.",
+          "observedAt": "2026-09-02T20:18:26.186Z"
+        },
+        {
+          "kind": "manual_qa",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a01-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1",
+          "attemptId": "a01-baseline",
+          "stage": "external_mechanic_probe",
+          "quality": "actual_submission",
+          "outcome": "manual_qa_rejected",
+          "summary": "the white hazards are not killing the player",
+          "observedAt": "2026-09-02T23:36:13.676Z"
+        }
+      ],
+      "amendments": [
+        {
+          "revision": 1,
+          "changedAt": "2026-09-02T21:08:54Z",
+          "reason": "An actual manually rejected candidate used a contract-owned archetype ID distinct from its exact referenced rendering asset, which was supplied in immutable creation properties. Requiring the archetype ID itself to be an asset ID made the trusted adopter silently skip valid generated hazards.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated owned objects need explicit trusted interaction adoption",
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to reference the object kind as an exact hazard-role asset and to share an exact hazard-role entity with the trusted hazard-contact mechanic before registering player overlap. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary by invoking the generated object's overlap handler and observing the trusted player and objective reset.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "Manual gameplay showed recurring spawned white hazards, but collision did not reset the player. The accepted generated mechanic and hazard_contact shared the exact hazard entity and hazard_placeholder asset. Runtime tracing showed the created object's admitted archetype was spawned_hazard and its immutable asset property was hazard_placeholder, while trusted adoption checked only whether the archetype string itself was the referenced asset ID.",
+              "observedAt": "2026-09-02T20:56:50.600Z"
+            }
+          ]
+        },
+        {
+          "revision": 2,
+          "changedAt": "2026-09-02T22:19:33Z",
+          "reason": "An actual manually rejected candidate used the exact shared hazard entity ID as its admitted object kind and referenced the same exact hazard asset on both mechanics, but did not repeat that asset through the canonical properties.asset field. Exact Final Game Spec entity-and-asset lineage was sufficient for trusted adoption and was not recognized.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated owned objects need explicit trusted interaction adoption",
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by that generated mechanic. Accept the association when either the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset; ordinary owned-archetype IDs may differ from rendering asset IDs. Reject missing, unknown, unreferenced, or wrong-role asset values. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary with a distinct archetype ID and referenced asset property by invoking the generated object's overlap handler and observing the trusted player and objective reset, and verify an unreferenced property asset receives no trusted overlap.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "Manual gameplay showed recurring white generated hazards, but touching them did not kill or reset the player. The accepted Final Game Spec gave the generated mechanic and trusted hazard_contact the same exact hazard entity and hazard asset. Generated source used that entity ID as objectKind and placed the asset ID under visual_asset, so the trusted observer did not recognize either previously admitted asset-association shape and attached no overlap handler.",
+              "observedAt": "2026-09-02T22:07:39.376Z"
+            }
+          ]
+        },
+        {
+          "revision": 3,
+          "changedAt": "2026-09-03T00:31:09Z",
+          "reason": "An actual manually rejected candidate used its contract's sole admitted owned-object kind without repeating the shared asset identity in canonical creation properties. The exact Final Game Spec still supplied a unique shared hazard entity and asset, so the trusted adopter could identify the object without trusting a provider-chosen name.",
+          "previous": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated owned objects need explicit trusted interaction adoption",
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by the generated mechanic. Accept the association when the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset. Also accept an object kind that is the exact shared hazard entity ID only when the generated and trusted mechanics reference the same exact hazard-role asset in the Final Game Spec; do not trust arbitrary property aliases such as visual_asset. Ordinary owned-archetype IDs may differ from rendering asset IDs. Reject missing, unknown, unreferenced, wrong-role, or merely name-derived identities. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary for all three admitted shapes by invoking each generated object's overlap handler and observing the trusted player and objective reset, and verify unreferenced objects receive no trusted overlap.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            }
+          },
+          "evidenceAdded": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "the white hazards are not killing the player",
+              "observedAt": "2026-09-02T23:36:13.676Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T20:26:19Z",
+      "updatedAt": "2026-09-03T00:31:09Z"
+    },
+    {
+      "status": "active",
+      "confidence": "supported",
+      "title": "Handoff target proof must match evaluator capability prerequisites",
+      "guidance": "Require evaluator-authored target-interaction evidence only when the accepted intent and contract provide an observable target-authority path, including both spatial_query and object_motion_write. Project handoff must apply the same prerequisite as evaluator planning before comparing requireTargetInteraction. A target reference alone establishes lineage; it does not prove generated source can mutate or interact with that target. Preserve exact authentic evaluation receipt, scenario, assertion, and actual-value checks.",
+      "scope": {
+        "applicability": "pipeline_general",
+        "mechanicIds": [],
+        "manifestIds": [],
+        "stages": [
+          "deterministic_evaluation",
+          "assembly"
+        ],
+        "classifications": [
+          "pipeline_failure"
+        ]
+      },
+      "id": "KF-0045",
+      "revision": 1,
+      "evidence": [
+        {
+          "kind": "campaign_attempt",
+          "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a03-baseline",
+          "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1",
+          "attemptId": "a03-baseline",
+          "stage": "assembly",
+          "quality": "actual_submission",
+          "outcome": "pipeline_failure",
+          "summary": "Deterministic evaluation evidence must exactly cover every declared setup entry, step, and observation for the accepted contract.",
+          "observedAt": "2026-09-02T23:21:12.559Z"
+        }
+      ],
+      "amendments": [],
+      "createdAt": "2026-09-03T00:31:09Z",
+      "updatedAt": "2026-09-03T00:31:09Z"
     }
   ],
   "reconciliations": [
@@ -9289,6 +9931,1348 @@
       "createdAt": "2026-09-02T05:14:21Z",
       "priorManifestDigest": "ed0af497223900b87e25489539db6ad06b23be5361436c5763d62c8fec6e594f",
       "resultingManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-1-20260902t160052z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-1",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2"
+      },
+      "consultedManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305",
+      "contextDigest": "d156849a20e6b76d37e5ada3e20dc8562bdeb5453af6e69e49e5352aad7e5e96",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0009",
+        "KF-0014",
+        "KF-0018",
+        "KF-0025",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0033",
+        "KF-0034"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0018",
+            "KF-0031",
+            "KF-0033",
+            "KF-0034"
+          ],
+          "rationale": "The actual contract repair sequence oscillated between state-write and binding invariants because each retry received only the latest rejected candidate's issues. KF-0018 and KF-0031 establish the state-write obligation, KF-0034 requires a closed invariant checklist, and KF-0033 requires the new bounded repair-history field to survive strict provider transport. KF-0003, KF-0009, KF-0014, KF-0025, KF-0027, KF-0028, and KF-0029 constrain later lifecycle, authority, placement, and timing behavior but do not explain this contract-stage oscillation. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0034",
+          "expectedRevision": 3,
+          "reason": "Collecting all issues from each rejected candidate still allowed successive candidates to alternate between distinct invariant failures. Repairs need provenance-checked earlier same-stage issue history in addition to exact current failure evidence so a newly corrected path cannot regress on the next attempt.",
+          "changes": {
+            "guidance": "For every contract repair, recheck required intent capabilities, mandatory lifecycle callbacks, scenario trigger mode, private-state write obligations, and the exact accepted configuration declaration manifest together before returning. For every structurally valid rejected contract candidate, collect intrinsic and reference-validation issues together with accepted-intent lineage and safety issues before producing repair feedback; an earlier validation layer must not mask a later invariant. Preserve the latest rejected candidate's issues as exact failure evidence and separately retain a bounded, deduplicated, provenance-checked history of distinct earlier same-stage issues. Render both sets to repair generation and require every earlier invariant to remain satisfied while correcting current issues. Render the exact required-capability manifest and an exact configuration declaration manifest that preserves every accepted key and default. Use boolean, integer, or number for matching scalar values. Use stable_id for an accepted string only when that exact value occurs in exactly one trusted catalog kind; otherwise use a bounded string. An unknown_reference repair must restore the manifest declaration kind without substituting another default. Autonomous install scenarios must omit dispatch_action and logical_action; logical-action scenarios must retain both. A final state_equals that differs from setup or initial state must retain state_write. Correct the reported paths without changing unrelated checklist items."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c0-r2",
+              "attemptId": "a01-baseline",
+              "stage": "contract_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Actual contract attempts alternated between missing state_write and an invalid entity binding. The third candidate restored state_write but used the wrong binding reference; the fourth fixed that binding while dropping state_write again and adding an autonomous dispatch_action, exhausting repair before source generation.",
+              "observedAt": "2026-09-02T15:42:57.170Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T16:00:52Z",
+      "priorManifestDigest": "039e96f43310d3485e749af42f72854259154e022922cd8f5b50f52ef70f9305",
+      "resultingManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-2-20260902t162237z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-2",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3"
+      },
+      "consultedManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf",
+      "contextDigest": "6e14cff3ae83b6fc082eda2fc45fc820d9230db31c9076b52a979ebd3d1951ae",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0036",
+        "KF-0037"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-1",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The verified cumulative contract-repair fix is already represented by reconciliation KR-p09-t18-v2-fix-cycle-1-20260902t160052z and does not explain this distinct pre-contract actor-reference admission failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0028",
+            "KF-0038"
+          ],
+          "rationale": "The actual planning response returned a valid base Game Spec containing one hazard-role entity, but routing omitted generated work with observable_actor_reference_required before contract or source calls. KF-0028 prevents treating seeded arena placement as actor-origin behavior. The new KF-0038 records the safe role/reference normalization boundary while leaving ambiguous and unmatched roles rejected. KF-0003, KF-0008, KF-0009, KF-0011, KF-0020, KF-0023, KF-0025, KF-0026, KF-0027, KF-0029, KF-0036, and KF-0037 govern later lifecycle, state, replay, interaction, scheduling, and external proof and do not cause this routing rejection. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated-host role references may be normalized only from exact entities",
+            "guidance": "Before generated-host routing, make provider-declared actor and target role lineage explicit only when the returned Game Spec contains exactly one entity with that role. Add that exact entity reference and record a reversible assumption; never choose among duplicate-role entities or infer an unmatched role. An independently positioned autonomous owned-object lifecycle may leave actors empty when it already carries an exact entity reference and has no actor-origin spatial rule. Continue requiring an actor role for bound-entity behavior or explicit actor-origin creation, and reject every nonempty actor or target role not represented by an exact referenced entity.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "planning",
+                "routing",
+                "runtime_health"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0038",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c1-r3",
+                "attemptId": "a01-baseline",
+                "stage": "runtime_health",
+                "quality": "actual_submission",
+                "outcome": "semantic_runtime_failure",
+                "summary": "Actual planning returned a validated survival-arena Game Spec with one hazard-role entity, then generated-host routing stopped before contract or source calls with observable_actor_reference_required. The retained public evidence did not include the raw intent, so the durable fix covers both safe causes of that generic issue: an omitted role for an independent autonomous lifecycle, and a named role with one exact matching entity but no entity reference.",
+                "observedAt": "2026-09-02T16:08:50.303Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T16:22:37Z",
+            "updatedAt": "2026-09-02T16:22:37Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T16:22:37Z",
+      "priorManifestDigest": "ac4cc0b5165b49c7ccc6c3fd9ad5863c8af77ccd94cde1a025333921dd32d2cf",
+      "resultingManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-3-20260902t173050z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-3",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4"
+      },
+      "consultedManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc",
+      "contextDigest": "3ee9ec04fd2d144eb0ee146d621ad92a421bcf1d673781574f0ff29c1a021869",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-2",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 2 safely normalized generated-host actor references and allowed this attempt to reach contract and source generation. It does not explain the distinct realm-context failure after source compilation."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0019"
+          ],
+          "rationale": "All four structurally different source candidates failed with realm.binding is not a function. The candidates did not reference realm. Source validation had enabled generated_admitted execution while still placing trusted realm.callCapability and realm.binding context construction inside the separately compiled callback. KF-0019 requires this authenticated path but did not yet state the required authority split. The fix builds and freezes the capability, binding, and config context in the realm-bearing outer execution, then gives admitted callbacks only __sparklineLifecycleContext. The other consulted findings govern candidate behavior and contract obligations but cannot cause this stable host exception before candidate capability execution. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0019",
+          "expectedRevision": 6,
+          "reason": "Source-stage adoption of generated_admitted exposed a second trust-boundary requirement: callbacks compiled in the reusable restricted compartment cannot construct their own context through realm, because that compartment intentionally has no realm authority.",
+          "changes": {
+            "guidance": "Enforce generated callback active work inside the execution realm at the exact resource budget. Compile authenticated admitted callback source before active-work measurement while retaining compilation inside the bounded outer execution deadline. Source-stage realm validation of an already parsed, typechecked, compiled, and statically admitted artifact must explicitly use the authenticated generated lifecycle path; foundation and diagnostic fixtures that claim generated-mechanic readiness must use that same path. Construct and freeze the capability, binding, and config lifecycle context once in the realm-bearing outer execution. Generated-admitted callback source must consume only __sparklineLifecycleContext and must never call realm.callCapability, realm.binding, or any other realm member. Cover both an exact nonempty binding and a capability call when asserting this split. Keep callback metering and the host watchdog suspended across capability transport, trusted response decoding, and internal Promise forwarding, then resume them immediately before the generated continuation. Retain a separate bounded allowance for Worker delivery and suspension acknowledgement. Preserve a trusted structured callback-limit settlement across the bounded execute-to-terminate handoff: consume at most one exact retired execute acknowledgement and response without making either authoritative, reject unknown, malformed, or replayed envelopes, and let only the correlated terminate response return the controller's measured settlement. Do not widen the generated resource budget or outer execution deadline to absorb trusted compilation, bridge work, or response delivery."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c2-r4",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "Planning and repaired contract generation succeeded. Four source candidates then failed identically with realm.binding is not a function even though none referenced realm. The source validator had enabled authenticated generated callback execution but kept trusted context construction inside each restricted callback, so every candidate with a nonempty contract binding failed before its own capability behavior could run.",
+              "observedAt": "2026-09-02T17:21:11.219Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T17:30:50Z",
+      "priorManifestDigest": "4f6d71732c71f2c22cb114ebdc1830696663d0d559203d1fd35412f310a58fdc",
+      "resultingManifestDigest": "b09f6e4dc928c5251ca0c98410bf0f7fb969167da0cb3c56d41418d6651e44db"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-4-20260902t174018z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-4",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5"
+      },
+      "consultedManifestDigest": "b09f6e4dc928c5251ca0c98410bf0f7fb969167da0cb3c56d41418d6651e44db",
+      "contextDigest": "0449bbdf5a3ff6f104c0cdba005264128daf9261796d050f8a71ac21a30220a9",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-3",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 3 correctly separated trusted realm-context construction from generated-admitted callbacks and allowed the next source candidate to execute. It does not explain the distinct downstream evaluator rejection for an intentionally actorless autonomous lifecycle."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0039"
+          ],
+          "rationale": "The admitted intent was an independently positioned autonomous owned-object lifecycle with no actor or target role and one exact entity reference. Contract and initial source generation succeeded, then external-observation authoring threw before deterministic evaluation because it unconditionally required a nonempty actor-role evidence binding. The lifecycle observation does not consume a referenced binding unless actor-origin or target-interaction proof is required. The new finding records that evidence dependency while preserving exact bindings for bound motion, actor origin, and targets. The consulted source-behavior findings cannot cause this pre-evaluation host exception. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Evaluator binding requirements follow causal evidence",
+            "guidance": "Derive top-down evaluator reference-binding requirements from the causal observation being authored. Bound-entity motion requires exact actor-role entity bindings. Owned-object actor-origin proof requires exact actor-role bindings, and target-interaction proof requires exact target-role bindings. An independently positioned owned-object lifecycle with no actor-origin rule and no target interaction may have no actor or target role and must not be rejected for lacking an evidence binding. Preserve exact trusted intent lineage and keep every declared contract binding subject to normal contract admission; this rule removes only a binding requirement that the selected lifecycle observation cannot consume.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_failure",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0039",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c3-r5",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_failure",
+                "summary": "Actual planning admitted an independently positioned autonomous spawner with no actor or target roles and one exact entity reference. Repaired contract and initial source generation succeeded. Before deterministic evaluation, external-observation authoring rejected the actorless intent with Top-down generated mechanic evaluation requires exactly one single-entity binding for every trusted actor-role entity reference, even though its owned-object lifecycle observation consumed no actor binding.",
+                "observedAt": "2026-09-02T17:35:46.657Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T17:40:18Z",
+            "updatedAt": "2026-09-02T17:40:18Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T17:40:18Z",
+      "priorManifestDigest": "b09f6e4dc928c5251ca0c98410bf0f7fb969167da0cb3c56d41418d6651e44db",
+      "resultingManifestDigest": "adb58cc0e08508232f5d7c80c1e798eb7fee148bb9c081035a2f4d3aa1eb8eb7"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-5-20260902t175342z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-5",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c4-r6"
+      },
+      "consultedManifestDigest": "adb58cc0e08508232f5d7c80c1e798eb7fee148bb9c081035a2f4d3aa1eb8eb7",
+      "contextDigest": "049c0555d2565017b228b8e9d35bb89da988156357911d4da56c06ebfb51fac5",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0039"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-4",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 4 correctly removed a non-causal binding requirement and allowed deterministic evaluation to run. It does not address the distinct downstream assertion that every transient lifecycle with a declared target must interact with that target even when neither the intent nor contract authorizes the evaluator's observable interaction path."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c4-r6/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0040"
+          ],
+          "rationale": "The actual-provider intent and accepted contract described autonomous seeded hazard creation while trusted hazard-contact behavior remained outside the generated mechanic. The contract granted spatial queries but no object_motion_write authority. The evaluator nevertheless required target interaction, an outcome its tracker can recognize only after a spatial match followed by object_motion_write on the matched target. The initial source satisfied required state writes but failed this impossible assertion. Subsequent repairs chased it until the final source removed required state writes and exhausted repair. KF-0039 explains which bindings causal evidence consumes but not when target-interaction evidence is provable. The remaining consulted findings concern source behavior, scheduling, state transitions, runtime containment, or transport and do not cause this evaluator-authored impossible obligation. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Target interaction proof requires an observable authority path",
+            "guidance": "Require evaluator-authored owned-object target interaction only when the trusted intent declares a target and requires both spatial_query and object_motion_write, and the accepted contract grants both capabilities. A target role or target reference alone does not prove that the generated mechanic owns target interaction, especially when trusted built-in contact handling remains unchanged. Preserve exact target bindings and ordinary contract admission. This rule only prevents an external assertion that the evaluator cannot observe through the accepted authority surface.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0040",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c4-r6/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c4-r6",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual planning and contract generation admitted an autonomous seeded hazard spawner with a player target reference, spatial_query, and no object_motion_write authority. The initial source created four hazards, destroyed one, retained three, and wrote the required state, but evaluator-authored target interaction failed. Repairs pursued that impossible assertion until the final repair removed state_write and was rejected for unused required authority.",
+                "observedAt": "2026-09-02T17:46:23.258Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T17:53:42Z",
+            "updatedAt": "2026-09-02T17:53:42Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T17:53:42Z",
+      "priorManifestDigest": "adb58cc0e08508232f5d7c80c1e798eb7fee148bb9c081035a2f4d3aa1eb8eb7",
+      "resultingManifestDigest": "63f8c17e0642f4efacb030b93171a1856bab1b81db473c4c8083a2a259d2a021"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-6-20260902t180813z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-6",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7"
+      },
+      "consultedManifestDigest": "63f8c17e0642f4efacb030b93171a1856bab1b81db473c4c8083a2a259d2a021",
+      "contextDigest": "84c92a3fc1487fae6cad6a630ddbaa6229c91c7b620772b61a36e54b132eb131",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-5",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0040"
+          ],
+          "rationale": "Fix cycle 5 removed the impossible evaluator-authored target-interaction requirement. The next actual-provider run reached model-declared state and owned-object observations without any target-interaction failure, confirming the corrected authority boundary. It does not explain the distinct accepted-contract population contradiction."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0041"
+          ],
+          "rationale": "The accepted intent fixed a 1800ms recurrence, 5000ms lifetime, one hazard per recurrence, cleanup of expired hazards, and a maximum of four active hazards. Its repaired contract used nine interval-sized time steps but required four live hazards and creation order five. Cleanup at or before each recurrence leaves at most ceil(5000 / 1800), or three, simultaneously live objects; continued replacement yields one creation per reachable recurrence. The initial and repaired sources consistently exposed the contradiction, including the terminal actual owned-object count of three. Existing findings cover scenario-local liveness, reachable recurrence steps, and source transition guidance, but none rejects a contract population above its accepted cadence-and-lifetime ceiling. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Recurring population must fit cadence and lifetime",
+            "guidance": "For an autonomous recurring owned-object lifecycle without an explicit positive batch-size configuration, admit at most one creation per recurrence. With accepted recurrence interval I and lifetime L, final simultaneous live population cannot exceed ceil(L / I), further bounded by the accepted active limit and owned-object maximum. Simulate every scenario advance_time step in order, clean up expired objects before recurring creation, and keep final owned_object_count, active-count state, and creation-sequence state consistent with that one simulation. Reject an impossible contract before source generation and give contract repair the computed bound.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "contract_generation",
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0041",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c5-r7",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "An actual-provider contract declared a 1800ms recurrence, 5000ms lifetime, nine interval steps, and a final live hazard count of four. At most three interval-spaced hazards can remain live under required cleanup. Source candidates produced three live hazards while repairs oscillated on creation-order state and ultimately exhausted on the impossible count.",
+                "observedAt": "2026-09-02T18:01:02.905Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T18:08:13Z",
+            "updatedAt": "2026-09-02T18:08:13Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T18:08:13Z",
+      "priorManifestDigest": "63f8c17e0642f4efacb030b93171a1856bab1b81db473c4c8083a2a259d2a021",
+      "resultingManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-7-20260902t194552z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-7",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8"
+      },
+      "consultedManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929",
+      "contextDigest": "c4afcfed8d9e223cacb8cd49a377d234343dcd4cecf770659fa7dfa73349ba18",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-6",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0041"
+          ],
+          "rationale": "Fix cycle 6 rejected the prior impossible recurring population and the next actual-provider contract admitted a coherent 1800ms recurrence, 2400ms lifetime, one creation per recurrence, and one live object after each cleanup boundary. Source generation then reached deterministic evaluation, confirming the cadence-and-lifetime admission boundary. It does not explain the distinct source scheduling failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0042"
+          ],
+          "rationale": "The accepted contract was internally coherent, but every source candidate scheduled recurrence and per-object expiry independently to the same required scheduled callback. The callback tried to distinguish those identical invocations with current-time modulus. The host dispatches already-due callbacks at the coarse-step endpoint, so multiple nominal boundaries can share one observed time and the branch destroyed both created hazards before the progress observation. KF-0029 and KF-0035 describe endpoint reachability and recurrence drift, while KF-0032 describes source transition closure, but none states that one admitted scheduled callback must coordinate overlapping recurrence and expiry work through one pending earliest-boundary schedule. The remaining consulted findings concern unrelated provider, authority, binding, state, and contract-admission failures. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "One scheduled callback must coordinate recurrence and expiry",
+            "guidance": "When recurring creation and owned-object expiry share the one admitted scheduled callback, maintain one deterministic coordinator and at most one pending scheduled entry. Persist object creation times in immutable properties. On each invocation, read current simulation time once, rediscover and inspect owned objects in one bounded pass, remember the latest valid creation time before cleanup, destroy expired objects, perform at most one overdue recurrence, update accepted state, and schedule one positive relative delay to the earliest future recurrence or surviving-object expiry. Use an accepted absolute next-boundary state when present, otherwise derive the due recurrence from the latest persisted creation time observed before cleanup. Never schedule separate recurrence and per-object expiry entries to the same callback, infer invocation purpose from endpoint modulus or equality, or replay multiple missed recurrences after a coarse step.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "source_generation",
+                "deterministic_evaluation"
+              ],
+              "classifications": [
+                "provider_output_rejected",
+                "semantic_runtime_failure"
+              ]
+            },
+            "id": "KF-0042",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c6-r8",
+                "attemptId": "a01-baseline",
+                "stage": "source_generation",
+                "quality": "actual_submission",
+                "outcome": "provider_output_rejected",
+                "summary": "Actual-provider source candidates used separate recurrence and expiry schedules that all entered the one required scheduled callback, then inferred purpose from endpoint-time modulus. Coarse-step dispatch collapsed overdue nominal times to one endpoint, and the final candidate created two hazards but destroyed both before the required progress observation.",
+                "observedAt": "2026-09-02T19:36:23.372Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T19:45:52Z",
+            "updatedAt": "2026-09-02T19:45:52Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T19:45:52Z",
+      "priorManifestDigest": "6c14ea5fb401e8d7d8ddb30fcca6ed283e3fe4773302351f545782715543c929",
+      "resultingManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-8-20260902t200907z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-8",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9"
+      },
+      "consultedManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882",
+      "contextDigest": "3016cd902e5cc8dab743b5de84d97fdbdc75f62f99031caa79fc7e7de8c6c99b",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0037",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-7",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0042"
+          ],
+          "rationale": "Fix cycle 7's single-callback recurrence and expiry coordinator produced accepted source, passed deterministic evaluation, and reached manual gameplay QA. That confirms the source scheduling boundary in KF-0042. The remaining visual failure occurred after source acceptance and has a separate runtime cause."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0037",
+            "KF-0043"
+          ],
+          "rationale": "Manual QA again showed the trusted static red hazard and only one inert-looking white generated entity despite accepted recurring source, confirming KF-0037. Artifact tracing showed install and every scheduled callback consumed the same first two seeded random values because each SES executor job reinitialized random state from the realm seed. Every created hazard therefore occupied identical coordinates and visually stacked. Runtime mode now delegates random_next to the retained lifecycle capability host, whose state advances across callback executions; conformance mode keeps isolated seeded randomness for deterministic replay probes. The browser regression failed before the fix, then proved runtime sequence advancement while the unchanged 32-probe conformance corpus passed. The other consulted findings cover provider, authority, contract, evaluator, probe, or scheduling failures and do not explain per-execution RNG reset. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Retained runtime randomness must advance across callbacks",
+            "guidance": "Keep seeded random state at retained mechanic-session scope, not inside a per-execution or per-callback worker job. In runtime mode, route random_next through the retained lifecycle capability host so install, scheduled, action, and dispose callbacks consume one advancing deterministic sequence. Preserve independently seeded local randomness only for isolated conformance replay probes. Verify the production worker boundary in a browser by showing two executions in one realm receive different successive subsequences, while the conformance deterministic-replay corpus still matches for equal seeds. A contract, source, or evaluator creation count does not prove visible variation when repeated objects can stack at identical coordinates.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            },
+            "id": "KF-0043",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "manual_qa",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c7-r9",
+                "attemptId": "a01-baseline",
+                "stage": "external_mechanic_probe",
+                "quality": "actual_submission",
+                "outcome": "manual_qa_rejected",
+                "summary": "Manual gameplay showed the trusted static red hazard and one inert-looking white generated entity. Accepted source invoked random_next twice during install and twice during every recurring callback, but the SES executor reinitialized its random state from the same realm seed for every execution, placing all generated hazards at identical coordinates.",
+                "observedAt": "2026-09-02T20:00:39.862Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T20:09:07Z",
+            "updatedAt": "2026-09-02T20:09:07Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T20:09:07Z",
+      "priorManifestDigest": "909b9809db52479eb5b838f4deb21f57a522ff3514539d11ad32714768eb6882",
+      "resultingManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-9-20260902t202619z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-9",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10"
+      },
+      "consultedManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726",
+      "contextDigest": "c3902c4a682d5257348a7ff8104052f36402dc2b728fe1b7a9cbb3a71709b2da",
+      "consultedFindingIds": [
+        "KF-0037",
+        "KF-0043"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-8",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0043"
+          ],
+          "rationale": "After fix cycle 8, manual gameplay showed generated white hazards appearing at varying positions over time. That directly confirms KF-0043's retained-session RNG boundary. The remaining failure concerns trusted collision behavior, not recurrence or randomness."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "Manual QA proved that generated hazard objects rendered, varied, and could be contacted, but contact did not reset the player. The accepted contract claimed that hazards could contact the player and reset the round, while its generated objects were never adopted by the trusted hazard_contact installer. The Phaser host now exposes generated owned-object observation only to trusted built-in installers. The trusted hazard installer attaches its reset behavior only when the generated mechanic references a hazard-role asset as the exact object kind and shares an exact hazard entity with that installer. A focused regression failed before the fix, then proved both player and objective reset through the trusted path. KF-0037 concerns visible recurrence and KF-0043 concerns RNG continuity; neither establishes trusted interaction behavior. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Generated owned objects need explicit trusted interaction adoption",
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to reference the object kind as an exact hazard-role asset and to share an exact hazard-role entity with the trusted hazard-contact mechanic before registering player overlap. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary by invoking the generated object's overlap handler and observing the trusted player and objective reset.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "runtime_health",
+                "external_mechanic_probe"
+              ],
+              "classifications": [
+                "semantic_runtime_failure",
+                "manual_qa_rejected"
+              ]
+            },
+            "id": "KF-0044",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "manual_qa",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10/a01-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c8-r10",
+                "attemptId": "a01-baseline",
+                "stage": "external_mechanic_probe",
+                "quality": "actual_submission",
+                "outcome": "manual_qa_rejected",
+                "summary": "Manual gameplay showed generated white hazards appearing over time, but player contact did not trigger death or round reset. The accepted contract claimed contact-and-reset behavior, while runtime tracing showed the trusted hazard_contact installer registered overlap only for its original static entity and never observed generated owned hazards.",
+                "observedAt": "2026-09-02T20:18:26.186Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-02T20:26:19Z",
+            "updatedAt": "2026-09-02T20:26:19Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-02T20:26:19Z",
+      "priorManifestDigest": "efa587e8a29528aa4c321da225010a340c5d7baaa140d8525fa2e87dcaa12726",
+      "resultingManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-10-20260902t204133z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-10",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11"
+      },
+      "consultedManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f",
+      "contextDigest": "bf55fcd9f0511dfd9e9b4ddd6f55990ea8d178dccde8f1b0067ecca4a967ec27",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-9",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 9 verified the separate trusted collision-adoption boundary for generated hazards and allowed this attempt to reach source evaluation. It does not explain the new deterministic travel failure, which occurred before runtime handoff."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The accepted contract granted object_motion_write, so lifecycle-progress evaluation correctly required positive travel. Across source candidates, creation, destruction, and final active population were correct, but velocity-only writes and a writeMotion call that rewrote the creation position left simulatedDistanceTraveledDelta at zero. KF-0027 already defines when travel is required but did not state that the evaluator observes position displacement rather than velocity metadata or no-op position rewrites. The source prompt now makes that requirement explicit for initial generation and both action- and install-triggered progress repairs. The other consulted findings govern lifecycle phase, recurrence, timing, authority, state, and interaction behavior but do not define observed travel. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0027",
+          "expectedRevision": 1,
+          "reason": "An actual install-triggered lifecycle granted object_motion_write but repeatedly produced zero observed travel because source generation treated velocity metadata or a same-position write as sufficient motion. The evaluator measures owned-object position displacement.",
+          "changes": {
+            "guidance": "When accepted behavior is a bounded mechanic-owned lifecycle, use matching object_create and object_destroy authority and prove creation plus cleanup. Require nonzero travel only when object_motion_write is actually requested and granted; do not invent motion to satisfy independent-effect admission or evaluation. When travel is required, create or observe the owned object's position and make a reachable awaited objects.writeMotion call that writes a finite position different from its creation or current observed position before the lifecycle observation. Velocity-only writes and same-position rewrites do not increase simulatedDistanceTraveledDelta. Apply the same rule to action- and install-triggered lifecycle-progress evidence."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c9-r11",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "The accepted install-triggered hazard lifecycle created four objects, destroyed one, and retained three as required. Source candidates wrote velocity or rewrote each object's creation position through object_motion_write, leaving simulatedDistanceTraveledDelta at zero and failing lifecycle-progress evidence in all three scenarios.",
+              "observedAt": "2026-09-02T20:32:43.385Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T20:41:33Z",
+      "priorManifestDigest": "98d04e09df7a49dfcf9536cb6e0ebb9f47d0ae1d9121bfcc14a778f87041ec7f",
+      "resultingManifestDigest": "7d0716c3ceda6391f658bfa24ebb932372c0d559db5160b36e857067f90b2853"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-11-20260902t210854z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-11",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12"
+      },
+      "consultedManifestDigest": "7d0716c3ceda6391f658bfa24ebb932372c0d559db5160b36e857067f90b2853",
+      "contextDigest": "5cd5abb6bab8f9dd9af005ad296f5dc9176512e2ad60c3a0199d5cbfa88bf6df",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0037",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042",
+        "KF-0043",
+        "KF-0044"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-10",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "Fix cycle 10 clarified observed travel only when object_motion_write is granted. The next accepted contract correctly omitted motion authority for stationary spawned hazards and passed deterministic evaluation, confirming KF-0027. It does not explain the later trusted collision-adoption failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "Manual QA showed recurring white generated hazards but no player reset on collision. The accepted Final Game Spec gave both the generated mechanic and hazard_contact the exact hazard entity and hazard_placeholder asset. The accepted contract used the ordinary owned archetype ID spawned_hazard, while generated creation properties carried asset hazard_placeholder. The trusted observer incorrectly required objectKind itself to equal the asset ID and skipped every created object. The fix accepts either an archetype that is itself an exact referenced asset or an exact creation-property asset that the generated mechanic references and the Final Game Spec declares with the required role; shared exact entity-role lineage remains mandatory. An unreferenced property asset remains rejected. KF-0003, KF-0008, KF-0009, KF-0011, KF-0020, KF-0023, KF-0026, KF-0027, KF-0028, KF-0029, KF-0037, KF-0040, KF-0041, KF-0042, and KF-0043 govern lifecycle, evaluation, recurrence, randomness, and generated interaction evidence but do not define trusted runtime asset association. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0044",
+          "expectedRevision": 1,
+          "reason": "An actual manually rejected candidate used a contract-owned archetype ID distinct from its exact referenced rendering asset, which was supplied in immutable creation properties. Requiring the archetype ID itself to be an asset ID made the trusted adopter silently skip valid generated hazards.",
+          "changes": {
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by that generated mechanic. Accept the association when either the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset; ordinary owned-archetype IDs may differ from rendering asset IDs. Reject missing, unknown, unreferenced, or wrong-role asset values. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary with a distinct archetype ID and referenced asset property by invoking the generated object's overlap handler and observing the trusted player and objective reset, and verify an unreferenced property asset receives no trusted overlap."
+          },
+          "evidence": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c10-r12",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "Manual gameplay showed recurring spawned white hazards, but collision did not reset the player. The accepted generated mechanic and hazard_contact shared the exact hazard entity and hazard_placeholder asset. Runtime tracing showed the created object's admitted archetype was spawned_hazard and its immutable asset property was hazard_placeholder, while trusted adoption checked only whether the archetype string itself was the referenced asset ID.",
+              "observedAt": "2026-09-02T20:56:50.600Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T21:08:54Z",
+      "priorManifestDigest": "7d0716c3ceda6391f658bfa24ebb932372c0d559db5160b36e857067f90b2853",
+      "resultingManifestDigest": "8f53f2570ddcdbd9394ac26bbc94aa7ac231d4147f0e350bd7592f4cecff67bb"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-12-20260902t212254z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-12",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13"
+      },
+      "consultedManifestDigest": "8f53f2570ddcdbd9394ac26bbc94aa7ac231d4147f0e350bd7592f4cecff67bb",
+      "contextDigest": "309b228c4c9b062c95d0ad50ac54a491aec2ad65eaa9e87d1b4bc0a8dd0186ad",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-11",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "Fix cycle 11 preserved the accepted stationary lifecycle without object_motion_write and therefore continues to confirm KF-0027. Its trusted runtime asset-association repair is orthogonal to the current contract timing failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0029"
+          ],
+          "rationale": "The accepted contract asked one 6000ms advance_time step to prove recurrences nominally due at 2500ms and 5000ms, including last_spawn_time 5000. The evaluator moved directly to 6000ms, dispatched the one callback already due, and did not replay the newly scheduled positive-delay callback. Three source candidates could not satisfy the impossible scenario; the terminal candidate truthfully wrote the endpoint time 6000. KF-0029 already defines the scheduling rule, but prompt guidance alone did not stop the same impossible contract from being admitted. The durable fix enforces the rule during contract admission by rejecting any autonomous recurring advance_time step longer than the accepted recurrence interval and returning a path-specific repair that requires separate reachable steps. KF-0002, KF-0003, KF-0004, KF-0005, KF-0008, KF-0009, KF-0011, KF-0014, KF-0017, KF-0018, KF-0019, KF-0020, KF-0023, KF-0025, KF-0026, KF-0027, KF-0028, KF-0031, KF-0032, KF-0033, KF-0035, KF-0040, KF-0041, and KF-0042 remain applicable but do not replace contract admission for recurrence-step reachability. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0029",
+          "expectedRevision": 1,
+          "reason": "A second actual-provider campaign reproduced the same coarse-step recurrence contradiction after the scheduling rule had already been added to provider guidance, proving that contract admission must enforce it.",
+          "changes": {
+            "confidence": "confirmed",
+            "guidance": "A single advance_time step moves the clock to its endpoint and then dispatches callbacks already due there. A positive-delay callback scheduled during that dispatch is reachable only from a later advance_time step. Prove N recurrences with N separate interval-sized steps, and make exact private-state counters include install-time writes plus only the callbacks reachable from those steps. For an autonomous recurring intent with one accepted positive recurrence interval, contract admission must reject each advance_time step longer than that interval and return the exact scenario-step path with repair guidance to split it into reachable steps. Do not rely on prompt guidance or source repair to reconcile an impossible coarse-step contract."
+          },
+          "evidence": [
+            {
+              "kind": "campaign_attempt",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c11-r13",
+              "attemptId": "a01-baseline",
+              "stage": "source_generation",
+              "quality": "actual_submission",
+              "outcome": "provider_output_rejected",
+              "summary": "An actual-provider contract used one 6000ms step for a 2500ms recurrence while requiring three total creations and last_spawn_time 5000. Endpoint dispatch reached only the callback due before the step; the terminal source wrote the truthful endpoint time 6000, so the impossible declared observation exhausted source repair.",
+              "observedAt": "2026-09-02T21:15:53.436Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T21:22:54Z",
+      "priorManifestDigest": "8f53f2570ddcdbd9394ac26bbc94aa7ac231d4147f0e350bd7592f4cecff67bb",
+      "resultingManifestDigest": "dae0bef130a837723b7c8a239fb61fc99e03391de5b472f1dbe4e45e5caebf37"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-13-20260902t221933z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-13",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15"
+      },
+      "consultedManifestDigest": "dae0bef130a837723b7c8a239fb61fc99e03391de5b472f1dbe4e45e5caebf37",
+      "contextDigest": "a67927a975f842e7fd3a17bf53b40607663282982e0c1994a238fdfb502f4192",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0036",
+        "KF-0037",
+        "KF-0038",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042",
+        "KF-0043",
+        "KF-0044"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-12",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0029"
+          ],
+          "rationale": "Fix cycle 12 enforced reachable interval-sized recurrence steps during contract admission and the next actual-provider candidate passed deterministic evaluation, confirming KF-0029. It does not explain the later trusted collision-adoption failure."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r14/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The recorded 0 iframe(s) runtime-health failure was invalidated and credited after campaign-runner repair established that the exact accepted candidate had been restored but its iframe disappeared during replay. It is infrastructure evidence, not reusable mechanic-generation evidence."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "Manual QA showed that touching the recurring white hazards still did not kill or reset the player. The accepted Final Game Spec gave the generated mechanic and trusted hazard_contact the exact same hazard-role entity and hazard-role asset. Generated source created the object with the exact shared entity ID as objectKind and used visual_asset rather than the canonical immutable asset property. The trusted observer therefore found neither of its two previously admitted asset associations and silently skipped the object. The durable fix adds a third narrow association: when objectKind is the exact shared hazard entity ID, derive the rendering identity only from an exact hazard-role asset referenced by both mechanics in the Final Game Spec. The existing exact object-kind asset and canonical properties.asset paths remain intact, and unreferenced assets remain rejected. KF-0003, KF-0008, KF-0009, KF-0011, KF-0020, KF-0023, KF-0025, KF-0026, KF-0027, KF-0028, KF-0029, KF-0036, KF-0037, KF-0038, KF-0040, KF-0041, KF-0042, and KF-0043 govern adjacent lifecycle, authority, recurrence, transport, and evaluation behavior but do not define this trusted entity-to-asset association. There are no related findings."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0044",
+          "expectedRevision": 2,
+          "reason": "An actual manually rejected candidate used the exact shared hazard entity ID as its admitted object kind and referenced the same exact hazard asset on both mechanics, but did not repeat that asset through the canonical properties.asset field. Exact Final Game Spec entity-and-asset lineage was sufficient for trusted adoption and was not recognized.",
+          "changes": {
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by the generated mechanic. Accept the association when the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset. Also accept an object kind that is the exact shared hazard entity ID only when the generated and trusted mechanics reference the same exact hazard-role asset in the Final Game Spec; do not trust arbitrary property aliases such as visual_asset. Ordinary owned-archetype IDs may differ from rendering asset IDs. Reject missing, unknown, unreferenced, wrong-role, or merely name-derived identities. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary for all three admitted shapes by invoking each generated object's overlap handler and observing the trusted player and objective reset, and verify unreferenced objects receive no trusted overlap."
+          },
+          "evidence": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c12-r15",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "Manual gameplay showed recurring white generated hazards, but touching them did not kill or reset the player. The accepted Final Game Spec gave the generated mechanic and trusted hazard_contact the same exact hazard entity and hazard asset. Generated source used that entity ID as objectKind and placed the asset ID under visual_asset, so the trusted observer did not recognize either previously admitted asset-association shape and attached no overlap handler.",
+              "observedAt": "2026-09-02T22:07:39.376Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-09-02T22:19:33Z",
+      "priorManifestDigest": "dae0bef130a837723b7c8a239fb61fc99e03391de5b472f1dbe4e45e5caebf37",
+      "resultingManifestDigest": "d730cee5ef4ca8c83eb354f48189457389b5819b7a601c4a135a21e44d50fcd2"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-14-20260902t223546z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-14",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c13-r16"
+      },
+      "consultedManifestDigest": "d730cee5ef4ca8c83eb354f48189457389b5819b7a601c4a135a21e44d50fcd2",
+      "contextDigest": "cc35bff504f40477a809b0b4deddca22e41699b7791e1e2bcc46d4e91e2778f6",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0023",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-13",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 13 repaired trusted runtime collision adoption after successful deterministic evaluation. It is verified and retained, but it does not diagnose the current source-stage mismatch between direct position writes and evaluator travel accounting."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c13-r16/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027"
+          ],
+          "rationale": "The accepted contract granted object_motion_write, so KF-0027 required finite nonzero owned-object position displacement before lifecycle-progress observation. Multiple actual source candidates made a reachable awaited writeMotion call with a position one pixel away from creation, yet simulatedDistanceTraveledDelta remained zero because the browser evaluation tracker accumulated only velocity-integrated time advancement and ignored direct position displacement. The published source guidance was correct; its production evaluator did not implement that rule. The durable fix measures the Euclidean position delta across every successful owned-object motion write while leaving velocity-only and same-position writes at zero. KF-0002, KF-0003, KF-0004, KF-0005, KF-0008, KF-0009, KF-0011, KF-0014, KF-0017, KF-0018, KF-0019, KF-0020, KF-0023, KF-0025, KF-0026, KF-0028, KF-0029, KF-0031, KF-0032, KF-0033, KF-0035, KF-0040, KF-0041, and KF-0042 govern adjacent lifecycle, timing, state, target interaction, authority, and transport behavior but do not define direct position-write travel accounting. There are no related findings."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "KF-0027 revision 2 already states the exact reusable rule: a reachable finite nonzero owned-object position write must establish travel, while velocity-only and same-position writes must not. This fix makes the production evaluator conform to that guidance, so no compiled finding change is needed.",
+      "createdAt": "2026-09-02T22:35:46Z",
+      "priorManifestDigest": "d730cee5ef4ca8c83eb354f48189457389b5819b7a601c4a135a21e44d50fcd2",
+      "resultingManifestDigest": "8620faed5948d9c01ec02d858ce292df7dad267d744768e86859f9b7a1326d3f"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-fix-cycle-15-20260903t003109z",
+      "source": {
+        "kind": "fix_cycle",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z",
+        "fixId": "fix-cycle-15",
+        "triggerCampaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1"
+      },
+      "consultedManifestDigest": "8620faed5948d9c01ec02d858ce292df7dad267d744768e86859f9b7a1326d3f",
+      "contextDigest": "0e3a37515a1f43e0e1df168b5c64b7bfa75833a83fc735c011994d63dfa5473b",
+      "consultedFindingIds": [
+        "KF-0003",
+        "KF-0007",
+        "KF-0008",
+        "KF-0009",
+        "KF-0011",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0024",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0037",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042",
+        "KF-0043",
+        "KF-0044"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-14",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "Fix cycle 14 repaired direct owned-object position displacement accounting and is verified independently. It does not explain the current trusted collision-adoption gap, handoff prerequisite mismatch, or browser-foundation timeout, so it is not reused for this fix."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-discovery-c14-r17/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0027",
+            "KF-0044"
+          ],
+          "rationale": "The next actual-provider discovery candidate passed deterministic evaluation and the user approved its mounted runtime, confirming both corrected direct-position travel accounting and a working exact-lineage trusted collision path for that candidate shape. It does not cover the distinct sole-contract-archetype shape later exposed by repeatability a01."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a03-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0045"
+          ],
+          "rationale": "The actual candidate passed deterministic evaluation under an accepted contract that granted spatial_query but not object_motion_write. The evaluator correctly omitted target-interaction proof because the generated source had no target-mutation authority, but project handoff inferred target interaction from the target reference alone and rejected the authentic receipt as incomplete. The durable fix makes handoff use the evaluator's same capability prerequisites before requiring target-interaction evidence."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a01-baseline",
+          "disposition": "incorporated",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "Manual QA showed recurring white hazards that still did not kill or reset the player. The accepted generated contract had one owned object kind, spawned_hazard, and the exact Final Game Spec gave the generated and trusted mechanics one shared hazard-role entity and one shared hazard-role asset, but the source supplied no canonical properties.asset value. The prior trusted adopter recognized only an asset ID, canonical asset property, or shared entity ID and therefore attached no overlap handler. The durable fix accepts the sole contract-owned object kind only under that unique exact shared lineage. An explicit wrong asset claim still fails closed and cannot use the fallback. KF-0003, KF-0007, KF-0008, KF-0009, KF-0011, KF-0020, KF-0022, KF-0023, KF-0024, KF-0026, KF-0027, KF-0028, KF-0029, KF-0037, KF-0040, KF-0041, KF-0042, and KF-0043 govern adjacent lifecycle, timing, transport, authority, target, recurrence, and evidence concerns but do not define this defect."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a02-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "The user approved this independent actual-provider repeatability candidate after observing the mounted runtime, confirming that the existing exact-lineage trusted collision paths remain valid."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a04-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0044"
+          ],
+          "rationale": "The user approved this second independent actual-provider repeatability candidate after observing the mounted runtime, confirming that the existing exact-lineage trusted collision paths remain valid."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a05-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The attempt ended during browser foundation conformance before contract or source generation. Retained evidence shows host and runtime heartbeats succeeded but browser execution did not complete inside the fixed conformance window. This is control-plane timeout evidence, not generated-mechanic evidence. The security timing policy remains unchanged and the failed slot will rerun on the new revision."
+        }
+      ],
+      "operations": [
+        {
+          "type": "amend",
+          "findingId": "KF-0044",
+          "expectedRevision": 3,
+          "reason": "An actual manually rejected candidate used its contract's sole admitted owned-object kind without repeating the shared asset identity in canonical creation properties. The exact Final Game Spec still supplied a unique shared hazard entity and asset, so the trusted adopter could identify the object without trusting a provider-chosen name.",
+          "changes": {
+            "guidance": "Rendering or simulating a generated owned object does not make it participate in a trusted built-in mechanic. Let the trusted installer observe owned-object creation through a narrow host service and attach its own behavior only from exact Final Game Spec lineage. For a generated hazard, require the generated mechanic to share an exact hazard-role entity with the trusted hazard-contact mechanic and associate the created object with an exact hazard-role asset referenced by the generated mechanic. Accept the association when the admitted object kind is that asset ID or immutable creation properties name that exact referenced asset. Also accept an object kind that is the exact shared hazard entity ID only when the generated and trusted mechanics reference the same exact hazard-role asset in the Final Game Spec; do not trust arbitrary property aliases such as visual_asset. When no canonical asset claim is present, also accept the generated mechanic's sole contract-owned object kind only when the exact Final Game Spec yields exactly one shared hazard-role entity and exactly one shared hazard-role asset between the generated and trusted mechanics. Treat this as trusted contract identity, not a provider string heuristic. An explicit unknown or unreferenced properties.asset claim remains a rejection and must not fall back. Ordinary owned-archetype IDs may differ from rendering asset IDs. Reject ambiguous, wrong-role, merely name-derived, or otherwise unreferenced identities. Keep objective, player reset, score, health, win, and loss mutations inside the trusted installer; never grant those mutations to generated source or infer interaction authority from an object name, color, shape, or free-text outcome. Test the actual Phaser boundary for every admitted shape by invoking each generated object's overlap handler and observing the trusted player and objective reset, and verify unreferenced objects receive no trusted overlap."
+          },
+          "evidence": [
+            {
+              "kind": "manual_qa",
+              "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a01-baseline",
+              "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1",
+              "attemptId": "a01-baseline",
+              "stage": "external_mechanic_probe",
+              "quality": "actual_submission",
+              "outcome": "manual_qa_rejected",
+              "summary": "the white hazards are not killing the player",
+              "observedAt": "2026-09-02T23:36:13.676Z"
+            }
+          ]
+        },
+        {
+          "type": "add",
+          "entry": {
+            "status": "active",
+            "confidence": "supported",
+            "title": "Handoff target proof must match evaluator capability prerequisites",
+            "guidance": "Require evaluator-authored target-interaction evidence only when the accepted intent and contract provide an observable target-authority path, including both spatial_query and object_motion_write. Project handoff must apply the same prerequisite as evaluator planning before comparing requireTargetInteraction. A target reference alone establishes lineage; it does not prove generated source can mutate or interact with that target. Preserve exact authentic evaluation receipt, scenario, assertion, and actual-value checks.",
+            "scope": {
+              "applicability": "pipeline_general",
+              "mechanicIds": [],
+              "manifestIds": [],
+              "stages": [
+                "deterministic_evaluation",
+                "assembly"
+              ],
+              "classifications": [
+                "pipeline_failure"
+              ]
+            },
+            "id": "KF-0045",
+            "revision": 1,
+            "evidence": [
+              {
+                "kind": "campaign_attempt",
+                "id": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1/a03-baseline",
+                "campaignRunId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c14-r1",
+                "attemptId": "a03-baseline",
+                "stage": "assembly",
+                "quality": "actual_submission",
+                "outcome": "pipeline_failure",
+                "summary": "Deterministic evaluation evidence must exactly cover every declared setup entry, step, and observation for the accepted contract.",
+                "observedAt": "2026-09-02T23:21:12.559Z"
+              }
+            ],
+            "amendments": [],
+            "createdAt": "2026-09-03T00:31:09Z",
+            "updatedAt": "2026-09-03T00:31:09Z"
+          }
+        }
+      ],
+      "createdAt": "2026-09-03T00:31:09Z",
+      "priorManifestDigest": "8620faed5948d9c01ec02d858ce292df7dad267d744768e86859f9b7a1326d3f",
+      "resultingManifestDigest": "1adcd72a80b9ecef0d069b998b7b37f6ded55c6b2c4793a6dd88f254f1667dc9"
     }
   ]
 }
