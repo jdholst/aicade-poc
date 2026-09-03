@@ -22,6 +22,7 @@ import {
   extendCampaignLoop,
   isPreProviderConfigurationFailureCapture,
   pauseCampaignLoopForRepair,
+  preservePendingManualQaFromCampaign,
   recoverCampaignLoop,
   resumeCampaignLoop,
   runCampaignLoopIsolation,
@@ -50,6 +51,28 @@ afterEach(async () => {
 });
 
 describe("campaign loop controller", () => {
+  it("preserves a concurrent candidate when another attempt needs campaign repair", () => {
+    const candidate = {
+      manualQaId: "manual-qa-a05-baseline",
+      campaignRunId: "campaign-1",
+      attemptId: "a05-baseline",
+    };
+    const run = {
+      activeCampaign: { campaignRunId: "campaign-1" },
+      pendingManualQaQueue: [],
+    };
+
+    expect(
+      preservePendingManualQaFromCampaign(run, {
+        id: "campaign-1",
+        pendingManualQaQueue: [candidate],
+      })
+    ).toMatchObject({
+      pendingManualQa: candidate,
+      pendingManualQaQueue: [candidate],
+    });
+  });
+
   it("requires explicit zero-attempt configuration evidence for exact-zero reconciliation", () => {
     const capture = {
       callId: "attempt-1:planning:1",

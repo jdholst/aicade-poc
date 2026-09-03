@@ -1309,7 +1309,18 @@ async function executeSequence({
       await loopStore.writeRun(state.run);
     } catch (error) {
       if (state.run.status !== "exhausted") {
-        state.run = pauseLoopForCampaignRepair(state.run, {
+        let repairableRun = state.run;
+        try {
+          const persistedCampaign = await campaignStore.readRun(campaignRunId);
+          repairableRun = preservePendingManualQaFromCampaign(
+            repairableRun,
+            persistedCampaign
+          );
+        } catch {
+          // Preserve the original campaign failure when no durable campaign
+          // record is available to reconcile.
+        }
+        state.run = pauseLoopForCampaignRepair(repairableRun, {
           id: `campaign-repair-${(state.run.campaignRepairs ?? []).length + 1}`,
           reason: error instanceof Error ? error.message : String(error),
         });
@@ -1319,6 +1330,21 @@ async function executeSequence({
     }
   }
   return { run: state.run };
+}
+
+export function preservePendingManualQaFromCampaign(run, campaignRun) {
+  if (run.activeCampaign?.campaignRunId !== campaignRun.id) return run;
+  const pendingManualQaQueue = campaignRun.pendingManualQaQueue?.length
+    ? campaignRun.pendingManualQaQueue
+    : campaignRun.pendingManualQa
+      ? [campaignRun.pendingManualQa]
+      : [];
+  if (pendingManualQaQueue.length === 0) return run;
+  return {
+    ...run,
+    pendingManualQa: pendingManualQaQueue[0],
+    pendingManualQaQueue,
+  };
 }
 
 export function createProviderCallBudget(state, loopStore, pricing) {

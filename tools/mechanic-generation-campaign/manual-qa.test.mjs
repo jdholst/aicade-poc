@@ -534,6 +534,45 @@ describe("manual gameplay QA", () => {
     expect(approved.loopRun.usage).toEqual(before.usage);
   });
 
+  it("recovers a persisted candidate omitted from a pending campaign repair", async () => {
+    const fixture = await createPendingStore();
+    const loopStore = await attachLoop(fixture.store, fixture.run);
+    const before = await loopStore.readRun("loop-1");
+    const interrupted = {
+      ...before,
+      status: "running",
+      pendingManualQa: undefined,
+      pendingManualQaQueue: [],
+    };
+    await loopStore.writeRun(
+      pauseLoopForCampaignRepair(interrupted, {
+        id: "campaign-repair-1",
+        reason: "A parallel attempt timed out after this candidate persisted.",
+        detectedAt: "2026-08-23T15:02:00.000Z",
+      })
+    );
+
+    const approved = await approveCampaignAttempt({
+      store: fixture.store,
+      loopStore,
+      campaignRunId: "campaign-1",
+      attemptId: "a01-baseline",
+      note: "The retained candidate works.",
+      decidedAt: "2026-08-23T15:05:00.000Z",
+    });
+
+    expect(approved.manualQa).toMatchObject({
+      status: "approved",
+      approvalNote: "The retained candidate works.",
+    });
+    expect(approved.loopRun.status).toBe("running");
+    expect(approved.loopRun.campaignRepairs[0]).toMatchObject({
+      status: "completed",
+      completedAt: "2026-08-23T15:05:00.000Z",
+    });
+    expect(approved.loopRun.usage).toEqual(before.usage);
+  });
+
   it("adjudicates a legacy review false negative after terminal campaign repair recovery", async () => {
     const fixture = await createPendingStore();
     const loopStore = await attachLoop(fixture.store, fixture.run);

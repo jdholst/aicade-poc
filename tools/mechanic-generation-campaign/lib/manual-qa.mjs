@@ -382,24 +382,28 @@ function assertArtifactIdentity(run, attempt, manualQa) {
 }
 
 function assertPendingCandidate(run, attempt, manualQa, linkedLoop) {
+  const campaignPendingManualQaQueue = run.pendingManualQaQueue?.length
+    ? run.pendingManualQaQueue
+    : run.pendingManualQa
+      ? [run.pendingManualQa]
+      : [];
   const campaignCandidateIsStale =
     !["running", "waiting_for_manual_qa"].includes(run.status) ||
-    !run.pendingManualQaQueue.some(
+    !campaignPendingManualQaQueue.some(
       ({ attemptId, manualQaId }) =>
         attemptId === attempt.id && manualQaId === manualQa.id
     );
   const repairPending =
     linkedLoop?.status === "waiting_for_campaign_repair" &&
     linkedLoop.activeCampaign?.campaignRunId === run.id &&
-    (linkedLoop.pendingManualQaQueue ?? [linkedLoop.pendingManualQa]).some(
+    campaignPendingManualQaQueue.some(
       (pending) =>
         pending?.attemptId === attempt.id && pending?.manualQaId === manualQa.id
     ) &&
     linkedLoop.campaignRepairs?.some(
       (repair) =>
         repair.status === "pending" &&
-        repair.campaignRunId === run.id &&
-        repair.resumeStatus === "waiting_for_manual_qa"
+        repair.campaignRunId === run.id
     );
   if (campaignCandidateIsStale && !repairPending) {
     throw new Error("Manual QA verdict is stale or does not match the pending candidate.");
@@ -418,18 +422,34 @@ async function updateLinkedLoop({
   if (!loopStore) {
     throw new Error("A loop-linked manual QA verdict requires the campaign loop store.");
   }
-  const update = (loopRun) =>
-    verdict === "approved" || campaignContinues
-      ? resumeLoopAfterManualQaApproval(loopRun, {
+  const update = (loopRun) => {
+    const campaignPendingManualQaQueue = campaignRun.pendingManualQaQueue?.length
+      ? campaignRun.pendingManualQaQueue
+      : campaignRun.pendingManualQa
+        ? [campaignRun.pendingManualQa]
+        : [];
+    const decisionLoopRun =
+      loopRun.status === "waiting_for_campaign_repair" &&
+      loopRun.activeCampaign?.campaignRunId === campaignRun.id &&
+      campaignPendingManualQaQueue.length > 0
+        ? {
+            ...loopRun,
+            pendingManualQa: campaignPendingManualQaQueue[0],
+            pendingManualQaQueue: campaignPendingManualQaQueue,
+          }
+        : loopRun;
+    return verdict === "approved" || campaignContinues
+      ? resumeLoopAfterManualQaApproval(decisionLoopRun, {
           campaignRunId: campaignRun.id,
           attemptId,
           completedAt: decidedAt,
         })
-      : rejectLoopManualQa(loopRun, {
+      : rejectLoopManualQa(decisionLoopRun, {
           campaignRunId: campaignRun.id,
           attemptId,
           completedAt: decidedAt,
         });
+  };
   if (typeof loopStore.updateRun === "function") {
     return loopStore.updateRun(campaignRun.loopId, update);
   }
