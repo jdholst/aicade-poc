@@ -1,7 +1,7 @@
 {
   "schemaVersion": "campaign-knowledge/v1",
-  "revision": 62,
-  "updatedAt": "2026-09-03T00:31:09Z",
+  "revision": 63,
+  "updatedAt": "2026-09-03T01:59:31Z",
   "entries": [
     {
       "status": "active",
@@ -11273,6 +11273,145 @@
       "createdAt": "2026-09-03T00:31:09Z",
       "priorManifestDigest": "8620faed5948d9c01ec02d858ce292df7dad267d744768e86859f9b7a1326d3f",
       "resultingManifestDigest": "1adcd72a80b9ecef0d069b998b7b37f6ded55c6b2c4793a6dd88f254f1667dc9"
+    },
+    {
+      "schemaVersion": "campaign-knowledge-reconciliation/v1",
+      "id": "KR-p09-t18-v2-conclusion-20260903t015931z",
+      "source": {
+        "kind": "loop_outcome",
+        "loopId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z"
+      },
+      "consultedManifestDigest": "1adcd72a80b9ecef0d069b998b7b37f6ded55c6b2c4793a6dd88f254f1667dc9",
+      "contextDigest": "2613dad0df2a5edb0bcb1df016b5d25df7938b8e4b32c6b6f50b2c9219a49705",
+      "consultedFindingIds": [
+        "KF-0002",
+        "KF-0003",
+        "KF-0004",
+        "KF-0005",
+        "KF-0006",
+        "KF-0007",
+        "KF-0008",
+        "KF-0009",
+        "KF-0010",
+        "KF-0011",
+        "KF-0012",
+        "KF-0014",
+        "KF-0017",
+        "KF-0018",
+        "KF-0019",
+        "KF-0020",
+        "KF-0022",
+        "KF-0023",
+        "KF-0024",
+        "KF-0025",
+        "KF-0026",
+        "KF-0027",
+        "KF-0028",
+        "KF-0029",
+        "KF-0030",
+        "KF-0031",
+        "KF-0032",
+        "KF-0033",
+        "KF-0035",
+        "KF-0040",
+        "KF-0041",
+        "KF-0042",
+        "KF-0044",
+        "KF-0045"
+      ],
+      "evidenceReview": [
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z/fix-cycle-15",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0044",
+            "KF-0045"
+          ],
+          "rationale": "The verified fix confirms the existing exact-lineage hazard adoption rule and the shared evaluator and handoff prerequisite for generated target-interaction evidence."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r2/a03-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This attempt belonged to the campaign repaired for parallel browser-foundation collapse and did not retain a trustworthy contract, source, or runtime result."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r2/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This attempt belonged to the campaign repaired for parallel browser-foundation collapse and did not retain a trustworthy contract, source, or runtime result."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r2/a05-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "This attempt belonged to the campaign repaired for parallel browser-foundation collapse and did not retain a trustworthy contract, source, or runtime result."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r3/a03-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The network-idle timeout occurred before provider work and was repaired as a campaign submission-control defect."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r3/a01-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The network-idle timeout occurred before provider work and was repaired as a campaign submission-control defect."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r3/a05-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The network-idle timeout occurred before provider work and was repaired as a campaign submission-control defect."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r4/a01-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0007",
+            "KF-0019"
+          ],
+          "rationale": "The generated install callback exceeded its independent active-work deadline, confirming that callback execution limits and delivery or heartbeat health must remain separate evidence."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r4/a03-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The accepted project remained at Booting runtime with no iframe until the campaign timeout. This was retained as infrastructure evidence and does not establish a reusable generation rule."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r4/a05-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0041",
+            "KF-0042"
+          ],
+          "rationale": "The approved candidate confirmed repeated spawning and working collision behavior, while the recorded non-failing observation that hazards did not despawn and crashed after more than five accumulated reinforces the existing bounded-population and coordinated-expiry guidance."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r4/a07-baseline",
+          "disposition": "not_reusable",
+          "findingIds": [],
+          "rationale": "The generic foundation-install failure did not retain enough structured callback, evaluator, or runtime evidence to compile new generation guidance."
+        },
+        {
+          "evidenceId": "p09-t18-seeded-hazard-spawner-proof-loop-v2-20260902t153450465z-repeatability-c15-r4/a06-baseline",
+          "disposition": "confirming",
+          "findingIds": [
+            "KF-0003",
+            "KF-0009",
+            "KF-0041",
+            "KF-0042"
+          ],
+          "rationale": "The source created and destroyed six hazards but retained none for the required post-install progress observation, confirming scenario-local liveness, transient-creation timing, population bounds, and coordinated recurrence and expiry guidance."
+        }
+      ],
+      "operations": [],
+      "noChangeReason": "The final evidence is already covered by the active callback-budget, scenario-local liveness, transient-creation, recurring-population, coordinated-expiry, hazard-lineage, and handoff-prerequisite findings. Infrastructure-only failures and repaired campaign-control failures do not justify generation-guidance changes.",
+      "createdAt": "2026-09-03T01:59:31Z",
+      "priorManifestDigest": "1adcd72a80b9ecef0d069b998b7b37f6ded55c6b2c4793a6dd88f254f1667dc9",
+      "resultingManifestDigest": "7df74ab5bb0cc30c22068d12ace8375d9e79f3c2e0d3e6e3ddd1b69c9347211e"
     }
   ]
 }
