@@ -1104,12 +1104,14 @@ export async function configureProviderInput(
 }
 
 export async function submitCampaignPrompt(page, prompt) {
-  await page.waitForLoadState("networkidle", { timeout: 30_000 });
-  await enterControlledText(
-    page.getByPlaceholder("Describe the starter game you want to build."),
-    prompt
+  const promptInput = page.getByPlaceholder(
+    "Describe the starter game you want to build."
   );
-  await page.getByRole("button", { name: "Send prompt" }).click();
+  const submitButton = page.getByRole("button", { name: "Send prompt" });
+  await promptInput.waitFor({ state: "visible", timeout: 30_000 });
+  await submitButton.waitFor({ state: "visible", timeout: 30_000 });
+  await enterControlledText(promptInput, prompt);
+  await submitButton.click();
 }
 
 async function enterControlledText(locator, value) {

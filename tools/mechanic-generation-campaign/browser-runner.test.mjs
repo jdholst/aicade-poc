@@ -245,7 +245,8 @@ describe("campaign browser runner", () => {
     await submitCampaignPrompt(page, "Build a compact arena.");
 
     expect(events).toEqual([
-      "wait:networkidle:30000",
+      "prompt:wait:visible:30000",
+      "submit:wait:visible:30000",
       "prompt:click",
       `prompt:press:${process.platform === "darwin" ? "Meta+A" : "Control+A"}`,
       "prompt:type:Build a compact arena.",
@@ -439,6 +440,9 @@ describe("campaign browser runner", () => {
 
 function createPromptPageDouble(events) {
   const prompt = {
+    async waitFor(options) {
+      events.push(`prompt:wait:${options.state}:${options.timeout}`);
+    },
     async click() {
       events.push("prompt:click");
     },
@@ -450,14 +454,14 @@ function createPromptPageDouble(events) {
     },
   };
   const submit = {
+    async waitFor(options) {
+      events.push(`submit:wait:${options.state}:${options.timeout}`);
+    },
     async click() {
       events.push("submit:click");
     },
   };
   return {
-    async waitForLoadState(state, options) {
-      events.push(`wait:${state}:${options.timeout}`);
-    },
     getByPlaceholder() {
       return prompt;
     },
