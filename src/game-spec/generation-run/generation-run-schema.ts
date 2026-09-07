@@ -3,6 +3,10 @@ import { z } from "zod";
 import type { RuntimeKind } from "@/runtime/runtime-adapter";
 
 import { jsonValueSchema, stableIdSchema } from "../game-spec-schema";
+import {
+  artifactScopedMechanicRepairReceiptSchema,
+  getArtifactScopedRepairGenerationRunOutcome,
+} from "./artifact-scoped-mechanic-repair-receipt";
 
 const runtimeKindValues = [
   "canvas2d",
@@ -21,6 +25,64 @@ const generationRunValidationIssueSchema = z
     message: z.string().min(1).max(500),
   })
   .strict();
+
+const generatedMechanicRejectedOutcomeSchema = z
+  .object({
+    status: z.literal("rejected"),
+    stage: z.enum([
+      "foundation",
+      "preflight",
+      "deterministic_evaluation",
+      "runtime_activation",
+      "first_playable",
+      "persistence",
+      "continuation",
+    ]),
+    issues: z
+      .array(
+        z
+          .object({
+            path: z.string().min(1),
+            code: stableIdSchema,
+            message: z.string().min(1),
+          })
+          .strict()
+      )
+      .min(1),
+    runtimeEvidence: jsonValueSchema.optional(),
+  })
+  .strict();
+
+const downstreamGeneratedMechanicFailureByStage = {
+  foundation: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  preflight: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  deterministic_evaluation: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  runtime_activation: {
+    stage: "runtime-boot",
+    failureClass: "build-failure",
+  },
+  first_playable: {
+    stage: "browser-check",
+    failureClass: "first-playable-failure",
+  },
+  persistence: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+  continuation: {
+    stage: "artifact-build",
+    failureClass: "build-failure",
+  },
+} as const;
 
 export const generationRunOperationTypeSchema = z.enum([
   "generate",
@@ -148,6 +210,7 @@ export const generationRunRelationshipsSchema = z
   .object({
     gamePackId: stableIdSchema.optional(),
     gameSpecId: stableIdSchema.optional(),
+    acceptedGeneratedMechanicArtifactIds: z.array(stableIdSchema).optional(),
     buildIds: z.array(stableIdSchema).optional(),
     checkpointIds: z.array(stableIdSchema).optional(),
     validationEvidenceIds: z.array(stableIdSchema).optional(),
@@ -174,6 +237,7 @@ export const generationRunSchema = z
     failureClass: generationRunFailureClassSchema.optional(),
     cost: generationRunCostEstimateSchema.optional(),
     relationships: generationRunRelationshipsSchema.optional(),
+    artifactScopedRepair: artifactScopedMechanicRepairReceiptSchema.optional(),
     metadata: metadataSchema.optional(),
   })
   .strict()
@@ -218,16 +282,32 @@ export const generationRunSchema = z
     }
 
     if (run.repairStatus === "repaired") {
-      if (run.status !== "succeeded") {
+      if (
+        run.status !== "succeeded" &&
+        !isExactDownstreamGeneratedMechanicOutcome(run)
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["repairStatus"],
           message:
-            "Repaired GenerationRun receipts must end with succeeded status.",
+            "Repaired GenerationRun receipts must either succeed or retain an exact downstream generated-mechanic failure or interruption.",
         });
       }
 
-      if (!run.attempts.some((attempt) => attempt.status === "failed")) {
+      const hasArtifactScopedFailedAttempt =
+        run.artifactScopedRepair?.attempts.some(
+          (attempt) => attempt.status === "rejected"
+        ) ?? false;
+      const hasArtifactScopedSuccessfulRepair =
+        run.artifactScopedRepair?.attempts.some(
+          (attempt) =>
+            attempt.kind === "repair" && attempt.status === "accepted"
+        ) ?? false;
+
+      if (
+        !run.attempts.some((attempt) => attempt.status === "failed") &&
+        !hasArtifactScopedFailedAttempt
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["attempts"],
@@ -240,7 +320,8 @@ export const generationRunSchema = z
         !run.attempts.some(
           (attempt) =>
             attempt.kind === "repair" && attempt.status === "succeeded"
-        )
+        ) &&
+        !hasArtifactScopedSuccessfulRepair
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -258,6 +339,57 @@ export const generationRunSchema = z
         message:
           "Repair-exhausted GenerationRun receipts must end with failed status.",
       });
+    }
+
+    if (run.artifactScopedRepair) {
+      if (run.artifactScopedRepair.generationRunId !== run.id) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["artifactScopedRepair", "generationRunId"],
+          message:
+            "Artifact-scoped repair evidence must belong to the same GenerationRun.",
+        });
+      }
+
+      const expectedOutcome = getArtifactScopedRepairGenerationRunOutcome(
+        run.artifactScopedRepair
+      );
+      if (run.repairStatus !== expectedOutcome.repairStatus) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["repairStatus"],
+          message:
+            "GenerationRun repairStatus must match its artifact-scoped repair receipt.",
+        });
+      }
+
+      const preservesSuccessfulRepairBeforeDownstreamFailure =
+        expectedOutcome.status === "succeeded" &&
+        isExactDownstreamGeneratedMechanicOutcome(run);
+      if (
+        run.status !== expectedOutcome.status &&
+        !preservesSuccessfulRepairBeforeDownstreamFailure
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["status"],
+          message:
+            "GenerationRun status must match its artifact-scoped repair receipt.",
+        });
+      }
+
+      if (
+        expectedOutcome.status === "failed" &&
+        (run.stage !== expectedOutcome.stage ||
+          run.failureClass !== expectedOutcome.failureClass)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["stage"],
+          message:
+            "Repair-exhausted GenerationRuns require the repair stage and repair-exhausted failure class.",
+        });
+      }
     }
 
     const seenAttemptIds = new Set<string>();
@@ -286,6 +418,40 @@ export const generationRunSchema = z
       }
     });
   });
+
+function isExactDownstreamGeneratedMechanicOutcome(
+  run: Readonly<{
+    status: z.infer<typeof generationRunStatusSchema>;
+    stage?: z.infer<typeof generationRunFailureStageSchema>;
+    failureClass?: z.infer<typeof generationRunFailureClassSchema>;
+    metadata?: z.infer<typeof metadataSchema>;
+  }>
+): boolean {
+  const outcome = generatedMechanicRejectedOutcomeSchema.safeParse(
+    run.metadata?.generatedMechanicOutcome
+  );
+  if (!outcome.success) {
+    return false;
+  }
+  if (run.status === "cancelled" || run.status === "timed-out") {
+    const expectedInterruption =
+      run.status === "timed-out"
+        ? { stage: "timeout", failureClass: "timeout" }
+        : { stage: "cancellation", failureClass: "cancellation" };
+    return (
+      outcome.data.issues.some(({ code }) => code === "generation_cancelled") &&
+      run.stage === expectedInterruption.stage &&
+      run.failureClass === expectedInterruption.failureClass
+    );
+  }
+  if (run.status !== "failed") {
+    return false;
+  }
+  const expected = downstreamGeneratedMechanicFailureByStage[outcome.data.stage];
+  return (
+    run.stage === expected.stage && run.failureClass === expected.failureClass
+  );
+}
 
 export type GenerationRunOperationType = z.infer<
   typeof generationRunOperationTypeSchema

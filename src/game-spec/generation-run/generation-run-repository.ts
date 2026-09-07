@@ -7,6 +7,15 @@ const DEFAULT_DATABASE_NAME = "sparkline_generation_runs";
 const DATABASE_VERSION = 1;
 const GENERATION_RUN_STORE_NAME = "generation_runs";
 const GENERATION_RUN_RECORD_VERSION = 1;
+const MAX_ATOMIC_UPDATE_ATTEMPTS = 16;
+const pendingWritesBySerializationScope = new WeakMap<
+  object,
+  Map<GenerationRun["id"], Promise<void>>
+>();
+const indexedDbSerializationScopes = new WeakMap<
+  IDBFactory,
+  Map<string, object>
+>();
 
 export type GenerationRunRepository = {
   create: (generationRun: GenerationRun) => Promise<GenerationRun>;
@@ -88,6 +97,11 @@ export type GenerationRunStorageDriver = {
     generationRunId: GenerationRun["id"]
   ) => Promise<StoredGenerationRunRecord | null>;
   getAll: () => Promise<StoredGenerationRunRecord[]>;
+  compareAndSwap?: (
+    generationRunId: GenerationRun["id"],
+    expected: StoredGenerationRunRecord,
+    replacement: StoredGenerationRunRecord
+  ) => Promise<boolean>;
   delete: (generationRunId: GenerationRun["id"]) => Promise<void>;
   clear: () => Promise<void>;
 };
@@ -100,7 +114,15 @@ export type IndexedDbGenerationRunRepositoryOptions = {
 export function createGenerationRunRepository(
   storage: GenerationRunStorageDriver
 ): GenerationRunRepository {
-  return {
+  return createSerializedGenerationRunRepository(storage, storage);
+}
+
+function createSerializedGenerationRunRepository(
+  storage: GenerationRunStorageDriver,
+  serializationScope: object
+): GenerationRunRepository {
+  const pendingWritesById = getPendingWritesForScope(serializationScope);
+  const repository: GenerationRunRepository = {
     async create(generationRun) {
       let record: StoredGenerationRunRecord;
 
@@ -177,41 +199,116 @@ export function createGenerationRunRepository(
     },
 
     async update(generationRunId, updater) {
-      const currentGenerationRun = await this.fetch(generationRunId);
-
-      if (!currentGenerationRun) {
-        throw createRepositoryError({
-          code: "not_found",
-          generationRunId,
-          operation: "update",
-          message: `Cannot update missing GenerationRun "${generationRunId}".`,
-        });
-      }
-
-      let nextGenerationRun: GenerationRun;
+      const previousWrite = pendingWritesById.get(generationRunId) ??
+        Promise.resolve();
+      let releaseWrite!: () => void;
+      const currentWrite = new Promise<void>((resolve) => {
+        releaseWrite = resolve;
+      });
+      pendingWritesById.set(generationRunId, currentWrite);
+      await previousWrite;
 
       try {
-        nextGenerationRun = await updater(currentGenerationRun);
-      } catch (error) {
-        throw createRepositoryError({
-          cause: error,
-          code: "update_failed",
-          generationRunId,
-          operation: "update",
-          message: `Failed to update GenerationRun "${generationRunId}".`,
-        });
-      }
+        if (storage.compareAndSwap) {
+          for (
+            let attempt = 0;
+            attempt < MAX_ATOMIC_UPDATE_ATTEMPTS;
+            attempt += 1
+          ) {
+            let currentRecord: StoredGenerationRunRecord | null;
+            try {
+              currentRecord = await storage.get(generationRunId);
+            } catch (error) {
+              throw createRepositoryError({
+                cause: error,
+                code: "fetch_failed",
+                generationRunId,
+                operation: "update",
+                message: `Failed to fetch GenerationRun "${generationRunId}" for update.`,
+              });
+            }
+            if (!currentRecord) {
+              throw createRepositoryError({
+                code: "not_found",
+                generationRunId,
+                operation: "update",
+                message: `Cannot update missing GenerationRun "${generationRunId}".`,
+              });
+            }
+            const parsedCurrentRecord = parseStoredGenerationRunRecord(
+              currentRecord,
+              "update"
+            );
+            const nextGenerationRun = await applyGenerationRunUpdater({
+              currentGenerationRun: parsedCurrentRecord.generationRun,
+              generationRunId,
+              updater,
+            });
+            let nextRecord: StoredGenerationRunRecord;
+            try {
+              nextRecord = createStoredGenerationRunRecord(nextGenerationRun);
+            } catch (error) {
+              throw createRepositoryError({
+                cause: error,
+                code: "invalid_generation_run",
+                generationRunId,
+                operation: "update",
+                message: `Cannot update GenerationRun "${generationRunId}" with an invalid receipt.`,
+              });
+            }
+            let swapped: boolean;
+            try {
+              swapped = await storage.compareAndSwap(
+                generationRunId,
+                parsedCurrentRecord,
+                nextRecord
+              );
+            } catch (error) {
+              throw createRepositoryError({
+                cause: error,
+                code: "update_failed",
+                generationRunId,
+                operation: "update",
+                message: `Failed to atomically update GenerationRun "${generationRunId}".`,
+              });
+            }
+            if (swapped) {
+              return nextRecord.generationRun;
+            }
+          }
 
-      if (nextGenerationRun.id !== generationRunId) {
-        throw createRepositoryError({
-          code: "update_id_mismatch",
-          generationRunId,
-          operation: "update",
-          message: `Cannot update GenerationRun "${generationRunId}" with payload for "${nextGenerationRun.id}".`,
-        });
-      }
+          throw createRepositoryError({
+            code: "update_failed",
+            generationRunId,
+            operation: "update",
+            message: `GenerationRun "${generationRunId}" changed too many times to update safely.`,
+          });
+        }
 
-      return this.create(nextGenerationRun);
+        const currentGenerationRun = await repository.fetch(generationRunId);
+
+        if (!currentGenerationRun) {
+          throw createRepositoryError({
+            code: "not_found",
+            generationRunId,
+            operation: "update",
+            message: `Cannot update missing GenerationRun "${generationRunId}".`,
+          });
+        }
+
+        const nextGenerationRun = await applyGenerationRunUpdater({
+          currentGenerationRun,
+          generationRunId,
+          updater,
+        });
+
+        return repository.create(nextGenerationRun);
+      } finally {
+        releaseWrite();
+        if (pendingWritesById.get(generationRunId) === currentWrite) {
+          pendingWritesById.delete(generationRunId);
+        }
+      }
     },
 
     async delete(generationRunId) {
@@ -241,14 +338,61 @@ export function createGenerationRunRepository(
       }
     },
   };
+  return repository;
 }
 
 export function createIndexedDbGenerationRunRepository(
   options: IndexedDbGenerationRunRepositoryOptions = {}
 ): GenerationRunRepository {
-  return createGenerationRunRepository(
-    createIndexedDbGenerationRunStorage(options)
+  const normalizedOptions = {
+    databaseName: options.databaseName ?? DEFAULT_DATABASE_NAME,
+    indexedDB:
+      options.indexedDB === undefined
+        ? getBrowserIndexedDbFactory()
+        : options.indexedDB,
+  } satisfies Required<IndexedDbGenerationRunRepositoryOptions>;
+  const storage = createIndexedDbGenerationRunStorage(normalizedOptions);
+
+  return createSerializedGenerationRunRepository(
+    storage,
+    normalizedOptions.indexedDB
+      ? getIndexedDbSerializationScope(
+          normalizedOptions.indexedDB,
+          normalizedOptions.databaseName
+        )
+      : storage
   );
+}
+
+function getPendingWritesForScope(
+  serializationScope: object
+): Map<GenerationRun["id"], Promise<void>> {
+  const existing = pendingWritesBySerializationScope.get(serializationScope);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Map<GenerationRun["id"], Promise<void>>();
+  pendingWritesBySerializationScope.set(serializationScope, created);
+  return created;
+}
+
+function getIndexedDbSerializationScope(
+  indexedDB: IDBFactory,
+  databaseName: string
+): object {
+  const scopesByDatabase = indexedDbSerializationScopes.get(indexedDB) ??
+    new Map<string, object>();
+  indexedDbSerializationScopes.set(indexedDB, scopesByDatabase);
+
+  const existing = scopesByDatabase.get(databaseName);
+  if (existing) {
+    return existing;
+  }
+
+  const created = Object.freeze({});
+  scopesByDatabase.set(databaseName, created);
+  return created;
 }
 
 function createStoredGenerationRunRecord(
@@ -313,6 +457,40 @@ function parseStoredGenerationRunRecord(
 
 function getGenerationRunUpdatedAt(generationRun: GenerationRun): string {
   return generationRun.completedAt ?? generationRun.startedAt;
+}
+
+async function applyGenerationRunUpdater({
+  currentGenerationRun,
+  generationRunId,
+  updater,
+}: Readonly<{
+  currentGenerationRun: GenerationRun;
+  generationRunId: GenerationRun["id"];
+  updater: (
+    generationRun: GenerationRun
+  ) => GenerationRun | Promise<GenerationRun>;
+}>): Promise<GenerationRun> {
+  let nextGenerationRun: GenerationRun;
+  try {
+    nextGenerationRun = await updater(currentGenerationRun);
+  } catch (error) {
+    throw createRepositoryError({
+      cause: error,
+      code: "update_failed",
+      generationRunId,
+      operation: "update",
+      message: `Failed to update GenerationRun "${generationRunId}".`,
+    });
+  }
+  if (nextGenerationRun.id !== generationRunId) {
+    throw createRepositoryError({
+      code: "update_id_mismatch",
+      generationRunId,
+      operation: "update",
+      message: `Cannot update GenerationRun "${generationRunId}" with payload for "${nextGenerationRun.id}".`,
+    });
+  }
+  return nextGenerationRun;
 }
 
 function createIndexedDbGenerationRunStorage({
@@ -392,6 +570,34 @@ function createIndexedDbGenerationRunStorage({
       }
     },
 
+    async compareAndSwap(generationRunId, expected, replacement) {
+      const db = await openGenerationRunDatabase({
+        databaseName,
+        indexedDB,
+        operation: "update",
+      });
+
+      try {
+        const transaction = db.transaction(
+          GENERATION_RUN_STORE_NAME,
+          "readwrite"
+        );
+        const store = transaction.objectStore(GENERATION_RUN_STORE_NAME);
+        const current =
+          (await requestToPromise<StoredGenerationRunRecord | undefined>(
+            store.get(generationRunId)
+          )) ?? null;
+        const matches = storedGenerationRunRecordsEqual(current, expected);
+        if (matches) {
+          store.put(replacement);
+        }
+        await waitForTransaction(transaction);
+        return matches;
+      } finally {
+        db.close();
+      }
+    },
+
     async delete(generationRunId) {
       const db = await openGenerationRunDatabase({
         databaseName,
@@ -430,6 +636,13 @@ function createIndexedDbGenerationRunStorage({
       }
     },
   };
+}
+
+function storedGenerationRunRecordsEqual(
+  left: StoredGenerationRunRecord | null,
+  right: StoredGenerationRunRecord
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function getBrowserIndexedDbFactory(): IDBFactory | null {

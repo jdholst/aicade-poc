@@ -4,10 +4,12 @@ import type {
   GameSpec,
   GameSpecValidationIssue,
   GenerationRun,
+  PreparedRestoredGeneratedMechanicProject,
 } from "@/game-spec";
 import {
   GameSpecValidationError,
   parseTopDownGameSpec as parseSavedTopDownGameSpec,
+  prepareRestoredGeneratedMechanicProject,
   validateTopDownGameSpec,
 } from "@/game-spec";
 import {
@@ -46,7 +48,11 @@ export type PlayableDraftValidationSource = {
   generationRunId?: GenerationRun["id"];
   gameSpec: GameSpec;
   runtimeCandidate: FirstPlayableRuntimeCandidate;
-  source: "fixture" | "generated-spec" | "restored-game-pack";
+  source:
+    | "accepted-game-pack"
+    | "fixture"
+    | "generated-spec"
+    | "restored-game-pack";
   runtimeKind: Extract<RuntimeKind, "phaser">;
 };
 
@@ -74,13 +80,15 @@ export type PlayableDraftSource =
       source: PlayableDraftValidationSource["source"];
       sourceKey: string;
       template: HandAuthoredPhaserTemplate;
+      generatedMechanicProject?: PreparedRestoredGeneratedMechanicProject;
       validationSource: PlayableDraftValidationSource;
       readyPolicy: PlayableDraftReadyPolicy;
       persistencePolicy: PlayableDraftPersistencePolicy;
-      runFirstPlayableChecksOnReady: true;
+      runFirstPlayableChecksOnReady: boolean;
     };
 
 export type CreatePlayableDraftSourceInput = {
+  activeGamePack?: GamePack | null;
   generatedSpecDraft?: GeneratedPlayableDraftSpec | null;
   generationSource?: EditorGenerationSource;
   phaserTemplateState?: TopDownPhaserTemplateState;
@@ -89,6 +97,7 @@ export type CreatePlayableDraftSourceInput = {
 };
 
 export function createPlayableDraftSource({
+  activeGamePack = null,
   generatedSpecDraft = null,
   generationSource,
   phaserTemplateState = getTopDownPhaserTemplateState(),
@@ -102,6 +111,13 @@ export function createPlayableDraftSource({
     return {
       type: "canvas",
     };
+  }
+
+  if (activeGamePack) {
+    return createRestoredGamePackDraftSource(
+      activeGamePack,
+      "accepted-game-pack"
+    );
   }
 
   if (generatedSpecDraft) {
@@ -214,7 +230,11 @@ function stringifyStableValue(value: unknown): string {
 }
 
 function createRestoredGamePackDraftSource(
-  gamePack: GamePack
+  gamePack: GamePack,
+  source: Extract<
+    PlayableDraftValidationSource["source"],
+    "accepted-game-pack" | "restored-game-pack"
+  > = "restored-game-pack"
 ): PlayableDraftSource {
   if (gamePack.runtimeKind !== "phaser") {
     return createBlockedGameSpecSource(
@@ -224,28 +244,72 @@ function createRestoredGamePackDraftSource(
   }
 
   try {
-    const gameSpec = validateTopDownGameSpec(
-      parseSavedTopDownGameSpec(gamePack.gameSpec)
-    );
+    const parsedGameSpec = parseSavedTopDownGameSpec(gamePack.gameSpec);
+    const generatedMechanicProjectResult =
+      gamePack.acceptedGeneratedMechanicArtifacts?.length
+        ? prepareRestoredGeneratedMechanicProject({
+            gamePack,
+            trustedPortContracts: [],
+          })
+        : null;
+    if (generatedMechanicProjectResult?.success === false) {
+      return {
+        type: "blocked",
+        issues: generatedMechanicProjectResult.issues.map(
+          ({ path, message }) => ({ path, message })
+        ),
+        message: generatedMechanicProjectResult.issues
+          .map(({ message }) => message)
+          .join(" "),
+      };
+    }
+    const generatedMechanicProject = generatedMechanicProjectResult?.success
+      ? generatedMechanicProjectResult.data
+      : undefined;
+    if (generatedMechanicProject) {
+      validateTopDownGameSpec({
+        ...parsedGameSpec,
+        mechanics: parsedGameSpec.mechanics.filter(
+          ({ id }) => id !== generatedMechanicProject.artifact.mechanicId
+        ),
+      });
+    } else {
+      validateTopDownGameSpec(parsedGameSpec);
+    }
+    const gameSpec = parsedGameSpec;
     const template = createTopDownPhaserTemplate(gameSpec);
 
     return {
       type: "phaser",
-      source: "restored-game-pack",
+      source,
       sourceKey: [
+        source,
         template.id,
         gamePack.updatedAt,
         gamePack.builds.length,
         gamePack.checkpoints.length,
+        ...(generatedMechanicProject
+          ? [
+              generatedMechanicProject.artifact.id,
+              generatedMechanicProject.dependency.sourceArtifact.id,
+              createStableContentHash(
+                generatedMechanicProject.dependency.runtimePolicy
+              ),
+            ]
+          : []),
       ].join("-"),
       template,
+      ...(generatedMechanicProject ? { generatedMechanicProject } : {}),
       validationSource: {
-        ...createValidationSource(template, "restored-game-pack"),
+        ...createValidationSource(template, source),
         gamePack,
       },
       readyPolicy: "ready-on-runtime-ready",
-      persistencePolicy: "reuse-restored-game-pack",
-      runFirstPlayableChecksOnReady: true,
+      persistencePolicy:
+        source === "accepted-game-pack"
+          ? "do-not-persist"
+          : "reuse-restored-game-pack",
+      runFirstPlayableChecksOnReady: false,
     };
   } catch (error) {
     return createBlockedGameSpecSource(

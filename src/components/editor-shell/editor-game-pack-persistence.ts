@@ -5,8 +5,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createIndexedDbGamePackRepository,
   hasCreatorFacingCheckpoint,
+  isGamePackAcceptanceRestorable,
+  reconcileGeneratedMechanicAcceptanceTransactions,
+  withGeneratedMechanicAcceptanceLock,
   type GamePack,
   type GamePackRepository,
+  type GenerationRunRepository,
 } from "@/game-spec";
 
 export type EditorGamePackPersistenceStatus =
@@ -17,6 +21,10 @@ export type EditorGamePackPersistenceStatus =
   | "error";
 
 export type UseEditorGamePackPersistenceInput = {
+  generationRunRepository?: Pick<
+    GenerationRunRepository,
+    "fetch" | "list" | "update"
+  > | null;
   repository?: GamePackRepository;
 };
 
@@ -28,6 +36,7 @@ export type EditorGamePackPersistence = {
 };
 
 export function useEditorGamePackPersistence({
+  generationRunRepository,
   repository,
 }: UseEditorGamePackPersistenceInput = {}): EditorGamePackPersistence {
   const repositoryRef = useRef<GamePackRepository | null>(repository ?? null);
@@ -58,15 +67,38 @@ export function useEditorGamePackPersistence({
   useEffect(() => {
     let cancelled = false;
 
-    getRepository()
-      .list()
+    const gamePackRepository = getRepository();
+    const loadGamePacks = async () => {
+      if (generationRunRepository) {
+        const reconciliation =
+          await reconcileGeneratedMechanicAcceptanceTransactions({
+            gamePackRepository,
+            generationRunRepository,
+          });
+        if (reconciliation.issues.length > 0) {
+          throw new EditorGamePackAcceptanceRecoveryError(
+            reconciliation.issues
+          );
+        }
+        return reconciliation.restorableGamePack
+          ? [reconciliation.restorableGamePack]
+          : [];
+      }
+      return gamePackRepository.list();
+    };
+
+    loadGamePacks()
       .then((gamePacks) => {
         if (cancelled) {
           return;
         }
 
         setRestoredGamePack(
-          gamePacks.find(hasCreatorFacingCheckpoint) ?? null
+          gamePacks.find(
+            (gamePack) =>
+              isGamePackAcceptanceRestorable(gamePack) &&
+              hasCreatorFacingCheckpoint(gamePack)
+          ) ?? null
         );
         setLoadStatus("loaded");
       })
@@ -83,7 +115,7 @@ export function useEditorGamePackPersistence({
     return () => {
       cancelled = true;
     };
-  }, [getRepository]);
+  }, [generationRunRepository, getRepository]);
 
   const persistValidatedGamePack = useCallback(
     async (gamePack: GamePack) => {
@@ -95,7 +127,9 @@ export function useEditorGamePackPersistence({
       setStorageError(null);
 
       try {
-        const savedGamePack = await getRepository().save(gamePack);
+        const savedGamePack = await withGeneratedMechanicAcceptanceLock({
+          operation: () => getRepository().save(gamePack),
+        });
 
         setLoadStatus("loaded");
 
@@ -122,4 +156,20 @@ export function useEditorGamePackPersistence({
 
 function toError(error: unknown) {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+class EditorGamePackAcceptanceRecoveryError extends Error {
+  readonly issues: readonly Readonly<{
+    path: string;
+    code: string;
+    message: string;
+  }>[];
+
+  constructor(issues: EditorGamePackAcceptanceRecoveryError["issues"]) {
+    super(
+      "A finalized generated mechanic Game Pack is waiting for exact cross-store acceptance recovery."
+    );
+    this.name = "EditorGamePackAcceptanceRecoveryError";
+    this.issues = issues;
+  }
 }

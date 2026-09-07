@@ -1,0 +1,3 @@
+# Prohibit mechanic-specific generation scaffolding
+
+Generated-mechanic calls may receive creator intent, accepted upstream contracts, generic schemas and capability documentation, the active constraints, lifecycle rules, and exact validation evidence, but not mechanic-specific source skeletons, algorithms, prompt branches, hidden helpers, handwritten implementation fragments, or external test code. This Generation Guidance Boundary allows the model to understand the required behavior while ensuring it must compose Sparkline's primitive capabilities rather than adapt a prewritten solution for each proof case.

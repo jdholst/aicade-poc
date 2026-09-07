@@ -15,6 +15,7 @@ import {
   createRestoredForwardGamePackFixture,
   createValidatedGamePackFixture,
 } from "./testing/game-pack-fixtures";
+import { createGeneratedMechanicProjectFixture } from "./testing/generated-mechanic-project-fixtures";
 
 const startedAt = "2026-05-21T13:00:00.000Z";
 const observedAt = "2026-05-21T13:00:01.500Z";
@@ -480,6 +481,82 @@ describe("first-playable validation orchestration", () => {
         validationEvidenceIds,
       }),
     ]);
+  });
+
+  it("preserves accepted generated-mechanic lineage when runtime validation evidence is written", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const initialAttempt = recordPassingRuntimeEvidence(
+      recordRuntimeReady(startValidation(fixture.gamePack))
+    );
+    const firstPlayableEvidenceIds = initialAttempt.evidence.map(
+      (evidence) => evidence.id
+    );
+    const validationEvidenceIds = [
+      ...fixture.artifact.validationEvidenceIds,
+      ...firstPlayableEvidenceIds,
+    ];
+    const artifact = {
+      ...fixture.artifact,
+      buildId: "build_initial_playable",
+      validationEvidenceIds,
+    };
+    const productionLikeGamePack = gamePackSchema.parse({
+      ...fixture.gamePack,
+      builds: fixture.gamePack.builds.map((build) => ({
+        ...build,
+        id: artifact.buildId,
+        validationEvidenceIds,
+        generatedMechanicArtifactIds: [artifact.id],
+      })),
+      checkpoints: fixture.gamePack.checkpoints.map((checkpoint) => ({
+        ...checkpoint,
+        buildId: artifact.buildId,
+        validationEvidenceIds,
+        generatedMechanicArtifactIds: [artifact.id],
+      })),
+      validationEvidence: [
+        ...fixture.gamePack.validationEvidence,
+        ...initialAttempt.evidence.map((evidence) => ({
+          ...evidence,
+          generatedMechanicArtifactIds: [artifact.id],
+        })),
+      ],
+      generationRuns: fixture.gamePack.generationRuns.map((generationRun) => ({
+        ...generationRun,
+        relationships: {
+          ...generationRun.relationships,
+          buildIds: [artifact.buildId],
+          validationEvidenceIds,
+        },
+      })),
+      acceptedGeneratedMechanicArtifacts: [artifact],
+    });
+    const attempt = recordPassingRuntimeEvidence(
+      recordRuntimeReady(startValidation(productionLikeGamePack))
+    );
+
+    const nextGamePack = writeFirstPlayableValidationResult({
+      gamePack: productionLikeGamePack,
+      attempt,
+      completedAt,
+    });
+
+    expect(gamePackSchema.parse(nextGamePack)).toEqual(nextGamePack);
+    expect(nextGamePack.acceptedGeneratedMechanicArtifacts).toEqual([
+      artifact,
+    ]);
+    expect(
+      nextGamePack.builds.find(
+        (build) => build.id === artifact.buildId
+      )?.generatedMechanicArtifactIds
+    ).toContain(artifact.id);
+    for (const evidenceId of artifact.validationEvidenceIds) {
+      expect(
+        nextGamePack.validationEvidence.find(
+          (evidence) => evidence.id === evidenceId
+        )?.generatedMechanicArtifactIds
+      ).toContain(artifact.id);
+    }
   });
 
   it("preserves a restored-forward checkpoint as current when successful validation is written after reload", () => {

@@ -160,6 +160,13 @@ export type TopDownMechanicMathService = {
 
 export type TopDownMechanicRuntimeService = {
   getViewport: () => RuntimeViewport;
+  observeGeneratedOwnedObjects: (
+    filter: {
+      assetRole: GameSpec["assets"][number]["role"];
+      entityRole: TopDownMechanicEntity["role"];
+    },
+    observer: (object: TopDownMechanicEntityHandle) => void
+  ) => () => void;
   resetEntity: (entityId: StableId) => void;
 };
 

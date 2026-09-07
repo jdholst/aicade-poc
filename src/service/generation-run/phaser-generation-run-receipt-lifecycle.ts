@@ -1,4 +1,5 @@
 import {
+  clearGeneratedMechanicHandoffReceipt,
   type GenerationRun,
   type GenerationRunAttemptReceipt,
   type GenerationRunRepository,
@@ -11,17 +12,25 @@ import {
   type TopDownSpecGenerationClientResult,
 } from "@/service/spec-generation";
 import type { StarterProjectRequest } from "@/service/starter-project/starter-project-client";
+import { CreatorGenerationRoutingError } from "@/service/creator-generation/creator-game-generation-dispatcher";
+import type { OmittedMechanicWarning } from "@/service/creator-generation/degraded-generation-fallback-policy";
 
 export type PhaserGenerationRunReceiptLifecycle = {
   generationRunId?: GenerationRun["id"];
   createInitialReceipt: () => Promise<void>;
   recordSpecGenerationFailure: (error: unknown) => Promise<void>;
   recordSpecGenerationInterruption: (
-    status: Extract<GenerationRun["status"], "cancelled" | "timed-out">
-  ) => Promise<void>;
+    status: Extract<GenerationRun["status"], "cancelled" | "timed-out">,
+    phase?: "generated_mechanic_continuation"
+  ) => Promise<
+    "recorded" | "preserved_acceptance" | "persistence_unavailable"
+  >;
   recordSpecGenerationSuccess: (
     result: TopDownSpecGenerationClientResult
   ) => Promise<void>;
+  recordDegradedGeneration: (
+    warning: OmittedMechanicWarning
+  ) => Promise<"recorded" | "persistence_unavailable">;
 };
 
 type CreatePhaserGenerationRunReceiptLifecycleInput = {
@@ -79,19 +88,22 @@ export function createPhaserGenerationRunReceiptLifecycle({
       );
     },
 
-    async recordSpecGenerationInterruption(status) {
+    async recordSpecGenerationInterruption(status, phase) {
       if (!generationRunId || !repository) {
-        return;
+        return "persistence_unavailable";
       }
 
-      await persistGenerationRunReceipt(() =>
+      return (
+        (await persistGenerationRunReceipt(() =>
         recordInterruptedSpecGenerationAttempt({
           completedAt: now(),
           generationRunId,
           repository,
           request,
           status,
+          phase,
         })
+        )) ?? "persistence_unavailable"
       );
     },
 
@@ -110,19 +122,116 @@ export function createPhaserGenerationRunReceiptLifecycle({
         })
       );
     },
+
+    async recordDegradedGeneration(warning) {
+      if (!generationRunId || !repository) {
+        return "persistence_unavailable";
+      }
+
+      const result = await persistGenerationRunReceipt(() =>
+        recordDegradedCreatorGenerationOutcome({
+          generationRunId,
+          recordedAt: now(),
+          repository,
+          warning,
+        })
+      );
+      return result === true ? "recorded" : "persistence_unavailable";
+    },
   };
 
-  async function persistGenerationRunReceipt(persist: () => Promise<void>) {
+  async function persistGenerationRunReceipt<Result>(
+    persist: () => Promise<Result>
+  ): Promise<Result | undefined> {
     if (isPersistenceDisabled) {
       return;
     }
 
     try {
-      await persist();
+      return await persist();
     } catch {
       isPersistenceDisabled = true;
     }
   }
+}
+
+async function recordDegradedCreatorGenerationOutcome({
+  generationRunId,
+  recordedAt,
+  repository,
+  warning,
+}: {
+  generationRunId: GenerationRun["id"];
+  recordedAt: string;
+  repository: Pick<GenerationRunRepository, "update">;
+  warning: OmittedMechanicWarning;
+}): Promise<boolean> {
+  const routingEvidence = {
+    stage: warning.routingFailure.evidence.stage,
+    code: warning.routingFailure.evidence.code,
+    issues: warning.routingFailure.evidence.issues.map((issue) => ({
+      ...issue,
+    })),
+    ...(warning.routingFailure.evidence.code === "capability_gap"
+      ? {
+          missingCapabilities: [
+            ...warning.routingFailure.evidence.missingCapabilities,
+          ],
+        }
+      : {}),
+  };
+  const creatorGenerationOutcome = {
+    schemaVersion: warning.schemaVersion,
+    status: "degraded" as const,
+    recordedAt,
+    warning: {
+      ...warning,
+      issues: warning.issues.map((issue) => ({ ...issue })),
+      fallbackValidation: {
+        ...warning.fallbackValidation,
+        mechanicTypes: [...warning.fallbackValidation.mechanicTypes],
+      },
+      routingFailure: {
+        kind: warning.routingFailure.kind,
+        evidence: routingEvidence,
+      },
+    },
+    generatedStageCallCounts: {
+      contract: 0,
+      source: 0,
+      realm: 0,
+      browser: 0,
+      handoff: 0,
+      persistence: 0,
+    },
+  };
+  const updatedGenerationRun = await repository.update(
+    generationRunId,
+    (generationRun) => {
+    if (
+      generationRun.status !== "running" ||
+      hasGeneratedMechanicLineage(generationRun)
+    ) {
+      throw new Error(
+        "Degraded creator generation cannot attach warning evidence to a terminal or generated-lineage GenerationRun."
+      );
+    }
+
+    return {
+      ...generationRun,
+      metadata: {
+        ...(generationRun.metadata ?? {}),
+        creatorGenerationOutcome,
+      },
+    };
+    }
+  );
+  return (
+    updatedGenerationRun.status === "running" &&
+    !hasGeneratedMechanicLineage(updatedGenerationRun) &&
+    JSON.stringify(updatedGenerationRun.metadata?.creatorGenerationOutcome) ===
+      JSON.stringify(creatorGenerationOutcome)
+  );
 }
 
 async function createInitialPhaserGenerationRunReceipt({
@@ -167,6 +276,10 @@ async function recordSuccessfulSpecGenerationAttempt({
   result: TopDownSpecGenerationClientResult;
 }) {
   await repository.update(generationRunId, (generationRun) => {
+    if (generationRun.status !== "running") {
+      return generationRun;
+    }
+
     const startedAt = generationRun.startedAt;
 
     return {
@@ -279,6 +392,10 @@ async function recordFailedSpecGenerationAttempt({
       : undefined;
 
   await repository.update(generationRunId, (generationRun) => {
+    if (generationRun.status !== "running") {
+      return generationRun;
+    }
+
     const startedAt = generationRun.startedAt;
     const stage = validationFailure
       ? toGenerationRunFailureStage(validationFailure.stage)
@@ -299,6 +416,8 @@ async function recordFailedSpecGenerationAttempt({
       stage,
       failureClass: hasRepairExhausted
         ? "repair-exhausted"
+        : error instanceof CreatorGenerationRoutingError
+          ? "unsupported-prompt-intent"
         : validationFailure
           ? "invalid-model-output"
           : "provider-request-failure",
@@ -320,51 +439,133 @@ async function recordInterruptedSpecGenerationAttempt({
   repository,
   request,
   status,
+  phase,
 }: {
   completedAt: string;
   generationRunId: GenerationRun["id"];
   repository: Pick<GenerationRunRepository, "update">;
   request: StarterProjectRequest;
   status: Extract<GenerationRun["status"], "cancelled" | "timed-out">;
-}) {
-  await repository.update(generationRunId, (generationRun) => {
-    if (generationRun.status !== "running") {
+  phase?: "generated_mechanic_continuation";
+}): Promise<"recorded" | "preserved_acceptance"> {
+  const updatedGenerationRun = await repository.update(
+    generationRunId,
+    (generationRun) => {
+    if (hasGeneratedMechanicAcceptanceTransaction(generationRun)) {
+      return generationRun;
+    }
+    const isGeneratedMechanicContinuation =
+      phase === "generated_mechanic_continuation";
+    const generationRunWithoutPendingHandoff =
+      isGeneratedMechanicContinuation
+        ? clearGeneratedMechanicHandoffReceipt(generationRun)
+        : generationRun;
+    const canInterruptGeneratedContinuation =
+      isGeneratedMechanicContinuation &&
+      generationRun.status === "succeeded" &&
+      !generationRun.relationships?.acceptedGeneratedMechanicArtifactIds?.length;
+    if (
+      generationRun.status !== "running" &&
+      !canInterruptGeneratedContinuation
+    ) {
       return generationRun;
     }
 
     const startedAt = generationRun.startedAt;
     const isTimeout = status === "timed-out";
+    const interruptionStartedAt = isGeneratedMechanicContinuation
+      ? generationRun.attempts.at(-1)?.completedAt ?? startedAt
+      : startedAt;
+
+    const interruptionAttempt: GenerationRunAttemptReceipt = {
+      id: isGeneratedMechanicContinuation
+        ? `${generationRunId}_generated_continuation_interruption`
+        : `${generationRunId}_attempt_1`,
+      attemptNumber: isGeneratedMechanicContinuation
+        ? Math.max(
+            0,
+            ...generationRun.attempts.map(({ attemptNumber }) => attemptNumber)
+          ) + 1
+        : 1,
+      kind: "initial",
+      status,
+      provider: "openai",
+      model: request.openAiModel ?? "unknown",
+      taskRoute: isGeneratedMechanicContinuation
+        ? "generated_mechanic.continuation"
+        : "spec_generation.primary",
+      requestSummary: summarizePrompt(request.prompt),
+      startedAt: interruptionStartedAt,
+      completedAt,
+      durationMs: getDurationMs(interruptionStartedAt, completedAt),
+      candidate: {
+        kind: "no_candidate",
+        summary: isGeneratedMechanicContinuation
+          ? isTimeout
+            ? "Generated mechanic continuation timed out before acceptance."
+            : "Generated mechanic continuation was cancelled before acceptance."
+          : isTimeout
+            ? "Spec Generation timed out before a candidate was returned."
+            : "Spec Generation was cancelled before a candidate was returned.",
+      },
+    };
 
     return {
-      ...generationRun,
+      ...generationRunWithoutPendingHandoff,
       status,
       completedAt,
       durationMs: getDurationMs(startedAt, completedAt),
       stage: isTimeout ? "timeout" : "cancellation",
       failureClass: isTimeout ? "timeout" : "cancellation",
-      attempts: [
-        {
-          id: `${generationRunId}_attempt_1`,
-          attemptNumber: 1,
-          kind: "initial",
-          status,
-          provider: "openai",
-          model: request.openAiModel ?? "unknown",
-          taskRoute: "spec_generation.primary",
-          requestSummary: summarizePrompt(request.prompt),
-          startedAt,
-          completedAt,
-          durationMs: getDurationMs(startedAt, completedAt),
-          candidate: {
-            kind: "no_candidate",
-            summary: isTimeout
-              ? "Spec Generation timed out before a candidate was returned."
-              : "Spec Generation was cancelled before a candidate was returned.",
-          },
-        },
-      ],
+      attempts: isGeneratedMechanicContinuation
+        ? [...generationRun.attempts, interruptionAttempt]
+        : [interruptionAttempt],
+      ...(isGeneratedMechanicContinuation
+        ? {
+            metadata: {
+              ...(generationRunWithoutPendingHandoff.metadata ?? {}),
+              generatedMechanicOutcome: {
+                status: "rejected" as const,
+                stage: "continuation" as const,
+                issues: [
+                  {
+                    path: "context.signal",
+                    code: "generation_cancelled",
+                    message: isTimeout
+                      ? "Generated mechanic continuation exceeded its browser deadline."
+                      : "The creator cancelled generated mechanic continuation.",
+                  },
+                ],
+              },
+            },
+          }
+        : {}),
     };
-  });
+    }
+  );
+  return hasGeneratedMechanicAcceptanceTransaction(updatedGenerationRun)
+    ? "preserved_acceptance"
+    : "recorded";
+}
+
+function hasGeneratedMechanicAcceptanceTransaction(
+  generationRun: GenerationRun
+): boolean {
+  return Object.hasOwn(
+    generationRun.metadata ?? {},
+    "generatedMechanicAcceptanceTransaction"
+  );
+}
+
+function hasGeneratedMechanicLineage(generationRun: GenerationRun): boolean {
+  return (
+    hasGeneratedMechanicAcceptanceTransaction(generationRun) ||
+    generationRun.artifactScopedRepair !== undefined ||
+    (generationRun.relationships?.acceptedGeneratedMechanicArtifactIds
+      ?.length ?? 0) > 0 ||
+    Object.hasOwn(generationRun.metadata ?? {}, "generatedMechanicHandoff") ||
+    Object.hasOwn(generationRun.metadata ?? {}, "generatedMechanicOutcome")
+  );
 }
 
 function createFailedSpecGenerationAttemptReceipts({

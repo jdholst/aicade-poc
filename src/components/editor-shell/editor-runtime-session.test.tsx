@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createGamePackRepository,
@@ -9,6 +9,7 @@ import {
   type StoredGamePackRecord,
 } from "@/game-spec";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
+import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
 import {
   createGenerationRunTestRepository,
   createRunningPhaserSpecGenerationRun,
@@ -18,6 +19,72 @@ import type { EditorGameCanvasSession } from "@/hooks/use-editor-session";
 import { useEditorRuntimeSession } from "./editor-runtime-session";
 
 describe("useEditorRuntimeSession", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: {
+        async request<T>(
+          _name: string,
+          _options: Readonly<{ mode: "exclusive"; signal?: AbortSignal }>,
+          callback: () => Promise<T>
+        ) {
+          return callback();
+        },
+      },
+    });
+  });
+
+  it("mounts a freshly accepted generated-mechanic pack without a second persistence write", async () => {
+    const storage = new MemoryGamePackStorage();
+    const repository = createGamePackRepository(storage);
+    const fixture = createGeneratedMechanicProjectFixture();
+    const canvas: EditorGameCanvasSession = {
+      ...createIdlePhaserAiCanvas(),
+      loadState: {
+        generationRunId: fixture.artifact.sourceGenerationRunId,
+        gamePack: fixture.gamePack,
+        source: "phaser-game-pack",
+        status: "success",
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useEditorRuntimeSession({
+        canvas,
+        gamePackRepository: repository,
+        onGameStatusChange: vi.fn(),
+      })
+    );
+
+    await waitFor(() => {
+      expect(result.current.runtimeTemplate).toMatchObject({
+        type: "phaser-valid",
+        persistencePolicy: "do-not-persist",
+        firstPlayableValidationSource: {
+          gamePack: fixture.gamePack,
+          source: "accepted-game-pack",
+        },
+      });
+    });
+    act(() => {
+      result.current.handleRuntimeStatusChange({ state: "ready" });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+    await act(async () => Promise.resolve());
+    expect(storage.putCalls).toBe(0);
+  });
+
   it("persists and restores a generated Phaser draft only after first-playable validation passes", async () => {
     const storage = new MemoryGamePackStorage();
     const repository = createGamePackRepository(storage);
@@ -132,17 +199,31 @@ describe("useEditorRuntimeSession", () => {
     expect(storage.records).toHaveLength(0);
   });
 
-  it("links a successful GenerationRun to persisted Game Pack outcome records", async () => {
+  it("links a degraded GenerationRun through the editor first-playable gate to persisted Game Pack outcome records", async () => {
     const storage = new MemoryGamePackStorage();
     const gamePackRepository = createGamePackRepository(storage);
     const generationRunTestRepository = createGenerationRunTestRepository();
     const generationRunId = "generation_run_durable_success";
 
-    await generationRunTestRepository.repository.create(
-      createRunningPhaserSpecGenerationRun({
+    await generationRunTestRepository.repository.create({
+      ...createRunningPhaserSpecGenerationRun({
         id: generationRunId,
-      })
-    );
+      }),
+      metadata: {
+        creatorGenerationOutcome: {
+          schemaVersion: "degraded_creator_generation/v1",
+          status: "degraded",
+          generatedStageCallCounts: {
+            contract: 0,
+            source: 0,
+            realm: 0,
+            browser: 0,
+            handoff: 0,
+            persistence: 0,
+          },
+        },
+      },
+    });
 
     const { result } = renderHook(() =>
       useEditorRuntimeSession({
@@ -177,6 +258,16 @@ describe("useEditorRuntimeSession", () => {
       expect(storage.records).toHaveLength(1);
     });
 
+    await waitFor(() => {
+      expect(storage.records[0].gamePack.metadata).toMatchObject({
+        creatorGenerationPersistenceTransaction: {
+          schemaVersion: "creator_generation_persistence_transaction/v1",
+          status: "finalized",
+          generationRunId,
+        },
+      });
+    });
+
     const savedGamePack = storage.records[0].gamePack;
 
     await waitFor(async () => {
@@ -195,6 +286,20 @@ describe("useEditorRuntimeSession", () => {
           validationEvidenceIds: savedGamePack.validationEvidence.map(
             (evidence) => evidence.id
           ),
+        },
+        metadata: {
+          creatorGenerationOutcome: {
+            schemaVersion: "degraded_creator_generation/v1",
+            status: "degraded",
+            generatedStageCallCounts: {
+              contract: 0,
+              source: 0,
+              realm: 0,
+              browser: 0,
+              handoff: 0,
+              persistence: 0,
+            },
+          },
         },
       });
     });
@@ -305,18 +410,25 @@ describe("useEditorRuntimeSession", () => {
     const generationRunTestRepository = createGenerationRunTestRepository();
     const generationRunId = "generation_run_save_failed";
 
-    await generationRunTestRepository.repository.create(
-      createRunningPhaserSpecGenerationRun({
+    await generationRunTestRepository.repository.create({
+      ...createRunningPhaserSpecGenerationRun({
         id: generationRunId,
-      })
-    );
+      }),
+      metadata: {
+        creatorGenerationOutcome: {
+          schemaVersion: "degraded_creator_generation/v1",
+          status: "degraded",
+        },
+      },
+    });
+    const onGameStatusChange = vi.fn();
 
     const { result } = renderHook(() =>
       useEditorRuntimeSession({
         canvas: createGeneratedPhaserCanvas({ generationRunId }),
         gamePackRepository,
         generationRunRepository: generationRunTestRepository.repository,
-        onGameStatusChange: vi.fn(),
+        onGameStatusChange,
       })
     );
 
@@ -348,13 +460,219 @@ describe("useEditorRuntimeSession", () => {
       await Promise.resolve();
     });
 
+    await waitFor(async () => {
+      await expect(
+        generationRunTestRepository.repository.fetch(generationRunId)
+      ).resolves.toMatchObject({
+        status: "failed",
+        stage: "artifact-build",
+        failureClass: "build-failure",
+        metadata: {
+          creatorGenerationOutcome: {
+            schemaVersion: "degraded_creator_generation/v1",
+            status: "degraded",
+          },
+          creatorGenerationPersistenceFailure: {
+            code: "game_pack_persistence_failed",
+          },
+        },
+      });
+    });
+    expect(onGameStatusChange).toHaveBeenLastCalledWith({
+      state: "error",
+      message:
+        "The validated game could not be saved, so generation remains blocked.",
+    });
     const generationRun =
       await generationRunTestRepository.repository.fetch(generationRunId);
+    expect(generationRun?.relationships).toBeUndefined();
+  });
 
-    expect(generationRun).toMatchObject({
+  it("does not restore a degraded Game Pack when GenerationRun finalization fails after the pack save", async () => {
+    const storage = new MemoryGamePackStorage();
+    const gamePackRepository = createGamePackRepository(storage);
+    const generationRunTestRepository = createGenerationRunTestRepository();
+    const generationRunId = "generation_run_finalization_failed";
+
+    await generationRunTestRepository.repository.create({
+      ...createRunningPhaserSpecGenerationRun({ id: generationRunId }),
+      metadata: {
+        creatorGenerationOutcome: {
+          schemaVersion: "degraded_creator_generation/v1",
+          status: "degraded",
+        },
+      },
+    });
+
+    const finalizationFailingRepository = {
+      fetch: generationRunTestRepository.repository.fetch,
+      list: generationRunTestRepository.repository.list,
+      update: vi.fn(async () => {
+        throw new Error("Injected GenerationRun finalization failure.");
+      }),
+    };
+    const onGameStatusChange = vi.fn();
+    const mounted = renderHook(() =>
+      useEditorRuntimeSession({
+        canvas: createGeneratedPhaserCanvas({ generationRunId }),
+        gamePackRepository,
+        generationRunRepository: finalizationFailingRepository,
+        onGameStatusChange,
+      })
+    );
+
+    await waitFor(() => {
+      expect(storage.getAllCalls).toBe(1);
+    });
+
+    act(() => {
+      mounted.result.current.handleRuntimeStatusChange({ state: "ready" });
+      mounted.result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      mounted.result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      mounted.result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+
+    await waitFor(() => {
+      expect(storage.records).toHaveLength(1);
+      expect(onGameStatusChange).toHaveBeenLastCalledWith({
+        state: "error",
+        message:
+          "The validated game was saved, but its generation receipt could not be finalized, so generation remains blocked.",
+      });
+    });
+
+    mounted.unmount();
+
+    const restored = renderHook(() =>
+      useEditorRuntimeSession({
+        canvas: createIdlePhaserAiCanvas(),
+        gamePackRepository,
+        generationRunRepository: generationRunTestRepository.repository,
+        onGameStatusChange: vi.fn(),
+      })
+    );
+
+    await waitFor(() => {
+      expect(storage.getAllCalls).toBeGreaterThanOrEqual(2);
+      expect(restored.result.current.runtimeTemplate.type).not.toBe(
+        "phaser-valid"
+      );
+    });
+
+    await expect(
+      generationRunTestRepository.repository.fetch(generationRunId)
+    ).resolves.toMatchObject({
       status: "running",
     });
-    expect(generationRun?.relationships).toBeUndefined();
+    expect(storage.records[0].gamePack.metadata).toMatchObject({
+      creatorGenerationPersistenceTransaction: {
+        schemaVersion: "creator_generation_persistence_transaction/v1",
+        status: "pending",
+        generationRunId,
+      },
+    });
+  });
+
+  it("compensates a succeeded degraded run when the finalized Game Pack write fails", async () => {
+    const storage = new MemoryGamePackStorage({ failOnPutCall: 2 });
+    const gamePackRepository = createGamePackRepository(storage);
+    const generationRunTestRepository = createGenerationRunTestRepository();
+    const generationRunId = "generation_run_final_pack_write_failed";
+
+    await generationRunTestRepository.repository.create({
+      ...createRunningPhaserSpecGenerationRun({ id: generationRunId }),
+      metadata: {
+        creatorGenerationOutcome: {
+          schemaVersion: "degraded_creator_generation/v1",
+          status: "degraded",
+        },
+      },
+    });
+    const onGameStatusChange = vi.fn();
+    const mounted = renderHook(() =>
+      useEditorRuntimeSession({
+        canvas: createGeneratedPhaserCanvas({ generationRunId }),
+        gamePackRepository,
+        generationRunRepository: generationRunTestRepository.repository,
+        onGameStatusChange,
+      })
+    );
+
+    await waitFor(() => {
+      expect(storage.getAllCalls).toBe(1);
+    });
+    act(() => {
+      mounted.result.current.handleRuntimeStatusChange({ state: "ready" });
+      mounted.result.current.handleRuntimeValidationEvidence({
+        checkId: "nonblank_render",
+        status: "passed",
+      });
+      mounted.result.current.handleRuntimeValidationEvidence({
+        checkId: "player_visible",
+        status: "passed",
+      });
+      mounted.result.current.handleRuntimeValidationEvidence({
+        checkId: "input_response",
+        status: "passed",
+      });
+    });
+
+    await waitFor(() => {
+      expect(storage.putCalls).toBe(2);
+      expect(onGameStatusChange).toHaveBeenLastCalledWith({
+        state: "error",
+        message:
+          "The generation receipt was finalized, but its final Game Pack linkage could not be saved, so generation remains blocked.",
+      });
+    });
+    await waitFor(async () => {
+      await expect(
+        generationRunTestRepository.repository.fetch(generationRunId)
+      ).resolves.toMatchObject({
+        status: "failed",
+        stage: "artifact-build",
+        failureClass: "build-failure",
+        metadata: {
+          creatorGenerationPersistenceFailure: {
+            code: "game_pack_finalization_failed",
+          },
+        },
+      });
+    });
+    const compensatedRun =
+      await generationRunTestRepository.repository.fetch(generationRunId);
+    expect(compensatedRun?.relationships).toBeUndefined();
+    expect(storage.records[0].gamePack.metadata).toMatchObject({
+      creatorGenerationPersistenceTransaction: {
+        status: "pending",
+        generationRunId,
+      },
+    });
+
+    mounted.unmount();
+    const restored = renderHook(() =>
+      useEditorRuntimeSession({
+        canvas: createIdlePhaserAiCanvas(),
+        gamePackRepository,
+        generationRunRepository: generationRunTestRepository.repository,
+        onGameStatusChange: vi.fn(),
+      })
+    );
+    await waitFor(() => {
+      expect(storage.getAllCalls).toBeGreaterThanOrEqual(2);
+      expect(restored.result.current.runtimeTemplate.type).not.toBe(
+        "phaser-valid"
+      );
+    });
   });
 });
 
@@ -421,7 +739,10 @@ function createIdlePhaserAiCanvas(): EditorGameCanvasSession {
 
 class MemoryGamePackStorage implements GamePackStorageDriver {
   constructor(
-    private readonly options: { failOnPut?: boolean } = {}
+    private readonly options: {
+      failOnPut?: boolean;
+      failOnPutCall?: number;
+    } = {}
   ) {}
 
   getAllCalls = 0;
@@ -431,7 +752,10 @@ class MemoryGamePackStorage implements GamePackStorageDriver {
   async put(record: StoredGamePackRecord) {
     this.putCalls += 1;
 
-    if (this.options.failOnPut) {
+    if (
+      this.options.failOnPut ||
+      this.options.failOnPutCall === this.putCalls
+    ) {
       throw new Error("Failed to save Game Pack.");
     }
 
@@ -456,6 +780,40 @@ class MemoryGamePackStorage implements GamePackStorageDriver {
     this.getAllCalls += 1;
 
     return this.records.map(cloneRecord);
+  }
+
+  async compareAndSwap(
+    gamePackId: string,
+    expected: StoredGamePackRecord | null,
+    replacement: StoredGamePackRecord | null
+  ) {
+    const current = this.records.find((record) => record.id === gamePackId) ?? null;
+    if (JSON.stringify(current) !== JSON.stringify(expected)) {
+      return false;
+    }
+    const existingIndex = this.records.findIndex(
+      (record) => record.id === gamePackId
+    );
+    if (!replacement) {
+      if (existingIndex >= 0) {
+        this.records.splice(existingIndex, 1);
+      }
+      return true;
+    }
+    const nextRecord = cloneRecord(replacement);
+    if (existingIndex === -1) {
+      this.records.push(nextRecord);
+    } else {
+      this.records[existingIndex] = nextRecord;
+    }
+    return true;
+  }
+
+  async delete(gamePackId: string) {
+    const index = this.records.findIndex((record) => record.id === gamePackId);
+    if (index >= 0) {
+      this.records.splice(index, 1);
+    }
   }
 }
 

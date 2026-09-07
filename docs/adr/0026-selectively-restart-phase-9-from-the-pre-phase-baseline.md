@@ -1,0 +1,3 @@
+# Selectively restart Phase 9 from the pre-phase baseline
+
+The general generated-mechanic implementation will restart from the pre-Phase-9 `development` baseline while preserving the existing `generate-mechanic-pipeline` branch as a working projectile vertical-slice reference. The new work will rebuild intent resolution, contracts, generation orchestration, capability enforcement, isolated execution, and generic evaluation, while selectively porting proven project-scoped artifact, GenerationRun evidence, persistence, registry handoff, and first-playable rails; projectile behavior returns only as an evaluation case.

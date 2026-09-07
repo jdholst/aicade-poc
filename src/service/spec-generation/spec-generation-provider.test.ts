@@ -83,6 +83,12 @@ describe("Spec Generation provider request", () => {
     expect(requestBody.instructions).toContain("TopDownGameSpec");
     expect(requestBody.instructions).toContain("template_top_down");
     expect(requestBody.instructions).toContain("Do not generate Phaser source");
+    expect(requestBody.instructions).toContain(
+      "Every non-player entity that must be visible, observed, bound, targeted, or affected at runtime must appear in entityIds of an allowed active mechanic"
+    );
+    expect(requestBody.instructions).toContain(
+      "A spawn-zone reference alone does not create a usable Phaser handle"
+    );
     expect(requestBody.instructions).not.toContain(
       "TEMPORARY VALIDATION FAILURE TEST"
     );

@@ -86,6 +86,8 @@ export type GenerationRunJsonExportRun = {
   mechanicIds?: GenerationRun["mechanicIds"];
   stage?: GenerationRun["stage"];
   failureClass?: GenerationRun["failureClass"];
+  metadata?: GenerationRun["metadata"];
+  artifactScopedRepair?: GenerationRun["artifactScopedRepair"];
   taskRoutes: string[];
   providerModels: GenerationRunJsonExportProviderModel[];
   attemptCount: number;
@@ -204,6 +206,10 @@ function createGenerationRunJsonExportRun(
     ...(run.mechanicIds ? { mechanicIds: run.mechanicIds } : {}),
     ...(run.stage ? { stage: run.stage } : {}),
     ...(run.failureClass ? { failureClass: run.failureClass } : {}),
+    ...(run.metadata ? { metadata: run.metadata } : {}),
+    ...(run.artifactScopedRepair
+      ? { artifactScopedRepair: run.artifactScopedRepair }
+      : {}),
     taskRoutes: unique(run.attempts.map((attempt) => attempt.taskRoute)),
     providerModels: uniqueProviderModels(run.attempts),
     attemptCount: run.attempts.length,

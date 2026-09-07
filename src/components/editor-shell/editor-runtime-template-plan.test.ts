@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
+import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
 
-import { createEditorRuntimeTemplatePlan } from "./editor-runtime-template-plan";
+import {
+  createEditorRuntimeTemplatePlan,
+  createPhaserRuntimeHostViewModel,
+} from "./editor-runtime-template-plan";
 
 describe("createEditorRuntimeTemplatePlan", () => {
   it("resolves Canvas mode without Phaser validation state", () => {
@@ -100,12 +104,70 @@ describe("createEditorRuntimeTemplatePlan", () => {
       },
       persistencePolicy: "reuse-restored-game-pack",
       readyPolicy: "ready-on-runtime-ready",
-      runFirstPlayableChecksOnReady: true,
+      runFirstPlayableChecksOnReady: false,
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
         title: topDownPhaserTemplate.title,
       },
       type: "phaser-valid",
+    });
+  });
+
+  it("carries the exact restored generated project into the Phaser host view model", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const plan = createEditorRuntimeTemplatePlan({
+      generationSource: "phaser-ai",
+      restoredGamePack: fixture.gamePack,
+      runtimeMode: "phaser",
+    });
+
+    expect(plan).toMatchObject({
+      type: "phaser-valid",
+      generatedMechanicProject: {
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+      },
+    });
+    if (plan.type !== "phaser-valid") {
+      throw new Error("Expected the accepted project to produce a valid plan.");
+    }
+
+    expect(
+      createPhaserRuntimeHostViewModel({
+        gameResetNonce: 2,
+        runtimeTemplate: plan,
+      })
+    ).toEqual({
+      type: "phaser",
+      key: `${plan.sourceKey}-2`,
+      template: plan.template,
+      generatedMechanicProject: {
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+      },
+    });
+  });
+
+  it("carries the current accepted Game Pack into the generated Phaser host", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const plan = createEditorRuntimeTemplatePlan({
+      activeGamePack: fixture.gamePack,
+      generationSource: "phaser-ai",
+      runtimeMode: "phaser",
+    });
+
+    expect(plan).toMatchObject({
+      type: "phaser-valid",
+      persistencePolicy: "do-not-persist",
+      runFirstPlayableChecksOnReady: false,
+      firstPlayableValidationSource: {
+        gamePack: fixture.gamePack,
+        source: "accepted-game-pack",
+      },
+      generatedMechanicProject: {
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+      },
     });
   });
 

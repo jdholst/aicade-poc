@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "campaign-manifest/v1",
+  "id": "p09-t19-temporary-proximity-modifier",
+  "mechanic": {
+    "id": "temporary_proximity_modifier",
+    "name": "Temporary proximity modifier",
+    "ticket": "Phase 09 Ticket 19",
+    "ticketUrl": "https://www.notion.so/3af9db009ee581af8d8ed6b6885830fe",
+    "requirementIds": ["existing_movement", "live_entity_bindings", "spatial_observation", "temporary_modifier", "deterministic_expiration", "enter_remain_leave", "reentry", "disposal_cleanup", "no_core_spawning", "trusted_system_preservation"]
+  },
+  "model": "gpt-5.6-luna",
+  "credential": { "source": "keyword_env", "envName": "AICADE_CAMPAIGN_KEYWORD" },
+  "pricingSnapshot": { "path": "../pricing/openai-2026-08-29.json", "sha256": "3f36091cb61399320b75a488547febbfaf56f8cb860e04a6226a685e9d3bc27b" },
+  "prompts": [
+    {
+      "id": "baseline",
+      "text": "Create a compact top-down game that keeps the existing movement controls. Add a generated proximity mechanic using live player and target bindings plus spatial observation. Entering the target's range should apply a visible temporary movement modifier once, remaining nearby must not stack it, leaving or deterministic expiration must remove it, re-entering later must apply it again, and disposal must clean it up. Object spawning must not be the core behavior. Keep health, score, objectives, win/loss, and unrelated trusted systems unchanged.",
+      "requirementIds": ["existing_movement", "live_entity_bindings", "spatial_observation", "temporary_modifier", "deterministic_expiration", "enter_remain_leave", "reentry", "disposal_cleanup", "no_core_spawning", "trusted_system_preservation"]
+    },
+    {
+      "id": "plain_paraphrase",
+      "text": "Make a small top-down game with current movement. A generated mechanic should observe the live distance between bound player and target entities. On entering range, apply one temporary visible movement effect without stacking while nearby. Remove it on leaving, deterministic timeout, or disposal, and allow a later re-entry to apply it again. Do not center the mechanic on spawned objects or mutate trusted health, score, objectives, win/loss, or unrelated systems.",
+      "requirementIds": ["existing_movement", "live_entity_bindings", "spatial_observation", "temporary_modifier", "deterministic_expiration", "enter_remain_leave", "reentry", "disposal_cleanup", "no_core_spawning", "trusted_system_preservation"]
+    },
+    {
+      "id": "constraints_first",
+      "text": "Preserve existing movement and all trusted health, score, objective, win/loss, and unrelated systems. Use no object spawning as the core mechanic, no stacking while in range, deterministic expiration, cleanup on leave and disposal, and support re-entry. Within those constraints, generate a compact top-down proximity modifier that observes live bound player and target positions and applies a visible temporary movement effect on entry.",
+      "requirementIds": ["existing_movement", "live_entity_bindings", "spatial_observation", "temporary_modifier", "deterministic_expiration", "enter_remain_leave", "reentry", "disposal_cleanup", "no_core_spawning", "trusted_system_preservation"]
+    },
+    {
+      "id": "outcomes_first",
+      "text": "The finished game should visibly apply one temporary movement modifier when the live bound player enters a target's range, avoid stacking while the player remains there, remove the effect on exit or deterministic expiry, apply it again after re-entry, and clean it up on disposal. Build this through spatial observation without core object spawning, retain existing movement, and leave health, score, objectives, win/loss, and unrelated trusted systems unchanged.",
+      "requirementIds": ["existing_movement", "live_entity_bindings", "spatial_observation", "temporary_modifier", "deterministic_expiration", "enter_remain_leave", "reentry", "disposal_cleanup", "no_core_spawning", "trusted_system_preservation"]
+    },
+    {
+      "id": "compact",
+      "text": "Create a compact top-down game with existing movement and a generated live-binding proximity modifier. Apply one visible temporary movement effect on range entry, do not stack it while nearby, remove it on exit, deterministic expiry, or disposal, and allow re-entry. Do not use spawning as the core or mutate trusted health, score, objective, win/loss, or unrelated systems.",
+      "requirementIds": ["existing_movement", "live_entity_bindings", "spatial_observation", "temporary_modifier", "deterministic_expiration", "enter_remain_leave", "reentry", "disposal_cleanup", "no_core_spawning", "trusted_system_preservation"]
+    }
+  ],
+  "providerModes": { "planning": "actual", "contract": "actual", "source": "actual" },
+  "fixtures": {},
+  "probe": "../probes/temporary-proximity-modifier.mjs",
+  "cohorts": {
+    "discovery": { "maxAttempts": 1, "minimumSuccesses": 1 },
+    "isolation": { "maxAttempts": 1, "minimumSuccesses": 1 },
+    "repeatability": { "maxAttempts": 10, "minimumSuccesses": 8, "failureLimit": 3 },
+    "variation": { "runsPerPrompt": 2, "minimumSuccesses": 8, "requireEveryPromptSuccess": true, "failureLimit": 3, "maxReplacementAttempts": 1 }
+  }
+}

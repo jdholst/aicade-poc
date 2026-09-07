@@ -111,4 +111,119 @@ describe("createGenerationFailureReceiptSurface", () => {
       "invalidCandidate"
     );
   });
+
+  it("renders exact generated-mechanic stage evidence for developer inspection", () => {
+    const surface = createGenerationFailureReceiptSurface({
+      message: "The generated mechanic browser proof failed.",
+      generatedMechanicFailure: {
+        stage: "first_playable",
+        issues: [
+          {
+            path: "firstPlayable",
+            code: "first_playable_not_passed",
+            message: "The generated mechanic browser proof failed.",
+          },
+        ],
+        runtimeEvidence: { checkId: "input_response", passed: false },
+      },
+    });
+
+    expect(surface).toEqual({
+      debugReceipts: [
+        {
+          checkId: "first_playable",
+          evidenceJson: JSON.stringify(
+            {
+              stage: "first_playable",
+              issues: [
+                {
+                  path: "firstPlayable",
+                  code: "first_playable_not_passed",
+                  message: "The generated mechanic browser proof failed.",
+                },
+              ],
+              runtimeEvidence: {
+                checkId: "input_response",
+                passed: false,
+              },
+            },
+            null,
+            2
+          ),
+          issueMessages: [
+            "firstPlayable: The generated mechanic browser proof failed.",
+          ],
+          message: "The generated mechanic browser proof failed.",
+          stage: "first_playable",
+          status: "failed",
+        },
+      ],
+      summary: "The generated mechanic browser proof failed.",
+    });
+  });
+
+  it("summarizes and groups a Mechanic Execution Realm conformance failure", () => {
+    const surface = createGenerationFailureReceiptSurface({
+      message: [
+        "The candidate did not return measured structured evidence for every fixed resource dimension.",
+        "The candidate did not produce identical observable output.",
+        "The browser host responsiveness check failed after deterministic_replay_a.",
+      ].join(" "),
+      generatedMechanicFailure: {
+        stage: "foundation",
+        issues: [
+          {
+            path: "foundation.realm_conformance.resource_enforcement",
+            code: "resource_limit_not_enforced",
+            message:
+              "The candidate did not return measured structured evidence for every fixed resource dimension.",
+          },
+          {
+            path: "foundation.realm_conformance.determinism",
+            code: "non_deterministic_replay",
+            message: "The candidate did not produce identical observable output.",
+          },
+          {
+            path: "foundation.realm_conformance.browser_integration",
+            code: "host_unresponsive_after_probe",
+            message:
+              'The browser host responsiveness check failed after probe "deterministic_replay_a".',
+          },
+        ],
+      },
+    });
+
+    expect(surface.summary).toBe(
+      "The secure mechanic runtime could not be verified. Review 3 failed conformance checks below."
+    );
+    expect(surface.summary).not.toContain("The candidate");
+    expect(surface.debugReceipts[0]).toMatchObject({
+      message:
+        "Mechanic execution conformance stopped before source generation began.",
+      issueMessages: [],
+      issueGroups: [
+        {
+          id: "resource_enforcement",
+          label: "Resource limits",
+          issueMessages: [
+            "The candidate did not return measured structured evidence for every fixed resource dimension.",
+          ],
+        },
+        {
+          id: "determinism",
+          label: "Deterministic replay",
+          issueMessages: [
+            "The candidate did not produce identical observable output.",
+          ],
+        },
+        {
+          id: "browser_integration",
+          label: "Browser runtime",
+          issueMessages: [
+            'The browser host responsiveness check failed after probe "deterministic_replay_a".',
+          ],
+        },
+      ],
+    });
+  });
 });

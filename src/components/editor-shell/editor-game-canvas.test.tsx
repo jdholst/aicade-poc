@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createGamePackRepository,
@@ -108,6 +108,13 @@ function createCanvasSession(
 }
 
 describe("EditorGameCanvas", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: new MemoryBrowserLockManager(),
+    });
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.doUnmock("@/runtime/phaser");
@@ -934,6 +941,78 @@ describe("EditorGameCanvas", () => {
     expect(onRegenerate).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the failed Mechanic Execution Realm conformance report", () => {
+    render(
+      <EditorGameCanvas
+        actions={createActions()}
+        canvas={createCanvasSession({
+          loadState: {
+            status: "error",
+            message:
+              "Mechanic Execution Realm conformance did not pass every hard gate.",
+            generatedMechanicFailure: {
+              stage: "foundation",
+              issues: [
+                {
+                  path: "foundation.realm_conformance.escape_resistance",
+                  code: "escape_observed",
+                  message: "The candidate exposed forbidden authority.",
+                },
+              ],
+              runtimeEvidence: {
+                schemaVersion: "runtime_contract_foundation_gate/v1",
+                status: "failed",
+                sourceGenerationAvailable: false,
+                checks: [
+                  {
+                    boundary: "realm_conformance",
+                    status: "failed",
+                    code: "realm_conformance_rejected",
+                    message:
+                      "Mechanic Execution Realm conformance did not pass every hard gate.",
+                    details: {
+                      schemaVersion:
+                        "mechanic_execution_realm_failure_report/v1",
+                      failedGates: [
+                        {
+                          id: "escape_resistance",
+                          probeIds: ["escape_probe"],
+                          failures: [
+                            {
+                              code: "escape_observed",
+                              message:
+                                "The candidate exposed forbidden authority.",
+                            },
+                          ],
+                          probeResults: [],
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        "The secure mechanic runtime could not be verified. Review 1 failed conformance check below."
+      )
+    ).toBeVisible();
+    expect(screen.getByText("Escape resistance")).toBeVisible();
+    expect(
+      screen.getByText("The candidate exposed forbidden authority.")
+    ).toBeVisible();
+    expect(
+      screen.getByRole("group", { name: "Raw evidence JSON" })
+    ).not.toHaveAttribute("open");
+    expect(screen.getByText(/mechanic_execution_realm_failure_report/)).toBeInTheDocument();
+    expect(screen.getByText(/escape_probe/)).toBeInTheDocument();
+  });
+
   it("shows Phaser Game Spec validation errors without crashing the editor", async () => {
     vi.resetModules();
     vi.doMock("@/runtime/phaser", () => ({
@@ -972,6 +1051,33 @@ describe("EditorGameCanvas", () => {
     expect(screen.queryByText("Phaser runtime")).not.toBeInTheDocument();
   });
 });
+
+class MemoryBrowserLockManager {
+  private readonly tails = new Map<string, Promise<void>>();
+
+  async request<T>(
+    name: string,
+    _options: Readonly<{ mode: "exclusive"; signal?: AbortSignal }>,
+    callback: () => Promise<T>
+  ): Promise<T> {
+    const previous = this.tails.get(name) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => current);
+    this.tails.set(name, tail);
+    await previous;
+    try {
+      return await callback();
+    } finally {
+      release();
+      if (this.tails.get(name) === tail) {
+        this.tails.delete(name);
+      }
+    }
+  }
+}
 
 function dispatchValidationEvidence(
   iframe: HTMLIFrameElement,
@@ -1027,6 +1133,27 @@ class MemoryGamePackStorage implements GamePackStorageDriver {
 
   async getAll() {
     return Array.from(this.records.values()).map(cloneRecord);
+  }
+
+  async compareAndSwap(
+    gamePackId: string,
+    expected: StoredGamePackRecord | null,
+    replacement: StoredGamePackRecord | null
+  ) {
+    const current = this.records.get(gamePackId) ?? null;
+    if (JSON.stringify(current) !== JSON.stringify(expected)) {
+      return false;
+    }
+    if (replacement) {
+      this.records.set(gamePackId, cloneRecord(replacement));
+    } else {
+      this.records.delete(gamePackId);
+    }
+    return true;
+  }
+
+  async delete(gamePackId: string) {
+    this.records.delete(gamePackId);
   }
 }
 

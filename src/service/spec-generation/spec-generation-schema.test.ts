@@ -82,6 +82,22 @@ describe("Spec Generation schema drift guards", () => {
     );
   });
 
+  it("constrains generated controls to physical keys dispatched by the retained host", () => {
+    const controlKeySchema =
+      topDownGameSpecJsonSchema.properties.controls.items.properties.keys.items;
+
+    expect(controlKeySchema.enum).toEqual([
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "Space",
+    ]);
+    expect(TOP_DOWN_SPEC_GENERATION_GUIDE).toContain(
+      "Use only individual physical control keys: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space"
+    );
+  });
+
   it("documents intentional provider-schema narrowing while Zod remains authoritative", () => {
     const fixture = getFirstValidTopDownGameSpecFixture();
     const mechanicProperties =

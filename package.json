@@ -6,10 +6,15 @@
     "dev": "next dev",
     "dev:local": "next dev --hostname 127.0.0.1 --port 3000",
     "build": "next build",
+    "campaign": "node tools/mechanic-generation-campaign/cli.mjs",
     "test": "vitest run",
     "test:editor-prompt-flow": "vitest run src/hooks/use-editor-session.test.ts src/components/editor-shell/editor-ai-chat.test.tsx",
     "qa:editor-prompt-flow": "node scripts/qa-editor-prompt-flow.mjs",
     "qa:editor-prompt-flow:browser": "node scripts/qa-editor-prompt-flow-browser.mjs",
+    "qa:mechanic-realm-conformance:browser": "node scripts/qa-mechanic-execution-realm-conformance-browser.mjs",
+    "qa:mechanic-realm-candidates:browser": "node scripts/qa-mechanic-execution-realm-candidates-browser.mjs",
+    "qa:runtime-contract-foundation-gate:browser": "node scripts/qa-runtime-contract-foundation-gate-browser.mjs",
+    "qa:mechanic-evaluation:browser": "node scripts/qa-mechanic-evaluation-browser.mjs",
     "test:smoke": "vitest run .smoke.test",
     "start": "next start",
     "lint": "eslint"
@@ -19,6 +24,7 @@
     "phaser": "^3.90.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "ses": "2.2.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

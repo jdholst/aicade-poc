@@ -7,6 +7,10 @@ import type {
   TopDownScene,
   TopDownSpawnZone,
 } from "../top-down-spec-schema";
+import {
+  TOP_DOWN_BROWSER_CONTROL_KEYS,
+  TOP_DOWN_BROWSER_CONTROL_KEYS_LABEL,
+} from "../top-down-control-profile";
 
 import {
   addReferences,
@@ -24,6 +28,7 @@ export function getTopDownGameSpecValidationIssues(
   const issues: GameSpecValidationIssue[] = [];
   const context = createTopDownValidationContext(spec);
 
+  addControlBindingIssues(issues, spec);
   addPrimaryObjectiveIssues(issues, spec);
   addRenderPlaceholderAssetIssues(issues, spec);
   addValidationGoalReferenceIssues(issues, spec, context);
@@ -32,6 +37,26 @@ export function getTopDownGameSpecValidationIssues(
   addSceneReferenceIssues(issues, spec, context);
 
   return issues;
+}
+
+function addControlBindingIssues(
+  issues: GameSpecValidationIssue[],
+  spec: TopDownGameSpec
+) {
+  const supportedKeys = new Set<string>(TOP_DOWN_BROWSER_CONTROL_KEYS);
+
+  for (const control of spec.controls) {
+    control.keys.forEach((key, index) => {
+      if (supportedKeys.has(key)) {
+        return;
+      }
+
+      issues.push({
+        path: `controls.${control.id}.keys.${index}`,
+        message: `Unsupported physical key "${key}". Use one of: ${TOP_DOWN_BROWSER_CONTROL_KEYS_LABEL}.`,
+      });
+    });
+  }
 }
 
 function addPrimaryObjectiveIssues(
@@ -165,6 +190,19 @@ function addUnusedModuleIssues(
   context: TopDownValidationContext
 ) {
   for (const entity of spec.entities) {
+    if (
+      entity.role !== "player" &&
+      context.spawnZoneEntityIds.has(entity.id) &&
+      !context.activeMechanicEntityIds.has(entity.id)
+    ) {
+      issues.push({
+        path: `entities.${entity.id}`,
+        message:
+          "A spawn zone does not materialize a non-player entity. Reference it from an allowed active mechanic.",
+      });
+      continue;
+    }
+
     if (
       entity.role !== "player" &&
       !context.spawnZoneEntityIds.has(entity.id) &&

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "openai-pricing-snapshot/v1",
+  "id": "openai-2026-08-29",
+  "effectiveAt": "2026-08-29",
+  "retrievedAt": "2026-08-30T01:15:59.000Z",
+  "sources": [
+    {
+      "url": "https://developers.openai.com/api/docs/pricing",
+      "sha256": "e1975d9c39f1a0880ab9d7375081679f2edc2331050f1b9ae518a311fafea938"
+    },
+    {
+      "url": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "sha256": "56d7831a9e402c7a044afcafbac1e5200818f9e3d2c94a6ede3b3900c6e4f042"
+    }
+  ],
+  "models": [
+    {
+      "id": "gpt-5.6-luna",
+      "aliases": [],
+      "contextWindowTokens": 1050000,
+      "maxOutputTokens": 128000,
+      "serviceTiers": {
+        "default": {
+          "inputNanoUsdPerMillionTokens": 200000000,
+          "cachedInputNanoUsdPerMillionTokens": 20000000,
+          "cacheWriteInputNanoUsdPerMillionTokens": 250000000,
+          "outputNanoUsdPerMillionTokens": 1200000000
+        }
+      },
+      "longContext": {
+        "thresholdInputTokens": 272000,
+        "inputMultiplier": { "numerator": 2, "denominator": 1 },
+        "outputMultiplier": { "numerator": 3, "denominator": 2 }
+      }
+    }
+  ]
+}

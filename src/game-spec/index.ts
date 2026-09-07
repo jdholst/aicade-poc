@@ -1,14 +1,19 @@
 export {
   GAME_SPEC_SCHEMA_VERSION,
+  MECHANIC_PORT_CONNECTIONS_SCHEMA_VERSION,
   STABLE_ID_PATTERN,
   STABLE_ID_PATTERN_SOURCE,
   gameSpecSchema,
+  finalGameSpecMechanicConnectionPlanSchema,
   parseGameSpec,
   stableIdSchema,
   type GameSpec,
+  type FinalGameSpecMechanicConnectionPlan,
   type GameSpecMechanicEntry,
   type GameSpecObjective,
   type GameSpecValidationGoal,
+  type MechanicPortConnection,
+  type MechanicPortEndpoint,
   type StableId,
 } from "./game-spec-schema";
 
@@ -22,6 +27,7 @@ export {
   validationEvidenceStageSchema,
   validationEvidenceStatusSchema,
   versionCheckpointSchema,
+  type AcceptedGeneratedMechanicArtifact,
   type FailedAttempt,
   type GamePack,
   type GamePackRuntimeKind,
@@ -31,6 +37,39 @@ export {
   type ValidationEvidenceStatus,
   type VersionCheckpoint,
 } from "./game-pack/game-pack-schema";
+
+export {
+  ACCEPTED_GENERATED_MECHANIC_ARTIFACT_VERSION,
+  GENERATED_MECHANIC_EXECUTION_REALM_CANDIDATE_ID,
+  GENERATED_MECHANIC_FIXED_STEP_INTERVAL_MILLISECONDS,
+  GENERATED_MECHANIC_EXECUTABLE_ARTIFACT_VERSION,
+  GENERATED_MECHANIC_FINAL_GAME_SPEC_VERSION,
+  GENERATED_MECHANIC_RESOURCE_BUDGET_PROFILE_ID,
+  GENERATED_MECHANIC_RUNTIME_CANDIDATE_VERSION,
+  GENERATED_MECHANIC_RUNTIME_POLICY_VERSION,
+  PERSISTED_GENERATED_MECHANIC_SOURCE_ARTIFACT_VERSION,
+  TOP_DOWN_PHASER_GENERATED_MECHANIC_HOST_PROFILE_ID,
+  TOP_DOWN_GENERATED_MECHANIC_EVALUATION_PROPERTY_IDS,
+  TOP_DOWN_GENERATED_MECHANIC_SUPPORTED_CAPABILITY_IDS,
+  acceptedGeneratedMechanicArtifactSchema,
+  createGeneratedMechanicRuntimePolicy,
+  generatedMechanicFinalGameSpecExtensionSchema,
+  generatedMechanicFinalGameSpecSchema,
+  generatedMechanicExecutableArtifactSchema,
+  generatedMechanicProjectHostProfileIssues,
+  generatedMechanicRuntimeCandidateSchema,
+  generatedMechanicRuntimePolicySchema,
+  persistedGeneratedMechanicSourceArtifactSchema,
+  projectAcceptedGeneratedMechanicExecutableArtifact,
+  projectAcceptedGeneratedMechanicRuntimeCandidate,
+  type GeneratedMechanicExecutableArtifact,
+  type GeneratedMechanicFinalGameSpec,
+  type GeneratedMechanicFinalGameSpecExtension,
+  type GeneratedMechanicRuntimePolicy,
+  type GeneratedMechanicRuntimeCandidate,
+  type GeneratedMechanicProjectHostProfileIssue,
+  type PersistedGeneratedMechanicSourceArtifact,
+} from "./mechanics/generated-mechanic-project-artifact";
 
 export {
   createGenerationRunRepository,
@@ -43,6 +82,16 @@ export {
   type IndexedDbGenerationRunRepositoryOptions,
   type StoredGenerationRunRecord,
 } from "./generation-run/generation-run-repository";
+
+export {
+  GENERATED_MECHANIC_HANDOFF_VERSION,
+  clearGeneratedMechanicHandoffReceipt,
+  generatedMechanicHandoffReceiptSchema,
+  readGeneratedMechanicHandoffReceipt,
+  writeGeneratedMechanicHandoffPendingReceipt,
+  type GeneratedMechanicHandoffReceipt,
+  type GeneratedMechanicHandoffReceiptReadResult,
+} from "./generation-run/generated-mechanic-handoff-receipt";
 
 export {
   createGenerationRunJsonExport,
@@ -60,6 +109,27 @@ export {
   type GenerationRunJsonExportRun,
   type GenerationRunJsonExportValidation,
 } from "./generation-run/generation-run-json-export";
+
+export {
+  ARTIFACT_SCOPED_MECHANIC_REPAIR_VERSION,
+  ARTIFACT_SCOPED_REPAIR_STAGES,
+  artifactScopedMechanicRepairReceiptSchema,
+  artifactScopedRepairArtifactReceiptSchema,
+  artifactScopedRepairArtifactIdSchema,
+  artifactScopedRepairAttemptReceiptSchema,
+  artifactScopedRepairAttemptIdSchema,
+  artifactScopedRepairStageSchema,
+  getArtifactScopedRepairGenerationRunOutcome,
+  hasExactAcceptedArtifactScopedRepairLineage,
+  type ArtifactScopedMechanicRepairReceipt,
+  type ArtifactScopedRepairArtifactReceipt,
+  type ArtifactScopedRepairArtifactId,
+  type ArtifactScopedRepairAttemptReceipt,
+  type ArtifactScopedRepairAttemptId,
+  type ArtifactScopedRepairGenerationRunOutcome,
+  type ArtifactScopedRepairIssue,
+  type ArtifactScopedRepairStage,
+} from "./generation-run/artifact-scoped-mechanic-repair-receipt";
 
 export {
   generationRunAttemptReceiptSchema,
@@ -104,6 +174,15 @@ export {
 } from "./game-pack/game-pack-lineage";
 
 export {
+  attachFinalizedGenerationRunToGamePack,
+  CREATOR_GENERATION_PERSISTENCE_TRANSACTION_VERSION,
+  isCreatorGenerationPersistenceRestorable,
+  readCreatorGenerationPersistenceTransaction,
+  writeCreatorGenerationPersistenceTransaction,
+  type CreatorGenerationPersistenceTransaction,
+} from "./game-pack/creator-generation-persistence-transaction";
+
+export {
   createGamePackRepository,
   createIndexedDbGamePackRepository,
   GamePackRepositoryError,
@@ -139,6 +218,35 @@ export {
 } from "./game-pack/first-playable-terminal-result";
 
 export {
+  GENERATED_MECHANIC_ACTIVATION_CHECK_ID,
+  completeGeneratedMechanicProjectHandoff,
+  isGamePackAcceptanceRestorable,
+  prepareRestoredGeneratedMechanicProject,
+  reconcileGeneratedMechanicAcceptanceTransactions,
+  restoreGeneratedMechanicProjectHandoff,
+  validateGeneratedMechanicFinalGameSpec,
+  withGeneratedMechanicAcceptanceLock,
+  type CompleteGeneratedMechanicProjectHandoffInput,
+  type GeneratedMechanicAcceptanceLockReceipt,
+  type GeneratedMechanicProjectActivation,
+  type GeneratedMechanicProjectBrowserResult,
+  type GeneratedMechanicProjectDependency,
+  type GeneratedMechanicProjectHandoffIssue,
+  type GeneratedMechanicProjectHandoffResult,
+  type GeneratedMechanicProjectRuntime,
+  type LoadedGeneratedMechanicProjectDependency,
+  type PreparedGeneratedMechanicRuntimeCandidateProject,
+  type PreparedGeneratedMechanicRuntimeProject,
+  type PreparedRestoredGeneratedMechanicProject,
+  type PrepareRestoredGeneratedMechanicProjectInput,
+  type PrepareRestoredGeneratedMechanicProjectResult,
+  type ReconcileGeneratedMechanicAcceptanceTransactionsInput,
+  type ReconcileGeneratedMechanicAcceptanceTransactionsResult,
+  type RestoreGeneratedMechanicProjectHandoffInput,
+  type RestoreGeneratedMechanicProjectHandoffResult,
+} from "./game-pack/generated-mechanic-project-handoff";
+
+export {
   createMechanicRuntimeBridge,
   getMechanicDefinitionForScope,
   getMechanicDefinitionsForScope,
@@ -155,6 +263,132 @@ export {
   type MechanicValidationLayoutCoverageRequirement,
   type MechanicValidationRequirements,
 } from "./mechanics/mechanic-registry";
+
+export {
+  OWNED_OBJECT_ACTOR_ORIGIN_SPATIAL_RULE,
+  requiresOwnedObjectActorOrigin,
+  resolveMechanicIntent,
+  type BuiltInMechanicConfigurationField,
+  type BuiltInMechanicCompositionResolution,
+  type BuiltInMechanicContract,
+  type BuiltInMechanicContractCoverage,
+  type BuiltInMechanicResolution,
+  type GeneratedMechanicResolution,
+  type MechanicCoverageEvidence,
+  type MechanicCoverageRequirement,
+  type MechanicCapabilityGapResolution,
+  type MechanicClarificationFailureResolution,
+  type MechanicIntent,
+  type MechanicIntentAmbiguity,
+  type MechanicIntentConfigurationValue,
+  type MechanicIntentConnection,
+  type MechanicIntentReference,
+  type MechanicReferenceKind,
+  type MechanicResolution,
+  type MechanicRequirementCategory,
+  type MechanicResolutionAssumption,
+  type ResolveMechanicIntentInput,
+} from "./mechanics/mechanic-resolver";
+
+export {
+  resolveTopDownMechanicIntent,
+  topDownBuiltInMechanicContracts,
+  type ResolveTopDownMechanicIntentInput,
+} from "./mechanics/top-down-built-in-mechanic-contracts";
+
+export {
+  GENERATION_CONSTRAINT_SET_SCHEMA_VERSION,
+  generationConstraintSetSchema,
+  parseGenerationConstraintSet,
+  PHASE_9_GENERATION_CONSTRAINT_SET,
+  type GenerationConstraintParseResult,
+  type GenerationConstraintSet,
+  type GenerationConstraintValidationIssue,
+} from "./mechanics/mechanic-generation-constraints";
+
+export {
+  coordinateMechanicGeneration,
+  type AdmittedGeneratedMechanicRequest,
+  type CoordinateMechanicGenerationInput,
+  type MechanicGenerationConstraintConflictEvidence,
+  type MechanicGenerationCoordination,
+} from "./mechanics/mechanic-generation-coordinator";
+
+export {
+  GENERATED_MECHANIC_CONTRACT_SCHEMA_VERSION,
+  behaviorScenarioSchema,
+  generatedMechanicContractSchema,
+  mechanicConfigDslValueSchema,
+  validateGeneratedMechanicContract,
+  type BehaviorScenario,
+  type GeneratedMechanicContract,
+  type GeneratedMechanicReferenceCatalog,
+  type GeneratedMechanicResourceBudget,
+  type GeneratedMechanicContractValidationIssue,
+  type GeneratedMechanicContractValidationResult,
+  type MechanicConfigDslField,
+  type MechanicConfigDslValue,
+  type ValidateGeneratedMechanicContractInput,
+} from "./mechanics/generated-mechanic-contract";
+
+export {
+  createMechanicCapabilityGrant,
+  getMechanicCapabilityVersion,
+  MECHANIC_CAPABILITY_VERSION,
+  mechanicCapabilityRegistry,
+  mechanicCapabilityGrantExactlyMatchesContract,
+  validateMechanicCapabilityUsage,
+  type MechanicCapabilityConformanceRequirement,
+  type MechanicCapabilityDefinition,
+  type MechanicCapabilityRegistryVersion,
+  type MechanicCapabilityResourceCosts,
+  type CreateMechanicCapabilityGrantInput,
+  type MechanicCapabilityGrant,
+  type MechanicCapabilityGrantEntry,
+  type MechanicCapabilityGrantIssue,
+  type MechanicCapabilityGrantResult,
+  type MechanicCapabilityUsageIssue,
+  type MechanicCapabilityUsageValidationResult,
+  type ValidateMechanicCapabilityUsageInput,
+} from "./mechanics/mechanic-capability-registry";
+
+export {
+  MECHANIC_EXECUTION_REALM_CONFORMANCE_POLICY,
+  MECHANIC_EXECUTION_REALM_CONFORMANCE_VERSION,
+  runMechanicExecutionRealmConformanceSuite,
+  type MechanicExecutionRealmCandidateAdapter,
+  type MechanicExecutionRealmCandidateRun,
+  type MechanicExecutionRealmConformanceGate,
+  type MechanicExecutionRealmConformanceGateId,
+  type MechanicExecutionRealmConformanceProbe,
+  type MechanicExecutionRealmConformanceReport,
+  type MechanicExecutionRealmProbeDiagnostic,
+  type MechanicExecutionRealmProbeResult,
+  type MechanicExecutionRealmResourceBudget,
+  type MechanicExecutionRealmResourceDimension,
+  type RunMechanicExecutionRealmConformanceSuiteInput,
+} from "./mechanics/mechanic-execution-realm-conformance";
+
+export {
+  MECHANIC_EXECUTION_REALM_BROWSER_SESSION_PROTOCOL_VERSION,
+  createMechanicExecutionRealmBrowserConformanceSession,
+  createMechanicExecutionRealmConformanceSession,
+  disposeMechanicExecutionRealmBrowserConformanceIframePreparation,
+  prepareMechanicExecutionRealmBrowserConformanceIframe,
+  type CreateMechanicExecutionRealmBrowserConformanceSessionInput,
+  type CreateMechanicExecutionRealmConformanceSessionInput,
+  type MechanicExecutionRealmBrowserCandidateEndpoint,
+  type MechanicExecutionRealmBrowserCandidateExecutionAcknowledgement,
+  type MechanicExecutionRealmBrowserCandidateInitialization,
+  type MechanicExecutionRealmBrowserCandidateRequest,
+  type MechanicExecutionRealmBrowserCandidateResponse,
+  type MechanicExecutionRealmBrowserRuntimeHeartbeatChallenge,
+  type MechanicExecutionRealmBrowserRuntimeHeartbeatResponse,
+  type MechanicExecutionRealmBrowserRuntimeInitialization,
+  type MechanicExecutionRealmBrowserRuntimeInitializationAcknowledgement,
+  type MechanicExecutionRealmConformanceHost,
+  type MechanicExecutionRealmConformanceSession,
+} from "./mechanics/mechanic-execution-realm-conformance-session";
 
 export {
   GameSpecValidationError,

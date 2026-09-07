@@ -1,0 +1,600 @@
+{
+    "ok": true,
+    "spec": {
+        "schemaVersion": "game-spec/v1",
+        "id": "projectile_pursuit",
+        "title": "Projectile Pursuit",
+        "currentIntentSummary": "Move around the arena, collect energy pickups, and fire a visible projectile in the player's current movement or facing direction with Space.",
+        "originalPrompt": "Create a top-down game where the player can shoot a projectile.",
+        "template": {
+            "id": "template_top_down",
+            "version": "1.0.0",
+            "config": {
+                "scenes": [
+                    {
+                        "id": "main_scene",
+                        "name": "Main Arena",
+                        "objectiveIds": [
+                            "collect_energy"
+                        ],
+                        "validationGoalIds": [
+                            "verify_collection_and_shooting"
+                        ],
+                        "arena": {
+                            "id": "main_arena",
+                            "width": 800,
+                            "height": 600
+                        },
+                        "layout": {
+                            "walls": [
+                                {
+                                    "id": "north_wall",
+                                    "x": 0,
+                                    "y": 0,
+                                    "width": 800,
+                                    "height": 20
+                                },
+                                {
+                                    "id": "south_wall",
+                                    "x": 0,
+                                    "y": 580,
+                                    "width": 800,
+                                    "height": 20
+                                },
+                                {
+                                    "id": "west_wall",
+                                    "x": 0,
+                                    "y": 0,
+                                    "width": 20,
+                                    "height": 600
+                                },
+                                {
+                                    "id": "east_wall",
+                                    "x": 780,
+                                    "y": 0,
+                                    "width": 20,
+                                    "height": 600
+                                }
+                            ],
+                            "obstacles": [
+                                {
+                                    "id": "cover_block_left",
+                                    "shape": "rect",
+                                    "x": 230,
+                                    "y": 210,
+                                    "width": 90,
+                                    "height": 150
+                                },
+                                {
+                                    "id": "cover_pillar",
+                                    "shape": "circle",
+                                    "x": 560,
+                                    "y": 300,
+                                    "radius": 45
+                                }
+                            ],
+                            "spawnZones": [
+                                {
+                                    "id": "player_spawn",
+                                    "x": 70,
+                                    "y": 270,
+                                    "width": 70,
+                                    "height": 60,
+                                    "entityIds": [
+                                        "player"
+                                    ]
+                                }
+                            ],
+                            "pickupZones": [
+                                {
+                                    "id": "energy_pickup_zone",
+                                    "x": 100,
+                                    "y": 70,
+                                    "width": 600,
+                                    "height": 460,
+                                    "assetIds": [
+                                        "energy_pickup_asset"
+                                    ]
+                                }
+                            ],
+                            "regions": [
+                                {
+                                    "id": "central_field",
+                                    "label": "Central Field",
+                                    "x": 100,
+                                    "y": 70,
+                                    "width": 600,
+                                    "height": 460
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "controls": [
+            {
+                "id": "move_action",
+                "action": "move_action",
+                "label": "Move",
+                "kind": "axis",
+                "keys": [
+                    "ArrowUp",
+                    "ArrowDown",
+                    "ArrowLeft",
+                    "ArrowRight"
+                ]
+            },
+            {
+                "id": "shoot_action",
+                "action": "shoot_action",
+                "label": "Shoot Projectile",
+                "kind": "button",
+                "keys": [
+                    "Space"
+                ]
+            }
+        ],
+        "entities": [
+            {
+                "id": "player",
+                "role": "player",
+                "name": "Player"
+            },
+            {
+                "id": "energy_pickup",
+                "role": "pickup",
+                "name": "Energy Pickup"
+            }
+        ],
+        "assets": [
+            {
+                "id": "player_asset",
+                "role": "player",
+                "name": "Player Placeholder",
+                "source": "template"
+            },
+            {
+                "id": "energy_pickup_asset",
+                "role": "pickup",
+                "name": "Energy Pickup Placeholder",
+                "source": "template"
+            }
+        ],
+        "objectives": [
+            {
+                "id": "collect_energy",
+                "label": "Collect Energy",
+                "description": "Collect energy pickups that appear throughout the central field while navigating the arena.",
+                "primary": true
+            }
+        ],
+        "validationGoals": [
+            {
+                "id": "verify_collection_and_shooting",
+                "label": "Verify Collection and Shooting",
+                "description": "Confirm that the player can move, collect a repositioning pickup, and fire a visible projectile with Space in the current movement or facing direction.",
+                "objectiveId": "collect_energy"
+            }
+        ],
+        "mechanics": [
+            {
+                "id": "player_movement",
+                "type": "player_movement",
+                "entityIds": [
+                    "player"
+                ],
+                "objectiveIds": [
+                    "collect_energy"
+                ],
+                "sceneIds": [
+                    "main_scene"
+                ],
+                "regionIds": [
+                    "central_field"
+                ],
+                "assetIds": [
+                    "player_asset"
+                ],
+                "config": {}
+            },
+            {
+                "id": "energy_collection",
+                "type": "pickup_collection",
+                "entityIds": [
+                    "player",
+                    "energy_pickup"
+                ],
+                "objectiveIds": [
+                    "collect_energy"
+                ],
+                "sceneIds": [
+                    "main_scene"
+                ],
+                "regionIds": [
+                    "central_field"
+                ],
+                "assetIds": [
+                    "energy_pickup_asset"
+                ],
+                "config": {}
+            }
+        ]
+    },
+    "metadata": {
+        "taskRoute": "spec_generation.primary",
+        "model": "gpt-5.6-luna",
+        "attemptCount": 2,
+        "repairStatus": "repaired",
+        "repairAttempts": [
+            {
+                "attempt": 1,
+                "outcome": "failed_validation",
+                "stage": "semantic_validation",
+                "issues": [
+                    {
+                        "path": "entities.projectile",
+                        "message": "Entity is not referenced by any spawn zone or active mechanic."
+                    }
+                ]
+            }
+        ],
+        "generationRunId": "generation_run_mt3dolg5_lffjdl75"
+    },
+    "routing": {
+        "kind": "generated_mechanic",
+        "generationRunId": "generation_run_mt3dolg5_lffjdl75",
+        "intent": {
+            "id": "player_projectile_shooting",
+            "summary": "When the player presses Space, create a visible projectile owned by the shooting behavior and launch it from the player in the player's current movement or facing direction, with bounded travel and cleanup.",
+            "triggers": [
+                "logical_action"
+            ],
+            "actors": [
+                "player"
+            ],
+            "targets": [],
+            "behaviors": [
+                "create_projectile",
+                "launch_projectile",
+                "display_projectile"
+            ],
+            "ownedObjects": [
+                "player_projectile"
+            ],
+            "stateChanges": [],
+            "temporalRules": [
+                "fire_on_each_valid_shoot_action",
+                "projectile_moves_continuously_after_creation",
+                "projectile_expires_after_bounded_duration",
+                "enforce_bounded_fire_cooldown"
+            ],
+            "spatialRules": [
+                "spawn_projectile_at_player_position",
+                "launch_in_current_movement_or_facing_direction",
+                "projectile_travels_in_launch_direction",
+                "projectile_remains_within_arena_bounds"
+            ],
+            "constraints": [
+                "one_projectile_per_shoot_action",
+                "bounded_projectile_count",
+                "do_not_move_player_as_a_shooting_side_effect"
+            ],
+            "configuration": [
+                {
+                    "key": "projectile_speed",
+                    "value": 360
+                },
+                {
+                    "key": "projectile_lifetime_ms",
+                    "value": 1200
+                },
+                {
+                    "key": "shoot_cooldown_ms",
+                    "value": 250
+                },
+                {
+                    "key": "projectile_size",
+                    "value": 10
+                }
+            ],
+            "connections": [
+                {
+                    "direction": "input",
+                    "port": "shoot_action"
+                }
+            ],
+            "references": [
+                {
+                    "kind": "entity",
+                    "id": "player"
+                },
+                {
+                    "kind": "scene",
+                    "id": "main_scene"
+                }
+            ],
+            "outcomes": [
+                "visible_projectile_is_created",
+                "projectile_motion_is_observable",
+                "projectile_is_removed_after_lifetime",
+                "repeated_shooting_is_rate_limited"
+            ],
+            "requiredCapabilities": [
+                "object_create",
+                "object_motion_write",
+                "object_destroy",
+                "object_read",
+                "spatial_query"
+            ],
+            "ambiguities": [
+                {
+                    "id": "projectile_direction_source",
+                    "description": "The prompt does not specify how a top-down projectile is aimed.",
+                    "inferredValue": "Use the player's current movement direction, or the most recent non-zero movement direction when stationary.",
+                    "rationale": "This requires no extra aiming control, fits the available arrow-key controls, and makes the projectile direction predictable.",
+                    "reversible": true
+                },
+                {
+                    "id": "projectile_lifetime_and_speed",
+                    "description": "The prompt does not specify projectile speed, range, or lifetime.",
+                    "inferredValue": "Use speed 360 pixels per second and a 1200 millisecond lifetime, for a bounded maximum travel distance of 432 pixels.",
+                    "rationale": "These values make the projectile clearly visible in the 800 by 600 arena without allowing unbounded objects.",
+                    "reversible": true
+                },
+                {
+                    "id": "shoot_rate",
+                    "description": "The prompt does not specify whether Space can be pressed repeatedly without limit.",
+                    "inferredValue": "Allow at most one projectile every 250 milliseconds.",
+                    "rationale": "A short cooldown preserves responsive shooting while bounding active projectile creation.",
+                    "reversible": true
+                },
+                {
+                    "id": "assumption_transient_owned_object_rediscovery",
+                    "description": "The provider described a transient owned object that survives across callbacks but omitted the retained host's rediscovery authority.",
+                    "inferredValue": "spatial_query",
+                    "rationale": "Opaque object handles cannot be stored in JSON private state, so a bounded owned-object spatial query is required to rediscover and later update or destroy the object after simulated time.",
+                    "reversible": true
+                },
+                {
+                    "id": "assumption_transient_owned_object_actor_observation",
+                    "description": "The provider described actor-relative owned-object behavior but omitted authority to observe the bound actor's live transform.",
+                    "inferredValue": "object_read",
+                    "rationale": "The retained host uses opaque object handles, so actor-relative creation or motion requires an explicit bounded read of the exact actor binding instead of a host-default position.",
+                    "reversible": true
+                }
+            ]
+        },
+        "admittedRequest": {
+            "resolution": {
+                "kind": "generated_mechanic",
+                "intentId": "player_projectile_shooting",
+                "candidateBuiltInTypes": [
+                    "player_movement"
+                ],
+                "assumptions": [
+                    {
+                        "ambiguityId": "projectile_direction_source",
+                        "description": "The prompt does not specify how a top-down projectile is aimed.",
+                        "inferredValue": "Use the player's current movement direction, or the most recent non-zero movement direction when stationary.",
+                        "rationale": "This requires no extra aiming control, fits the available arrow-key controls, and makes the projectile direction predictable.",
+                        "reversible": true
+                    },
+                    {
+                        "ambiguityId": "projectile_lifetime_and_speed",
+                        "description": "The prompt does not specify projectile speed, range, or lifetime.",
+                        "inferredValue": "Use speed 360 pixels per second and a 1200 millisecond lifetime, for a bounded maximum travel distance of 432 pixels.",
+                        "rationale": "These values make the projectile clearly visible in the 800 by 600 arena without allowing unbounded objects.",
+                        "reversible": true
+                    },
+                    {
+                        "ambiguityId": "shoot_rate",
+                        "description": "The prompt does not specify whether Space can be pressed repeatedly without limit.",
+                        "inferredValue": "Allow at most one projectile every 250 milliseconds.",
+                        "rationale": "A short cooldown preserves responsive shooting while bounding active projectile creation.",
+                        "reversible": true
+                    },
+                    {
+                        "ambiguityId": "assumption_transient_owned_object_rediscovery",
+                        "description": "The provider described a transient owned object that survives across callbacks but omitted the retained host's rediscovery authority.",
+                        "inferredValue": "spatial_query",
+                        "rationale": "Opaque object handles cannot be stored in JSON private state, so a bounded owned-object spatial query is required to rediscover and later update or destroy the object after simulated time.",
+                        "reversible": true
+                    },
+                    {
+                        "ambiguityId": "assumption_transient_owned_object_actor_observation",
+                        "description": "The provider described actor-relative owned-object behavior but omitted authority to observe the bound actor's live transform.",
+                        "inferredValue": "object_read",
+                        "rationale": "The retained host uses opaque object handles, so actor-relative creation or motion requires an explicit bounded read of the exact actor binding instead of a host-default position.",
+                        "reversible": true
+                    }
+                ],
+                "coverage": {
+                    "coveredRequirements": [
+                        {
+                            "category": "actor",
+                            "value": "player",
+                            "coveredBy": [
+                                "player_movement"
+                            ]
+                        },
+                        {
+                            "category": "reference",
+                            "value": "entity:player",
+                            "coveredBy": [
+                                "player_movement"
+                            ]
+                        }
+                    ],
+                    "uncoveredRequirements": [
+                        {
+                            "category": "trigger",
+                            "value": "logical_action",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "behavior",
+                            "value": "create_projectile",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "behavior",
+                            "value": "launch_projectile",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "behavior",
+                            "value": "display_projectile",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "owned_object",
+                            "value": "player_projectile",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "temporal_rule",
+                            "value": "fire_on_each_valid_shoot_action",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "temporal_rule",
+                            "value": "projectile_moves_continuously_after_creation",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "temporal_rule",
+                            "value": "projectile_expires_after_bounded_duration",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "temporal_rule",
+                            "value": "enforce_bounded_fire_cooldown",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "spatial_rule",
+                            "value": "spawn_projectile_at_player_position",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "spatial_rule",
+                            "value": "launch_in_current_movement_or_facing_direction",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "spatial_rule",
+                            "value": "projectile_travels_in_launch_direction",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "spatial_rule",
+                            "value": "projectile_remains_within_arena_bounds",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "constraint",
+                            "value": "one_projectile_per_shoot_action",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "constraint",
+                            "value": "bounded_projectile_count",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "constraint",
+                            "value": "do_not_move_player_as_a_shooting_side_effect",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "configuration",
+                            "value": "projectile_speed=360",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "configuration",
+                            "value": "projectile_lifetime_ms=1200",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "configuration",
+                            "value": "shoot_cooldown_ms=250",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "configuration",
+                            "value": "projectile_size=10",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "connection",
+                            "value": "input:shoot_action",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "reference",
+                            "value": "scene:main_scene",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "outcome",
+                            "value": "visible_projectile_is_created",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "outcome",
+                            "value": "projectile_motion_is_observable",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "outcome",
+                            "value": "projectile_is_removed_after_lifetime",
+                            "coveredBy": []
+                        },
+                        {
+                            "category": "outcome",
+                            "value": "repeated_shooting_is_rate_limited",
+                            "coveredBy": []
+                        }
+                    ]
+                }
+            },
+            "constraintSet": {
+                "schemaVersion": "generation-constraint-set/v1",
+                "id": "phase_9_generation_constraints",
+                "maximumGeneratedMechanicsPerRun": 1,
+                "capabilityVersion": "mechanic_capability/v1",
+                "admittedCapabilities": [
+                    "object_read",
+                    "object_create",
+                    "object_motion_write",
+                    "object_destroy",
+                    "spatial_query",
+                    "state_read",
+                    "state_write",
+                    "time_read",
+                    "time_schedule",
+                    "random_next",
+                    "event_subscribe",
+                    "signal_emit"
+                ],
+                "resourceBudgetProfile": "phase_9_fixed_budget",
+                "configDslComplexity": {
+                    "maximumDepth": 4,
+                    "maximumFields": 32,
+                    "maximumCollectionItems": 32
+                },
+                "evidenceRequirements": {
+                    "minimumBehaviorScenarios": 1,
+                    "minimumExternalAcceptanceObservations": 1
+                },
+                "maximumRepairAttempts": {
+                    "contract": 3,
+                    "source": 3,
+                    "finalGameSpec": 3
+                }
+            }
+        }
+    }
+}

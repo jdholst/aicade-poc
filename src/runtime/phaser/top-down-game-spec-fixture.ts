@@ -1,9 +1,9 @@
+import { validateTopDownGameSpec } from "@/game-spec/game-spec-validation";
+import type { TopDownGameSpec } from "@/game-spec/top-down-spec-schema";
 import {
   GameSpecValidationError,
-  validateTopDownGameSpec,
   type GameSpecValidationIssue,
-  type TopDownGameSpec,
-} from "@/game-spec";
+} from "@/game-spec/validation/validation-issue";
 
 import { crystalSpecChaseGameSpecFixtureInput } from "./fixtures/crystal-spec-chase";
 import { prismRelayGauntletGameSpecFixtureInput } from "./fixtures/prism-relay-gauntlet";

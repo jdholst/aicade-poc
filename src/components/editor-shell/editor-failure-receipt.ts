@@ -7,18 +7,27 @@ import type {
   SpecGenerationFailureStage,
   SpecGenerationValidationFailure,
 } from "@/service/spec-generation";
+import type { GeneratedMechanicGenerationFailureEvidence } from "@/service/generation-run";
 
 export type FailureReceiptStage =
   | ValidationEvidence["stage"]
-  | SpecGenerationFailureStage;
+  | SpecGenerationFailureStage
+  | GeneratedMechanicGenerationFailureEvidence["stage"];
 
 export type FailureReceiptViewModel = {
   checkId: string;
   evidenceJson: string | null;
+  issueGroups?: FailureReceiptIssueGroupViewModel[];
   issueMessages: string[];
   message: string;
   stage: FailureReceiptStage;
   status: ValidationEvidence["status"];
+};
+
+export type FailureReceiptIssueGroupViewModel = {
+  id: string;
+  issueMessages: string[];
+  label: string;
 };
 
 export type FailureReceiptSurfaceViewModel = {
@@ -27,12 +36,44 @@ export type FailureReceiptSurfaceViewModel = {
 };
 
 export function createGenerationFailureReceiptSurface({
+  generatedMechanicFailure,
   message,
   validationFailure,
 }: {
+  generatedMechanicFailure?: GeneratedMechanicGenerationFailureEvidence;
   message: string;
   validationFailure?: SpecGenerationValidationFailure;
 }): FailureReceiptSurfaceViewModel {
+  if (generatedMechanicFailure) {
+    const conformanceFailure = createRealmConformanceFailurePresentation(
+      generatedMechanicFailure
+    );
+
+    return {
+      debugReceipts: [
+        {
+          checkId: generatedMechanicFailure.stage,
+          evidenceJson: JSON.stringify(generatedMechanicFailure, null, 2),
+          ...(conformanceFailure
+            ? {
+                issueGroups: conformanceFailure.issueGroups,
+                issueMessages: [],
+              }
+            : {
+                issueMessages: generatedMechanicFailure.issues.map(
+                  ({ message: issueMessage, path }) =>
+                    `${path}: ${issueMessage}`
+                ),
+              }),
+          message: conformanceFailure?.receiptMessage ?? message,
+          stage: generatedMechanicFailure.stage,
+          status: "failed",
+        },
+      ],
+      summary: conformanceFailure?.summary ?? message,
+    };
+  }
+
   if (validationFailure) {
     return createSpecGenerationValidationFailureReceiptSurface({
       message,
@@ -53,6 +94,71 @@ export function createGenerationFailureReceiptSurface({
     ],
     summary: message,
   };
+}
+
+const REALM_CONFORMANCE_PATH_PREFIX = "foundation.realm_conformance.";
+
+const REALM_CONFORMANCE_GROUP_LABELS: Readonly<Record<string, string>> =
+  Object.freeze({
+    browser_integration: "Browser runtime",
+    cleanup_and_recovery: "Cleanup and recovery",
+    determinism: "Deterministic replay",
+    diagnostic_quality: "Diagnostic quality",
+    escape_resistance: "Escape resistance",
+    forbidden_authority_isolation: "Forbidden authority",
+    opaque_handle_isolation: "Opaque handle isolation",
+    resource_enforcement: "Resource limits",
+    runaway_termination: "Runaway containment",
+    usable_capability_execution: "Capability execution",
+  });
+
+function createRealmConformanceFailurePresentation(
+  failure: GeneratedMechanicGenerationFailureEvidence
+): Readonly<{
+  issueGroups: FailureReceiptIssueGroupViewModel[];
+  receiptMessage: string;
+  summary: string;
+}> | null {
+  if (
+    failure.stage !== "foundation" ||
+    failure.issues.length === 0 ||
+    !failure.issues.every(({ path }) =>
+      path.startsWith(REALM_CONFORMANCE_PATH_PREFIX)
+    )
+  ) {
+    return null;
+  }
+
+  const groups = new Map<string, FailureReceiptIssueGroupViewModel>();
+  for (const issue of failure.issues) {
+    const id = issue.path.slice(REALM_CONFORMANCE_PATH_PREFIX.length);
+    const existingGroup = groups.get(id);
+    if (existingGroup) {
+      existingGroup.issueMessages.push(issue.message);
+      continue;
+    }
+
+    groups.set(id, {
+      id,
+      issueMessages: [issue.message],
+      label: REALM_CONFORMANCE_GROUP_LABELS[id] ?? humanizeIdentifier(id),
+    });
+  }
+
+  const issueCount = failure.issues.length;
+  return {
+    issueGroups: [...groups.values()],
+    receiptMessage:
+      "Mechanic execution conformance stopped before source generation began.",
+    summary: `The secure mechanic runtime could not be verified. Review ${issueCount} failed conformance ${issueCount === 1 ? "check" : "checks"} below.`,
+  };
+}
+
+function humanizeIdentifier(value: string): string {
+  const words = value.replaceAll("_", " ");
+  return words.length === 0
+    ? "Conformance check"
+    : `${words[0]?.toUpperCase() ?? ""}${words.slice(1)}`;
 }
 
 export function createFirstPlayableFailureReceiptSurface(

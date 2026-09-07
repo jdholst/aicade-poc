@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Mechanic Generation Campaigns</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">AI-Cade internal QA</p>
+        <h1>Mechanic generation campaigns</h1>
+      </div>
+      <div class="topbar-actions">
+        <a class="nav-link" href="/documentation.html">Documentation</a>
+        <div class="live"><span></span><strong>Live local data</strong><small id="updated">Waiting for data</small></div>
+      </div>
+    </header>
+
+    <main>
+      <section id="summary" class="summary-grid"></section>
+
+      <section id="dashboard-loops" class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Orchestration</p><h2>Campaign loops</h2></div>
+          <select id="loop-filter" aria-label="Filter campaign loops"><option value="all">All loops</option></select>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Loop</th><th>Status</th><th>Current step</th><th>Revision</th><th>Budgets used</th><th>Actual calls</th><th>Evidence</th></tr></thead><tbody id="loops"></tbody></table></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading knowledge-heading">
+          <div><p class="eyebrow">Compiled evidence</p><h2>Campaign knowledge</h2></div>
+          <div class="knowledge-filters">
+            <select id="knowledge-status-filter" aria-label="Filter knowledge by status"><option value="all">All statuses</option><option value="active">Active</option><option value="retired">Retired</option></select>
+            <select id="knowledge-confidence-filter" aria-label="Filter knowledge by confidence"><option value="all">All confidence</option><option value="hypothesis">Hypothesis</option><option value="supported">Supported</option><option value="confirmed">Confirmed</option></select>
+            <select id="knowledge-applicability-filter" aria-label="Filter knowledge by applicability"><option value="all">All applicability</option><option value="pipeline_general">Pipeline general</option><option value="mechanic">Mechanic</option><option value="manifest">Manifest</option></select>
+            <select id="knowledge-stage-filter" aria-label="Filter knowledge by stage"><option value="all">All stages</option></select>
+            <select id="knowledge-classification-filter" aria-label="Filter knowledge by classification"><option value="all">All classifications</option></select>
+            <select id="knowledge-manifest-filter" aria-label="Filter knowledge by manifest"><option value="all">All manifests</option></select>
+          </div>
+        </div>
+        <div id="knowledge-pending" class="knowledge-pending"></div>
+        <div id="knowledge" class="knowledge-grid"></div>
+        <div id="knowledge-reconciliations" class="knowledge-history"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">Proof matrix</p><h2>Mechanics</h2></div></div>
+        <div id="mechanics" class="mechanic-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">Human evaluation</p><h2>Manual gameplay QA</h2></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Cohort</th><th>Status</th><th>Decision</th><th>Review sessions</th><th>Evidence</th></tr></thead><tbody id="manual-qa"></tbody></table></div>
+      </section>
+
+      <section class="two-column">
+        <article class="panel">
+          <div class="panel-heading"><div><p class="eyebrow">Pipeline</p><h2>Stage survival</h2></div></div>
+          <div id="stages" class="stage-list"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading"><div><p class="eyebrow">Failures</p><h2>Classifications</h2></div></div>
+          <div id="failures" class="failure-list"></div>
+        </article>
+      </section>
+
+      <section id="dashboard-cost-history" class="panel cost-history-panel">
+        <div class="panel-heading cost-history-heading">
+          <div><p class="eyebrow">Provider spend</p><h2>Known cost</h2></div>
+          <label class="cost-group-control" for="cost-group-by">
+            <span>Group by</span>
+            <select id="cost-group-by" aria-label="Group known cost history by period">
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+            </select>
+          </label>
+        </div>
+        <div class="cost-history-summary">
+          <span>Total spend</span>
+          <strong data-cost-total>—</strong>
+        </div>
+        <div class="cost-history-chart-scroll" data-cost-chart-scroll tabindex="0" aria-label="Known cost chart timeline">
+          <div class="cost-history-chart-frame" data-cost-chart-frame>
+            <canvas class="cost-history-chart" width="800" height="300" tabindex="0" role="img" aria-label="Known provider cost history"></canvas>
+            <div class="cost-history-tooltip" data-cost-tooltip role="status" aria-live="polite" hidden></div>
+          </div>
+        </div>
+        <p class="cost-history-empty empty" data-cost-empty hidden>No priced provider calls yet.</p>
+        <p class="cost-history-excluded" data-cost-excluded hidden></p>
+        <div class="visually-hidden">
+          <table>
+            <caption>Known provider cost by period</caption>
+            <thead><tr><th>Period</th><th>Total</th><th>Exact</th><th>Estimate</th><th>Priced calls</th></tr></thead>
+            <tbody data-cost-table-body></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="dashboard-campaigns" class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Current revision</p><h2>Campaign runs</h2></div>
+          <select id="campaign-filter" aria-label="Filter campaign runs"><option value="all">All campaigns</option></select>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Campaign</th><th>Cohort</th><th>Mode</th><th>Status</th><th>Success</th><th>Calls</th><th>Cost</th><th>Revision</th></tr></thead><tbody id="campaigns"></tbody></table></div>
+      </section>
+
+      <section id="dashboard-attempts" class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">Submissions</p><h2>Attempts</h2></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Attempt</th><th>Prompt</th><th>Outcome</th><th>Furthest stage</th><th>Classification</th><th>Duration</th><th>Artifacts</th></tr></thead><tbody id="attempts"></tbody></table></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">Prompt robustness</p><h2>Variation cohorts</h2></div></div>
+        <div id="variation" class="variation-grid"></div>
+      </section>
+
+      <section id="dashboard-fixes" class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Architecture debt</p><h2>Temporary fixes</h2></div>
+          <select id="fix-filter" aria-label="Filter temporary fixes"><option value="all">All fixes</option><option value="active">Active</option><option value="retired">Retired</option></select>
+        </div>
+        <div id="fixes" class="fix-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Imported evidence</p><h2>Legacy attempts</h2></div>
+          <select id="legacy-filter" aria-label="Filter legacy attempts"><option value="all">All completeness</option><option value="complete">Complete</option><option value="partial">Partial</option><option value="narrative_only">Narrative only</option></select>
+        </div>
+        <div class="table-wrap legacy"><table><thead><tr><th>ID</th><th>Recorded outcome</th><th>Furthest stage</th><th>Classification</th><th>Provenance</th></tr></thead><tbody id="legacy"></tbody></table></div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

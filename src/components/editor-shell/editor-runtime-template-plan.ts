@@ -1,6 +1,7 @@
 import type {
   GamePack,
   GameSpecValidationIssue,
+  PreparedRestoredGeneratedMechanicProject,
 } from "@/game-spec";
 import type {
   EditorGenerationSource,
@@ -25,6 +26,7 @@ export type EditorRuntimeHostViewModel =
   | {
       key: string;
       template: HandAuthoredPhaserTemplate;
+      generatedMechanicProject?: PreparedRestoredGeneratedMechanicProject;
       type: "phaser";
     }
   | {
@@ -55,13 +57,15 @@ export type EditorRuntimeTemplatePlan =
       firstPlayableValidationSource: FirstPlayableValidationSource;
       persistencePolicy: PlayableDraftPersistencePolicy;
       readyPolicy: PlayableDraftReadyPolicy;
-      runFirstPlayableChecksOnReady: true;
+      runFirstPlayableChecksOnReady: boolean;
       sourceKey: string;
       template: HandAuthoredPhaserTemplate;
+      generatedMechanicProject?: PreparedRestoredGeneratedMechanicProject;
       type: "phaser-valid";
     };
 
 type CreateEditorRuntimeTemplatePlanInput = {
+  activeGamePack?: GamePack | null;
   activeGeneratedSpec?: ActiveGeneratedSpecState | null;
   generationSource?: EditorGenerationSource;
   phaserTemplateState?: TopDownPhaserTemplateState;
@@ -70,6 +74,7 @@ type CreateEditorRuntimeTemplatePlanInput = {
 };
 
 export function createEditorRuntimeTemplatePlan({
+  activeGamePack = null,
   activeGeneratedSpec = null,
   generationSource,
   phaserTemplateState = getTopDownPhaserTemplateState(),
@@ -77,6 +82,7 @@ export function createEditorRuntimeTemplatePlan({
   runtimeMode = getEditorRuntimeMode(),
 }: CreateEditorRuntimeTemplatePlanInput = {}): EditorRuntimeTemplatePlan {
   const playableDraftSource = createPlayableDraftSource({
+    activeGamePack,
     generatedSpecDraft: activeGeneratedSpec,
     generationSource,
     phaserTemplateState,
@@ -118,6 +124,9 @@ export function createEditorRuntimeTemplatePlan({
       playableDraftSource.runFirstPlayableChecksOnReady,
     sourceKey: playableDraftSource.sourceKey,
     template: playableDraftSource.template,
+    ...(playableDraftSource.generatedMechanicProject
+      ? { generatedMechanicProject: playableDraftSource.generatedMechanicProject }
+      : {}),
     type: "phaser-valid",
   };
 }
@@ -133,6 +142,9 @@ export function createPhaserRuntimeHostViewModel({
     type: "phaser",
     key: `${runtimeTemplate.sourceKey}-${gameResetNonce}`,
     template: runtimeTemplate.template,
+    ...(runtimeTemplate.generatedMechanicProject
+      ? { generatedMechanicProject: runtimeTemplate.generatedMechanicProject }
+      : {}),
   };
 }
 

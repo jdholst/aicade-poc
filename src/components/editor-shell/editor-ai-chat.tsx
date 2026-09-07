@@ -3,8 +3,10 @@ import type {
   EditorAIChatActions,
   EditorAIChatSession,
 } from "@/hooks/use-editor-session";
-import type { TopDownGameSpec } from "@/game-spec";
+import { parseTopDownGameSpec, type TopDownGameSpec } from "@/game-spec";
 import type { GeneratedGamePack } from "@/service/starter-project/starter-project-schema";
+
+import { createGenerationFailureReceiptSurface } from "./editor-failure-receipt";
 
 type EditorAIChatProps = {
   actions: EditorAIChatActions;
@@ -119,6 +121,40 @@ function createGeneratedProjectSummary(
     };
   }
 
+  if (loadState.source === "phaser-game-pack") {
+    const gameSpec = parseTopDownGameSpec(loadState.gamePack.gameSpec);
+    const capabilities = Array.from(
+      new Set(
+        (loadState.gamePack.acceptedGeneratedMechanicArtifacts ?? []).flatMap(
+          ({ sourceArtifact }) =>
+            sourceArtifact.grant.capabilities.map(({ id }) => id)
+        )
+      )
+    );
+
+    return {
+      capabilities,
+      controls: gameSpec.controls,
+      detailPanels: [],
+      overviewMetrics: [
+        loadState.gamePack.runtimeKind,
+        gameSpec.schemaVersion,
+        gameSpec.template.id,
+        `${loadState.gamePack.acceptedGeneratedMechanicArtifacts?.length ?? 0} generated mechanic`,
+      ],
+      overviewSummary: gameSpec.currentIntentSummary,
+      statusMessage,
+      summaryItems: getTopDownSpecSummary(gameSpec),
+      transcript: [
+        { role: "user", text: submittedPrompt },
+        {
+          role: "assistant",
+          text: "Generated, evaluated, and accepted a playable mechanic project.",
+        },
+      ],
+    };
+  }
+
   return {
     capabilities: [],
     controls: loadState.spec.controls,
@@ -176,6 +212,23 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
     loadState,
     submittedPrompt
   );
+  const degradedGeneration =
+    loadState.status === "success" &&
+    loadState.source === "phaser-spec" &&
+    loadState.degradedWarning
+      ? {
+          generationRunId: loadState.generationRunId,
+          warning: loadState.degradedWarning,
+        }
+      : null;
+  const generationErrorSummary =
+    loadState.status === "error"
+      ? createGenerationFailureReceiptSurface({
+          generatedMechanicFailure: loadState.generatedMechanicFailure,
+          message: loadState.message,
+          validationFailure: loadState.validationFailure,
+        }).summary
+      : null;
   const isPromptEditingForRegeneration =
     isEditingPrompt && loadState.status === "error";
   const isPromptFormVisible =
@@ -372,7 +425,7 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
                 Generation error
               </div>
               <p className="mt-3 text-sm leading-7 text-[#613128]">
-                {loadState.message}
+                {generationErrorSummary}
               </p>
             </div>
             <OpenAiConfigForm
@@ -402,6 +455,114 @@ export function EditorAIChat({ actions, chat }: EditorAIChatProps) {
             <div className="border border-[var(--line)] bg-white/76 px-4 py-3 text-sm text-[var(--muted)]">
               {generatedProjectSummary.statusMessage}
             </div>
+
+            {degradedGeneration ? (
+              <section
+                aria-label="Degraded generation warning"
+                className="border border-[#b36b2c]/45 bg-[#fff3df] p-4 text-[var(--ink)]"
+              >
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8b4e1f]">
+                  Limited functionality
+                </div>
+                <h2 className="mt-2 text-base font-semibold">
+                  {degradedGeneration.warning.summary.replace(/\.$/, "")}
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
+                  {degradedGeneration.warning.omittedBehavior}
+                </p>
+                <details className="mt-3 border-t border-[#b36b2c]/25 pt-3 text-sm">
+                  <summary className="cursor-pointer font-semibold text-[#7a431b]">
+                    View omission details
+                  </summary>
+                  <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-[auto_1fr]">
+                    <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Stage
+                    </dt>
+                    <dd>{degradedGeneration.warning.stage}</dd>
+                    <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Outcome
+                    </dt>
+                    <dd>{degradedGeneration.warning.code}</dd>
+                    {degradedGeneration.generationRunId ? (
+                      <>
+                        <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                          Generation run
+                        </dt>
+                        <dd className="break-all">
+                          {degradedGeneration.generationRunId}
+                        </dd>
+                      </>
+                    ) : null}
+                    {degradedGeneration.warning.intentId ? (
+                      <>
+                        <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                          Omitted intent
+                        </dt>
+                        <dd className="break-all">
+                          {degradedGeneration.warning.intentId}
+                        </dd>
+                      </>
+                    ) : null}
+                    <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Generated stages
+                    </dt>
+                    <dd>Not started (0 provider, realm, browser, or handoff calls)</dd>
+                    <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Routing result
+                    </dt>
+                    <dd>{degradedGeneration.warning.routingFailure.kind}</dd>
+                    <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Routing evidence
+                    </dt>
+                    <dd>
+                      {degradedGeneration.warning.routingFailure.evidence.code}
+                    </dd>
+                    <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Fallback decision
+                    </dt>
+                    <dd>{degradedGeneration.warning.policyDecision.code}</dd>
+                    <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Fallback validation
+                    </dt>
+                    <dd>
+                      {degradedGeneration.warning.fallbackValidation.status} —{" "}
+                      {degradedGeneration.warning.fallbackValidation.gameSpecId}
+                    </dd>
+                    {"missingCapabilities" in
+                      degradedGeneration.warning.routingFailure.evidence &&
+                    degradedGeneration.warning.routingFailure.evidence
+                      .missingCapabilities.length > 0 ? (
+                      <>
+                        <dt className="font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                          Missing capabilities
+                        </dt>
+                        <dd>
+                          {degradedGeneration.warning.routingFailure.evidence.missingCapabilities.join(
+                            ", "
+                          )}
+                        </dd>
+                      </>
+                    ) : null}
+                  </dl>
+                  <ul className="mt-4 space-y-2">
+                    {degradedGeneration.warning.issues.map((issue) => (
+                      <li
+                        key={`${issue.path}:${issue.code}`}
+                        className="border border-[#b36b2c]/20 bg-white/55 p-3"
+                      >
+                        <div className="font-mono text-xs font-semibold">
+                          {issue.code}
+                        </div>
+                        <div className="mt-1 font-mono text-[11px] text-[var(--muted)]">
+                          {issue.path}
+                        </div>
+                        <p className="mt-2 leading-6">{issue.message}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </section>
+            ) : null}
 
             {generatedProjectSummary.transcript.map((message, index) => (
               <article

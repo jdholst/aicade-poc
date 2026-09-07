@@ -143,6 +143,56 @@ describe("Top-down Game Spec pre-runtime validation", () => {
     );
   });
 
+  it("accepts a distinct Space control for a generated player action", () => {
+    expect(
+      validateTopDownGameSpec({
+        ...validTopDownGameSpec,
+        controls: [
+          ...validTopDownGameSpec.controls,
+          {
+            id: "control_shoot",
+            action: "shoot_action",
+            label: "Shoot",
+            kind: "button",
+            keys: ["Space"],
+          },
+        ],
+      }).controls
+    ).toContainEqual({
+      id: "control_shoot",
+      action: "shoot_action",
+      label: "Shoot",
+      kind: "button",
+      keys: ["Space"],
+    });
+  });
+
+  it("rejects aggregate control labels that the retained browser host cannot dispatch", () => {
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      controls: [
+        {
+          ...validTopDownGameSpec.controls[0],
+          action: "move_action",
+          keys: ["WASD", "ARROW KEYS"],
+        },
+      ],
+    });
+
+    expect(issues).toEqual([
+      {
+        path: "controls.control_move.keys.0",
+        message:
+          'Unsupported physical key "WASD". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space.',
+      },
+      {
+        path: "controls.control_move.keys.1",
+        message:
+          'Unsupported physical key "ARROW KEYS". Use one of: ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space.',
+      },
+    ]);
+  });
+
   it("rejects malformed specs before semantic checks run", () => {
     expect(() =>
       validateTopDownGameSpec({
@@ -460,5 +510,50 @@ describe("Top-down Game Spec pre-runtime validation", () => {
         },
       ])
     );
+  });
+
+  it("rejects a spawned non-player entity that no active mechanic materializes", () => {
+    const scene = validTopDownGameSpec.template.config.scenes[0];
+    const issues = getValidationIssues({
+      ...validTopDownGameSpec,
+      entities: [
+        ...validTopDownGameSpec.entities,
+        {
+          id: "entity_unmaterialized_enemy",
+          role: "enemy",
+          name: "Unmaterialized Enemy",
+        },
+      ],
+      template: {
+        ...validTopDownGameSpec.template,
+        config: {
+          scenes: [
+            {
+              ...scene,
+              layout: {
+                ...scene.layout,
+                spawnZones: [
+                  ...scene.layout.spawnZones,
+                  {
+                    id: "spawn_unmaterialized_enemy",
+                    x: 600,
+                    y: 240,
+                    width: 80,
+                    height: 80,
+                    entityIds: ["entity_unmaterialized_enemy"],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(issues).toContainEqual({
+      path: "entities.entity_unmaterialized_enemy",
+      message:
+        "A spawn zone does not materialize a non-player entity. Reference it from an allowed active mechanic.",
+    });
   });
 });

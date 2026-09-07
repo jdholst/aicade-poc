@@ -99,6 +99,105 @@ describe("GenerationRun repository", () => {
     await expect(repository.fetch(runningRun.id)).resolves.toEqual(completedRun);
   });
 
+  it("serializes concurrent transitions so terminal interruption cannot be overwritten by stale success", async () => {
+    const storage = new MemoryGenerationRunStorage();
+    const interruptionRepository = createGenerationRunRepository(storage);
+    const continuationRepository = createGenerationRunRepository(storage);
+    const gamePack = createValidatedGamePackFixture();
+    const runningRun = createSuccessfulGenerationRunFixture(gamePack, {
+      id: "generation_run_serialized_transition",
+      status: "running",
+      repairStatus: undefined,
+      completedAt: undefined,
+      durationMs: undefined,
+      relationships: undefined,
+    });
+    await interruptionRepository.create(runningRun);
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const interruption = interruptionRepository.update(
+      runningRun.id,
+      async (current) => {
+        await firstBlocked;
+        return {
+          ...current,
+          status: "cancelled",
+          completedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
+          durationMs: 10_000,
+          stage: "cancellation",
+          failureClass: "cancellation",
+        };
+      }
+    );
+    const staleSuccess = continuationRepository.update(
+      runningRun.id,
+      (current) =>
+        current.status === "running"
+          ? {
+              ...current,
+              status: "succeeded",
+              completedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
+              durationMs: 10_000,
+            }
+          : current
+    );
+    releaseFirst();
+
+    await expect(interruption).resolves.toMatchObject({ status: "cancelled" });
+    await expect(staleSuccess).resolves.toMatchObject({ status: "cancelled" });
+    await expect(
+      continuationRepository.fetch(runningRun.id)
+    ).resolves.toMatchObject({
+      status: "cancelled",
+      stage: "cancellation",
+      failureClass: "cancellation",
+    });
+  });
+
+  it("retries an atomic storage transition instead of overwriting a cross-realm interruption", async () => {
+    const storage = new InterleavingGenerationRunStorage();
+    const repository = createGenerationRunRepository(storage);
+    const gamePack = createValidatedGamePackFixture();
+    const runningRun = createSuccessfulGenerationRunFixture(gamePack, {
+      id: "generation_run_cross_realm_transition",
+      status: "running",
+      repairStatus: undefined,
+      completedAt: undefined,
+      durationMs: undefined,
+      relationships: undefined,
+    });
+    const cancelledRun = {
+      ...runningRun,
+      status: "cancelled" as const,
+      completedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
+      durationMs: 10_000,
+      stage: "cancellation" as const,
+      failureClass: "cancellation" as const,
+    };
+    await repository.create(runningRun);
+    storage.interleaveNextCompareAndSwap(cancelledRun);
+
+    const result = await repository.update(runningRun.id, (current) =>
+      current.status === "running"
+        ? {
+            ...current,
+            status: "succeeded",
+            completedAt: GAME_PACK_FIXTURE_LATER_UPDATED_AT,
+            durationMs: 10_000,
+          }
+        : current
+    );
+
+    expect(result).toEqual(cancelledRun);
+    expect(storage.compareAndSwapCalls).toBe(2);
+    await expect(repository.fetch(runningRun.id)).resolves.toEqual(
+      cancelledRun
+    );
+  });
+
   it("persists failed pre-project runs without Game Pack relationships", async () => {
     const repository = createGenerationRunRepository(
       new MemoryGenerationRunStorage()
@@ -222,6 +321,44 @@ class MemoryGenerationRunStorage implements GenerationRunStorageDriver {
 
   async clear() {
     this.records.clear();
+  }
+}
+
+class InterleavingGenerationRunStorage extends MemoryGenerationRunStorage {
+  compareAndSwapCalls = 0;
+  private interleavedRecord: StoredGenerationRunRecord | undefined;
+
+  interleaveNextCompareAndSwap(
+    generationRun: StoredGenerationRunRecord["generationRun"]
+  ) {
+    this.interleavedRecord = {
+      id: generationRun.id,
+      recordVersion: 1,
+      status: generationRun.status,
+      updatedAt: generationRun.completedAt ?? generationRun.startedAt,
+      generationRun,
+    };
+  }
+
+  async compareAndSwap(
+    generationRunId: string,
+    expected: StoredGenerationRunRecord,
+    replacement: StoredGenerationRunRecord
+  ) {
+    this.compareAndSwapCalls += 1;
+    if (this.interleavedRecord) {
+      this.records.set(
+        generationRunId,
+        cloneRecord(this.interleavedRecord)
+      );
+      this.interleavedRecord = undefined;
+    }
+    const current = this.records.get(generationRunId) ?? null;
+    if (JSON.stringify(current) !== JSON.stringify(expected)) {
+      return false;
+    }
+    this.records.set(generationRunId, cloneRecord(replacement));
+    return true;
   }
 }
 

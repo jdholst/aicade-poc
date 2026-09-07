@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "campaign-manifest/v1",
+  "id": "p09-t17-projectile",
+  "mechanic": {
+    "id": "projectile_shooting",
+    "name": "Projectile shooting",
+    "ticket": "Phase 09 Ticket 17",
+    "ticketUrl": "https://www.notion.so/3af9db009ee581c8aee7c95ebf905a83",
+    "requirementIds": [
+      "existing_movement",
+      "fire_action",
+      "actor_origin",
+      "visible_travel",
+      "first_target_interaction",
+      "hit_cleanup",
+      "bounds_cleanup",
+      "playable_objective",
+      "trusted_system_preservation"
+    ]
+  },
+  "model": "gpt-5.6-luna",
+  "credential": {
+    "source": "keyword_env",
+    "envName": "AICADE_CAMPAIGN_KEYWORD"
+  },
+  "pricingSnapshot": {
+    "path": "../pricing/openai-2026-08-29.json",
+    "sha256": "3f36091cb61399320b75a488547febbfaf56f8cb860e04a6226a685e9d3bc27b"
+  },
+  "prompts": [
+    {
+      "id": "baseline",
+      "text": "Create a compact top-down arena game. The player should move with the existing movement controls and press a fire action to launch a short-lived projectile from the player's current location toward a visible target. The projectile should travel visibly, affect the first target it hits, then be removed. It should also be removed if it leaves the arena. Include a simple objective so the game remains playable, but keep score, win/loss, and unrelated systems trusted and unchanged.",
+      "requirementIds": ["existing_movement", "fire_action", "actor_origin", "visible_travel", "first_target_interaction", "hit_cleanup", "bounds_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "plain_paraphrase",
+      "text": "Make a small top-down arena game that keeps the current movement controls. A fire input should create a temporary projectile at the player's live position and send it visibly toward a target. It must affect only the first target contacted and disappear after that contact or after crossing the arena boundary. Keep a simple playable objective while leaving score, victory, defeat, and unrelated trusted systems unchanged.",
+      "requirementIds": ["existing_movement", "fire_action", "actor_origin", "visible_travel", "first_target_interaction", "hit_cleanup", "bounds_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "constraints_first",
+      "text": "Keep score, win/loss, unrelated trusted systems, and the existing player movement controls unchanged. In a compact top-down arena with a simple playable objective, add a fire action that launches a short-lived projectile from the player's current position toward a visible target. Show its travel, affect the first target hit, and remove the projectile on that hit or when it exits the arena.",
+      "requirementIds": ["existing_movement", "fire_action", "actor_origin", "visible_travel", "first_target_interaction", "hit_cleanup", "bounds_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "outcomes_first",
+      "text": "The finished top-down arena should visibly show a projectile leaving the player's current location, travelling to a visible target, affecting only the first target it reaches, and disappearing on impact or outside the arena. Trigger it with a fire action, retain the existing movement controls, include a simple objective, and leave trusted score, win/loss, and unrelated systems unchanged.",
+      "requirementIds": ["existing_movement", "fire_action", "actor_origin", "visible_travel", "first_target_interaction", "hit_cleanup", "bounds_cleanup", "playable_objective", "trusted_system_preservation"]
+    },
+    {
+      "id": "compact",
+      "text": "Create a playable compact top-down arena with existing movement and a fire action. Fire a visible short-lived projectile from the player's live position toward a target, affect the first target hit, and clean it up on impact or arena exit. Preserve trusted score, win/loss, and unrelated systems.",
+      "requirementIds": ["existing_movement", "fire_action", "actor_origin", "visible_travel", "first_target_interaction", "hit_cleanup", "bounds_cleanup", "playable_objective", "trusted_system_preservation"]
+    }
+  ],
+  "providerModes": {
+    "planning": "actual",
+    "contract": "actual",
+    "source": "actual"
+  },
+  "fixtures": {
+    "planning": {
+      "path": "../fixtures/ticket-17/planning.json",
+      "sha256": "4f1b5ae5ca0a149a15c24ca507ed07e3836390b0d094c6f0473ef7db382341de"
+    },
+    "contract": {
+      "path": "../fixtures/ticket-17/contract.json",
+      "sha256": "c9790ef1926121dc7c8cd32c381e7a3abcfc003ece38c5485e73798563c07bdd"
+    },
+    "source": {
+      "path": "../fixtures/ticket-17/source.json",
+      "sha256": "e025b285ae3a0cdee823b8036c02267333826927637e73bba4194b50b9659b10"
+    }
+  },
+  "probe": "../probes/projectile.mjs",
+  "cohorts": {
+    "discovery": { "maxAttempts": 1, "minimumSuccesses": 1 },
+    "isolation": { "maxAttempts": 1, "minimumSuccesses": 1 },
+    "repeatability": { "maxAttempts": 10, "minimumSuccesses": 8, "failureLimit": 3 },
+    "variation": { "runsPerPrompt": 2, "minimumSuccesses": 8, "requireEveryPromptSuccess": true, "failureLimit": 3, "maxReplacementAttempts": 1 }
+  }
+}

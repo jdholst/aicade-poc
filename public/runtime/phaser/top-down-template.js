@@ -1,4 +1,8 @@
 (function () {
+  // Bound catch-up to eight 16 ms host steps so one delayed SES response
+  // cannot consume the full fixed per-tick execution budget.
+  const GENERATED_MECHANIC_MAX_PENDING_ELAPSED_MILLISECONDS = 128;
+
   function createRuntimeConfig(rawTemplate) {
     const template = rawTemplate || {};
     const gameSpec = template.gameSpec || {};
@@ -41,6 +45,7 @@
     return {
       activeMechanics,
       arena,
+      controls: Array.isArray(template.controls) ? template.controls : [],
       defaultPlayerEntityId: "entity_player",
       gameSpec,
       layout,
@@ -58,6 +63,8 @@
     return {
       activeScene: null,
       game: null,
+      generatedMechanicPendingElapsedMilliseconds: 0,
+      generatedMechanicUpdatePending: false,
       isPaused: false,
       playerHandle: null,
       renderedObjectCount: 0,
@@ -71,7 +78,15 @@
   }
 
   function notify(type, payload) {
-    parent.postMessage(Object.assign({ type }, payload || {}), "*");
+    const message = Object.assign({ type }, payload || {});
+    const trustedNotify = globalThis.__AICADE_RUNTIME_NOTIFY__;
+
+    if (typeof trustedNotify === "function") {
+      trustedNotify(message);
+      return;
+    }
+
+    parent.postMessage(message, "*");
   }
 
   function getErrorMessage(error) {
@@ -102,7 +117,20 @@
       });
     }
 
+    function reportFatalRuntimeFailure(message) {
+      notify("game-error", {
+        issue: {
+          type: "runtime-error",
+          severity: "error",
+          recoverable: false,
+          message,
+        },
+        message,
+      });
+    }
+
     return {
+      reportFatalRuntimeFailure,
       reportMechanicFailure,
     };
   }
@@ -565,6 +593,20 @@
     const reporter = dependencies.reporter;
     const runtimeState = dependencies.runtimeState;
     let installedMechanics = [];
+    let generatedMechanicSession = null;
+    let generatedMechanicDisposed = false;
+    let generatedOwnedObjectObservers = [];
+
+    function getGeneratedMechanicHost() {
+      const host = globalThis.__AICADE_GENERATED_MECHANIC_HOST__;
+
+      return host &&
+        typeof host === "object" &&
+        typeof host.mechanicId === "string" &&
+        typeof host.install === "function"
+        ? host
+        : null;
+    }
 
     function createRuntimeCursorKeys(scene) {
       const cursors = scene.input.keyboard.createCursorKeys();
@@ -676,6 +718,32 @@
           getViewport() {
             return config.viewport;
           },
+          observeGeneratedOwnedObjects(filter, observer) {
+            if (
+              !filter ||
+              typeof filter !== "object" ||
+              typeof filter.assetRole !== "string" ||
+              typeof filter.entityRole !== "string" ||
+              typeof observer !== "function"
+            ) {
+              throw new TypeError(
+                "Generated owned-object observation requires exact roles and an observer."
+              );
+            }
+            const registration = {
+              assetRole: filter.assetRole,
+              entityRole: filter.entityRole,
+              mechanic,
+              observer,
+            };
+            generatedOwnedObjectObservers.push(registration);
+            return function stopObservingGeneratedOwnedObjects() {
+              generatedOwnedObjectObservers =
+                generatedOwnedObjectObservers.filter(function (candidate) {
+                  return candidate !== registration;
+                });
+            };
+          },
           resetEntity: entityModule.resetEntityHandle,
         },
       };
@@ -684,6 +752,14 @@
     function installActiveMechanic(scene, mechanic, contextExtras) {
       if (!mechanic || !mechanic.type) {
         return null;
+      }
+
+      const generatedHost = getGeneratedMechanicHost();
+      if (generatedHost && generatedHost.mechanicId === mechanic.id) {
+        return {
+          mechanic,
+          status: "externally-hosted",
+        };
       }
 
       const installerKey = config.runtimeInstallerKeys[mechanic.type];
@@ -748,6 +824,405 @@
       return installedMechanics;
     }
 
+    function createGeneratedOwnedObject(
+      scene,
+      mechanic,
+      ownedObjectKinds,
+      input
+    ) {
+      if (
+        !input ||
+        typeof input !== "object" ||
+        typeof input.objectId !== "string" ||
+        typeof input.objectKind !== "string"
+      ) {
+        throw new TypeError(
+          "Generated owned-object creation requires exact object identity."
+        );
+      }
+      const initial =
+        input.initial &&
+        typeof input.initial === "object" &&
+        !Array.isArray(input.initial)
+          ? input.initial
+          : {};
+      const position =
+        initial.position &&
+        typeof initial.position === "object" &&
+        !Array.isArray(initial.position)
+          ? initial.position
+          : {};
+      const velocity =
+        initial.velocity &&
+        typeof initial.velocity === "object" &&
+        !Array.isArray(initial.velocity)
+          ? initial.velocity
+          : {};
+      const properties =
+        initial.properties &&
+        typeof initial.properties === "object" &&
+        !Array.isArray(initial.properties)
+          ? initial.properties
+          : {};
+      const x = boundedNumber(
+        position.x,
+        config.viewport.width / 2,
+        -1000000,
+        1000000
+      );
+      const y = boundedNumber(
+        position.y,
+        config.viewport.height / 2,
+        -1000000,
+        1000000
+      );
+      const color = Math.round(
+        boundedNumber(initial.color, 0xffffff, 0, 0xffffff)
+      );
+      const object =
+        initial.shape === "rectangle"
+          ? scene.add.rectangle(
+              x,
+              y,
+              boundedNumber(initial.width, 12, 1, 256),
+              boundedNumber(initial.height, 12, 1, 256),
+              color
+            )
+          : scene.add.circle(
+              x,
+              y,
+              boundedNumber(initial.radius, 6, 1, 128),
+              color
+            );
+      scene.physics.add.existing(object, false);
+      if (
+        object.body &&
+        typeof object.body.setAllowGravity === "function"
+      ) {
+        object.body.setAllowGravity(false);
+      }
+      if (object.body && typeof object.body.setVelocity === "function") {
+        object.body.setVelocity(
+          boundedNumber(velocity.x, 0, -2000, 2000),
+          boundedNumber(velocity.y, 0, -2000, 2000)
+        );
+      }
+      if (typeof object.destroy !== "function") {
+        throw new Error(
+          'Generated owned object "' + input.objectId + '" cannot be destroyed.'
+        );
+      }
+      try {
+        notifyGeneratedOwnedObjectObservers(
+          mechanic,
+          ownedObjectKinds,
+          input.objectKind,
+          properties,
+          object
+        );
+      } catch (error) {
+        object.destroy();
+        throw error;
+      }
+      return {
+        object,
+        observeProperties() {
+          return Object.assign({}, properties);
+        },
+      };
+    }
+
+    function notifyGeneratedOwnedObjectObservers(
+      generatedMechanic,
+      ownedObjectKinds,
+      objectKind,
+      properties,
+      object
+    ) {
+      const generatedAssetIds =
+        generatedMechanic && Array.isArray(generatedMechanic.assetIds)
+          ? generatedMechanic.assetIds
+          : [];
+      const propertyAssetId =
+        properties && typeof properties.asset === "string"
+          ? properties.asset
+          : null;
+      const generatedEntityIds =
+        generatedMechanic && Array.isArray(generatedMechanic.entityIds)
+          ? generatedMechanic.entityIds
+          : [];
+      const assets = Array.isArray(config.gameSpec.assets)
+        ? config.gameSpec.assets
+        : [];
+      const isSoleOwnedObjectKind =
+        Array.isArray(ownedObjectKinds) &&
+        ownedObjectKinds.length === 1 &&
+        ownedObjectKinds[0] === objectKind;
+
+      generatedOwnedObjectObservers.slice().forEach(function (registration) {
+        const observerEntityIds =
+          registration.mechanic &&
+          Array.isArray(registration.mechanic.entityIds)
+            ? registration.mechanic.entityIds
+            : [];
+        const sharedEntityIds = generatedEntityIds.filter(function (entityId) {
+          if (!observerEntityIds.includes(entityId)) {
+            return false;
+          }
+          const entity = entityModule.findById(entityId);
+          return entity && entity.role === registration.entityRole;
+        });
+        if (sharedEntityIds.length === 0) {
+          return;
+        }
+        const observerAssetIds =
+          registration.mechanic &&
+          Array.isArray(registration.mechanic.assetIds)
+            ? registration.mechanic.assetIds
+            : [];
+        const sharedAssetIds = generatedAssetIds.filter(function (
+          generatedAssetId
+        ) {
+          if (!observerAssetIds.includes(generatedAssetId)) {
+            return false;
+          }
+          const sharedAsset = assets.find(function (candidate) {
+            return candidate && candidate.id === generatedAssetId;
+          });
+          return sharedAsset && sharedAsset.role === registration.assetRole;
+        });
+        const assetId = generatedAssetIds.includes(objectKind)
+          ? objectKind
+          : propertyAssetId && generatedAssetIds.includes(propertyAssetId)
+            ? propertyAssetId
+            : sharedEntityIds.includes(objectKind)
+              ? sharedAssetIds[0]
+              : propertyAssetId === null &&
+                  isSoleOwnedObjectKind &&
+                  sharedEntityIds.length === 1 &&
+                  sharedAssetIds.length === 1
+                ? sharedAssetIds[0]
+                : null;
+        const asset = assetId
+          ? assets.find(function (candidate) {
+              return candidate && candidate.id === assetId;
+            })
+          : null;
+        if (!asset || asset.role !== registration.assetRole) {
+          return;
+        }
+        registration.observer(object);
+      });
+    }
+
+    function boundedNumber(value, fallback, minimum, maximum) {
+      return typeof value === "number" && Number.isFinite(value)
+        ? Math.min(maximum, Math.max(minimum, value))
+        : fallback;
+    }
+
+    function installGeneratedMechanic(scene) {
+      const generatedHost = getGeneratedMechanicHost();
+      if (!generatedHost) {
+        return null;
+      }
+      const mechanic = config.activeMechanics.find(function (candidate) {
+        return candidate && candidate.id === generatedHost.mechanicId;
+      });
+      if (!mechanic) {
+        return Promise.reject(
+          new Error(
+            'Generated mechanic host target "' +
+              generatedHost.mechanicId +
+              '" is not present in the active Game Spec.'
+          )
+        );
+      }
+
+      return Promise.resolve(
+        generatedHost.install({
+          gameSpec: config.gameSpec,
+          mechanic,
+          template: config.template,
+          createOwnedObject(input) {
+            return createGeneratedOwnedObject(
+              scene,
+              mechanic,
+              generatedHost.ownedObjectKinds,
+              input
+            );
+          },
+          getEntityDefinition: entityModule.findById,
+          getEntityHandle: entityModule.getEntityHandle,
+        })
+      ).then(function (session) {
+        if (
+          !session ||
+          typeof session !== "object" ||
+          !session.identity ||
+          typeof session.advanceSimulation !== "function" ||
+          typeof session.dispatchLogicalAction !== "function" ||
+          typeof session.dispose !== "function"
+        ) {
+          throw new Error(
+            "Generated mechanic host returned an invalid retained session."
+          );
+        }
+        if (generatedMechanicDisposed) {
+          return Promise.resolve(session.dispose()).then(function () {
+            throw new Error(
+              "Generated mechanic installation completed after frame disposal."
+            );
+          });
+        }
+        generatedMechanicSession = session;
+        generatedMechanicDisposed = false;
+        return session;
+      });
+    }
+
+    function drainGeneratedMechanicUpdates() {
+      if (
+        !generatedMechanicSession ||
+        runtimeState.generatedMechanicUpdatePending ||
+        runtimeState.generatedMechanicPendingElapsedMilliseconds <= 0
+      ) {
+        return;
+      }
+      const pendingElapsed =
+        runtimeState.generatedMechanicPendingElapsedMilliseconds;
+      const elapsed = Math.floor(pendingElapsed);
+      if (elapsed <= 0) {
+        return;
+      }
+      const activeSession = generatedMechanicSession;
+      runtimeState.generatedMechanicPendingElapsedMilliseconds =
+        pendingElapsed - elapsed;
+      runtimeState.generatedMechanicUpdatePending = true;
+
+      Promise.resolve(activeSession.advanceSimulation(elapsed)).then(
+        function () {
+          runtimeState.generatedMechanicUpdatePending = false;
+          if (
+            generatedMechanicSession === activeSession &&
+            !generatedMechanicDisposed
+          ) {
+            drainGeneratedMechanicUpdates();
+          }
+        },
+        function (error) {
+          failGeneratedMechanicSession(activeSession, "update", error);
+        }
+      );
+    }
+
+    function failGeneratedMechanicSession(activeSession, phase, error) {
+      runtimeState.generatedMechanicUpdatePending = false;
+      runtimeState.generatedMechanicPendingElapsedMilliseconds = 0;
+      const failedSession =
+        generatedMechanicSession === activeSession ? activeSession : null;
+      generatedMechanicSession = null;
+      generatedMechanicDisposed = true;
+      if (failedSession) {
+        try {
+          Promise.resolve(failedSession.dispose()).catch(
+            function (disposeError) {
+              reporter.reportFatalRuntimeFailure(
+                "Generated mechanic disposal failed: " +
+                  getErrorMessage(disposeError)
+              );
+            }
+          );
+        } catch (disposeError) {
+          reporter.reportFatalRuntimeFailure(
+            "Generated mechanic disposal failed: " +
+              getErrorMessage(disposeError)
+          );
+        }
+      }
+      reporter.reportFatalRuntimeFailure(
+        "Generated mechanic " + phase + " failed: " + getErrorMessage(error)
+      );
+    }
+
+    function dispatchGeneratedLogicalAction(actionId) {
+      if (!generatedMechanicSession || generatedMechanicDisposed) {
+        return Promise.resolve(false);
+      }
+      return Promise.resolve(
+        generatedMechanicSession.dispatchLogicalAction(actionId)
+      ).then(
+        function () {
+          return true;
+        }
+      );
+    }
+
+    function reportGeneratedLogicalActionFailure(error) {
+      if (!generatedMechanicSession || generatedMechanicDisposed) {
+        return;
+      }
+      failGeneratedMechanicSession(
+        generatedMechanicSession,
+        "logical action",
+        error
+      );
+    }
+
+    function updateGeneratedMechanic(elapsedMilliseconds) {
+      if (!generatedMechanicSession) {
+        return;
+      }
+      const elapsed =
+        typeof elapsedMilliseconds === "number" &&
+        Number.isFinite(elapsedMilliseconds) &&
+        elapsedMilliseconds >= 0
+          ? elapsedMilliseconds
+          : 16;
+      if (elapsed === 0) {
+        return;
+      }
+      runtimeState.generatedMechanicPendingElapsedMilliseconds = Math.min(
+        GENERATED_MECHANIC_MAX_PENDING_ELAPSED_MILLISECONDS,
+        runtimeState.generatedMechanicPendingElapsedMilliseconds + elapsed
+      );
+      drainGeneratedMechanicUpdates();
+    }
+
+    function disposeGeneratedMechanic() {
+      if (generatedMechanicDisposed) {
+        return;
+      }
+      generatedMechanicDisposed = true;
+      runtimeState.generatedMechanicPendingElapsedMilliseconds = 0;
+      if (!generatedMechanicSession) {
+        const generatedHost = getGeneratedMechanicHost();
+        if (generatedHost && typeof generatedHost.dispose === "function") {
+          try {
+            Promise.resolve(generatedHost.dispose()).catch(function (error) {
+              reporter.reportFatalRuntimeFailure(
+                "Generated mechanic host disposal failed: " +
+                  getErrorMessage(error)
+              );
+            });
+          } catch (error) {
+            reporter.reportFatalRuntimeFailure(
+              "Generated mechanic host disposal failed: " +
+                getErrorMessage(error)
+            );
+          }
+        }
+        return;
+      }
+      const session = generatedMechanicSession;
+      generatedMechanicSession = null;
+      Promise.resolve(session.dispose()).catch(function (error) {
+        reporter.reportFatalRuntimeFailure(
+          "Generated mechanic disposal failed: " + getErrorMessage(error)
+        );
+      });
+    }
+
     function updateInstalledMechanics() {
       installedMechanics.forEach(function (installed) {
         if (
@@ -787,8 +1262,13 @@
     }
 
     return {
+      disposeGeneratedMechanic,
       disposeInstalledMechanics,
+      dispatchGeneratedLogicalAction,
+      installGeneratedMechanic,
       installActiveMechanics,
+      reportGeneratedLogicalActionFailure,
+      updateGeneratedMechanic,
       updateInstalledMechanics,
     };
   }
@@ -920,7 +1400,7 @@
       };
     }
 
-    function runFirstPlayableChecks() {
+    function runFirstPlayableChecks(generatedActionId) {
       const renderedObjectCount = runtimeState.renderedObjectCount;
       const player = runtimeState.playerHandle;
       const playerHasFinitePosition =
@@ -984,13 +1464,63 @@
             ]
       );
 
-      emitValidationEvidence(
-        "input_response",
-        inputResponse.status,
-        inputResponse.message,
-        inputResponse.evidence,
-        inputResponse.issues
-      );
+      if (typeof generatedActionId !== "string" || !generatedActionId) {
+        emitValidationEvidence(
+          "input_response",
+          inputResponse.status,
+          inputResponse.message,
+          inputResponse.evidence,
+          inputResponse.issues
+        );
+        return;
+      }
+
+      void mechanicsModule
+        .dispatchGeneratedLogicalAction(generatedActionId)
+        .then(
+          function (dispatched) {
+            emitValidationEvidence(
+              "input_response",
+              dispatched ? inputResponse.status : "failed",
+              dispatched
+                ? inputResponse.message
+                : "Runtime could not dispatch the generated mechanic action.",
+              Object.assign({}, inputResponse.evidence, {
+                generatedActionId,
+                generatedActionDispatched: dispatched,
+              }),
+              dispatched
+                ? inputResponse.issues
+                : [
+                    {
+                      code: "generated_action_probe_unavailable",
+                      path: "runtime.generatedMechanic.action",
+                      message:
+                        "Expected the generated mechanic session to accept the routed action.",
+                    },
+                  ]
+            );
+          },
+          function (error) {
+            emitValidationEvidence(
+              "input_response",
+              "failed",
+              "Generated mechanic action failed during first-playable validation.",
+              Object.assign({}, inputResponse.evidence, {
+                generatedActionId,
+                generatedActionDispatched: false,
+              }),
+              [
+                {
+                  code: "generated_action_probe_failed",
+                  path: "runtime.generatedMechanic.action",
+                  message: getErrorMessage(error),
+                },
+              ]
+            );
+            mechanicsModule.reportGeneratedLogicalActionFailure(error);
+          }
+        );
     }
 
     function applyHostViewport(nextViewport) {
@@ -1054,33 +1584,74 @@
 
     function registerHostCommandListeners() {
       window.addEventListener("message", function (event) {
-        if (event.data && event.data.type === "game-reload") {
+        const authorizeCommand =
+          globalThis.__AICADE_RUNTIME_AUTHORIZE_COMMAND__;
+        const command =
+          typeof authorizeCommand === "function"
+            ? authorizeCommand(event)
+            : event.data;
+
+        if (!command || typeof command !== "object") {
+          return;
+        }
+
+        if (command.type === "game-reload") {
           location.reload();
         }
 
-        if (event.data && event.data.type === "game-focus") {
+        if (command.type === "game-focus") {
           focusGameContainer();
         }
 
-        if (event.data && event.data.type === "game-pause") {
-          setPaused(Boolean(event.data.paused));
+        if (command.type === "game-pause") {
+          setPaused(Boolean(command.paused));
         }
 
-        if (event.data && event.data.type === "game-resize") {
-          applyHostViewport(event.data.viewport);
+        if (command.type === "game-resize") {
+          applyHostViewport(command.viewport);
         }
 
+        if (command.type === "game-run-first-playable-checks") {
+          runFirstPlayableChecks(command.actionId);
+        }
+      });
+
+      window.addEventListener("keydown", function (event) {
         if (
-          event.data &&
-          event.data.type === "game-run-first-playable-checks"
+          !event ||
+          event.isTrusted !== true ||
+          event.repeat === true ||
+          runtimeState.isPaused ||
+          typeof event.key !== "string"
         ) {
-          runFirstPlayableChecks();
+          return;
         }
+        const dispatchedActionIds = new Set();
+        config.controls.forEach(function (control) {
+          if (
+            !control ||
+            typeof control.action !== "string" ||
+            !Array.isArray(control.keys) ||
+            (!control.keys.includes(event.key) &&
+              (typeof event.code !== "string" ||
+                !control.keys.includes(event.code))) ||
+            dispatchedActionIds.has(control.action)
+          ) {
+            return;
+          }
+          dispatchedActionIds.add(control.action);
+          void mechanicsModule
+            .dispatchGeneratedLogicalAction(control.action)
+            .catch(function (error) {
+              mechanicsModule.reportGeneratedLogicalActionFailure(error);
+            });
+        });
       });
     }
 
     function registerTeardownListener() {
       window.addEventListener("beforeunload", function () {
+        mechanicsModule.disposeGeneratedMechanic();
         mechanicsModule.disposeInstalledMechanics();
 
         if (runtimeState.game) {
@@ -1158,17 +1729,37 @@
           });
         }
 
-        notify("game-ready", {
-          manifest: {
-            title:
-              config.gameSpec.title || config.template.title || "Top-Down Chase",
-            runtime: "phaser",
-          },
-          viewport: config.viewport,
-        });
+        const notifyReady = function (generatedSession) {
+          notify("game-ready", {
+            manifest: {
+              title:
+                config.gameSpec.title ||
+                config.template.title ||
+                "Top-Down Chase",
+              runtime: "phaser",
+              ...(generatedSession
+                ? { generatedMechanic: generatedSession.identity }
+                : {}),
+            },
+            viewport: config.viewport,
+          });
+        };
+        const generatedInstall =
+          modules.mechanicsModule.installGeneratedMechanic(this);
+        if (generatedInstall) {
+          generatedInstall.then(notifyReady, function (error) {
+            modules.reporter.reportFatalRuntimeFailure(
+              "Generated mechanic activation failed: " +
+                getErrorMessage(error)
+            );
+          });
+        } else {
+          notifyReady(null);
+        }
       },
-      update() {
+      update(_time, delta) {
         modules.mechanicsModule.updateInstalledMechanics();
+        modules.mechanicsModule.updateGeneratedMechanic(delta);
       },
     };
   }
@@ -1218,6 +1809,7 @@
         layoutModule,
         mechanicsModule,
         objectiveModule,
+        reporter,
       }),
     });
 

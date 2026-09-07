@@ -262,6 +262,13 @@ function createRestoredForwardCheckpoint({
     gameSpecId: sourceCheckpoint.gameSpecId,
     ...(sourceCheckpoint.buildId ? { buildId: sourceCheckpoint.buildId } : {}),
     validationEvidenceIds: [...sourceCheckpoint.validationEvidenceIds],
+    ...(sourceCheckpoint.generatedMechanicArtifactIds
+      ? {
+          generatedMechanicArtifactIds: [
+            ...sourceCheckpoint.generatedMechanicArtifactIds,
+          ],
+        }
+      : {}),
     restoredFromCheckpointId: sourceCheckpoint.id,
     metadata: {
       action: "checkpoint_restore",

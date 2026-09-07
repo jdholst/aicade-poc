@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createValidatedGamePackFixture } from "@/game-spec/game-pack/testing/game-pack-fixtures";
+import { createGeneratedMechanicProjectFixture } from "@/game-spec/game-pack/testing/generated-mechanic-project-fixtures";
 import { topDownPhaserTemplate } from "@/runtime/phaser";
 
 import { createPlayableDraftSource } from "./playable-draft-source";
@@ -150,7 +151,7 @@ describe("createPlayableDraftSource", () => {
     expect(source).toMatchObject({
       persistencePolicy: "reuse-restored-game-pack",
       readyPolicy: "ready-on-runtime-ready",
-      runFirstPlayableChecksOnReady: true,
+      runFirstPlayableChecksOnReady: false,
       source: "restored-game-pack",
       template: {
         gameSpec: topDownPhaserTemplate.gameSpec,
@@ -162,6 +163,110 @@ describe("createPlayableDraftSource", () => {
         gameSpec: topDownPhaserTemplate.gameSpec,
         source: "restored-game-pack",
       },
+    });
+  });
+
+  it("restores the exact accepted generated mechanic as an out-of-band project dependency", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+
+    const source = createPlayableDraftSource({
+      generationSource: "phaser-ai",
+      restoredGamePack: fixture.gamePack,
+      runtimeMode: "phaser",
+    });
+
+    expect(source).toMatchObject({
+      type: "phaser",
+      source: "restored-game-pack",
+      generatedMechanicProject: {
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+      },
+      sourceKey: expect.stringContaining(fixture.artifact.id),
+      template: {
+        gameSpec: fixture.dependency.finalGameSpec.gameSpec,
+      },
+    });
+  });
+
+  it("mounts the freshly accepted Game Pack ahead of stale restored state without persisting it twice", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const staleRestoredGamePack = createValidatedGamePackFixture({
+      gameSpec: topDownPhaserTemplate.gameSpec,
+    });
+
+    const source = createPlayableDraftSource({
+      activeGamePack: fixture.gamePack,
+      generationSource: "phaser-ai",
+      restoredGamePack: staleRestoredGamePack,
+      runtimeMode: "phaser",
+    });
+
+    expect(source).toMatchObject({
+      type: "phaser",
+      source: "accepted-game-pack",
+      persistencePolicy: "do-not-persist",
+      runFirstPlayableChecksOnReady: false,
+      generatedMechanicProject: {
+        artifact: fixture.artifact,
+        dependency: fixture.dependency,
+      },
+      validationSource: {
+        gamePack: fixture.gamePack,
+        source: "accepted-game-pack",
+      },
+    });
+  });
+
+  it("blocks an unaccepted active Game Pack without falling through to a stale restored generated project", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const {
+      acceptedGeneratedMechanicArtifacts: _acceptedArtifacts,
+      ...unacceptedActiveGamePack
+    } = fixture.gamePack;
+    void _acceptedArtifacts;
+
+    const source = createPlayableDraftSource({
+      activeGamePack: unacceptedActiveGamePack,
+      generationSource: "phaser-ai",
+      restoredGamePack: fixture.gamePack,
+      runtimeMode: "phaser",
+    });
+
+    expect(source).toMatchObject({
+      type: "blocked",
+    });
+    expect(source).not.toHaveProperty("source");
+    expect(source).not.toHaveProperty("generatedMechanicProject");
+    expect(source).not.toHaveProperty("validationSource");
+    expect(source).not.toHaveProperty("persistencePolicy");
+  });
+
+  it("does not let an accepted sidecar admit another unknown mechanic type", () => {
+    const fixture = createGeneratedMechanicProjectFixture();
+    const restoredGamePack = {
+      ...fixture.gamePack,
+      gameSpec: {
+        ...fixture.gamePack.gameSpec,
+        mechanics: [
+          ...fixture.gamePack.gameSpec.mechanics,
+          {
+            id: "mechanic_unaccepted_unknown",
+            type: "unaccepted_unknown",
+            config: {},
+          },
+        ],
+      },
+    };
+
+    expect(
+      createPlayableDraftSource({
+        generationSource: "phaser-ai",
+        restoredGamePack,
+        runtimeMode: "phaser",
+      })
+    ).toMatchObject({
+      type: "blocked",
     });
   });
 

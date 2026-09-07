@@ -1,0 +1,3 @@
+# Control generated mechanic execution through a host lifecycle
+
+Generated Mechanic Extensions will run only through a Sparkline-controlled lifecycle: bounded installation, logical input and gameplay event callbacks, admitted timers, optional fixed-step updates, and disposal. Extensions cannot create independent loops, raw input listeners, workers, or uncontrolled timers; Sparkline budgets every callback and guarantees removal of registrations, timers, handles, local state, and mechanic-owned objects so both event-driven mechanics such as shooting and continuous mechanics remain deterministic and interruptible.

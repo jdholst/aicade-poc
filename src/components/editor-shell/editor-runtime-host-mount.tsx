@@ -1,6 +1,7 @@
 import { type RefObject } from "react";
 
 import { GeneratedGameHost } from "@/components/generated-game-host";
+import { GeneratedMechanicPhaserRuntimeHost } from "@/components/generated-mechanic-phaser-runtime-host";
 import {
   RuntimeIframeHost,
   type RuntimeIframeHostHandle,
@@ -35,6 +36,24 @@ export function EditorRuntimeHostMount({
   }
 
   if (host.type === "phaser") {
+    if (host.generatedMechanicProject) {
+      return (
+        <GeneratedMechanicPhaserRuntimeHost
+          ref={hostRef}
+          key={host.key}
+          template={host.template}
+          generatedMechanicProject={host.generatedMechanicProject}
+          isPaused={isPaused}
+          focusOnReadyKey={focusOnReadyKey}
+          frameLabel="Phaser runtime"
+          frameDetail="Sandboxed generated mechanic"
+          onStatusChange={onStatusChange}
+          onValidationEvidence={onValidationEvidence}
+          runFirstPlayableChecksOnReady={runFirstPlayableChecksOnReady}
+        />
+      );
+    }
+
     return (
       <RuntimeIframeHost
         ref={hostRef}

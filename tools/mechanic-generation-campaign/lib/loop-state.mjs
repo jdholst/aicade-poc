@@ -1,0 +1,1306 @@
+import { createHash } from "node:crypto";
+import path from "node:path";
+
+import {
+  CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION,
+  CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
+  loopBudgetAdditionsSchema,
+} from "./loop-contracts.mjs";
+import { isCountedCohortFailure } from "./contracts.mjs";
+
+const ACTUAL_PROVIDER_STAGES = ["planning", "contract", "source"];
+const PROOF_COHORTS = ["discovery", "repeatability", "variation"];
+
+export function createInitialLoopRun({
+  definition,
+  definitionPath,
+  definitionHash,
+  authorizationHash,
+  campaign,
+  runId,
+  createdAt,
+  revision,
+  controlRoot,
+  worktreePath,
+  branch,
+  knowledgeManifestDigest,
+}) {
+  return {
+    schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
+    id: runId,
+    definitionPath: path.relative(controlRoot, definitionPath),
+    definitionHash,
+    authorizationHash,
+    manifestId: campaign.manifest.id,
+    manifestPath: path.relative(controlRoot, campaign.manifestPath),
+    manifestHash: campaign.manifestHash,
+    model: definition.model,
+    status: "pending",
+    createdAt,
+    baseRevision: { head: revision.head, revisionKey: revision.revisionKey },
+    currentRevision: {
+      head: revision.head,
+      revisionKey: revision.revisionKey,
+      cycle: 0,
+    },
+    currentStepIndex: 0,
+    usage: {
+      fixCycles: 0,
+      campaignRuns: 0,
+      submissions: 0,
+      auxiliaryIsolationCampaigns: 0,
+      actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+      grossActualProviderCalls: { planning: 0, contract: 0, source: 0 },
+    },
+    limits: definition.limits,
+    worktree: {
+      controlRoot,
+      path: worktreePath,
+      branch,
+    },
+    steps: definition.sequence.map((step) => ({
+      id: step.id,
+      cohort: step.cohort,
+      status: "pending",
+      campaignRunIds: [],
+      sameRevisionRuns: 0,
+    })),
+    campaignLinks: [],
+    fixCheckpointIds: [],
+    stateRevision: 0,
+    pendingManualQa: undefined,
+    pendingManualQaQueue: [],
+    campaignRepairs: [],
+    knowledgePolicy: {
+      required: true,
+      baselineManifestDigest: knowledgeManifestDigest,
+    },
+    knowledgeReconciliationIds: [],
+    budgetExtensions: [],
+    ...(campaign.pricing
+      ? {
+          pricing: {
+            path: path.relative(controlRoot, campaign.pricing.pricingPath),
+            sha256: campaign.pricing.pricingHash,
+            snapshotId: campaign.pricing.snapshot.id,
+          },
+          providerCost: emptyProviderCost(),
+        }
+      : {}),
+  };
+}
+
+export function startLoopCampaign(run, {
+  campaignRunId,
+  role,
+  stepId,
+  profileId,
+  startedAt = new Date().toISOString(),
+}) {
+  if (run.activeCampaign) {
+    throw new Error(`Loop already has active campaign ${run.activeCampaign.campaignRunId}.`);
+  }
+  if (run.usage.campaignRuns >= run.limits.maxCampaignRuns) {
+    return exhaustLoop(run, "Global campaign-run ceiling reached.");
+  }
+
+  const budgetCheckpoint = createCampaignUsageCheckpoint(run);
+  const link = {
+    campaignRunId,
+    role,
+    ...(stepId ? { stepId } : {}),
+    ...(profileId ? { profileId } : {}),
+    cycle: run.currentRevision.cycle,
+    revisionKey: run.currentRevision.revisionKey,
+    status: "running",
+  };
+  const next = {
+    ...run,
+    status: "running",
+    startedAt: run.startedAt ?? startedAt,
+    usage: {
+      ...run.usage,
+      campaignRuns: run.usage.campaignRuns + 1,
+      auxiliaryIsolationCampaigns:
+        run.usage.auxiliaryIsolationCampaigns + (role === "isolation" ? 1 : 0),
+    },
+    activeCampaign: {
+      campaignRunId,
+      role,
+      ...(stepId ? { stepId } : {}),
+      ...(profileId ? { profileId } : {}),
+      budgetCheckpoint,
+    },
+    campaignLinks: [...run.campaignLinks, link],
+  };
+
+  if (role === "isolation") {
+    return next;
+  }
+
+  const stepIndex = next.steps.findIndex(({ id }) => id === stepId);
+  if (stepIndex !== next.currentStepIndex) {
+    throw new Error(`Sequence campaign must target the current loop step ${next.currentStepIndex}.`);
+  }
+  return {
+    ...next,
+    steps: next.steps.map((step, index) =>
+      index === stepIndex
+        ? {
+            ...step,
+            status: "running",
+            campaignRunIds: [...step.campaignRunIds, campaignRunId],
+            sameRevisionRuns: step.sameRevisionRuns + 1,
+          }
+        : step
+    ),
+  };
+}
+
+export function finishSequenceCampaign(run, definition, {
+  campaignRunId,
+  status,
+  attempts,
+  pendingManualQa,
+  pendingManualQaQueue,
+  completedAt = new Date().toISOString(),
+}) {
+  assertActiveCampaign(run, campaignRunId, "sequence");
+  const stepDefinition = definition.sequence[run.currentStepIndex];
+  const currentStep = run.steps[run.currentStepIndex];
+  if (status === "waiting_for_manual_qa") {
+    const queue = pendingManualQaQueue ??
+      (pendingManualQa ? [pendingManualQa] : []);
+    if (queue.length === 0) {
+      throw new Error("A campaign waiting for manual QA requires its pending review reference.");
+    }
+    return {
+      ...run,
+      status: "waiting_for_manual_qa",
+      pendingManualQa: queue[0],
+      pendingManualQaQueue: queue,
+      campaignLinks: run.campaignLinks.map((link) =>
+        link.campaignRunId === campaignRunId
+          ? { ...link, status: "waiting_for_manual_qa" }
+          : link
+      ),
+    };
+  }
+  let next = finishCampaignLink(run, campaignRunId, status);
+
+  if (status === "interrupted") {
+    return { ...next, status: "interrupted" };
+  }
+  if (status === "invalid") {
+    return {
+      ...next,
+      status: "invalid",
+      completedAt,
+      invalidReason: "A linked campaign became invalid.",
+    };
+  }
+  if (status === "achieved") {
+    if (
+      PROOF_COHORTS.includes(stepDefinition.cohort) &&
+      !attempts.some(
+        (attempt) =>
+          attempt.status === "success" && attempt.manualQa?.status === "approved"
+      )
+    ) {
+      throw new Error(
+        "A proof campaign cannot advance without manual QA approval evidence."
+      );
+    }
+    const steps = next.steps.map((step, index) =>
+      index === next.currentStepIndex
+        ? {
+            ...step,
+            status: "achieved",
+            revisionKey: next.currentRevision.revisionKey,
+          }
+        : step
+    );
+    const currentStepIndex = next.currentStepIndex + 1;
+    if (currentStepIndex < steps.length) {
+      return { ...next, steps, currentStepIndex, status: "running" };
+    }
+    return {
+      ...next,
+      steps,
+      currentStepIndex,
+      status: "achieved",
+      completedAt,
+      result: createLoopResult(steps, definition, next.currentRevision.revisionKey),
+    };
+  }
+
+  const failedClassifications = attempts
+    .filter((attempt) => attempt.status !== "success")
+    .map((attempt) => attempt.classification);
+  const failureLimitReached =
+    ["repeatability", "variation"].includes(stepDefinition.cohort) &&
+    attempts.filter(isCountedCohortFailure).length >= 3;
+  const canRetry =
+    !failureLimitReached &&
+    failedClassifications.length > 0 &&
+    failedClassifications.every((classification) =>
+      stepDefinition.retryableClassifications.includes(classification)
+    ) &&
+    currentStep.sameRevisionRuns < stepDefinition.maxCampaignRunsPerRevision;
+
+  if (canRetry) {
+    return { ...next, status: "running" };
+  }
+  if (next.usage.fixCycles < next.limits.maxFixCycles) {
+    return { ...next, status: "waiting_for_fix" };
+  }
+  return exhaustLoop(
+    next,
+    "The current step failed and no fix cycles remain.",
+    completedAt,
+    { status: "waiting_for_fix" }
+  );
+}
+
+export function finishIsolationCampaign(run, {
+  campaignRunId,
+  status,
+}) {
+  assertActiveCampaign(run, campaignRunId, "isolation");
+  const next = finishCampaignLink(run, campaignRunId, status);
+  return status === "interrupted"
+    ? { ...next, status: "interrupted" }
+    : { ...next, status: "waiting_for_fix" };
+}
+
+export function resumeLoopAfterManualQaApproval(
+  run,
+  { campaignRunId, attemptId, completedAt }
+) {
+  const pendingRun = run.status === "waiting_for_campaign_repair"
+    ? resumeLoopAfterCampaignRepair(run, { completedAt })
+    : run;
+  assertActiveCampaign(pendingRun, campaignRunId, "sequence");
+  const queue = pendingRun.pendingManualQaQueue?.length
+    ? pendingRun.pendingManualQaQueue
+    : pendingRun.pendingManualQa
+      ? [pendingRun.pendingManualQa]
+      : [];
+  const decidedAttemptId = attemptId ?? queue[0]?.attemptId;
+  if (
+    !["running", "waiting_for_manual_qa"].includes(pendingRun.status) ||
+    !queue.some(
+      (pending) =>
+        pending.campaignRunId === campaignRunId &&
+        pending.attemptId === decidedAttemptId
+    )
+  ) {
+    throw new Error("Loop does not have the requested pending manual QA candidate.");
+  }
+  const remainingQueue = queue.filter(
+    ({ attemptId: pendingAttemptId }) => pendingAttemptId !== decidedAttemptId
+  );
+  const status = remainingQueue.length > 0
+    ? "waiting_for_manual_qa"
+    : "running";
+  return {
+    ...pendingRun,
+    status,
+    pendingManualQa: remainingQueue[0],
+    pendingManualQaQueue: remainingQueue,
+    campaignLinks: pendingRun.campaignLinks.map((link) =>
+      link.campaignRunId === campaignRunId
+        ? { ...link, status }
+        : link
+    ),
+  };
+}
+
+export function pauseLoopForCampaignRepair(
+  run,
+  { id, reason, detectedAt = new Date().toISOString(), priorTerminal }
+) {
+  if (!run.activeCampaign) {
+    throw new Error("A campaign repair requires an active campaign.");
+  }
+  if (!reason?.trim()) {
+    throw new Error("A campaign repair requires a reason.");
+  }
+  if (run.status === "waiting_for_campaign_repair") {
+    throw new Error("The campaign loop is already waiting for a campaign repair.");
+  }
+  const hasPendingManualQa =
+    (run.pendingManualQaQueue?.length ?? (run.pendingManualQa ? 1 : 0)) > 0;
+  const resumeStatus =
+    run.status === "waiting_for_manual_qa" || hasPendingManualQa
+      ? "waiting_for_manual_qa"
+      : "running";
+  const creditedUsage = resumeStatus === "running"
+    ? createCampaignRepairCredit(run, run.activeCampaign.budgetCheckpoint)
+    : emptyCampaignRepairCredit();
+  return {
+    ...run,
+    status: "waiting_for_campaign_repair",
+    completedAt: undefined,
+    usage: applyCampaignRepairCredit(run.usage, creditedUsage),
+    ...(run.providerCost
+      ? {
+          providerCost: {
+            ...run.providerCost,
+            attributedExactNanoUsd: Math.max(
+              0,
+              run.providerCost.attributedExactNanoUsd -
+                (creditedUsage.attributedExactNanoUsd ?? 0)
+            ),
+            attributedEstimatedNanoUsd: Math.max(
+              0,
+              run.providerCost.attributedEstimatedNanoUsd -
+                (creditedUsage.attributedEstimatedNanoUsd ?? 0)
+            ),
+          },
+        }
+      : {}),
+    campaignLinks: run.campaignLinks.map((link) =>
+      link.campaignRunId === run.activeCampaign.campaignRunId
+        ? { ...link, status: "waiting_for_campaign_repair" }
+        : link
+    ),
+    campaignRepairs: [
+      ...(run.campaignRepairs ?? []),
+      {
+        id,
+        campaignRunId: run.activeCampaign.campaignRunId,
+        reason: reason.trim(),
+        detectedAt,
+        resumeStatus,
+        status: "pending",
+        creditedUsage,
+        ...(priorTerminal ? { priorTerminal } : {}),
+      },
+    ],
+  };
+}
+
+export function resumeLoopAfterCampaignRepair(
+  run,
+  { completedAt = new Date().toISOString() } = {}
+) {
+  if (run.status !== "waiting_for_campaign_repair") {
+    throw new Error("The campaign loop is not waiting for a campaign repair.");
+  }
+  const pendingRepairs = (run.campaignRepairs ?? []).filter(
+    ({ status }) => status === "pending"
+  );
+  if (pendingRepairs.length !== 1) {
+    throw new Error("The campaign loop requires exactly one pending campaign repair.");
+  }
+  const [repair] = pendingRepairs;
+  if (run.activeCampaign?.campaignRunId !== repair.campaignRunId) {
+    throw new Error("The pending campaign repair does not match the active campaign.");
+  }
+  const hasPendingManualQa =
+    (run.pendingManualQaQueue?.length ?? (run.pendingManualQa ? 1 : 0)) > 0;
+  const restoresMisclassifiedCredit =
+    hasPendingManualQa && repair.resumeStatus === "running";
+  const replacesRunningCampaign =
+    repair.resumeStatus === "running" && !hasPendingManualQa;
+  const replacedSequenceStepId =
+    replacesRunningCampaign && run.activeCampaign.role === "sequence"
+      ? run.activeCampaign.stepId
+      : undefined;
+  return {
+    ...run,
+    status: hasPendingManualQa
+      ? "waiting_for_manual_qa"
+      : replacesRunningCampaign && run.activeCampaign.role === "isolation"
+        ? "waiting_for_fix"
+        : repair.resumeStatus,
+    completedAt: undefined,
+    activeCampaign: replacesRunningCampaign ? undefined : run.activeCampaign,
+    pendingManualQa: replacesRunningCampaign ? undefined : run.pendingManualQa,
+    usage: restoresMisclassifiedCredit
+      ? restoreCampaignRepairCredit(run.usage, repair.creditedUsage)
+      : run.usage,
+    ...(run.providerCost
+      ? {
+          providerCost: restoresMisclassifiedCredit
+            ? {
+                ...run.providerCost,
+                attributedExactNanoUsd: Math.min(
+                  run.providerCost.grossExactNanoUsd,
+                  run.providerCost.attributedExactNanoUsd +
+                    (repair.creditedUsage.attributedExactNanoUsd ?? 0)
+                ),
+                attributedEstimatedNanoUsd: Math.min(
+                  run.providerCost.grossEstimatedNanoUsd,
+                  run.providerCost.attributedEstimatedNanoUsd +
+                    (repair.creditedUsage.attributedEstimatedNanoUsd ?? 0)
+                ),
+              }
+            : run.providerCost,
+        }
+      : {}),
+    steps: replacedSequenceStepId
+      ? run.steps.map((step) =>
+          step.id === replacedSequenceStepId
+            ? {
+                ...step,
+                sameRevisionRuns: Math.max(0, step.sameRevisionRuns - 1),
+              }
+            : step
+        )
+      : run.steps,
+    campaignLinks: run.campaignLinks.map((link) =>
+      link.campaignRunId === repair.campaignRunId
+        ? {
+            ...link,
+            status: hasPendingManualQa
+              ? "waiting_for_manual_qa"
+              : replacesRunningCampaign
+                ? "campaign_repair_replaced"
+                : repair.resumeStatus,
+          }
+        : link
+    ),
+    campaignRepairs: run.campaignRepairs.map((entry) =>
+      entry.id === repair.id
+        ? { ...entry, status: "completed", completedAt }
+        : entry
+    ),
+  };
+}
+
+export function rejectLoopManualQa(
+  run,
+  { campaignRunId, attemptId, completedAt = new Date().toISOString() }
+) {
+  const pendingRun = run.status === "waiting_for_campaign_repair"
+    ? resumeLoopAfterCampaignRepair(run, { completedAt })
+    : run;
+  assertActiveCampaign(pendingRun, campaignRunId, "sequence");
+  const queue = pendingRun.pendingManualQaQueue?.length
+    ? pendingRun.pendingManualQaQueue
+    : pendingRun.pendingManualQa
+      ? [pendingRun.pendingManualQa]
+      : [];
+  const decidedAttemptId = attemptId ?? queue[0]?.attemptId;
+  if (
+    !["running", "waiting_for_manual_qa"].includes(pendingRun.status) ||
+    !queue.some(
+      (pending) =>
+        pending.campaignRunId === campaignRunId &&
+        pending.attemptId === decidedAttemptId
+    )
+  ) {
+    throw new Error("Loop does not have the requested pending manual QA candidate.");
+  }
+  const next = {
+    ...pendingRun,
+    status: "waiting_for_fix",
+    pendingManualQa: undefined,
+    pendingManualQaQueue: [],
+    activeCampaign: undefined,
+    campaignLinks: pendingRun.campaignLinks.map((link) =>
+      link.campaignRunId === campaignRunId
+        ? { ...link, status: "completed_not_achieved" }
+        : link
+    ),
+  };
+  return next.usage.fixCycles < next.limits.maxFixCycles
+    ? next
+    : exhaustLoop(
+        next,
+        "Manual gameplay QA failed and no fix cycles remain.",
+        completedAt,
+        { status: "waiting_for_fix" }
+      );
+}
+
+export function applyFixCheckpoint(
+  run,
+  fix,
+  { knowledgeReconciliationId, carryoverAttemptRefs = [] } = {}
+) {
+  if (run.usage.fixCycles >= run.limits.maxFixCycles) {
+    return exhaustLoop(run, "Fix-cycle ceiling reached.", undefined, {
+      status: "waiting_for_fix",
+    });
+  }
+  return {
+    ...run,
+    status: "running",
+    completedAt: undefined,
+    currentRevision: {
+      ...fix.afterRevision,
+      cycle: run.currentRevision.cycle + 1,
+    },
+    currentStepIndex: run.currentStepIndex,
+    usage: {
+      ...run.usage,
+      fixCycles: run.usage.fixCycles + 1,
+    },
+    steps: run.steps.map((step, index) =>
+      index === run.currentStepIndex
+        ? {
+            ...step,
+            status: "pending",
+            sameRevisionRuns: 0,
+            revisionKey: undefined,
+            ...(carryoverAttemptRefs.length > 0
+              ? { carryoverAttemptRefs }
+              : { carryoverAttemptRefs: undefined }),
+          }
+        : step
+    ),
+    fixCheckpointIds: [...run.fixCheckpointIds, fix.id],
+    knowledgeReconciliationIds: knowledgeReconciliationId
+      ? [...run.knowledgeReconciliationIds, knowledgeReconciliationId]
+      : run.knowledgeReconciliationIds,
+    activeCampaign: undefined,
+    pendingManualQa: undefined,
+    result: undefined,
+  };
+}
+
+export function restoreLegacyFixProgress(
+  run,
+  {
+    fixId,
+    triggerCampaignRunId,
+    carryoverAttemptRefs,
+    supersededCampaignRunIds,
+    migratedAt = new Date().toISOString(),
+  }
+) {
+  if (!run.fixCheckpointIds.includes(fixId) || run.currentRevision.cycle === 0) {
+    throw new Error("The loop does not contain the accepted fix checkpoint.");
+  }
+  if ((run.progressMigrations ?? []).some((entry) => entry.fixId === fixId)) {
+    throw new Error(`Fix checkpoint ${fixId} has already been migrated.`);
+  }
+  const triggerLink = run.campaignLinks.find(
+    (link) =>
+      link.campaignRunId === triggerCampaignRunId && link.role === "sequence"
+  );
+  const restoredStepIndex = run.steps.findIndex(
+    (step) => step.id === triggerLink?.stepId
+  );
+  if (restoredStepIndex < 0) {
+    throw new Error("The fix trigger campaign is not linked to a sequence step.");
+  }
+  if (carryoverAttemptRefs.length === 0) {
+    throw new Error("Legacy fix progress migration requires approved carryover attempts.");
+  }
+  const superseded = new Set(supersededCampaignRunIds);
+  if (
+    !run.activeCampaign ||
+    !superseded.has(run.activeCampaign.campaignRunId) ||
+    run.activeCampaign.role !== "sequence"
+  ) {
+    throw new Error("The migration must supersede the active reset campaign.");
+  }
+
+  const steps = run.steps.map((step, index) => {
+    if (index < restoredStepIndex) {
+      const achievedLink = [...run.campaignLinks]
+        .reverse()
+        .find(
+          (link) =>
+            link.role === "sequence" &&
+            link.stepId === step.id &&
+            link.status === "achieved" &&
+            link.cycle < run.currentRevision.cycle
+        );
+      if (!achievedLink) {
+        throw new Error(`Earlier step ${step.id} has no achieved checkpoint.`);
+      }
+      return {
+        ...step,
+        status: "achieved",
+        sameRevisionRuns: 0,
+        revisionKey: achievedLink.revisionKey,
+        carryoverAttemptRefs: undefined,
+      };
+    }
+    if (index === restoredStepIndex) {
+      return {
+        ...step,
+        status: "pending",
+        sameRevisionRuns: 0,
+        revisionKey: undefined,
+        carryoverAttemptRefs,
+      };
+    }
+    return step;
+  });
+
+  return {
+    ...run,
+    status: "interrupted",
+    completedAt: undefined,
+    currentStepIndex: restoredStepIndex,
+    steps,
+    campaignLinks: run.campaignLinks.map((link) =>
+      superseded.has(link.campaignRunId)
+        ? { ...link, status: "checkpoint_policy_superseded" }
+        : link
+    ),
+    activeCampaign: undefined,
+    pendingManualQa: undefined,
+    pendingManualQaQueue: [],
+    result: undefined,
+    progressMigrations: [
+      ...(run.progressMigrations ?? []),
+      {
+        id: `legacy-fix-reset-${run.currentRevision.cycle}`,
+        kind: "legacy-fix-reset",
+        fixId,
+        triggerCampaignRunId,
+        restoredStepId: steps[restoredStepIndex].id,
+        supersededCampaignRunIds,
+        carryoverAttemptRefs,
+        migratedAt,
+      },
+    ],
+  };
+}
+
+export function recordLoopSubmission(run) {
+  if (run.usage.submissions >= run.limits.maxSubmissions) {
+    return { allowed: false, run: exhaustLoop(run, "Submission ceiling reached.") };
+  }
+  return {
+    allowed: true,
+    run: {
+      ...run,
+      usage: { ...run.usage, submissions: run.usage.submissions + 1 },
+    },
+  };
+}
+
+export function recordActualProviderCall(run, stage) {
+  if (!ACTUAL_PROVIDER_STAGES.includes(stage)) {
+    throw new Error(`Unknown provider stage ${stage}.`);
+  }
+  const grossActualProviderCalls =
+    run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls;
+  if (grossActualProviderCalls[stage] >= run.limits.actualProviderCalls[stage]) {
+    return {
+      allowed: false,
+      run: exhaustLoop(run, `${stage} provider-call ceiling reached.`),
+    };
+  }
+  return {
+    allowed: true,
+    run: {
+      ...run,
+      usage: {
+        ...run.usage,
+        actualProviderCalls: {
+          ...run.usage.actualProviderCalls,
+          [stage]: run.usage.actualProviderCalls[stage] + 1,
+        },
+        grossActualProviderCalls: {
+          ...grossActualProviderCalls,
+          [stage]: grossActualProviderCalls[stage] + 1,
+        },
+      },
+    },
+  };
+}
+
+export function beginActualProviderCall(
+  run,
+  { callId, stage, requestedAt, costAuthorized = false }
+) {
+  if (run.status === "exhausted") {
+    return { allowed: false, run };
+  }
+  if (!run.pricing) {
+    return recordActualProviderCall(run, stage);
+  }
+  if (
+    run.providerCost.settledCalls.some((call) => call.callId === callId) ||
+    run.providerCost.pendingReservations.some(
+      (reservation) => reservation.callId === callId
+    )
+  ) {
+    return { allowed: true, run };
+  }
+  if (hasUnresolvedProviderCost(run.providerCost)) {
+    return unresolvedProviderCostResult(run);
+  }
+  if (!costAuthorized) {
+    const batchAuthorization = authorizeActualProviderBatch(run);
+    if (!batchAuthorization.allowed) return batchAuthorization;
+  }
+  const callResult = recordActualProviderCall(run, stage);
+  if (!callResult.allowed) return callResult;
+  return {
+    allowed: true,
+    run: {
+      ...callResult.run,
+      providerCost: {
+        ...callResult.run.providerCost,
+        pendingReservations: [
+          ...callResult.run.providerCost.pendingReservations,
+          {
+            callId,
+            stage,
+            requestedAt,
+            totalNanoUsd: 0,
+          },
+        ],
+      },
+    },
+  };
+}
+
+export function authorizeActualProviderBatch(run) {
+  if (!run.pricing) return { allowed: true, run };
+  if (hasUnresolvedProviderCost(run.providerCost)) {
+    return unresolvedProviderCostResult(run);
+  }
+  const limit = run.limits.maxActualProviderCostNanoUsd;
+  if (limit !== undefined && providerCostSettled(run.providerCost) >= limit) {
+    return {
+      allowed: false,
+      run:
+        run.status === "exhausted"
+          ? run
+          : exhaustLoop(run, "Actual-provider cost budget reached."),
+    };
+  }
+  return { allowed: true, run };
+}
+
+export function settleActualProviderCallCost(
+  run,
+  { callId, stage, completedAt, quality, totalNanoUsd }
+) {
+  if (!run.pricing) return run;
+  if (run.providerCost.settledCalls.some((call) => call.callId === callId)) {
+    return run;
+  }
+  const pending = run.providerCost.pendingReservations.find(
+    (reservation) => reservation.callId === callId
+  );
+  const settledQuality = [
+    "exact",
+    "call_derived_estimate",
+    "unknown",
+  ].includes(quality)
+    ? quality
+    : "conservative_estimate";
+  const settledNanoUsd = settledQuality === "unknown"
+    ? 0
+    : Number.isSafeInteger(totalNanoUsd)
+      ? totalNanoUsd
+      : pending?.totalNanoUsd;
+  if (!Number.isSafeInteger(settledNanoUsd) || settledNanoUsd < 0) {
+    throw new Error(`Provider call ${callId} has invalid settled cost.`);
+  }
+  const exactDelta = settledQuality === "exact" ? settledNanoUsd : 0;
+  const estimatedDelta = [
+    "call_derived_estimate",
+    "conservative_estimate",
+  ].includes(settledQuality)
+    ? settledNanoUsd
+    : 0;
+  const next = {
+    ...run,
+    providerCost: {
+      ...run.providerCost,
+      grossExactNanoUsd: run.providerCost.grossExactNanoUsd + exactDelta,
+      grossEstimatedNanoUsd:
+        run.providerCost.grossEstimatedNanoUsd + estimatedDelta,
+      attributedExactNanoUsd:
+        run.providerCost.attributedExactNanoUsd + exactDelta,
+      attributedEstimatedNanoUsd:
+        run.providerCost.attributedEstimatedNanoUsd + estimatedDelta,
+      pendingReservations: run.providerCost.pendingReservations.filter(
+        (reservation) => reservation.callId !== callId
+      ),
+      settledCalls: [
+        ...run.providerCost.settledCalls,
+        {
+          callId,
+          stage,
+          completedAt,
+          quality: settledQuality,
+          totalNanoUsd: settledNanoUsd,
+          ...(settledQuality === "unknown" && pending
+            ? { reservationNanoUsd: pending.totalNanoUsd }
+            : {}),
+          attributed: true,
+        },
+      ],
+    },
+  };
+  if (settledQuality === "unknown") {
+    return exhaustLoop(
+      next,
+      "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
+    );
+  }
+  return enforceProviderCostBudget(next);
+}
+
+export function reconcileLegacyProviderCostEstimates(
+  run,
+  {
+    id,
+    reason,
+    exactZeroCallIds = [],
+    reconciledAt = new Date().toISOString(),
+  }
+) {
+  if (!run.providerCost) {
+    throw new Error("Provider cost reconciliation requires frozen pricing.");
+  }
+  if (!id?.trim() || !reason?.trim()) {
+    throw new Error("Provider cost reconciliation requires an ID and reason.");
+  }
+  if (
+    (run.providerCostReconciliations ?? []).some(
+      (reconciliation) => reconciliation.id === id
+    )
+  ) {
+    return run;
+  }
+  const legacyCalls = run.providerCost.settledCalls.filter(
+    (call) => call.quality === "conservative_estimate"
+  );
+  const exactZeroCallIdSet = new Set(exactZeroCallIds);
+  const exactZeroCalls = run.providerCost.settledCalls.filter(
+    (call) =>
+      call.quality === "unknown" && exactZeroCallIdSet.has(call.callId)
+  );
+  if (exactZeroCalls.length !== exactZeroCallIdSet.size) {
+    throw new Error(
+      "Exact-zero provider cost reconciliation requires every call ID to match one unresolved settled call."
+    );
+  }
+  const removedGrossEstimatedNanoUsd = legacyCalls.reduce(
+    (sum, call) => sum + call.totalNanoUsd,
+    0
+  );
+  const removedAttributedEstimatedNanoUsd = legacyCalls.reduce(
+    (sum, call) => sum + (call.attributed ? call.totalNanoUsd : 0),
+    0
+  );
+  const reconciled = {
+    ...run,
+    providerCost: {
+      ...run.providerCost,
+      grossEstimatedNanoUsd: Math.max(
+        0,
+        run.providerCost.grossEstimatedNanoUsd - removedGrossEstimatedNanoUsd
+      ),
+      attributedEstimatedNanoUsd: Math.max(
+        0,
+        run.providerCost.attributedEstimatedNanoUsd -
+          removedAttributedEstimatedNanoUsd
+      ),
+      settledCalls: run.providerCost.settledCalls.map((call) => {
+        if (call.quality === "conservative_estimate") {
+          return {
+            ...call,
+            quality: "unknown",
+            reservationNanoUsd: call.totalNanoUsd,
+            totalNanoUsd: 0,
+          };
+        }
+        if (exactZeroCallIdSet.has(call.callId)) {
+          const settledCall = { ...call };
+          delete settledCall.reservationNanoUsd;
+          return {
+            ...settledCall,
+            quality: "exact",
+            totalNanoUsd: 0,
+          };
+        }
+        return call;
+      }),
+    },
+    providerCostReconciliations: [
+      ...(run.providerCostReconciliations ?? []),
+      {
+        id: id.trim(),
+        reason: reason.trim(),
+        reconciledAt,
+        convertedCalls: legacyCalls.length + exactZeroCalls.length,
+        removedGrossEstimatedNanoUsd,
+        removedAttributedEstimatedNanoUsd,
+      },
+    ],
+  };
+  const reconciledStatus = run.status === "exhausted" && /provider cost budget/i.test(
+    run.exhaustionReason ?? ""
+  )
+    ? {
+        ...reconciled,
+        exhaustionReason:
+          "Actual-provider cost budget is unresolved because one or more API calls have no token usage or call-derived estimate.",
+      }
+    : reconciled;
+  return enforceProviderCostBudget(reconciledStatus);
+}
+
+export function blockLoop(run, reason, completedAt = new Date().toISOString()) {
+  return {
+    ...run,
+    status: "blocked",
+    completedAt,
+    blockedReason: reason,
+    activeCampaign: undefined,
+  };
+}
+
+export function invalidateLoop(run, reason, completedAt = new Date().toISOString()) {
+  return {
+    ...run,
+    status: "invalid",
+    completedAt,
+    invalidReason: reason,
+    activeCampaign: undefined,
+  };
+}
+
+export function exhaustLoop(
+  run,
+  reason,
+  completedAt = new Date().toISOString(),
+  resume = { status: "running" }
+) {
+  const activeCampaign =
+    resume.status === "running"
+      ? resume.activeCampaign ?? run.activeCampaign
+      : undefined;
+  return {
+    ...run,
+    status: "exhausted",
+    completedAt,
+    exhaustionReason: reason,
+    exhaustionResume: {
+      status: resume.status,
+      ...(activeCampaign ? { activeCampaign } : {}),
+    },
+    activeCampaign: undefined,
+  };
+}
+
+export function createLoopBudgetExtensionPreview(run, additionsInput) {
+  if (run.status !== "exhausted") {
+    throw new Error(
+      `Campaign loop ${run.id} cannot be extended from status ${run.status}.`
+    );
+  }
+  const additions = loopBudgetAdditionsSchema.parse(additionsInput);
+  if (
+    (additions.maxActualProviderCostNanoUsd ?? 0) > 0 &&
+    !run.pricing
+  ) {
+    throw new Error(
+      "A budget extension cannot introduce pricing into an unpriced loop."
+    );
+  }
+  const resultingLimits = addLoopLimits(run.limits, additions);
+  const payload = {
+    schemaVersion: CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION,
+    loopId: run.id,
+    definitionHash: run.definitionHash,
+    loopAuthorizationHash: run.authorizationHash,
+    currentRevision: run.currentRevision,
+    usage: run.usage,
+    previousLimits: run.limits,
+    additions,
+    resultingLimits,
+    exhaustionResume: run.exhaustionResume,
+  };
+  const authorizationHash = createHash("sha256")
+    .update(
+      `campaign-loop-budget-extension-authorization/v1:${canonicalJson(payload)}`
+    )
+    .digest("hex");
+  return { ...payload, authorizationHash };
+}
+
+export function applyLoopBudgetExtension(
+  run,
+  { additions, authorization, createdAt = new Date().toISOString() }
+) {
+  const preview = createLoopBudgetExtensionPreview(run, additions);
+  if (authorization !== preview.authorizationHash) {
+    throw new Error(
+      `Loop extension authorization does not match ${preview.authorizationHash}.`
+    );
+  }
+  const resume = run.exhaustionResume;
+  return {
+    ...run,
+    schemaVersion: CAMPAIGN_LOOP_RUN_SCHEMA_VERSION,
+    status: resume.status,
+    completedAt: undefined,
+    limits: preview.resultingLimits,
+    budgetExtensions: [
+      ...(run.budgetExtensions ?? []),
+      {
+        schemaVersion: CAMPAIGN_LOOP_BUDGET_EXTENSION_SCHEMA_VERSION,
+        authorizationHash: preview.authorizationHash,
+        createdAt,
+        previousStatus: "exhausted",
+        previousLimits: run.limits,
+        usageAtAuthorization: run.usage,
+        additions: preview.additions,
+        resultingLimits: preview.resultingLimits,
+        resumeStatus: resume.status,
+      },
+    ],
+    exhaustionReason: undefined,
+    exhaustionResume: undefined,
+    activeCampaign: resume.activeCampaign,
+  };
+}
+
+export function remainingLoopBudgets(run) {
+  return {
+    fixCycles: run.limits.maxFixCycles - run.usage.fixCycles,
+    campaignRuns: run.limits.maxCampaignRuns - run.usage.campaignRuns,
+    submissions: run.limits.maxSubmissions - run.usage.submissions,
+    auxiliaryIsolationCampaigns:
+      run.limits.maxAuxiliaryIsolationCampaigns -
+      run.usage.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        run.limits.actualProviderCalls[stage] -
+          (run.usage.grossActualProviderCalls ?? run.usage.actualProviderCalls)[stage],
+      ])
+    ),
+    actualProviderCostNanoUsd:
+      run.limits.maxActualProviderCostNanoUsd === undefined
+        ? undefined
+        : Math.max(
+            0,
+            run.limits.maxActualProviderCostNanoUsd -
+              providerCostSettled(run.providerCost)
+          ),
+  };
+}
+
+function createCampaignUsageCheckpoint(run) {
+  return {
+    campaignRuns: run.usage.campaignRuns,
+    submissions: run.usage.submissions,
+    auxiliaryIsolationCampaigns: run.usage.auxiliaryIsolationCampaigns,
+    actualProviderCalls: { ...run.usage.actualProviderCalls },
+    ...(run.providerCost
+      ? {
+          attributedExactNanoUsd: run.providerCost.attributedExactNanoUsd,
+          attributedEstimatedNanoUsd:
+            run.providerCost.attributedEstimatedNanoUsd,
+        }
+      : {}),
+  };
+}
+
+function emptyCampaignRepairCredit() {
+  return {
+    campaignRuns: 0,
+    submissions: 0,
+    auxiliaryIsolationCampaigns: 0,
+    actualProviderCalls: { planning: 0, contract: 0, source: 0 },
+  };
+}
+
+function createCampaignRepairCredit(run, checkpoint) {
+  if (!checkpoint) return emptyCampaignRepairCredit();
+  return {
+    campaignRuns: run.usage.campaignRuns - checkpoint.campaignRuns,
+    submissions: run.usage.submissions - checkpoint.submissions,
+    auxiliaryIsolationCampaigns:
+      run.usage.auxiliaryIsolationCampaigns - checkpoint.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        run.usage.actualProviderCalls[stage] - checkpoint.actualProviderCalls[stage],
+      ])
+    ),
+    ...(run.providerCost
+      ? {
+          attributedExactNanoUsd: Math.max(
+            0,
+            run.providerCost.attributedExactNanoUsd -
+              (checkpoint.attributedExactNanoUsd ?? 0)
+          ),
+          attributedEstimatedNanoUsd: Math.max(
+            0,
+            run.providerCost.attributedEstimatedNanoUsd -
+              (checkpoint.attributedEstimatedNanoUsd ?? 0)
+          ),
+        }
+      : {}),
+  };
+}
+
+function applyCampaignRepairCredit(usage, credit) {
+  return {
+    ...usage,
+    campaignRuns: usage.campaignRuns - credit.campaignRuns,
+    submissions: usage.submissions - credit.submissions,
+    auxiliaryIsolationCampaigns:
+      usage.auxiliaryIsolationCampaigns - credit.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        usage.actualProviderCalls[stage] - credit.actualProviderCalls[stage],
+      ])
+    ),
+  };
+}
+
+function restoreCampaignRepairCredit(usage, credit) {
+  return {
+    ...usage,
+    campaignRuns: usage.campaignRuns + credit.campaignRuns,
+    submissions: usage.submissions + credit.submissions,
+    auxiliaryIsolationCampaigns:
+      usage.auxiliaryIsolationCampaigns + credit.auxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        usage.actualProviderCalls[stage] + credit.actualProviderCalls[stage],
+      ])
+    ),
+  };
+}
+
+function finishCampaignLink(run, campaignRunId, status) {
+  return {
+    ...run,
+    campaignLinks: run.campaignLinks.map((link) =>
+      link.campaignRunId === campaignRunId ? { ...link, status } : link
+    ),
+    activeCampaign: undefined,
+    pendingManualQa: undefined,
+  };
+}
+
+function assertActiveCampaign(run, campaignRunId, role) {
+  if (
+    run.activeCampaign?.campaignRunId !== campaignRunId ||
+    run.activeCampaign?.role !== role
+  ) {
+    throw new Error(`Campaign ${campaignRunId} is not the active ${role} campaign.`);
+  }
+}
+
+function createLoopResult(steps, definition, finalRevisionKey) {
+  const achievedStepIds = steps
+    .filter(({ status }) => status === "achieved")
+    .map(({ id }) => id);
+  const proofSteps = new Map(
+    definition.sequence.map((step, index) => [step.cohort, { step, state: steps[index] }])
+  );
+  const mechanicProven = PROOF_COHORTS.every((cohort) => {
+    const proof = proofSteps.get(cohort);
+    return (
+      proof?.state.status === "achieved" &&
+      ACTUAL_PROVIDER_STAGES.every(
+        (stage) => proof.step.providerModes[stage] === "actual"
+      )
+    );
+  });
+  return {
+    sequenceAchieved: achievedStepIds.length === steps.length,
+    mechanicProven,
+    achievedStepIds,
+    finalRevisionKey,
+  };
+}
+
+function addLoopLimits(limits, additions) {
+  return {
+    maxFixCycles: limits.maxFixCycles + additions.maxFixCycles,
+    maxCampaignRuns: limits.maxCampaignRuns + additions.maxCampaignRuns,
+    maxSubmissions: limits.maxSubmissions + additions.maxSubmissions,
+    maxAuxiliaryIsolationCampaigns:
+      limits.maxAuxiliaryIsolationCampaigns +
+      additions.maxAuxiliaryIsolationCampaigns,
+    actualProviderCalls: Object.fromEntries(
+      ACTUAL_PROVIDER_STAGES.map((stage) => [
+        stage,
+        limits.actualProviderCalls[stage] + additions.actualProviderCalls[stage],
+      ])
+    ),
+    ...((limits.maxActualProviderCostNanoUsd !== undefined ||
+    additions.maxActualProviderCostNanoUsd !== undefined)
+      ? {
+          maxActualProviderCostNanoUsd:
+            (limits.maxActualProviderCostNanoUsd ?? 0) +
+            (additions.maxActualProviderCostNanoUsd ?? 0),
+        }
+      : {}),
+  };
+}
+
+function emptyProviderCost() {
+  return {
+    grossExactNanoUsd: 0,
+    grossEstimatedNanoUsd: 0,
+    attributedExactNanoUsd: 0,
+    attributedEstimatedNanoUsd: 0,
+    pendingReservations: [],
+    settledCalls: [],
+  };
+}
+
+function providerCostSettled(providerCost) {
+  if (!providerCost) return 0;
+  return providerCost.grossExactNanoUsd + providerCost.grossEstimatedNanoUsd;
+}
+
+function enforceProviderCostBudget(run) {
+  const limit = run.limits.maxActualProviderCostNanoUsd;
+  if (
+    limit === undefined ||
+    providerCostSettled(run.providerCost) < limit ||
+    run.status === "exhausted"
+  ) {
+    return run;
+  }
+  return exhaustLoop(run, "Actual-provider cost budget reached.");
+}
+
+function hasUnresolvedProviderCost(providerCost) {
+  return Boolean(
+    providerCost?.settledCalls.some((call) => call.quality === "unknown")
+  );
+}
+
+function unresolvedProviderCostResult(run) {
+  return {
+    allowed: false,
+    run:
+      run.status === "exhausted"
+        ? run
+        : exhaustLoop(
+            run,
+            "Actual-provider cost is unresolved because one or more API calls have no token usage or call-derived estimate."
+          ),
+  };
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}

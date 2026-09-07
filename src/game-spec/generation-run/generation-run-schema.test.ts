@@ -6,6 +6,7 @@ import {
   createSuccessfulGenerationRunFixture,
   createValidatedGamePackFixture,
 } from "../game-pack/testing/game-pack-fixtures";
+import { createGeneratedMechanicProjectFixture } from "../game-pack/testing/generated-mechanic-project-fixtures";
 import { generationRunSchema } from "./generation-run-schema";
 
 describe("GenerationRun schema", () => {
@@ -109,6 +110,43 @@ describe("GenerationRun schema", () => {
         ...createSuccessfulGenerationRunFixture(gamePack),
         id: "generation_run_repaired_without_repair_attempt",
         repairStatus: "repaired",
+      }).success
+    ).toBe(false);
+  });
+
+  it("allows successful artifact repair to end in an exact downstream handoff failure", () => {
+    const acceptedRun =
+      createGeneratedMechanicProjectFixture().gamePack.generationRuns[0];
+    if (!acceptedRun?.artifactScopedRepair) {
+      throw new Error("Expected an artifact-scoped generated mechanic run.");
+    }
+    const failedHandoffRun = {
+      ...acceptedRun,
+      status: "failed" as const,
+      stage: "browser-check" as const,
+      failureClass: "first-playable-failure" as const,
+      relationships: undefined,
+      metadata: {
+        generatedMechanicOutcome: {
+          status: "rejected",
+          stage: "first_playable",
+          issues: [
+            {
+              path: "firstPlayable",
+              code: "first_playable_not_passed",
+              message: "The generated mechanic browser proof failed.",
+            },
+          ],
+        },
+      },
+    };
+
+    expect(generationRunSchema.safeParse(failedHandoffRun).success).toBe(true);
+    expect(
+      generationRunSchema.safeParse({
+        ...failedHandoffRun,
+        stage: "model-generation",
+        failureClass: "provider-request-failure",
       }).success
     ).toBe(false);
   });

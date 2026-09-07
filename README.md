@@ -158,6 +158,7 @@ If `OPENAI_MODEL` is not set in the environment, the UI allows selecting from th
 - `npm run test:editor-prompt-flow` - run the focused editor prompt-flow regression tests
 - `npm run qa:editor-prompt-flow` - run prompt-flow tests and print the manual QA path for `/editor`
 - `npm run qa:editor-prompt-flow:browser` - run the prompt-flow tests, drive `/editor` in a real browser, and save screenshots under `.qa/editor-prompt-flow`
+- `npm run qa:mechanic-realm-conformance:browser` - run the paired candidate/runtime evidence matrix in real Chromium, including replay, source, identity, replacement, disconnection, timeout, and unattested-mix rejection cases
 
 See [`docs/manual-qa.md`](./docs/manual-qa.md) for the low-friction manual testing checklist.
 

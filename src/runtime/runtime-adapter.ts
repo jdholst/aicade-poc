@@ -5,7 +5,7 @@ export type RuntimeCommand =
   | { type: "game-reload" }
   | { type: "game-resize"; viewport: RuntimeViewport }
   | { type: "game-pause"; paused: boolean }
-  | { type: "game-run-first-playable-checks" };
+  | { type: "game-run-first-playable-checks"; actionId?: string };
 
 export type RuntimeViewport = {
   width: number;

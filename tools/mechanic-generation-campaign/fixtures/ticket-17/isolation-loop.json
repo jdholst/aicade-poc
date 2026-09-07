@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "campaign-loop-manifest/v1",
+  "id": "p09-t17-fixture-smoke-loop",
+  "manifest": {
+    "path": "tools/mechanic-generation-campaign/manifests/p09-t17-projectile.json",
+    "sha256": "7ded16f312e25c1c4f04e46320dbe5003942675cd8dedb06a93be0116ad2f13c",
+    "probeSha256": "4dc1c0b63661c708a9c326a377f1f1d5be62a03ff1f5d0a1519dd579936002df"
+  },
+  "model": "gpt-5.6-luna",
+  "sequence": [
+    {
+      "id": "fixture-isolation",
+      "cohort": "isolation",
+      "providerModes": {
+        "planning": "fixture",
+        "contract": "fixture",
+        "source": "fixture"
+      },
+      "maxCampaignRunsPerRevision": 1,
+      "retryableClassifications": []
+    }
+  ],
+  "isolationProfiles": [],
+  "limits": {
+    "maxFixCycles": 0,
+    "maxCampaignRuns": 1,
+    "maxSubmissions": 1,
+    "maxAuxiliaryIsolationCampaigns": 0,
+    "actualProviderCalls": {
+      "planning": 0,
+      "contract": 0,
+      "source": 0
+    }
+  }
+}

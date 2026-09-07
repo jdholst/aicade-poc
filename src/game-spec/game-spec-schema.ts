@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const GAME_SPEC_SCHEMA_VERSION = "game-spec/v1";
+export const MECHANIC_PORT_CONNECTIONS_SCHEMA_VERSION =
+  "mechanic_port_connections/v1";
 export const STABLE_ID_PATTERN_SOURCE =
   "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$";
 export const STABLE_ID_PATTERN = new RegExp(STABLE_ID_PATTERN_SOURCE);
@@ -136,6 +138,29 @@ const gameSpecMechanicEntrySchema = z
   })
   .strict();
 
+const mechanicPortEndpointSchema = z
+  .object({
+    ownerKind: z.enum(["mechanic", "game_system"]),
+    ownerId: stableIdSchema,
+    portId: stableIdSchema,
+  })
+  .strict();
+
+export const finalGameSpecMechanicConnectionPlanSchema = z
+  .object({
+    schemaVersion: z.literal(MECHANIC_PORT_CONNECTIONS_SCHEMA_VERSION),
+    connections: z.array(
+      z
+        .object({
+          id: stableIdSchema,
+          output: mechanicPortEndpointSchema,
+          input: mechanicPortEndpointSchema,
+        })
+        .strict()
+    ),
+  })
+  .strict();
+
 export const gameSpecSchema = z
   .object({
     schemaVersion: z.literal(GAME_SPEC_SCHEMA_VERSION),
@@ -156,6 +181,7 @@ export const gameSpecSchema = z
     objectives: z.array(gameSpecObjectiveSchema).min(1).max(20),
     validationGoals: z.array(gameSpecValidationGoalSchema),
     mechanics: z.array(gameSpecMechanicEntrySchema),
+    mechanicConnections: finalGameSpecMechanicConnectionPlanSchema.optional(),
     extensions: z.record(z.string(), jsonValueSchema).optional(),
   })
   .strict();
@@ -173,3 +199,9 @@ export type GameSpecValidationGoal = z.infer<
 export type GameSpecMechanicEntry = z.infer<
   typeof gameSpecMechanicEntrySchema
 >;
+export type FinalGameSpecMechanicConnectionPlan = z.infer<
+  typeof finalGameSpecMechanicConnectionPlanSchema
+>;
+export type MechanicPortConnection =
+  FinalGameSpecMechanicConnectionPlan["connections"][number];
+export type MechanicPortEndpoint = MechanicPortConnection["output"];

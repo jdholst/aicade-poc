@@ -20,6 +20,7 @@ export type PostedMessage = {
 };
 
 export type GameElement = {
+  active?: boolean;
   body?: {
     setAllowGravity: () => void;
     setCollideWorldBounds: () => void;
@@ -28,6 +29,7 @@ export type GameElement = {
     velocityCalls: Array<{ x: number; y: number }>;
   };
   kind: string;
+  destroy?: () => void;
   setPosition?: (x: number, y: number) => void;
   setStrokeStyle?: () => GameElement;
   x: number;
@@ -46,9 +48,17 @@ export type RuntimeHarnessContext = {
   window: {
     addEventListener: (
       type: string,
-      listener: (event?: { data?: unknown }) => void
+      listener: (event?: RuntimeHarnessWindowEvent) => void
     ) => void;
   };
+};
+
+export type RuntimeHarnessWindowEvent = {
+  code?: string;
+  data?: unknown;
+  isTrusted?: boolean;
+  key?: string;
+  repeat?: boolean;
 };
 
 export type RuntimeCursorState = Partial<
@@ -100,9 +110,12 @@ export function createRuntimeHarness(
   }> = [];
   const windowEventListeners: Record<
     string,
-    Array<(event?: { data?: unknown }) => void>
+    Array<(event?: RuntimeHarnessWindowEvent) => void>
   > = {};
-  let sceneConfig: { create: () => void; update?: () => void } | null = null;
+  let sceneConfig: {
+    create: () => void;
+    update?: (time: number, delta: number) => void;
+  } | null = null;
 
   const createBody = () => {
     const body = {
@@ -131,6 +144,10 @@ export function createRuntimeHarness(
     add: {
       circle(x: number, y: number) {
         const element: GameElement = {
+          active: true,
+          destroy() {
+            element.active = false;
+          },
           kind: "circle",
           setPosition(nextX: number, nextY: number) {
             element.x = nextX;
@@ -144,6 +161,10 @@ export function createRuntimeHarness(
       },
       rectangle(x: number, y: number) {
         const element: GameElement = {
+          active: true,
+          destroy() {
+            element.active = false;
+          },
           kind: "rectangle",
           setPosition(nextX: number, nextY: number) {
             element.x = nextX;
@@ -160,6 +181,10 @@ export function createRuntimeHarness(
       },
       star(x: number, y: number) {
         const element: GameElement = {
+          active: true,
+          destroy() {
+            element.active = false;
+          },
           kind: "star",
           setPosition(nextX: number, nextY: number) {
             element.x = nextX;
@@ -282,7 +307,7 @@ export function createRuntimeHarness(
     window: {
       addEventListener(
         type: string,
-        listener: (event?: { data?: unknown }) => void
+        listener: (event?: RuntimeHarnessWindowEvent) => void
       ) {
         windowEventListeners[type] = windowEventListeners[type] || [];
         windowEventListeners[type].push(listener);
@@ -296,11 +321,11 @@ export function createRuntimeHarness(
     moveToObjectCalls,
     overlapCalls,
     messages,
-    dispatchWindowEvent(type: string, event?: { data?: unknown }) {
+    dispatchWindowEvent(type: string, event?: RuntimeHarnessWindowEvent) {
       windowEventListeners[type]?.forEach((listener) => listener(event));
     },
-    runUpdate() {
-      sceneConfig?.update?.call(scene);
+    runUpdate(delta = 16) {
+      sceneConfig?.update?.call(scene, 0, delta);
     },
     textLabels,
   };

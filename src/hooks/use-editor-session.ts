@@ -171,7 +171,9 @@ export function useEditorSession({
     loadState.status === "success"
       ? loadState.source === "canvas-starter"
         ? loadState.pack.project.name
-        : loadState.spec.title
+        : loadState.source === "phaser-game-pack"
+          ? loadState.gamePack.title
+          : loadState.spec.title
       : "Starter Project";
   const activeGeneratedSpec =
     loadState.status === "success" && loadState.source === "phaser-spec"

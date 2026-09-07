@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Campaign Documentation</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Mechanic generation harness</p>
+        <h1>Campaign documentation</h1>
+      </div>
+      <div class="topbar-actions">
+        <a class="nav-link" href="/">Dashboard</a>
+        <small class="documentation-source">Canonical Markdown · agent readable</small>
+      </div>
+    </header>
+
+    <main class="docs-main">
+      <aside class="docs-sidebar panel" aria-label="Documentation pages">
+        <p class="eyebrow">Contents</p>
+        <nav id="docs-navigation"></nav>
+        <p class="docs-agent-note">AI agents should begin with the documentation index and the project campaign skill.</p>
+      </aside>
+
+      <article class="docs-article panel">
+        <div id="documentation-content" aria-live="polite">
+          <p class="empty">Loading documentation…</p>
+        </div>
+        <a id="documentation-raw" class="raw-doc-link" target="_blank" rel="noreferrer">Open canonical Markdown</a>
+      </article>
+    </main>
+
+    <script type="module" src="/documentation.js"></script>
+  </body>
+</html>

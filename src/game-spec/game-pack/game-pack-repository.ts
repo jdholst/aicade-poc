@@ -13,6 +13,12 @@ export type GamePackRepository = {
     gamePackId: GamePack["id"],
     updater: (gamePack: GamePack) => GamePack | Promise<GamePack>
   ) => Promise<GamePack>;
+  compareAndSwap: (
+    gamePackId: GamePack["id"],
+    expected: GamePack | null,
+    replacement: GamePack | null
+  ) => Promise<boolean>;
+  delete: (gamePackId: GamePack["id"]) => Promise<void>;
 };
 
 export type GamePackRepositoryOperation =
@@ -20,7 +26,9 @@ export type GamePackRepositoryOperation =
   | "save"
   | "load"
   | "list"
-  | "update";
+  | "update"
+  | "compare_and_swap"
+  | "delete";
 
 export type GamePackRepositoryErrorCode =
   | "indexeddb_unavailable"
@@ -29,6 +37,9 @@ export type GamePackRepositoryErrorCode =
   | "load_failed"
   | "list_failed"
   | "update_failed"
+  | "compare_and_swap_failed"
+  | "compare_and_swap_unavailable"
+  | "delete_failed"
   | "update_id_mismatch"
   | "not_found"
   | "invalid_game_pack";
@@ -73,6 +84,12 @@ export type GamePackStorageDriver = {
   put: (record: StoredGamePackRecord) => Promise<void>;
   get: (gamePackId: GamePack["id"]) => Promise<StoredGamePackRecord | null>;
   getAll: () => Promise<StoredGamePackRecord[]>;
+  compareAndSwap: (
+    gamePackId: GamePack["id"],
+    expected: StoredGamePackRecord | null,
+    replacement: StoredGamePackRecord | null
+  ) => Promise<boolean>;
+  delete: (gamePackId: GamePack["id"]) => Promise<void>;
 };
 
 export type IndexedDbGamePackRepositoryOptions = {
@@ -187,6 +204,75 @@ export function createGamePackRepository(
       }
 
       return this.save(nextGamePack);
+    },
+
+    async compareAndSwap(gamePackId, expected, replacement) {
+      if (!storage.compareAndSwap) {
+        throw createRepositoryError({
+          code: "compare_and_swap_unavailable",
+          gamePackId,
+          operation: "compare_and_swap",
+          message: `Game Pack storage cannot atomically compare and swap "${gamePackId}".`,
+        });
+      }
+      let expectedRecord: StoredGamePackRecord | null;
+      let replacementRecord: StoredGamePackRecord | null;
+      try {
+        expectedRecord = expected ? createStoredGamePackRecord(expected) : null;
+        replacementRecord = replacement
+          ? createStoredGamePackRecord(replacement)
+          : null;
+      } catch (error) {
+        throw createRepositoryError({
+          cause: error,
+          code: "invalid_game_pack",
+          gamePackId,
+          operation: "compare_and_swap",
+          message: `Cannot compare and swap invalid Game Pack "${gamePackId}".`,
+        });
+      }
+      if (
+        (expectedRecord?.id !== undefined &&
+          expectedRecord.id !== gamePackId) ||
+        (replacementRecord?.id !== undefined &&
+          replacementRecord.id !== gamePackId)
+      ) {
+        throw createRepositoryError({
+          code: "update_id_mismatch",
+          gamePackId,
+          operation: "compare_and_swap",
+          message: `Cannot compare and swap Game Pack "${gamePackId}" with a different ID.`,
+        });
+      }
+      try {
+        return await storage.compareAndSwap(
+          gamePackId,
+          expectedRecord,
+          replacementRecord
+        );
+      } catch (error) {
+        throw createRepositoryError({
+          cause: error,
+          code: "compare_and_swap_failed",
+          gamePackId,
+          operation: "compare_and_swap",
+          message: `Failed to compare and swap Game Pack "${gamePackId}".`,
+        });
+      }
+    },
+
+    async delete(gamePackId) {
+      try {
+        await storage.delete(gamePackId);
+      } catch (error) {
+        throw createRepositoryError({
+          cause: error,
+          code: "delete_failed",
+          gamePackId,
+          operation: "delete",
+          message: `Failed to delete Game Pack "${gamePackId}".`,
+        });
+      }
     },
   };
 }
@@ -321,7 +407,59 @@ function createIndexedDbGamePackStorage({
         db.close();
       }
     },
+
+    async compareAndSwap(gamePackId, expected, replacement) {
+      const db = await openGamePackDatabase({
+        databaseName,
+        indexedDB,
+        operation: "compare_and_swap",
+      });
+
+      try {
+        const transaction = db.transaction(GAME_PACK_STORE_NAME, "readwrite");
+        const store = transaction.objectStore(GAME_PACK_STORE_NAME);
+        const current =
+          (await requestToPromise<StoredGamePackRecord | undefined>(
+            store.get(gamePackId)
+          )) ?? null;
+        const matches = storedGamePackRecordsEqual(current, expected);
+        if (matches) {
+          if (replacement) {
+            store.put(replacement);
+          } else {
+            store.delete(gamePackId);
+          }
+        }
+        await waitForTransaction(transaction);
+        return matches;
+      } finally {
+        db.close();
+      }
+    },
+
+    async delete(gamePackId) {
+      const db = await openGamePackDatabase({
+        databaseName,
+        indexedDB,
+        operation: "delete",
+      });
+
+      try {
+        const transaction = db.transaction(GAME_PACK_STORE_NAME, "readwrite");
+        transaction.objectStore(GAME_PACK_STORE_NAME).delete(gamePackId);
+        await waitForTransaction(transaction);
+      } finally {
+        db.close();
+      }
+    },
   };
+}
+
+function storedGamePackRecordsEqual(
+  left: StoredGamePackRecord | null,
+  right: StoredGamePackRecord | null
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function getBrowserIndexedDbFactory(): IDBFactory | null {

@@ -1,0 +1,36 @@
+{
+    "schemaVersion": "generated_mechanic_provider_response/v1",
+    "ok": true,
+    "generationRunId": "generation_run_mt1vsw0i_fx1nqcx8",
+    "stage": "source",
+    "attempt": 1,
+    "attemptKind": "initial",
+    "candidate": {
+        "schemaVersion": "generated_mechanic_source_candidate/v1",
+        "capabilityVersion": "mechanic_capability/v1",
+        "id": "generation_run_mt1vsw0i_fx1nqcx8_source_initial_1",
+        "contractId": "generation_run_mt1vsw0i_fx1nqcx8_contract_initial_1",
+        "callbacks": [
+            {
+                "id": "install",
+                "kind": "install",
+                "source": "await capabilities.state.write(\"dash_active\", false);\nawait capabilities.state.write(\"dash_end_time\", 0);"
+            },
+            {
+                "id": "logical_action",
+                "kind": "logical_action",
+                "source": "const actionId = typeof lifecycleInput === \"string\" ? lifecycleInput : lifecycleInput.actionId;\nif (actionId !== \"move_action\") return;\n\nconst active = await capabilities.state.read(\"dash_active\");\nif (active === true) return;\n\nconst player = bindings.player_binding;\nconst observation = await capabilities.objects.read(player);\nconst now = await capabilities.time.now();\nconst velocityX = observation.velocity.x;\nconst velocityY = observation.velocity.y;\nconst magnitude = Math.sqrt(velocityX * velocityX + velocityY * velocityY);\nconst directionX = magnitude > 0 ? velocityX / magnitude : 1;\nconst directionY = magnitude > 0 ? velocityY / magnitude : 0;\nconst dashSpeed = config.normal_movement_speed * config.dash_speed_multiplier;\nconst duration = config.dash_duration_ms;\nconst endTime = now + duration;\n\nawait capabilities.objects.writeMotion(player, {\n  velocity: {\n    x: directionX * dashSpeed,\n    y: directionY * dashSpeed\n  }\n});\nawait capabilities.state.write(\"dash_active\", true);\nawait capabilities.state.write(\"dash_end_time\", endTime);\nawait capabilities.time.schedule(duration, \"scheduled\");"
+            },
+            {
+                "id": "scheduled",
+                "kind": "scheduled",
+                "source": "const player = bindings.player_binding;\nconst observation = await capabilities.objects.read(player);\nconst velocityX = observation.velocity.x;\nconst velocityY = observation.velocity.y;\nconst magnitude = Math.sqrt(velocityX * velocityX + velocityY * velocityY);\nconst directionX = magnitude > 0 ? velocityX / magnitude : 1;\nconst directionY = magnitude > 0 ? velocityY / magnitude : 0;\n\nawait capabilities.objects.writeMotion(player, {\n  velocity: {\n    x: directionX * config.normal_movement_speed,\n    y: directionY * config.normal_movement_speed\n  }\n});\nawait capabilities.state.write(\"dash_active\", false);\nawait capabilities.state.write(\"dash_end_time\", 0);"
+            },
+            {
+                "id": "dispose",
+                "kind": "dispose",
+                "source": "await capabilities.state.write(\"dash_active\", false);\nawait capabilities.state.write(\"dash_end_time\", 0);"
+            }
+        ]
+    }
+}

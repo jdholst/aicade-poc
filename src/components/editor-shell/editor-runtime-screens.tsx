@@ -285,10 +285,44 @@ function ValidationReceiptDetail({
           ))}
         </ul>
       ) : null}
+      {receipt.issueGroups && receipt.issueGroups.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {receipt.issueGroups.map((group) => (
+            <section
+              key={group.id}
+              className="border border-white/10 bg-black/15 p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-white/80">
+                  {group.label}
+                </h3>
+                <span className="shrink-0 text-xs text-white/40">
+                  {group.issueMessages.length}
+                </span>
+              </div>
+              <ul className="mt-3 space-y-2 text-sm leading-6 text-white/65">
+                {group.issueMessages.map((issueMessage, index) => (
+                  <li key={`${group.id}-${index}-${issueMessage}`}>
+                    {issueMessage}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      ) : null}
       {receipt.evidenceJson ? (
-        <pre className="max-h-48 overflow-auto border border-white/10 bg-black/25 p-3 text-xs leading-5 text-white/60">
-          {receipt.evidenceJson}
-        </pre>
+        <details
+          aria-label="Raw evidence JSON"
+          className="border border-white/10 bg-black/20 p-3"
+        >
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-white/55">
+            Raw evidence JSON
+          </summary>
+          <pre className="mt-3 max-h-48 overflow-auto border border-white/10 bg-black/25 p-3 text-xs leading-5 text-white/60">
+            {receipt.evidenceJson}
+          </pre>
+        </details>
       ) : null}
     </section>
   );

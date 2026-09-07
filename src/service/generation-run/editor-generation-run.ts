@@ -1,9 +1,25 @@
 import { GENERATION_TIMEOUT_MS } from "@/constants";
 import {
+  type GamePack,
   createIndexedDbGenerationRunRepository,
   type GenerationRun,
   type GenerationRunRepository,
 } from "@/game-spec";
+import {
+  dispatchCreatorGenerationPlan,
+  CreatorGenerationRoutingError,
+  type CreatorGenerationPlanClientResult,
+  type ContinueGeneratedMechanicGeneration,
+} from "@/service/creator-generation/creator-game-generation-dispatcher";
+import {
+  DEGRADED_GENERATION_FALLBACK_POLICY,
+  type OmittedMechanicWarning,
+} from "@/service/creator-generation/degraded-generation-fallback-policy";
+import {
+  continueGeneratedMechanicGeneration,
+  type ContinueGeneratedMechanicGenerationResult,
+} from "@/service/creator-generation/continue-generated-mechanic-generation";
+import { requestTopDownCreatorGenerationPlanning } from "@/service/creator-generation-planning/creator-generation-planning-client";
 import type { EditorGenerationSource } from "@/runtime/editor-runtime-mode";
 import {
   requestTopDownSpecGeneration,
@@ -25,6 +41,9 @@ import {
 
 export const GENERATION_RUN_TIMEOUT_MESSAGE =
   "Generation took longer than two minutes. Please retry; the model may have stalled while creating or validating the game module.";
+export const GENERATED_MECHANIC_GENERATION_TIMEOUT_MS = 600_000;
+export const GENERATED_MECHANIC_GENERATION_TIMEOUT_MESSAGE =
+  "Generated mechanic creation timed out before it could finish evaluation and browser validation. Please retry the request.";
 
 export type EditorGenerationRunCompletion =
   | { generationRunId?: GenerationRun["id"]; status: "cancelled" }
@@ -33,6 +52,7 @@ export type EditorGenerationRunCompletion =
       status: "error";
       message: string;
       reason: "request-failed" | "timed-out";
+      generatedMechanicFailure?: GeneratedMechanicGenerationFailureEvidence;
       validationFailure?: SpecGenerationValidationFailure;
     }
   | {
@@ -40,13 +60,35 @@ export type EditorGenerationRunCompletion =
       pack: GeneratedGamePack;
       source: "canvas-starter";
     }
+  | {
+      generationRunId: GenerationRun["id"];
+      gamePack: GamePack;
+      status: "success";
+      source: "phaser-game-pack";
+    }
   | ({
       generationRunId?: GenerationRun["id"];
+      degradedWarning?: OmittedMechanicWarning;
       status: "success";
       source: "phaser-spec";
     } & TopDownSpecGenerationClientResult);
 
 type TimerId = ReturnType<typeof globalThis.setTimeout>;
+
+export type GeneratedMechanicGenerationFailureEvidence = Extract<
+  ContinueGeneratedMechanicGenerationResult,
+  { outcome: "rejected" }
+>["evidence"];
+
+class GeneratedMechanicGenerationError extends Error {
+  readonly evidence: GeneratedMechanicGenerationFailureEvidence;
+
+  constructor(evidence: GeneratedMechanicGenerationFailureEvidence) {
+    super(evidence.issues.map(({ message }) => message).join(" "));
+    this.name = "GeneratedMechanicGenerationError";
+    this.evidence = evidence;
+  }
+}
 
 type EditorGenerationRunTimer = {
   clearTimeout: (timeoutId: TimerId) => void;
@@ -54,8 +96,11 @@ type EditorGenerationRunTimer = {
 };
 
 type StartEditorGenerationRunInput = {
+  continueGeneratedMechanicGeneration?: ContinueGeneratedMechanicGeneration<ContinueGeneratedMechanicGenerationResult>;
   createGenerationRunId?: () => GenerationRun["id"];
+  degradedGenerationFallbackEnabled?: boolean;
   generationRunRepository?: Pick<GenerationRunRepository, "create" | "update"> | null;
+  generatedMechanicTimeoutMs?: number;
   generationSource: EditorGenerationSource;
   now?: () => string;
   request: StarterProjectRequest;
@@ -64,7 +109,7 @@ type StartEditorGenerationRunInput = {
     request: StarterProjectRequest,
     signal?: AbortSignal,
     options?: TopDownSpecGenerationClientOptions
-  ) => Promise<TopDownSpecGenerationClientResult>;
+  ) => Promise<CreatorGenerationPlanClientResult>;
   timeoutMs?: number;
   timer?: EditorGenerationRunTimer;
 };
@@ -75,13 +120,16 @@ export type EditorGenerationRun = {
 };
 
 export function startEditorGenerationRun({
+  continueGeneratedMechanicGeneration: continueGeneratedMechanic = continueGeneratedMechanicGeneration,
   createGenerationRunId,
+  degradedGenerationFallbackEnabled = getDefaultDegradedGenerationFallbackEnabled(),
   generationRunRepository = getBrowserGenerationRunRepository(),
+  generatedMechanicTimeoutMs = GENERATED_MECHANIC_GENERATION_TIMEOUT_MS,
   generationSource,
   now = () => new Date().toISOString(),
   request,
   requestCanvasStarterProject = requestStarterProject,
-  requestPhaserSpecGeneration = requestTopDownSpecGeneration,
+  requestPhaserSpecGeneration = requestCreatorGenerationPlan,
   timeoutMs = GENERATION_TIMEOUT_MS,
   timer = globalThis,
 }: StartEditorGenerationRunInput): EditorGenerationRun {
@@ -96,6 +144,16 @@ export function startEditorGenerationRun({
   });
   const generationRunId = receiptLifecycle.generationRunId;
   let timeoutId: TimerId | undefined;
+  let generatedMechanicDeadlineArmed = false;
+  const armTimeout = (durationMs: number) => {
+    if (timeoutId !== undefined) {
+      timer.clearTimeout(timeoutId);
+    }
+    timeoutId = timer.setTimeout(() => {
+      didTimeOut = true;
+      abortController.abort("timed-out");
+    }, durationMs);
+  };
 
   const done = (async (): Promise<EditorGenerationRunCompletion> => {
     if (generationSource === "phaser-fixture") {
@@ -105,31 +163,50 @@ export function startEditorGenerationRun({
     try {
       await receiptLifecycle.createInitialReceipt();
 
-      timeoutId = timer.setTimeout(() => {
-        didTimeOut = true;
-        abortController.abort();
-      }, timeoutMs);
+      armTimeout(timeoutMs);
 
+      const adapterPromise = runGenerationAdapter({
+        generationSource,
+        continueGeneratedMechanicGeneration: continueGeneratedMechanic,
+        degradedGenerationFallbackEnabled,
+        request,
+        requestCanvasStarterProject,
+        requestPhaserSpecGeneration,
+        receiptLifecycle,
+        signal: abortController.signal,
+        onGeneratedMechanicRoute() {
+          if (generatedMechanicDeadlineArmed) {
+            return;
+          }
+          generatedMechanicDeadlineArmed = true;
+          armTimeout(generatedMechanicTimeoutMs);
+        },
+      });
       return await Promise.race([
-        runGenerationAdapter({
-          generationSource,
-          request,
-          requestCanvasStarterProject,
-          requestPhaserSpecGeneration,
-          receiptLifecycle,
-          signal: abortController.signal,
-        }),
+        adapterPromise,
         waitForAbort(abortController.signal, async () => {
-          await receiptLifecycle.recordSpecGenerationInterruption(
-            didTimeOut ? "timed-out" : "cancelled"
-          );
+          const interruptionResult =
+            await receiptLifecycle.recordSpecGenerationInterruption(
+              didTimeOut ? "timed-out" : "cancelled",
+              generatedMechanicDeadlineArmed
+                ? "generated_mechanic_continuation"
+                : undefined
+            );
+          if (
+            generatedMechanicDeadlineArmed &&
+            interruptionResult !== "recorded"
+          ) {
+            return adapterPromise;
+          }
 
           return didTimeOut
             ? {
                 ...(generationRunId ? { generationRunId } : {}),
                 status: "error",
                 reason: "timed-out",
-                message: GENERATION_RUN_TIMEOUT_MESSAGE,
+                message: generatedMechanicDeadlineArmed
+                  ? GENERATED_MECHANIC_GENERATION_TIMEOUT_MESSAGE
+                  : GENERATION_RUN_TIMEOUT_MESSAGE,
               }
             : {
                 ...(generationRunId ? { generationRunId } : {}),
@@ -140,7 +217,10 @@ export function startEditorGenerationRun({
     } catch (error) {
       if (abortController.signal.aborted) {
         await receiptLifecycle.recordSpecGenerationInterruption(
-          didTimeOut ? "timed-out" : "cancelled"
+          didTimeOut ? "timed-out" : "cancelled",
+          generatedMechanicDeadlineArmed
+            ? "generated_mechanic_continuation"
+            : undefined
         );
 
         return didTimeOut
@@ -148,7 +228,9 @@ export function startEditorGenerationRun({
               ...(generationRunId ? { generationRunId } : {}),
               status: "error",
               reason: "timed-out",
-              message: GENERATION_RUN_TIMEOUT_MESSAGE,
+              message: generatedMechanicDeadlineArmed
+                ? GENERATED_MECHANIC_GENERATION_TIMEOUT_MESSAGE
+                : GENERATION_RUN_TIMEOUT_MESSAGE,
             }
           : {
               ...(generationRunId ? { generationRunId } : {}),
@@ -167,19 +249,24 @@ export function startEditorGenerationRun({
   })();
 
   return {
-    abort: () => abortController.abort(),
+    abort: () => abortController.abort("cancelled"),
     done,
   };
 }
 
 async function runGenerationAdapter({
+  continueGeneratedMechanicGeneration,
+  degradedGenerationFallbackEnabled,
   generationSource,
   receiptLifecycle,
   request,
   requestCanvasStarterProject,
   requestPhaserSpecGeneration,
   signal,
+  onGeneratedMechanicRoute,
 }: {
+  continueGeneratedMechanicGeneration: ContinueGeneratedMechanicGeneration<ContinueGeneratedMechanicGenerationResult>;
+  degradedGenerationFallbackEnabled: boolean;
   generationSource: Exclude<EditorGenerationSource, "phaser-fixture">;
   receiptLifecycle: PhaserGenerationRunReceiptLifecycle;
   request: StarterProjectRequest;
@@ -188,8 +275,9 @@ async function runGenerationAdapter({
     request: StarterProjectRequest,
     signal?: AbortSignal,
     options?: TopDownSpecGenerationClientOptions
-  ) => Promise<TopDownSpecGenerationClientResult>;
+  ) => Promise<CreatorGenerationPlanClientResult>;
   signal: AbortSignal;
+  onGeneratedMechanicRoute: () => void;
 }): Promise<EditorGenerationRunCompletion> {
   if (generationSource === "phaser-ai") {
     const result = receiptLifecycle.generationRunId
@@ -200,13 +288,84 @@ async function runGenerationAdapter({
 
     await receiptLifecycle.recordSpecGenerationSuccess(result);
 
+    const dispatched = await dispatchCreatorGenerationPlan({
+      continueGeneratedMechanicGeneration: (input) => {
+        onGeneratedMechanicRoute();
+        return continueGeneratedMechanicGeneration(input);
+      },
+      degradedGenerationFallbackEnabled,
+      generationRunId: receiptLifecycle.generationRunId,
+      plan: result,
+      request,
+      signal,
+    });
+    if (dispatched.kind === "rejected") {
+      const issues = [
+        ...dispatched.evidence.issues,
+        ...(dispatched.fallbackEvidence?.issues ?? []),
+      ];
+      const message = issues
+        .map((issue) => issue.message)
+        .join(" ");
+      throw new CreatorGenerationRoutingError({
+        message,
+        routeKind: dispatched.routeKind,
+        validationFailure: {
+          attemptCount: result.metadata.attemptCount,
+          ...(receiptLifecycle.generationRunId
+            ? { generationRunId: receiptLifecycle.generationRunId }
+            : {}),
+          issues: issues.map((issue) => ({ ...issue })),
+          stage: "mechanic_validation",
+          taskRoute: "spec_generation.primary",
+        },
+      });
+    }
+    if (dispatched.kind === "generated_mechanic") {
+      if (dispatched.result.outcome === "rejected") {
+        throw new GeneratedMechanicGenerationError(
+          dispatched.result.evidence
+        );
+      }
+      if (!receiptLifecycle.generationRunId) {
+        throw new Error(
+          "Generated mechanic acceptance requires its exact GenerationRun identity."
+        );
+      }
+      return {
+        generationRunId: receiptLifecycle.generationRunId,
+        gamePack: dispatched.result.value.gamePack,
+        status: "success",
+        source: "phaser-game-pack",
+      };
+    }
+
+    if (dispatched.kind === "degraded") {
+      const receiptStatus =
+        await receiptLifecycle.recordDegradedGeneration(dispatched.warning);
+      signal.throwIfAborted();
+      if (receiptStatus !== "recorded") {
+        throw new Error(
+          "Degraded creator generation could not persist its required warning receipt."
+        );
+      }
+
+      return {
+        generationRunId: dispatched.generationRunId,
+        degradedWarning: dispatched.warning,
+        status: "success",
+        source: "phaser-spec",
+        ...dispatched.result,
+      };
+    }
+
     return {
       ...(receiptLifecycle.generationRunId
         ? { generationRunId: receiptLifecycle.generationRunId }
         : {}),
       status: "success",
       source: "phaser-spec",
-      ...result,
+      ...dispatched.result,
     };
   }
 
@@ -217,6 +376,18 @@ async function runGenerationAdapter({
     source: "canvas-starter",
     pack,
   };
+}
+
+function requestCreatorGenerationPlan(
+  request: StarterProjectRequest,
+  signal?: AbortSignal,
+  options?: TopDownSpecGenerationClientOptions
+): Promise<CreatorGenerationPlanClientResult> {
+  return options?.generationRunId
+    ? requestTopDownCreatorGenerationPlanning(request, signal, {
+        generationRunId: options.generationRunId,
+      })
+    : requestTopDownSpecGeneration(request, signal);
 }
 
 function waitForAbort(
@@ -248,12 +419,17 @@ function createRequestFailure(
     error instanceof SpecGenerationClientError
       ? error.validationFailure
       : undefined;
+  const generatedMechanicFailure =
+    error instanceof GeneratedMechanicGenerationError
+      ? error.evidence
+      : undefined;
 
   return {
     ...(generationRunId ? { generationRunId } : {}),
     status: "error",
     reason: "request-failed",
     message,
+    ...(generatedMechanicFailure ? { generatedMechanicFailure } : {}),
     ...(validationFailure ? { validationFailure } : {}),
   };
 }
@@ -266,4 +442,17 @@ function getBrowserGenerationRunRepository():
   }
 
   return createIndexedDbGenerationRunRepository();
+}
+
+function getDefaultDegradedGenerationFallbackEnabled(): boolean {
+  if (typeof globalThis.location === "undefined") {
+    return DEGRADED_GENERATION_FALLBACK_POLICY.enabled;
+  }
+
+  const override = new URLSearchParams(globalThis.location.search).get(
+    "degradedGenerationFallback"
+  );
+  return override === "off" || override === "0"
+    ? false
+    : DEGRADED_GENERATION_FALLBACK_POLICY.enabled;
 }

@@ -16,7 +16,7 @@ type StarterProjectGenerationSuccess = Extract<
 
 type StarterProjectGenerationError = Pick<
   Extract<EditorGenerationRunCompletion, { status: "error" }>,
-  "message" | "status" | "validationFailure"
+  "generatedMechanicFailure" | "message" | "status" | "validationFailure"
 >;
 
 export type StarterProjectLoadState =
@@ -86,6 +86,12 @@ export function useStarterProjectGeneration({
         setLoadState({
           status: "error",
           message: completion.message,
+          ...(completion.generatedMechanicFailure
+            ? {
+                generatedMechanicFailure:
+                  completion.generatedMechanicFailure,
+              }
+            : {}),
           ...(completion.validationFailure
             ? { validationFailure: completion.validationFailure }
             : {}),

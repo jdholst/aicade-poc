@@ -10,6 +10,19 @@ export {
   createPhaserRuntimeDocument,
   phaserRuntimeAdapter,
 } from "./phaser-runtime-adapter";
+export {
+  createTopDownPhaserMechanicObjectHost,
+  createTrustedTopDownPhaserMechanicObjectAdapter,
+} from "./top-down-mechanic-object-adapter";
+export type {
+  CreateTopDownPhaserMechanicObjectHostInput,
+  CreateTrustedTopDownPhaserMechanicObjectAdapterInput,
+  TrustedTopDownPhaserMechanicBody,
+  TrustedTopDownPhaserMechanicObject,
+  TrustedTopDownPhaserMechanicObjectRegistration,
+  TrustedTopDownPhaserOwnedMechanicObject,
+  TrustedTopDownPhaserOwnedObjectFactory,
+} from "./top-down-mechanic-object-adapter";
 export { TOP_DOWN_MECHANIC_CONTEXT_SERVICE_KEYS } from "./top-down-mechanic-runtime";
 export type {
   TopDownMechanicContextServiceKey,

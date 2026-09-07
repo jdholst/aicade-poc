@@ -1,0 +1,212 @@
+{
+    "schemaVersion": "generated_mechanic_provider_response/v1",
+    "ok": true,
+    "generationRunId": "generation_run_mt3dolg5_lffjdl75",
+    "stage": "contract",
+    "attempt": 1,
+    "attemptKind": "initial",
+    "candidate": {
+        "schemaVersion": "generated-mechanic-contract/v1",
+        "id": "generation_run_mt3dolg5_lffjdl75_contract_initial_1",
+        "intentId": "player_projectile_shooting",
+        "capabilityVersion": "mechanic_capability/v1",
+        "behavior": {
+            "summary": "When the player performs shoot_action, accept the action only when the bounded cooldown permits it, create one visible projectile at the player's position, launch it using the player's current or most recent non-zero movement direction, preserve player motion, and remove the projectile after its bounded lifetime or arena-bound termination.",
+            "triggers": [
+                "logical_action"
+            ],
+            "outcomes": [
+                "visible_projectile_is_created",
+                "projectile_motion_is_observable",
+                "projectile_is_removed_after_lifetime",
+                "repeated_shooting_is_rate_limited"
+            ]
+        },
+        "config": {
+            "kind": "object",
+            "fields": [
+                {
+                    "key": "projectile_speed",
+                    "required": true,
+                    "value": {
+                        "kind": "number",
+                        "minimum": 0,
+                        "maximum": 1000,
+                        "default": 360
+                    }
+                },
+                {
+                    "key": "projectile_lifetime_ms",
+                    "required": true,
+                    "value": {
+                        "kind": "integer",
+                        "minimum": 1,
+                        "maximum": 10000,
+                        "default": 1200
+                    }
+                },
+                {
+                    "key": "shoot_cooldown_ms",
+                    "required": true,
+                    "value": {
+                        "kind": "integer",
+                        "minimum": 0,
+                        "maximum": 5000,
+                        "default": 250
+                    }
+                },
+                {
+                    "key": "projectile_size",
+                    "required": true,
+                    "value": {
+                        "kind": "number",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 10
+                    }
+                }
+            ]
+        },
+        "bindings": [
+            {
+                "id": "player_binding",
+                "referenceKind": "entity",
+                "cardinality": "one",
+                "objectIds": [
+                    "player"
+                ]
+            }
+        ],
+        "ownedObjects": [
+            {
+                "id": "player_projectile",
+                "objectKind": "projectile",
+                "maximumInstances": 4
+            }
+        ],
+        "privateState": [
+            {
+                "id": "last_shot_time",
+                "valueType": "integer",
+                "initialValue": 0
+            }
+        ],
+        "lifecycle": {
+            "dispose": true,
+            "callbacks": [
+                "install",
+                "logical_action",
+                "scheduled"
+            ],
+            "fixedStep": false
+        },
+        "ports": [],
+        "capabilities": [
+            "object_create",
+            "object_motion_write",
+            "object_destroy",
+            "object_read",
+            "spatial_query",
+            "state_read",
+            "state_write",
+            "time_read",
+            "time_schedule"
+        ],
+        "resourceExpectations": {
+            "maximumOwnedObjects": 4,
+            "maximumOperationsPerTick": 16,
+            "maximumScheduledCallbacks": 4,
+            "maximumSubscriptions": 0,
+            "maximumSignalsPerTick": 0,
+            "maximumStateBytes": 1024,
+            "maximumCallbackMilliseconds": 8,
+            "maximumConsecutiveFailures": 3
+        },
+        "scenarios": [
+            {
+                "id": "shoot_creates_and_cleans_projectile",
+                "seed": 101,
+                "setup": [
+                    {
+                        "kind": "binding_present",
+                        "bindingId": "player_binding"
+                    },
+                    {
+                        "kind": "state_equals",
+                        "stateId": "last_shot_time",
+                        "value": 0
+                    }
+                ],
+                "steps": [
+                    {
+                        "kind": "advance_time",
+                        "milliseconds": 250
+                    },
+                    {
+                        "kind": "dispatch_action",
+                        "actionId": "shoot_action"
+                    },
+                    {
+                        "kind": "advance_time",
+                        "milliseconds": 1
+                    },
+                    {
+                        "kind": "advance_time",
+                        "milliseconds": 1199
+                    }
+        ],
+        "observations": [
+          {
+            "kind": "state_equals",
+            "stateId": "last_shot_time",
+                        "value": 250
+                    },
+                    {
+                        "kind": "owned_object_count",
+                        "archetypeId": "player_projectile",
+                        "operator": "equals",
+                        "value": 0
+                    }
+                ]
+            },
+            {
+                "id": "cooldown_rejects_early_shot",
+                "seed": 202,
+                "setup": [
+                    {
+                        "kind": "binding_present",
+                        "bindingId": "player_binding"
+                    },
+          {
+            "kind": "state_equals",
+            "stateId": "last_shot_time",
+            "value": 0
+          }
+        ],
+        "steps": [
+          {
+            "kind": "advance_time",
+            "milliseconds": 100
+                    },
+                    {
+                        "kind": "dispatch_action",
+                        "actionId": "shoot_action"
+                    }
+                ],
+                "observations": [
+                    {
+                        "kind": "owned_object_count",
+                        "archetypeId": "player_projectile",
+                        "operator": "equals",
+                        "value": 0
+                    },
+                    {
+                        "kind": "state_equals",
+                        "stateId": "last_shot_time",
+                        "value": 0
+                    }
+                ]
+            }
+        ]
+    }
+}
